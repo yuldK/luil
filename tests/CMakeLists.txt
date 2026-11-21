@@ -137,6 +137,8 @@ add_executable(luil_core_tests
     virtual_list_grid_tests.cpp
     virtual_tree_tests.cpp
     webview_element_tests.cpp
+    webview_layout_tests.cpp
+    webview_message_gate_tests.cpp
     wheel_axis_tests.cpp
     window_metrics_tests.cpp
     wrap_element_tests.cpp
@@ -523,8 +525,6 @@ add_executable(luil_tests
     uia_provider_tests.cpp
     utf8_tests.cpp
     webview_failure_tests.cpp
-    webview_layout_tests.cpp
-    webview_message_gate_tests.cpp
     win32_clipboard_tests.cpp
     win32_file_clipboard_tests.cpp
     win32_image_clipboard_tests.cpp
@@ -560,7 +560,7 @@ target_link_libraries(luil_tests
         # loopback_http_server가 raw Winsock으로 서므로 test 실행 파일만 이것을 건다 (loopback_socket_win32.cpp).
         ws2_32
         Catch2::Catch2WithMain)
-# test는 win32 내부의 순수 계산(caption_layout·popup_reconcile 등)도 검증하므로
+# test는 win32 내부의 순수 계산(window_mode·layered_placement 등)도 검증하므로
 # 비공개 header가 있는 src/를 직접 본다. 소비자에게는 열리지 않는 경로다.
 target_include_directories(luil_tests PRIVATE "${LUIL_SOURCE_DIRECTORY}")
 # 고지 검사가 웹뷰 구성을 따라간다 — 끈 구성의 실행 파일에는 로더가 없다.

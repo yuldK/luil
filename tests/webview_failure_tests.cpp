@@ -72,7 +72,7 @@ TEST_CASE("A ready webview reports surface transitions even with a zero page eve
         REQUIRE(reports == std::vector<bool> { false, true, false });
         Microsoft::WRL::ComPtr<IDCompositionVisual> underlay {};
         REQUIRE(SUCCEEDED(device->CreateVisual(&underlay)));
-        const luil::win32::webview_layout visible { .width = 80, .height = 80, .uncovered = true };
+        const luil::webview_layout visible { .width = 80, .height = 80, .uncovered = true };
         const auto navigation_deadline { std::chrono::steady_clock::now() + std::chrono::seconds { 10 } };
         while (children.empty() && std::chrono::steady_clock::now() < navigation_deadline)
         {

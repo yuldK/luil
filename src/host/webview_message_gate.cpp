@@ -1,6 +1,6 @@
-#include "win32/webview_message_gate.h"
+#include "host/webview_message_gate.h"
 
-namespace luil::win32 {
+namespace luil {
     namespace {
         constexpr std::uint64_t window_length_ms { 1000 };
     }

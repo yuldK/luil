@@ -142,4 +142,4 @@ luil::ui_window inspector {
 
 [caption_layout_tests.cpp](../tests/caption_layout_tests.cpp)는 전체 버튼, 일부 버튼, 버튼 없음의 경계와 hit 결과를 검증한다. 또한 `caption_element` bounds와 `make_caption_layout()`의 일치, 버튼 opt-out과 창 style의 일치, caption 자리 계산이 비클라이언트 판정과 하나임을 확인한다. 앱 단추가 창 버튼 왼쪽에 목록 차례로 서는 것과, 그 자리가 비활성이어도 끌기가 아니라 client로 답해지는 것도 확인한다. caption을 창 아래·창 일부·반 픽셀 자리·높은 배율에 세운 tree에서 띠와 버튼이 그린 자리를 따르는 것, 숨긴 caption에 띠가 없는 것, tree나 caption이 없으면 맨 위 띠인 것도 확인한다. [win32_window_tests.cpp](../tests/win32_window_tests.cpp)는 실제 창의 판정 경로가 tree의 띠를 읽는지 확인한다. 모드별 스타일과 hit 결과는 [window_mode_tests.cpp](../tests/window_mode_tests.cpp)가 창 없이 검증한다.
 
-Win32 구현 경계는 [caption_layout.cpp](../src/win32/caption_layout.cpp), [caption_surface.cpp](../src/win32/caption_surface.cpp), [caption_surface.h](../src/win32/caption_surface.h), [window_mode.h](../src/win32/window_mode.h)에 있다.
+버튼 자리와 띠 판정은 플랫폼을 모르는 [caption_layout.cpp](../src/host/caption_layout.cpp)에 있다. Win32 구현 경계는 [caption_surface.cpp](../src/win32/caption_surface.cpp), [caption_surface.h](../src/win32/caption_surface.h), [window_mode.h](../src/win32/window_mode.h)에 있다.

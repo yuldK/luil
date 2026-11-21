@@ -5,7 +5,7 @@
 
 #include <optional>
 
-namespace luil::win32 {
+namespace luil {
     // 웹뷰 하나가 이번 frame에 차지할 자리와, 그 자리에 구멍을 뚫을지다.
     //
     // 자리는 표면 client의 **물리 픽셀**이다 — tree의 좌표가 이미 배율을 곱한

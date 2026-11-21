@@ -1,9 +1,9 @@
+#include "host/caption_layout.h"
 #include "luil/ui/caption_element.h"
 #include "luil/ui/caption_metrics.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/root_element.h"
 #include "luil/ui/ui_tree.h"
-#include "win32/caption_layout.h"
 #include "win32/caption_surface.h"
 #include "win32/window_mode.h"
 
@@ -14,26 +14,26 @@
 
 TEST_CASE("Caption button bounds scale with DPI", "[caption]")
 {
-    const auto layout = luil::win32::make_caption_layout(1000, 96);
+    const auto layout = luil::make_caption_layout(1000, 96);
     REQUIRE(layout.height == luil::default_caption_ui_metrics.height);
     REQUIRE(layout.button_width == luil::default_caption_ui_metrics.button_width);
     REQUIRE(layout.close_left == 958);
     REQUIRE(layout.maximize_left == 916);
     REQUIRE(layout.minimize_left == 874);
 
-    const auto scaled = luil::win32::make_caption_layout(1500, 144);
+    const auto scaled = luil::make_caption_layout(1500, 144);
     REQUIRE(scaled.height == 54);
     REQUIRE(scaled.button_width == 63);
 }
 
 TEST_CASE("Caption hit testing distinguishes drag and system buttons", "[caption]")
 {
-    const auto layout = luil::win32::make_caption_layout(1000, 96);
-    REQUIRE(luil::win32::hit_test_caption(layout, 100, 20) == luil::win32::caption_hit::drag);
-    REQUIRE(luil::win32::hit_test_caption(layout, 880, 20) == luil::win32::caption_hit::minimize);
-    REQUIRE(luil::win32::hit_test_caption(layout, 930, 20) == luil::win32::caption_hit::maximize);
-    REQUIRE(luil::win32::hit_test_caption(layout, 980, 20) == luil::win32::caption_hit::close);
-    REQUIRE(luil::win32::hit_test_caption(layout, 100, 60) == luil::win32::caption_hit::client);
+    const auto layout = luil::make_caption_layout(1000, 96);
+    REQUIRE(luil::hit_test_caption(layout, 100, 20) == luil::caption_hit::drag);
+    REQUIRE(luil::hit_test_caption(layout, 880, 20) == luil::caption_hit::minimize);
+    REQUIRE(luil::hit_test_caption(layout, 930, 20) == luil::caption_hit::maximize);
+    REQUIRE(luil::hit_test_caption(layout, 980, 20) == luil::caption_hit::close);
+    REQUIRE(luil::hit_test_caption(layout, 100, 60) == luil::caption_hit::client);
 }
 
 TEST_CASE("A caption without some buttons pulls the rest to the right edge", "[caption]")
@@ -41,34 +41,34 @@ TEST_CASE("A caption without some buttons pulls the rest to the right edge", "[c
     // 최소화·최대화를 뺀 도구 창 캡션이다.
     // 빠진 버튼은 자리를 차지하지 않고 닫기가 오른쪽 끝에 남는다.
     constexpr luil::caption_buttons close_only { .minimize = false, .maximize = false, .close = true };
-    const auto layout = luil::win32::make_caption_layout(1000, 96, luil::default_caption_ui_metrics, close_only);
+    const auto layout = luil::make_caption_layout(1000, 96, luil::default_caption_ui_metrics, close_only);
     REQUIRE(layout.close_left == 958);
     // 없는 버튼의 왼쪽은 그 시점의 오른쪽 끝이라 어떤 x로도 맞지 않는다.
     REQUIRE(layout.maximize_left == layout.close_left);
     REQUIRE(layout.minimize_left == layout.close_left);
 
     // 판정은 한 줄도 바뀌지 않았는데 결과가 맞는다.
-    REQUIRE(luil::win32::hit_test_caption(layout, 980, 20) == luil::win32::caption_hit::close);
-    REQUIRE(luil::win32::hit_test_caption(layout, 930, 20) == luil::win32::caption_hit::drag);
-    REQUIRE(luil::win32::hit_test_caption(layout, 880, 20) == luil::win32::caption_hit::drag);
+    REQUIRE(luil::hit_test_caption(layout, 980, 20) == luil::caption_hit::close);
+    REQUIRE(luil::hit_test_caption(layout, 930, 20) == luil::caption_hit::drag);
+    REQUIRE(luil::hit_test_caption(layout, 880, 20) == luil::caption_hit::drag);
 }
 
 TEST_CASE("A caption without the close button keeps the others in order", "[caption]")
 {
     // 가운데를 빼는 경우도 순서가 유지되어야 한다.
     constexpr luil::caption_buttons no_maximize { .minimize = true, .maximize = false, .close = true };
-    const auto layout = luil::win32::make_caption_layout(1000, 96, luil::default_caption_ui_metrics, no_maximize);
+    const auto layout = luil::make_caption_layout(1000, 96, luil::default_caption_ui_metrics, no_maximize);
     REQUIRE(layout.close_left == 958);
     REQUIRE(layout.maximize_left == 958);
     REQUIRE(layout.minimize_left == 916);
-    REQUIRE(luil::win32::hit_test_caption(layout, 980, 20) == luil::win32::caption_hit::close);
-    REQUIRE(luil::win32::hit_test_caption(layout, 930, 20) == luil::win32::caption_hit::minimize);
-    REQUIRE(luil::win32::hit_test_caption(layout, 880, 20) == luil::win32::caption_hit::drag);
+    REQUIRE(luil::hit_test_caption(layout, 980, 20) == luil::caption_hit::close);
+    REQUIRE(luil::hit_test_caption(layout, 930, 20) == luil::caption_hit::minimize);
+    REQUIRE(luil::hit_test_caption(layout, 880, 20) == luil::caption_hit::drag);
 
     // 버튼이 하나도 없으면 캡션 전체가 끌기다.
     constexpr luil::caption_buttons none { .minimize = false, .maximize = false, .close = false };
-    const auto bare = luil::win32::make_caption_layout(1000, 96, luil::default_caption_ui_metrics, none);
-    REQUIRE(luil::win32::hit_test_caption(bare, 980, 20) == luil::win32::caption_hit::drag);
+    const auto bare = luil::make_caption_layout(1000, 96, luil::default_caption_ui_metrics, none);
+    REQUIRE(luil::hit_test_caption(bare, 980, 20) == luil::caption_hit::drag);
 }
 
 TEST_CASE("The caption element builds only the configured buttons", "[caption]")
@@ -83,14 +83,14 @@ TEST_CASE("The caption element builds only the configured buttons", "[caption]")
     const luil::ui_element* const close = tree.find(luil::ui_element_id { luil::ui_element_kind::caption_close });
     REQUIRE(close != nullptr);
 
-    const auto layout = luil::win32::make_caption_layout(1000, 96, config.metrics, config.buttons);
+    const auto layout = luil::make_caption_layout(1000, 96, config.metrics, config.buttons);
     REQUIRE(static_cast<int>(close->bounds().x) == layout.close_left);
 
     // 기본 설정에서는 셋 다 있고 자리도 그대로다.
     auto full = luil::make_caption_tree(1000.0f, 1.0f, luil::caption_config {});
     const luil::ui_element* const minimize = full.find(luil::ui_element_id { luil::ui_element_kind::caption_minimize });
     REQUIRE(minimize != nullptr);
-    REQUIRE(static_cast<int>(minimize->bounds().x) == luil::win32::make_caption_layout(1000, 96).minimize_left);
+    REQUIRE(static_cast<int>(minimize->bounds().x) == luil::make_caption_layout(1000, 96).minimize_left);
 }
 
 TEST_CASE("A missing caption button drops its window style", "[caption]")
@@ -113,10 +113,10 @@ TEST_CASE("The caption geometry is the same computation the window hit test uses
     // 버튼을 뺀 캡션의 빈자리는 판정에서도 그대로 끌기가 된다.
     constexpr luil::caption_buttons close_only { .minimize = false, .maximize = false, .close = true };
     const luil::win32::window_frame_metrics metrics { luil::default_caption_ui_metrics, close_only, 4, 10 };
-    const auto layout = luil::win32::make_caption_layout(1000, 96, luil::default_caption_ui_metrics, close_only);
+    const auto layout = luil::make_caption_layout(1000, 96, luil::default_caption_ui_metrics, close_only);
 
     // 닫기 버튼의 왼쪽 경계 바로 오른쪽은 두 계산 모두에서 닫기다.
-    REQUIRE(luil::win32::hit_test_caption(layout, layout.close_left + 1, 20) == luil::win32::caption_hit::close);
+    REQUIRE(luil::hit_test_caption(layout, layout.close_left + 1, 20) == luil::caption_hit::close);
     REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, layout.close_left + 1, 20) == luil::win32::window_hit::close_button);
     // 빠진 최대화 버튼의 자리는 끌기다.
     REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, 930, 20) == luil::win32::window_hit::caption_drag);
@@ -143,7 +143,7 @@ TEST_CASE("Caption app buttons stand left of the window buttons in their listed 
     config.app_buttons.push_back(luil::caption_app_button { .key = u8"inert" });
     auto tree = luil::make_caption_tree(1000.0f, 1.0f, config);
 
-    const auto layout = luil::win32::make_caption_layout(1000, 96, config.metrics, config.buttons);
+    const auto layout = luil::make_caption_layout(1000, 96, config.metrics, config.buttons);
     const luil::ui_element* const search = tree.find(luil::ui_element_id { luil::ui_element_kind::caption_app_button, u8"search" });
     const luil::ui_element* const settings = tree.find(luil::ui_element_id { luil::ui_element_kind::caption_app_button, u8"settings" });
     REQUIRE(search != nullptr);
@@ -170,12 +170,12 @@ TEST_CASE("The caption drag strip answers client over an app button", "[caption]
     luil::caption_config config {};
     config.app_buttons = { make_app_button(u8"settings"), make_app_button(u8"off", false) };
     const auto tree = luil::make_caption_tree(1000.0f, 1.0f, config);
-    const auto layout = luil::win32::make_caption_layout(1000, 96, config.metrics, config.buttons);
+    const auto layout = luil::make_caption_layout(1000, 96, config.metrics, config.buttons);
     const int off_x { layout.minimize_left - layout.button_width / 2 };
     const int settings_x { layout.minimize_left - layout.button_width - layout.button_width / 2 };
 
     // 비클라이언트 판정 자체는 그 자리를 끌기로 본다 — 단추를 아는 것은 tree다.
-    REQUIRE(luil::win32::hit_test_caption(layout, settings_x, 18) == luil::win32::caption_hit::drag);
+    REQUIRE(luil::hit_test_caption(layout, settings_x, 18) == luil::caption_hit::drag);
     REQUIRE(luil::win32::caption_client_at(&tree, settings_x, 18));
     // 비활성 단추 위도 끌기 자리가 아니다.
     REQUIRE(luil::win32::caption_client_at(&tree, off_x, 18));
@@ -250,9 +250,9 @@ TEST_CASE("Any element marked as a caption client turns the drag strip into clie
     root->add(std::move(strip));
 
     const luil::ui_tree tree { std::move(root) };
-    const auto layout = luil::win32::make_caption_layout(1000, 96, config.metrics, config.buttons);
+    const auto layout = luil::make_caption_layout(1000, 96, config.metrics, config.buttons);
     // 비클라이언트 판정 자체는 그 자리를 끌기로 본다 — 칸을 아는 것은 tree다.
-    REQUIRE(luil::win32::hit_test_caption(layout, 500, 18) == luil::win32::caption_hit::drag);
+    REQUIRE(luil::hit_test_caption(layout, 500, 18) == luil::caption_hit::drag);
     REQUIRE(luil::win32::caption_client_at(&tree, 500, 18));
     // 칸 옆은 그대로 끌기다.
     REQUIRE(luil::win32::caption_client_at(&tree, 380, 18) == false);
@@ -301,7 +301,7 @@ namespace {
         return luil::ui_tree { std::move(root) };
     }
 
-    [[nodiscard]] luil::win32::window_hit hit_with_band(const luil::win32::caption_band& band, const int x, const int y)
+    [[nodiscard]] luil::win32::window_hit hit_with_band(const luil::caption_band& band, const int x, const int y)
     {
         return luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1000, 800, 96, x, y, band);
     }
@@ -314,8 +314,8 @@ TEST_CASE("The caption band follows where the tree placed the caption", "[captio
     SECTION("창 아래에 둔 caption은 아래 띠가 끌기이고 위는 client다")
     {
         const auto tree { make_placed_caption_tree({ 0.0f, 764.0f, 1000.0f, 0.0f }) };
-        const luil::win32::caption_band band { luil::win32::caption_band_in(&tree, 1000, 96) };
-        REQUIRE(band == luil::win32::caption_band { 0, 764, 1000, 36 });
+        const luil::caption_band band { luil::caption_band_in(&tree, 1000, 96) };
+        REQUIRE(band == luil::caption_band { 0, 764, 1000, 36 });
 
         REQUIRE(hit_with_band(band, 300, 780) == window_hit::caption_drag);
         REQUIRE(hit_with_band(band, 20, 780) == window_hit::system_menu);
@@ -334,11 +334,11 @@ TEST_CASE("The caption band follows where the tree placed the caption", "[captio
     SECTION("창 일부만 덮은 caption은 그 폭 안에서 버튼이 오른쪽 끝에 선다")
     {
         const auto tree { make_placed_caption_tree({ 200.0f, 300.0f, 600.0f, 0.0f }) };
-        const luil::win32::caption_band band { luil::win32::caption_band_in(&tree, 1000, 96) };
-        REQUIRE(band == luil::win32::caption_band { 200, 300, 600, 36 });
+        const luil::caption_band band { luil::caption_band_in(&tree, 1000, 96) };
+        REQUIRE(band == luil::caption_band { 200, 300, 600, 36 });
 
         // 그린 버튼과 판정의 버튼이 같은 자리다.
-        const auto layout { luil::win32::make_caption_layout(band, 96) };
+        const auto layout { luil::make_caption_layout(band, 96) };
         const luil::ui_element* const close { tree.find(luil::ui_element_id { luil::ui_element_kind::caption_close }) };
         const luil::ui_element* const minimize { tree.find(luil::ui_element_id { luil::ui_element_kind::caption_minimize }) };
         REQUIRE(static_cast<int>(close->bounds().x) == layout.close_left);
@@ -359,14 +359,14 @@ TEST_CASE("The caption band follows where the tree placed the caption", "[captio
     {
         // 아래에서 위로 밀어 올리는 도중의 frame이다. 반 픽셀 자리도 그린 자리에 맞춰 반올림한다.
         const auto tree { make_placed_caption_tree({ 0.0f, 400.4f, 1000.0f, 0.0f }) };
-        REQUIRE(luil::win32::caption_band_in(&tree, 1000, 96) == luil::win32::caption_band { 0, 400, 1000, 36 });
+        REQUIRE(luil::caption_band_in(&tree, 1000, 96) == luil::caption_band { 0, 400, 1000, 36 });
     }
 
     SECTION("숨긴 caption은 어느 자리도 끌기가 아니다")
     {
         const auto tree { make_placed_caption_tree({ 0.0f, 0.0f, 1000.0f, 0.0f }, {}, false) };
-        const luil::win32::caption_band band { luil::win32::caption_band_in(&tree, 1000, 96) };
-        REQUIRE(band == luil::win32::caption_band {});
+        const luil::caption_band band { luil::caption_band_in(&tree, 1000, 96) };
+        REQUIRE(band == luil::caption_band {});
         REQUIRE(hit_with_band(band, 300, 20) == window_hit::client);
         REQUIRE(hit_with_band(band, 980, 20) == window_hit::client);
         REQUIRE(hit_with_band(band, 20, 20) == window_hit::client);
@@ -374,14 +374,14 @@ TEST_CASE("The caption band follows where the tree placed the caption", "[captio
 
     SECTION("tree가 없거나 caption을 담지 않았으면 맨 위 띠다")
     {
-        const luil::win32::caption_band top { luil::win32::default_caption_band(1000, 96) };
-        REQUIRE(top == luil::win32::caption_band { 0, 0, 1000, 36 });
-        REQUIRE(luil::win32::caption_band_in(nullptr, 1000, 96) == top);
+        const luil::caption_band top { luil::default_caption_band(1000, 96) };
+        REQUIRE(top == luil::caption_band { 0, 0, 1000, 36 });
+        REQUIRE(luil::caption_band_in(nullptr, 1000, 96) == top);
 
         auto root { std::make_unique<luil::root_element>() };
         root->arrange({ { 0.0f, 0.0f, 1000.0f, 800.0f }, 1.0f });
         const luil::ui_tree bare { std::move(root) };
-        REQUIRE(luil::win32::caption_band_in(&bare, 1000, 96) == top);
+        REQUIRE(luil::caption_band_in(&bare, 1000, 96) == top);
         // 기존 판정(띠를 주지 않는 호출)과 같은 답이다.
         REQUIRE(hit_with_band(top, 300, 20) == luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1000, 800, 96, 300, 20));
     }
@@ -395,9 +395,9 @@ TEST_CASE("The caption band follows where the tree placed the caption", "[captio
         root->add(std::move(caption));
         const luil::ui_tree tree { std::move(root) };
 
-        const luil::win32::caption_band band { luil::win32::caption_band_in(&tree, 1500, 144) };
-        REQUIRE(band == luil::win32::caption_band { 0, 1146, 1500, 54 });
-        const auto layout { luil::win32::make_caption_layout(band, 144) };
+        const luil::caption_band band { luil::caption_band_in(&tree, 1500, 144) };
+        REQUIRE(band == luil::caption_band { 0, 1146, 1500, 54 });
+        const auto layout { luil::make_caption_layout(band, 144) };
         const luil::ui_element* const close { tree.find(luil::ui_element_id { luil::ui_element_kind::caption_close }) };
         REQUIRE(static_cast<int>(close->bounds().x) == layout.close_left);
         REQUIRE(luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1500, 1200, 144, 1480, 1170, band)

@@ -3,7 +3,7 @@
 #include <cstddef>
 #include <cstdint>
 
-namespace luil::win32 {
+namespace luil {
     // 페이지가 보낸 web message 하나에 내린 판정이다.
     enum class webview_message_verdict
     {

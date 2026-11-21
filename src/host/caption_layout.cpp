@@ -1,4 +1,4 @@
-#include "win32/caption_layout.h"
+#include "host/caption_layout.h"
 
 #include "luil/ui/ui_tree.h"
 
@@ -6,7 +6,7 @@
 #include <cmath>
 #include <memory>
 
-namespace luil::win32 {
+namespace luil {
     namespace {
         int scale_for_dpi(const int value, const std::uint32_t dpi) noexcept
         {

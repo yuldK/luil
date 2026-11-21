@@ -1,9 +1,9 @@
 #include "win32/webview_host.h"
 
 #include "host/popup_reconcile.h"
+#include "host/webview_message_gate.h"
 #include "win32/utf8.h"
 #include "win32/webview_failure.h"
-#include "win32/webview_message_gate.h"
 #include "win32/win32_error.h"
 
 #include <windowsx.h>

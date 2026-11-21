@@ -1,10 +1,10 @@
-#include "win32/webview_message_gate.h"
+#include "host/webview_message_gate.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 namespace {
-    using luil::win32::webview_message_gate;
-    using luil::win32::webview_message_verdict;
+    using luil::webview_message_gate;
+    using luil::webview_message_verdict;
 }
 
 TEST_CASE("Web messages under both limits are accepted", "[win32][webview]")

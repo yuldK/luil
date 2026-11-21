@@ -6,9 +6,7 @@
 
 namespace luil {
     class ui_tree;
-}
 
-namespace luil::win32 {
     // caption이 서 있는 자리다 (client 물리 픽셀).
     // 폭이나 높이가 0이면 caption이 없는 것이라 어느 자리도 caption으로 맞지 않는다.
     struct caption_band

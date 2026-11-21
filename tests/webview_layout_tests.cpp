@@ -1,10 +1,10 @@
-#include "win32/webview_layout.h"
+#include "host/webview_layout.h"
 
 #include <catch2/catch_test_macros.hpp>
 
 namespace {
     using luil::rect_f;
-    using luil::win32::plan_webview_layout;
+    using luil::plan_webview_layout;
 }
 
 TEST_CASE("A webview with no visible bounds takes no place", "[win32][webview]")
@@ -50,12 +50,12 @@ TEST_CASE("An overlay webview takes input without a hole and hides when covered"
     REQUIRE(shown.width == 220);
     REQUIRE(shown.height == 140);
     REQUIRE(shown.scale == 1.5f);
-    REQUIRE(luil::win32::translate_webview_pointer(shown, 30, 20).inside);
-    REQUIRE(luil::win32::translate_webview_pointer(shown, 0, 0, true).inside);
+    REQUIRE(luil::translate_webview_pointer(shown, 30, 20).inside);
+    REQUIRE(luil::translate_webview_pointer(shown, 0, 0, true).inside);
     const auto covered { plan_webview_layout(bounds, 240, 150, true, 1.5f, luil::webview_layer::overlay) };
     REQUIRE_FALSE(covered.visible());
     REQUIRE_FALSE(covered.punch_hole());
-    REQUIRE_FALSE(luil::win32::translate_webview_pointer(covered, 30, 20, true).inside);
+    REQUIRE_FALSE(luil::translate_webview_pointer(covered, 30, 20, true).inside);
 }
 
 TEST_CASE("A webview is clipped to the client rectangle", "[win32][webview]")
@@ -99,8 +99,8 @@ TEST_CASE("A zero-sized client leaves no place for a webview", "[win32][webview]
 
 TEST_CASE("A pointer inside the webview translates to its own origin", "[win32][webview]")
 {
-    using luil::win32::translate_webview_pointer;
-    using luil::win32::webview_layout;
+    using luil::translate_webview_pointer;
+    using luil::webview_layout;
 
     const webview_layout layout { 100, 80, 300, 220, true };
 
@@ -117,8 +117,8 @@ TEST_CASE("A pointer inside the webview translates to its own origin", "[win32][
 
 TEST_CASE("The webview rectangle is half open", "[win32][webview]")
 {
-    using luil::win32::translate_webview_pointer;
-    using luil::win32::webview_layout;
+    using luil::translate_webview_pointer;
+    using luil::webview_layout;
 
     // 자리를 잇대어 놓아도 한 점이 두 웹뷰의 것이 되지 않는다.
     const webview_layout layout { 100, 80, 300, 220, true };
@@ -132,8 +132,8 @@ TEST_CASE("The webview rectangle is half open", "[win32][webview]")
 
 TEST_CASE("A hidden webview never takes the pointer", "[win32][webview]")
 {
-    using luil::win32::translate_webview_pointer;
-    using luil::win32::webview_layout;
+    using luil::translate_webview_pointer;
+    using luil::webview_layout;
 
     // 자리가 없으면 언제나 바깥이다 — 감춰진 웹뷰가 포인터를 먹지 않는다.
     const webview_layout hidden {};
@@ -143,8 +143,8 @@ TEST_CASE("A hidden webview never takes the pointer", "[win32][webview]")
 
 TEST_CASE("An occluded webview leaves the pointer to the overlay", "[win32][webview]")
 {
-    using luil::win32::translate_webview_pointer;
-    using luil::win32::webview_layout;
+    using luil::translate_webview_pointer;
+    using luil::webview_layout;
 
     // 중계는 tree의 입력 처리보다 먼저 일어나므로 가림을 여기서도 지킨다.
     const webview_layout covered { 100, 80, 300, 220, false };
@@ -154,12 +154,12 @@ TEST_CASE("An occluded webview leaves the pointer to the overlay", "[win32][webv
 
 TEST_CASE("A captured webview receives movement and release outside its rectangle", "[win32][webview]")
 {
-    const luil::win32::webview_layout layout { 100, 80, 300, 220, true };
-    const auto pointer { luil::win32::translate_webview_pointer(layout, 50, 400, true) };
+    const luil::webview_layout layout { 100, 80, 300, 220, true };
+    const auto pointer { luil::translate_webview_pointer(layout, 50, 400, true) };
     REQUIRE(pointer.inside);
     REQUIRE(pointer.x == -50);
     REQUIRE(pointer.y == 320);
-    REQUIRE(luil::win32::translate_webview_pointer(layout, 50, 400).inside == false);
+    REQUIRE(luil::translate_webview_pointer(layout, 50, 400).inside == false);
 }
 
 TEST_CASE("A webview place carries the scale it was arranged at", "[win32][webview]")

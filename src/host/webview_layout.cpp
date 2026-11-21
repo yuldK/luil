@@ -1,9 +1,9 @@
-#include "win32/webview_layout.h"
+#include "host/webview_layout.h"
 
 #include <algorithm>
 #include <cmath>
 
-namespace luil::win32 {
+namespace luil {
     namespace {
         // 왼쪽·위뿐 아니라 오른쪽·아래도 각각 반올림한다.
         // 반올림한 위치에 폭을 더하지 않아 이동에 따른 1픽셀 크기 흔들림을 막는다.
