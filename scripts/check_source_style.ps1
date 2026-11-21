@@ -213,7 +213,9 @@ function Get-IgnoredKeys {
     return ,$ignored
 }
 
-$candidates = @(Get-ChildItem -LiteralPath $resolved_root -Recurse -File | Where-Object {
+# -Force가 있어야 Windows 밖에서도 점으로 시작하는 파일을 본다. Unix의 Get-ChildItem은 그런 이름을
+# 숨김으로 보고 건너뛰어, `$special_names`의 `.gitattributes`·`.gitignore`·`.clang-format`이 조용히 빠진다.
+$candidates = @(Get-ChildItem -LiteralPath $resolved_root -Recurse -File -Force | Where-Object {
     $relative = [System.IO.Path]::GetRelativePath($resolved_root, $_.FullName)
     $segments = $relative -split '[\\/]'
     $is_excluded = $false

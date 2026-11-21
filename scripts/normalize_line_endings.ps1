@@ -13,7 +13,8 @@ $extensions = @('.cmake', '.cpp', '.h', '.json', '.md', '.ps1', '.rc', '.version
 $special_names = @('.clang-format', '.clang-tidy', '.editorconfig', '.gitattributes', '.gitignore', 'CMakeLists.txt')
 $changed_count = 0
 
-$files = Get-ChildItem -LiteralPath $resolved_root -Recurse -File | Where-Object {
+# -Force가 있어야 Windows 밖에서도 점으로 시작하는 파일을 본다 (check_source_style.ps1과 같은 까닭).
+$files = Get-ChildItem -LiteralPath $resolved_root -Recurse -File -Force | Where-Object {
     $relative = [System.IO.Path]::GetRelativePath($resolved_root, $_.FullName)
     $segments = $relative -split '[\\/]'
     $is_excluded = $false
