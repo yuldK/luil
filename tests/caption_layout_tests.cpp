@@ -97,13 +97,13 @@ TEST_CASE("A missing caption button drops its window style", "[caption]")
 {
     // 버튼을 빼면 캡션 더블클릭·Win+↑·시스템 메뉴까지 함께 멎어야 한다.
     constexpr luil::caption_buttons close_only { .minimize = false, .maximize = false, .close = true };
-    const DWORD style = luil::win32::window_style_for(close_only, luil::win32::window_display_mode::normal);
+    const DWORD style = luil::win32::window_style_for(close_only, luil::window_display_mode::normal);
     REQUIRE((style & WS_MAXIMIZEBOX) == 0);
     REQUIRE((style & WS_MINIMIZEBOX) == 0);
     // 크기 조절과 시스템 메뉴는 버튼과 무관하다.
     REQUIRE((style & luil::win32::retained_window_styles) == luil::win32::retained_window_styles);
     // 만들 때와 크기를 잴 때 쓰는 스타일은 시스템 캡션 하나만 다르다.
-    REQUIRE(luil::win32::custom_window_style_for(close_only, luil::win32::window_display_mode::normal) == (style & ~static_cast<DWORD>(WS_CAPTION)));
+    REQUIRE(luil::win32::custom_window_style_for(close_only, luil::window_display_mode::normal) == (style & ~static_cast<DWORD>(WS_CAPTION)));
 }
 
 TEST_CASE("The caption geometry is the same computation the window hit test uses", "[caption][window-mode]")
@@ -117,9 +117,9 @@ TEST_CASE("The caption geometry is the same computation the window hit test uses
 
     // 닫기 버튼의 왼쪽 경계 바로 오른쪽은 두 계산 모두에서 닫기다.
     REQUIRE(luil::hit_test_caption(layout, layout.close_left + 1, 20) == luil::caption_hit::close);
-    REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, layout.close_left + 1, 20) == luil::win32::window_hit::close_button);
+    REQUIRE(luil::win32::hit_test_window(metrics, luil::window_display_mode::normal, 1000, 800, 96, layout.close_left + 1, 20) == luil::win32::window_hit::close_button);
     // 빠진 최대화 버튼의 자리는 끌기다.
-    REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, 930, 20) == luil::win32::window_hit::caption_drag);
+    REQUIRE(luil::win32::hit_test_window(metrics, luil::window_display_mode::normal, 1000, 800, 96, 930, 20) == luil::win32::window_hit::caption_drag);
 }
 
 namespace {
@@ -269,13 +269,13 @@ TEST_CASE("A fullscreen window answers client everywhere, caption clients or not
 {
     // 전체 화면에는 끌기 띠가 없다. 표시와 상관없이 모든 자리가 client다.
     const luil::win32::window_frame_metrics metrics { luil::default_caption_ui_metrics, luil::default_caption_buttons, 8, 16 };
-    REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::fullscreen, 1000, 800, 96, 500, 18) == luil::win32::window_hit::client);
-    REQUIRE(luil::win32::hit_test_window(metrics, luil::win32::window_display_mode::normal, 1000, 800, 96, 500, 18) == luil::win32::window_hit::caption_drag);
+    REQUIRE(luil::win32::hit_test_window(metrics, luil::window_display_mode::fullscreen, 1000, 800, 96, 500, 18) == luil::win32::window_hit::client);
+    REQUIRE(luil::win32::hit_test_window(metrics, luil::window_display_mode::normal, 1000, 800, 96, 500, 18) == luil::win32::window_hit::caption_drag);
 }
 
 TEST_CASE("A caption button runs only when pressed and released on it outside fullscreen", "[caption][window-mode]")
 {
-    using luil::win32::window_display_mode;
+    using luil::window_display_mode;
     // 누른 단추에서 뗀 것만 실행한다 — OS의 캡션 단추와 같다.
     REQUIRE(luil::win32::caption_click_executes(HTCLOSE, HTCLOSE, window_display_mode::normal));
     REQUIRE(luil::win32::caption_click_executes(HTMAXBUTTON, HTMAXBUTTON, window_display_mode::maximized));
@@ -303,7 +303,7 @@ namespace {
 
     [[nodiscard]] luil::win32::window_hit hit_with_band(const luil::caption_band& band, const int x, const int y)
     {
-        return luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1000, 800, 96, x, y, band);
+        return luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::window_display_mode::normal, 1000, 800, 96, x, y, band);
     }
 }
 
@@ -383,7 +383,7 @@ TEST_CASE("The caption band follows where the tree placed the caption", "[captio
         const luil::ui_tree bare { std::move(root) };
         REQUIRE(luil::caption_band_in(&bare, 1000, 96) == top);
         // 기존 판정(띠를 주지 않는 호출)과 같은 답이다.
-        REQUIRE(hit_with_band(top, 300, 20) == luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1000, 800, 96, 300, 20));
+        REQUIRE(hit_with_band(top, 300, 20) == luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::window_display_mode::normal, 1000, 800, 96, 300, 20));
     }
 
     SECTION("배율이 있어도 띠는 그린 자리이고 버튼 폭은 같은 식으로 잰다")
@@ -400,7 +400,7 @@ TEST_CASE("The caption band follows where the tree placed the caption", "[captio
         const auto layout { luil::make_caption_layout(band, 144) };
         const luil::ui_element* const close { tree.find(luil::ui_element_id { luil::ui_element_kind::caption_close }) };
         REQUIRE(static_cast<int>(close->bounds().x) == layout.close_left);
-        REQUIRE(luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::win32::window_display_mode::normal, 1500, 1200, 144, 1480, 1170, band)
+        REQUIRE(luil::win32::hit_test_window(luil::win32::window_frame_metrics {}, luil::window_display_mode::normal, 1500, 1200, 144, 1480, 1170, band)
                 == window_hit::close_button);
     }
 }

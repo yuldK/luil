@@ -443,7 +443,7 @@ luil_add_source_filter(luil_core_files "app"
 # (한 frame 그리기, 렌더러 실패 물러섬, 터치·펜 접촉 추적, popup·웹뷰 자리 대조,
 # 다시 그릴 표면과 timer 계획, GPU fence 대기 예산, 파일 감시의 합치기와 디바운스,
 # 작업 표시줄 요청과 적용한 상태의 대조, 직접 그리는 caption의 버튼 자리와 판정,
-# 웹뷰 한 frame의 자리와 web message 상한).
+# 웹뷰 한 frame의 자리와 web message 상한, 창의 표시 모드와 전체 화면의 자리·알릴 배치).
 # host/fonts: 글꼴 registry다 (설정된 글꼴, 가족 cache, 글자별 대체, 파일·바이트 로딩).
 # OS 글꼴 관리자와 사용자 언어는 플랫폼이 `platform_font_source()`로 공급한다.
 luil_add_source_filter(luil_core_files "host/fonts"
@@ -495,6 +495,8 @@ luil_add_source_filter(luil_core_files "host"
     host/webview_layout.h
     host/webview_message_gate.cpp
     host/webview_message_gate.h
+    host/window_display_mode.cpp
+    host/window_display_mode.h
     )
 
 # 우산 헤더는 플랫폼 조립까지 들이므로 core가 아니라 이쪽에 둔다.

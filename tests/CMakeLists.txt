@@ -140,6 +140,7 @@ add_executable(luil_core_tests
     webview_layout_tests.cpp
     webview_message_gate_tests.cpp
     wheel_axis_tests.cpp
+    window_display_mode_tests.cpp
     window_metrics_tests.cpp
     wrap_element_tests.cpp
     zoom_view_tests.cpp

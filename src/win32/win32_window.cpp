@@ -1693,7 +1693,7 @@ namespace luil::win32 {
             //  - **전체 화면인 동안은 관측값을 쓸 수 없다.** 들어갈 때의
             //    `SetWindowPos`가 `rcNormalPosition`을 모니터 사각형으로 덮어썼기
             //    때문이다. 그때 알릴 것은 표면이 갈무리해 둔 "돌아갈 자리"이고,
-            //    무엇을 고를지는 `placement_to_report`가 정한다 (window_mode.h).
+            //    무엇을 고를지는 `placement_to_report`가 정한다 (host/window_display_mode.h).
             void post_window_placement() noexcept
             {
                 if (host_ == nullptr || environment_.delegate == nullptr)

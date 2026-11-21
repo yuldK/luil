@@ -104,7 +104,7 @@ Main과 secondary caption surface는 `window_config::accept_file_drop`에 따라
 
 `caption_surface`는 custom caption과 함께 **창이 서 있는 모습**(`window_display_mode`)도 소유한다. 이미 창 style, 확장 style, `WM_GETMINMAXINFO`, DWM 프레임을 그 자리가 맡고 있어 전체 화면 진입·이탈이 손대야 하는 것이 전부 여기 모여 있기 때문이다.
 
-판단은 창을 모르는 [`window_mode.h`](../src/win32/window_mode.h)에 있고 surface는 그 답을 Win32에 옮긴다. Style(버튼 집합 + 모드), 비클라이언트 hit, 모니터 목표 사각형, 앱에 보고할 배치가 전부 그쪽의 순수 함수다. `caption_layout`, `popup_reconcile`, `surface_invalidate`와 같은 규칙이며 창 없이 test가 선다.
+판단은 창을 모르는 두 헤더에 있고 surface는 그 답을 Win32에 옮긴다. 모드 자신과 모니터 목표 사각형, 앱에 보고할 배치는 플랫폼을 모르는 [`window_display_mode.h`](../src/host/window_display_mode.h)에, Style(버튼 집합 + 모드)과 비클라이언트 hit는 Win32의 [`window_mode.h`](../src/win32/window_mode.h)에 있다. 전부 순수 함수다. `caption_layout`, `popup_reconcile`, `surface_invalidate`와 같은 규칙이며 창 없이 test가 선다.
 
 전체 화면은 main surface만 사용한다. Secondary surface와 popup은 언제나 통상 모드다.
 

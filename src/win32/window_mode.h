@@ -2,43 +2,18 @@
 
 #include "host/caption_layout.h"
 #include "host/popup_reconcile.h"
+#include "host/window_display_mode.h"
 #include "luil/app/app_host.h"
 #include "luil/ui/caption_metrics.h"
 
 #include <cstdint>
-#include <optional>
 
+// 창의 모습(`window_display_mode`)으로 Win32가 정하는 것들이다.
+// 모드 자신과 전체 화면의 자리·알릴 배치는 플랫폼을 모르는 host/window_display_mode.h에 있다.
+//  - 창 스타일·비클라이언트 판정·최대화 크기 한계·DWM 프레임이 **모두 그 한 값을 본다.**
+//    `caption_surface::set_caption`도 버튼 집합이 바뀌면 같은 모드 계산을 쓴다.
+//    기존 창에 적용할 때는 프레임 비트만 바꾸어 표시·최소화 상태를 보존한다.
 namespace luil::win32 {
-    // 주 창이 지금 어떤 모습으로 서 있는가다.
-    //
-    // 창 스타일·비클라이언트 판정·최대화 크기 한계·DWM 프레임이 **모두 이 한 값을
-    // 본다.** 셋을 따로 세우면 그중 하나만 갱신되는 frame이 반드시 생긴다 —
-    // `caption_surface::set_caption`도 버튼 집합이 바뀌면 같은 모드 계산을 쓴다.
-    // 기존 창에 적용할 때는 프레임 비트만 바꾸어 표시·최소화 상태를 보존한다.
-    //
-    // **전체 화면은 테두리 없는 창(borderless)이다.** 제시가
-    // DirectComposition(합성 스왑체인)을 지나므로 독점 전체 화면(exclusive
-    // fullscreen)은 애초에 설 수 없다 — 합성 스왑체인은 `SetFullscreenState`를
-    // 받지 못한다. 모니터 rcMonitor를 그대로 덮는 창이 유일하게 가능한 길이고
-    // 그것이 여기서 뜻하는 fullscreen이다 (docs/concepts/window.md).
-    enum class window_display_mode
-    {
-        normal,
-        maximized,
-        fullscreen,
-    };
-
-    // OS가 답한 최대화 표식과 우리가 든 전체 화면 상태를 모드 하나로 합친다.
-    // **전체 화면이 이긴다.** 최대화된 창에서 전체 화면으로 들어가면 `WS_MAXIMIZE`가
-    // 남아 `IsZoomed`가 계속 참을 답하는데, 그때 최대화로 보면 크기 한계가 작업
-    // 영역으로 잘려 창이 모니터를 덮지 못한다.
-    [[nodiscard]] constexpr window_display_mode window_mode_of(const bool zoomed, const bool fullscreen) noexcept
-    {
-        if (fullscreen)
-            return window_display_mode::fullscreen;
-        return zoomed ? window_display_mode::maximized : window_display_mode::normal;
-    }
-
     // Win32 창 스타일 비트다.
     // `DWORD`와 같은 타입이고 값도 `WS_*`와 같다 — 그 둘이 실제로 같다는 것은
     // windows.h를 든 자리(caption_surface.h)의 `static_assert`가 잇는다.
@@ -217,31 +192,6 @@ namespace luil::win32 {
     // 캡션이 client 맨 위를 가로지르는 창이다 (`default_caption_band`).
     [[nodiscard]] window_hit hit_test_window(const window_frame_metrics& metrics, window_display_mode mode, int width, int height, std::uint32_t dpi, int x, int y) noexcept;
 
-    // 창 하나가 설 자리다 (물리 픽셀).
-    struct window_bounds
-    {
-        int x { 0 };
-        int y { 0 };
-        int width { 0 };
-        int height { 0 };
-
-        [[nodiscard]] bool operator==(const window_bounds&) const noexcept = default;
-    };
-
-    // 이 모니터를 덮는 전체 화면 창의 자리다.
-    // **작업 영역(rcWork)이 아니라 모니터 전체(rcMonitor)다** — 이 코드베이스에서
-    // rcMonitor를 목표로 삼는 첫 자리이고, 작업 표시줄 위까지 덮는 것이 곧 전체
-    // 화면이다. 다른 계산(popup 다듬기·보조 창 초기 배치·최대화 한계)이 전부 rcWork를
-    // 쓰므로 여기만 다르다는 것을 이름으로 남긴다.
-    //
-    // **들어갈 때 한 번 재고 마는 값이 아니다.** 모니터 사각형은 배율이 바뀌거나
-    // (`WM_DPICHANGED`) 해상도·모니터 구성이 바뀌면(`WM_DISPLAYCHANGE`) 함께
-    // 바뀌는데, 그때 창만 옛 사각형에 남으면 화면을 덮는다는 뜻이 그 순간부터
-    // 거짓이 된다 — 그 창은 여전히 테두리가 없고 판정도 어디나 client라 사용자가
-    // 되돌릴 길이 전체 화면 해제뿐이다. 두 메시지가 이 계산을 다시 부른다
-    // (`caption_surface::reapply_fullscreen_bounds`).
-    [[nodiscard]] window_bounds fullscreen_bounds_for(const screen_area& monitor) noexcept;
-
     // 작업 영역 좌표(`WINDOWPLACEMENT`)의 원점이 화면 좌표에서 떨어진 거리다.
     // 화면 좌표 = 작업 영역 좌표 + 이 값이다. 작업 표시줄이 위나 왼쪽에 있는 모니터에서만 0이 아니다.
     //  - 저장 배치를 화면 사각형으로 옮기는 자리와 보이는 사각형을 복원 배치로 옮기는 자리가 같은 식을 본다.
@@ -262,21 +212,4 @@ namespace luil::win32 {
     //  - 최대화된 창의 보이는 크기는 복원 크기로 쓸 수 없어 `normal`을 그대로 둔다.
     [[nodiscard]] screen_area fullscreen_restore_area(
         const screen_area& normal, const screen_area& visible, const screen_area& monitor, const screen_area& work, bool maximized) noexcept;
-
-    // 앱에 알릴 창 배치다.
-    //
-    // `observed`는 OS가 방금 답한 값이다 (`WINDOWPLACEMENT::rcNormalPosition`과
-    // `IsZoomed`). `restore`는 전체 화면에 들어가기 **전에** 갈무리해 둔 배치이고,
-    // **비어 있다는 것이 곧 "전체 화면이 아니다"이다** — 곁에 bool을 두지 않는다.
-    //
-    // 이 함수가 있는 이유는 전체 화면이 관측값을 통째로 못 쓰게 만들기 때문이다.
-    //  - 전체 화면에 들어갈 때 쓰는 `SetWindowPos`가 `rcNormalPosition`을 **모니터
-    //    사각형으로 덮어쓴다.** 그대로 보고하면 다음 실행은 "전체 화면을 벗어나면
-    //    모니터를 덮는 창"으로 복원된다 — 돌아갈 자리가 사라진다.
-    //  - 같은 순간의 `WM_SIZE`는 `SIZE_RESTORED`로 와서 최대화 표식도 함께 지운다.
-    //    최대화 창에서 들어갔다가 나오면 창이 복원 크기로 앉는다.
-    // 그래서 전체 화면 동안의 답은 관측값이 아니라 **기억해 둔 것**이고, 거기에
-    // `fullscreen = true`만 얹는다. 저장했다가 그대로 다시 넣으면 전체 화면으로
-    // 열리면서 돌아갈 자리도 함께 산다 (app_host.h의 `window_placement`).
-    [[nodiscard]] window_placement placement_to_report(const window_placement& observed, const std::optional<window_placement>& restore) noexcept;
 }

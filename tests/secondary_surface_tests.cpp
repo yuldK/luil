@@ -178,7 +178,7 @@ namespace {
             if (RegisterClassExW(&type) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
                 return;
             // 보이지 않는 창으로 OS 제목·아이콘과 실제 기본 처리의 반환값을 잰다.
-            window_ = CreateWindowExW(0, type.lpszClassName, L"original", luil::win32::custom_window_style_for(surface.caption().buttons, luil::win32::window_display_mode::normal), 0, 0, 400, 300,
+            window_ = CreateWindowExW(0, type.lpszClassName, L"original", luil::win32::custom_window_style_for(surface.caption().buttons, luil::window_display_mode::normal), 0, 0, 400, 300,
                 nullptr, nullptr, type.hInstance, &surface);
             if (secondary == false && window_ != nullptr)
                 surface_.attach_window(window_);

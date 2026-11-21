@@ -70,7 +70,7 @@ config.initial_placement = saved_placement;
 
 명령과 `ui_frame::fullscreen`은 최소화된 창을 전체 화면으로 넣지도 빼지도 않는다. 들어가면 "최소화"가 돌아갈 배치로 갈무리되어 나올 때 창이 최소화되고, 나오면 `SetWindowPlacement`가 사용자가 내려 둔 창을 되살리기 때문이다. `ui_frame::fullscreen`과 전체 화면 배치 요청은 창이 되살아난 뒤의 wake에서 적용하고(게시 번호를 그때 소비한다), 한 번뿐인 명령은 버린다. 전체 화면이 아닌 배치 요청은 예전처럼 창을 되살리며 적용한다.
 
-창이 지금 어떤 모습인지는 [`window_display_mode`](../../src/win32/window_mode.h) 한 값이다. 창 스타일, 비클라이언트 판정, `WM_GETMINMAXINFO`의 최대화 크기, DWM 프레임이 모두 이 값을 본다. 특히 **스타일은 버튼 집합과 모드를 함께 받는 하나의 계산**이다. `caption_surface::set_caption`이 버튼이 바뀔 때마다 `GWL_STYLE`을 통째로 다시 쓰기 때문에, 전체 화면이 스타일을 나중에 덧칠하는 방식이면 caption이 바뀌는 아무 frame에서나 그 덧칠이 지워진다.
+창이 지금 어떤 모습인지는 [`window_display_mode`](../../src/host/window_display_mode.h) 한 값이다. 그 값으로 Win32가 정하는 것은 [`window_mode.h`](../../src/win32/window_mode.h)에 있다. 창 스타일, 비클라이언트 판정, `WM_GETMINMAXINFO`의 최대화 크기, DWM 프레임이 모두 이 값을 본다. 특히 **스타일은 버튼 집합과 모드를 함께 받는 하나의 계산**이다. `caption_surface::set_caption`이 버튼이 바뀔 때마다 `GWL_STYLE`을 통째로 다시 쓰기 때문에, 전체 화면이 스타일을 나중에 덧칠하는 방식이면 caption이 바뀌는 아무 frame에서나 그 덧칠이 지워진다.
 
 전체 화면인 동안의 차이는 다음과 같다.
 

@@ -178,14 +178,14 @@ namespace {
         window_class.lpszClassName = hit_test_class_name;
         if (RegisterClassExW(&window_class) == 0 && GetLastError() != ERROR_CLASS_ALREADY_EXISTS)
             return nullptr;
-        const DWORD style { luil::win32::custom_window_style_for({}, luil::win32::window_display_mode::normal) };
+        const DWORD style { luil::win32::custom_window_style_for({}, luil::window_display_mode::normal) };
         return CreateWindowExW(WS_EX_APPWINDOW, hit_test_class_name, L"hit test", style, 100, 100, 1000, 800, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
     }
 
     // 창 왼쪽 위에서 (x, y)만큼 떨어진 자리를 이 모드로 판정한다.
     // `WM_NCHITTEST`의 lParam은 **화면 좌표**라 창 자리를 더해 넘긴다.
     // `tree`는 캡션 띠의 자리를 정하는 게시된 tree다 (없으면 맨 위 띠).
-    [[nodiscard]] LRESULT hit_test_at(const HWND window, const luil::win32::window_display_mode mode, const int x, const int y, const luil::ui_tree* const tree = nullptr)
+    [[nodiscard]] LRESULT hit_test_at(const HWND window, const luil::window_display_mode mode, const int x, const int y, const luil::ui_tree* const tree = nullptr)
     {
         RECT bounds {};
         GetWindowRect(window, &bounds);
@@ -980,17 +980,17 @@ TEST_CASE("A fullscreen window has no non-client area at all", "[win32][window]"
     REQUIRE(window != nullptr);
 
     // 통상 창의 모서리와 캡션은 살아 있다.
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 1, 1) == HTTOPLEFT);
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 300, 10) == HTCAPTION);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::normal, 1, 1) == HTTOPLEFT);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::normal, 300, 10) == HTCAPTION);
 
     // 전체 화면에서는 같은 자리가 전부 client다.
     // 가장자리가 남으면 화면 끝을 노려 누르다 창 크기가 바뀌고, 캡션 띠가 남으면
     // 끌기 한 번에 전체 화면이 통째로 딸려 나온다.
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 1, 1) == HTCLIENT);
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 10, 10) == HTCLIENT);
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 300, 10) == HTCLIENT);
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 980, 10) == HTCLIENT);
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::fullscreen, 500, 400) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::fullscreen, 1, 1) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::fullscreen, 10, 10) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::fullscreen, 300, 10) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::fullscreen, 980, 10) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::fullscreen, 500, 400) == HTCLIENT);
 
     DestroyWindow(window);
 }
@@ -1013,11 +1013,11 @@ TEST_CASE("The window hit test reads the caption band from the published tree", 
     const luil::ui_tree tree { std::move(root) };
 
     const int bottom_row { static_cast<int>(height) - 20 };
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 300, bottom_row, &tree) == HTCAPTION);
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, static_cast<int>(width) - 20, bottom_row, &tree) == HTCLOSE);
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 300, 10, &tree) == HTCLIENT);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::normal, 300, bottom_row, &tree) == HTCAPTION);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::normal, static_cast<int>(width) - 20, bottom_row, &tree) == HTCLOSE);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::normal, 300, 10, &tree) == HTCLIENT);
     // tree가 없으면 예전처럼 맨 위가 캡션이다.
-    REQUIRE(hit_test_at(window, luil::win32::window_display_mode::normal, 300, 10) == HTCAPTION);
+    REQUIRE(hit_test_at(window, luil::window_display_mode::normal, 300, 10) == HTCAPTION);
 
     DestroyWindow(window);
 }
