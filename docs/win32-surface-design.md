@@ -116,7 +116,7 @@ Main application window는 `window_surface`에 `app_host`, popup과 secondary su
 
 ## 검증
 
-[`tests/surface_input_tests.cpp`](../tests/surface_input_tests.cpp)는 message 변환과 surface tag를 검증하고 [`tests/surface_invalidate_tests.cpp`](../tests/surface_invalidate_tests.cpp)는 repaint 판단을 검증하며 [`tests/window_mode_tests.cpp`](../tests/window_mode_tests.cpp)는 창 모드의 style·hit·목표 사각형·보고 배치를 검증한다. Secondary, popup, accessibility, renderer, text-input, WebView, OLE test는 공통 surface 경계에 붙은 service를 반복 검증한다.
+[`tests/surface_input_tests.cpp`](../tests/surface_input_tests.cpp)는 message 변환과 surface tag를 검증하고 [`tests/surface_invalidate_tests.cpp`](../tests/surface_invalidate_tests.cpp)는 repaint 판단을 검증하며 [`tests/window_mode_tests.cpp`](../tests/window_mode_tests.cpp)는 창 모드의 style·hit를, [`tests/window_display_mode_tests.cpp`](../tests/window_display_mode_tests.cpp)는 모드 합치기·목표 사각형·보고 배치를 검증한다. Secondary, popup, accessibility, renderer, text-input, WebView, OLE test는 공통 surface 경계에 붙은 service를 반복 검증한다.
 
 [`tests/secondary_surface_tests.cpp`](../tests/secondary_surface_tests.cpp)는 공통 캡션과 보조 창의 실제 message 경로에서 활성·비활성 전환 허용, 전체 버튼·닫기 전용 구성, 96·144·192 DPI, 최소화 분기와 OS 제목·아이콘·스타일·시스템 메뉴 보존을 검증한다.
 

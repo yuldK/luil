@@ -109,7 +109,7 @@ config.initial_placement = saved_placement;
 
 `window_placement::fullscreen`이 참이면 나머지 값은 지금 창의 사각형이 아니라 **돌아갈 자리**다. `maximized`와는 겹쳐 쓴다: 둘 다 참이면 "지금은 전체 화면, 나오면 최대화된 창"이다. 그래서 한 줄을 저장했다가 그대로 다시 넣으면 전체 화면으로 열리면서 돌아갈 자리도 함께 산다.
 
-전체 화면인 동안 OS의 관측값은 쓸 수 없다. 들어갈 때의 `SetWindowPos`가 `rcNormalPosition`을 모니터 사각형으로 덮어쓰고, 같은 순간의 `WM_SIZE`는 `SIZE_RESTORED`로 와서 최대화 표식까지 지운다. 무엇을 알릴지는 [`placement_to_report`](../../src/win32/window_mode.h)가 정한다 — 갈무리해 둔 값이 있으면 그것을, 없으면 관측값을 그대로 답한다. 전체 화면 전환의 `WM_SIZE`는 최대화 전환으로 세지 않고 명령이 직접 보고한다.
+전체 화면인 동안 OS의 관측값은 쓸 수 없다. 들어갈 때의 `SetWindowPos`가 `rcNormalPosition`을 모니터 사각형으로 덮어쓰고, 같은 순간의 `WM_SIZE`는 `SIZE_RESTORED`로 와서 최대화 표식까지 지운다. 무엇을 알릴지는 [`placement_to_report`](../../src/host/window_display_mode.h)가 정한다 — 갈무리해 둔 값이 있으면 그것을, 없으면 관측값을 그대로 답한다. 전체 화면 전환의 `WM_SIZE`는 최대화 전환으로 세지 않고 명령이 직접 보고한다.
 
 시작 복원은 저장한 자리의 모니터에서 전체 화면으로 열린다. 실행 중 전체 화면 배치 요청의 사각형과 최대화 여부는 그대로 돌아갈 배치로 저장한다. 요청한 사각형이 다른 모니터에 있어도 덮을 모니터는 현재 창이 정한다. 전체 화면을 해제하면 요청이 지정한 자리로 돌아가므로 앱이 저장한 명시적 복원 좌표가 보존된다.
 
