@@ -443,6 +443,18 @@ if(LUIL_PLATFORM STREQUAL "android")
     # 나머지 test는 Win32 계층이나 Windows 도구(rc, pwsh, MSVC ASan)를 쓴다.
     return()
 endif()
+
+if(LUIL_PLATFORM STREQUAL "macos")
+    # 빌드한 기계에서 그대로 돈다. 기기도 실행기도 없으므로 발견도 빌드 뒤에 바로 한다.
+    #  - core만 링크하는 실행 파일 둘이다. 플랫폼 조립의 test는 그 조립이 설 때 더한다.
+    catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
+    luil_set_ide_folder("Tests" luil_core_tests)
+    if(LUIL_ENABLE_TEXT_SHAPING)
+        catch_discover_tests(luil_text_shaping_tests PROPERTIES TIMEOUT 120)
+    endif()
+    # 나머지 test는 Win32 계층이나 Windows 도구(rc, pwsh, MSVC ASan)를 쓴다.
+    return()
+endif()
 luil_disable_automatic_windows_manifest(luil_core_tests)
 
 add_test(NAME luil_accent_catalog

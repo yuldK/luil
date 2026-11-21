@@ -662,7 +662,13 @@ luil_add_source_filter(luil_files "win32/support"
 #  - `win32` 안이 아닌 이유는 그 계층의 정체가 **창**이어서다 (HWND·메시지 루프·
 #    COM STA·렌더러·IME 어느 것도 HTTP에 없다). `win32` **위**인 이유는 의존
 #    방향이다 — WinHTTP 백엔드가 utf8 변환과 오류 글을 그 계층에서 가져다 쓴다.
-luil_add_source_filter(luil_files "net"
+#  - 이 묶음은 **플랫폼마다 같다.** 전송만 플랫폼의 것이라(net/winhttp, net/android) 따로 모아
+#    아래의 플랫폼 조립이 함께 가져다 쓴다. 플랫폼 블록마다 다시 적으면 새 파일이 한쪽에만 들어간다.
+#  - WebSocket client는 전송을 `websocket_transport.h` 뒤에 두므로 몸은 여기에 있다.
+#  - SMB client의 실제 구현은 Android의 것이다 (libsmb2). 규칙·연결 장부·DNS 메시지만 공통이고,
+#    "지원 안 함"으로 답하는 파일은 구현이 없는 플랫폼이 제 블록에서 더한다.
+set(luil_net_files)
+luil_add_source_filter(luil_net_files "net"
     net/http_body.cpp
     "${public_headers}/net/http_body.h"
     "${public_headers}/net/http_client.h"
@@ -672,15 +678,20 @@ luil_add_source_filter(luil_files "net"
     "${public_headers}/net/http_message.h"
     net/http_request_rules.cpp
     net/http_request_rules.h
-    # SMB client는 Android 전용이다. Windows는 운영체제의 SMB가 있어 `create`가 "지원 안 함"으로 답한다.
+    net/websocket_client.cpp
+    net/websocket_transport.h
+    "${public_headers}/net/websocket_client.h"
     net/dns_message.cpp
     net/dns_message.h
     "${public_headers}/net/smb_client.h"
-    net/smb_client_unsupported.cpp
     net/smb_pool.cpp
     net/smb_pool.h
     net/smb_rules.cpp
     net/smb_rules.h)
+list(APPEND luil_files ${luil_net_files})
+# Windows는 운영체제의 SMB가 있어 `smb_client::create`가 "지원 안 함"으로 답한다.
+luil_add_source_filter(luil_files "net"
+    net/smb_client_unsupported.cpp)
 
 # net/winhttp: WinHTTP 비동기 세션 위의 `http_client`다.
 # URL 가르기, 오류 코드 옮기기, 코드 페이지 변환도 WinHTTP·Win32에 기대므로 여기 있다.
@@ -710,10 +721,7 @@ luil_add_source_filter(luil_core_files "ui/foundation"
     ui/ligature_carets.cpp
     ui/ligature_carets.h)
 luil_add_source_filter(luil_files "net/winhttp"
-    net/websocket_client.cpp
-    net/websocket_transport.h
-    net/winhttp/websocket_transport.cpp
-    "${public_headers}/net/websocket_client.h")
+    net/winhttp/websocket_transport.cpp)
 luil_add_source_filter(luil_files "win32/media"
     win32/video_frame_player.cpp
     "${public_headers}/win32/video_frame_player.h"
@@ -892,31 +900,14 @@ if(LUIL_PLATFORM STREQUAL "android")
 
     # net: HTTP 값과 JNI의 HttpURLConnection 위에 선 `http_client`다.
     # JavaVM은 앱 host가 시작할 때 적는다 (android/java_vm.h). charset은 utf-8과 utf-16만 옮긴다.
+    #  - 값·규칙·WebSocket client의 몸은 플랫폼 공통 묶음이다 (위의 luil_net_files).
+    list(APPEND luil_android_files ${luil_net_files})
     luil_add_source_filter(luil_android_files "net"
         android/java_vm.cpp
         android/java_vm.h
-        net/websocket_client.cpp
-        net/websocket_transport.h
         net/android/websocket_transport.cpp
-        "${public_headers}/net/websocket_client.h"
         net/android/android_http_client.cpp
-        net/android/android_text_transcode.cpp
-        net/http_body.cpp
-        "${public_headers}/net/http_body.h"
-        "${public_headers}/net/http_client.h"
-        net/http_media_type.cpp
-        "${public_headers}/net/http_media_type.h"
-        net/http_message.cpp
-        "${public_headers}/net/http_message.h"
-        net/http_request_rules.cpp
-        net/http_request_rules.h
-        net/dns_message.cpp
-        net/dns_message.h
-        "${public_headers}/net/smb_client.h"
-        net/smb_pool.cpp
-        net/smb_pool.h
-        net/smb_rules.cpp
-        net/smb_rules.h)
+        net/android/android_text_transcode.cpp)
     # SMB client다. LUIL_ENABLE_SMB를 켠 구성은 libsmb2(따로 싼 libsmb2.so) 위에 서고, 끈 구성은 "지원 안 함"으로 답한다.
     if(LUIL_ENABLE_SMB)
         luil_add_source_filter(luil_android_files "net" net/mdns_query.cpp net/mdns_query.h net/smb_client_libsmb2.cpp)
@@ -949,6 +940,10 @@ if(LUIL_PLATFORM STREQUAL "android")
         target_link_libraries(luil PRIVATE luil_smb2)
     endif()
 endif()
+
+# macOS의 플랫폼 조립(`luil`)은 아직 없다. core와 그 test만 선다.
+#  - 설 때는 위의 두 블록과 같은 모양이다: 플랫폼 소스(.mm)와 luil_net_files, 그리고 전송 하나.
+#    codicon 글꼴은 Android처럼 라이브러리 안에 싣는다 (embed_binary.cmake).
 
 # CommonMark 파서는 원본 C로 컴파일해 core 정적 라이브러리에 담는다.
 target_sources(luil_core PRIVATE

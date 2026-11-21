@@ -95,3 +95,24 @@ test는 기기에서 돈다. `luil_core_tests`의 `CROSSCOMPILING_EMULATOR`가 [
 HTTP test(`luil_net_tests`)는 JNI로 `java.net`을 부르므로 JVM 안에서 돈다. 공유 라이브러리로 세우고, 같은 script가 `JVM_DEX`를 받으면 라이브러리와 dex를 함께 올려 `app_process`로 띄운다. dex는 [`JvmTestMain.java`](../../tests/android/JvmTestMain.java)를 Android Studio의 JBR `javac`(`JAVA_HOME`, 없으면 Android Studio 자리)로 옮기고 SDK build-tools의 `d8`로 짓는다. 그래서 Android test 구성에는 JBR과 build-tools가 있어야 한다.
 
 core test 실행 파일은 플랫폼 계층을 링크하지 않는다. core가 링크로 묶어 부르는 두 hook(`platform_font_source()`, `platform_fail_fast()`)은 [`core_platform_stub.cpp`](../../tests/core_platform_stub.cpp)가 test용으로 정의한다 (빈 글꼴 관리자, `abort`). 그래서 Windows와 Android가 같은 test를 같은 수만큼 돌린다.
+
+## macOS
+
+**아직 실물로 확인하지 못한 구성이다.** Mac과 mac-arm64 Skia 패키지가 준비되기 전에 CMake의 갈래만 먼저 세웠다. 지금은 Android의 2단계와 같은 자리, 곧 플랫폼을 모르는 층(`luil_core`)과 그 test(`luil_core_tests`)까지만 구성한다. 플랫폼 조립(`luil`)·예제·설치는 없고, `LUIL_BUILD_EXAMPLES`를 켜면 configure가 멈춘다.
+
+| 항목 | 값 |
+| --- | --- |
+| 플랫폼 | `LUIL_MACOS_ARCHITECTURE`, **임시로 arm64 하나** (universal을 받을지는 Skia 패키지를 세울 때 정한다). 최소 판은 `LUIL_MINIMUM_MACOS_VERSION`, **임시로 13.0** |
+| 생성기 | 가리지 않는다. preset은 Ninja Multi-Config |
+| 컴파일러 | Xcode의 clang. 플랫폼 조립이 쓸 Objective-C++(`OBJCXX`)도 함께 켠다 |
+| Skia | 대상 이름 `mac-arm64`, 자리 `third_party/skia-prep-mac-arm64`. **아카이브 목록·요구 인자·프레임워크는 임시 값**이고 패키지가 나오면 맞춘다 |
+
+[`platform/macos.cmake`](../../cmake/platform/macos.cmake)가 아키텍처와 `CMAKE_OSX_DEPLOYMENT_TARGET`을 검사한다. [`compiler/clang.cmake`](../../cmake/compiler/clang.cmake)의 `-Wall -Wextra -Werror`는 컴파일러 ID `Clang`과 `AppleClang`, 언어 `CXX`와 `OBJCXX`에 모두 건다. Xcode의 clang은 ID가 `AppleClang`이라 하나만 적으면 경고 규율이 오류 없이 빠진다. Apple의 `AssertMacros.h`가 `check`·`verify`·`require`를 매크로로 덮지 않게 `__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0`도 건다. 공개 헤더에 `check`라는 이름이 있어서다.
+
+```sh
+cmake --preset macos-arm64-core
+cmake --build --preset macos-arm64-core-debug
+ctest --preset macos-arm64-core-debug
+```
+
+test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`).

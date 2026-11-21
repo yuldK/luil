@@ -103,9 +103,16 @@ function(luil_check_skia_abi flavor build_directory arguments_text)
             "rebuild Skia with the argument file in third_party/skia-args.")
     endif()
 
-    # Android에는 MSVC CRT가 없다. 대신 패키지가 기대하는 최저 API 수준을 본다.
-    if(NOT LUIL_SKIA_TARGET STREQUAL "win-x64")
+    # CRT 검사는 MSVC CRT가 있는 대상의 것이다. 대상은 이름으로 가른다 — 설치본의 package config도
+    # 이 파일을 쓰고, 거기에는 LUIL_PLATFORM이 없다.
+    #  - Android는 대신 패키지가 기대하는 최저 API 수준을 본다.
+    #  - macOS의 최소 판은 platform/macos.cmake가 본다. 패키지의 args.gn과 맞대는 검사는
+    #    mac 패키지가 그 값을 어떻게 적는지 정해진 뒤에 더한다.
+    if(LUIL_SKIA_TARGET MATCHES "^android-")
         luil_check_skia_android_api("${build_directory}" "${arguments_text}")
+        return()
+    endif()
+    if(NOT LUIL_SKIA_TARGET MATCHES "^win-")
         return()
     endif()
 
@@ -274,14 +281,16 @@ function(luil_find_skia)
 
     add_library(luil_skia INTERFACE)
     target_include_directories(luil_skia SYSTEM INTERFACE "${LUIL_SKIA_ROOT}")
-    if(LUIL_SKIA_TARGET STREQUAL "win-x64")
-        set(component_link_items ${component_targets})
-    else()
+    if(LUIL_SKIA_TARGET MATCHES "^android-")
         # Android 소비자의 링크 계약이다 (skia-prep docs/skia-build.md 8.5).
         # 157 r1은 rust 아카이브의 중복 Skia 오브젝트를 걷었으므로 중복 정의를
         # 허용하지 않는다. 아카이브끼리 서로 부르는 기호만 한 묶음으로 다시 훑어 푼다.
         string(JOIN "," component_group ${component_targets})
         set(component_link_items "$<LINK_GROUP:RESCAN,${component_group}>")
+    else()
+        # 다시 훑는 묶음은 한 번만 훑는 GNU 계열 링커의 것이다. MSVC와 Apple의 링커는 아카이브를
+        # 순서와 무관하게 풀고, CMake도 Apple 대상에는 RESCAN을 정의하지 않는다.
+        set(component_link_items ${component_targets})
     endif()
     target_link_libraries(luil_skia
         INTERFACE

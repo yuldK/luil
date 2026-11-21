@@ -13,15 +13,22 @@ project(luil VERSION 0.1.0 LANGUAGES C CXX)
 # 대상 플랫폼이다. 플랫폼을 모르는 층(luil_core)은 어디서나 같고, 그 위의 조립과
 # 검사·Skia 계약이 여기서 갈린다 (docs/android-port-plan.md).
 #  - Android는 지금 core와 그 test만 세운다 (2단계). 창·입력·렌더러는 다음 단계다.
+#  - macOS도 core와 그 test부터 세운다. 플랫폼 조립(AppKit·Metal)은 다음 단계다.
+# 아래의 플랫폼 갈래는 모두 이 이름으로 가른다. "Windows가 아니면 Android"처럼 나머지로
+# 받는 갈래를 두지 않는다 — 플랫폼이 하나 더 늘 때 조용히 남의 설정을 받게 된다.
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(LUIL_PLATFORM "android")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+    set(LUIL_PLATFORM "macos")
+    # 플랫폼 조립이 Objective-C++(.mm)다. core는 C++만 쓴다.
+    enable_language(OBJCXX)
 elseif(WIN32)
     set(LUIL_PLATFORM "windows")
     # 실행 파일 resource(.rc)는 Windows에만 있다.
     enable_language(RC)
 else()
     message(FATAL_ERROR
-        "luil supports Windows 11 x64 and Android arm64. "
+        "luil supports Windows 11 x64, Android arm64 and macOS arm64. "
         "${CMAKE_SYSTEM_NAME} is not supported.")
 endif()
 
@@ -36,6 +43,11 @@ set(LUIL_SUPPORTED_GENERATORS
     "Visual Studio 17 2022"
     "Visual Studio 18 2026"
 )
+# macOS의 대상이다. Skia 패키지(mac-arm64)가 정한 것과 같아야 한다.
+#  - **둘 다 아직 임시 값이다.** arm64만 할지 universal까지 할지, 최소 판을 얼마로 할지는
+#    skia-prep이 mac 패키지를 세울 때 정하고 그 값으로 맞춘다.
+set(LUIL_MACOS_ARCHITECTURE "arm64")
+set(LUIL_MINIMUM_MACOS_VERSION "13.0")
 
 set(LUIL_CMAKE_DIRECTORY "${PROJECT_SOURCE_DIR}/cmake")
 set(LUIL_THIRD_PARTY_DIRECTORY "${PROJECT_SOURCE_DIR}/third_party")
@@ -92,6 +104,8 @@ configure_file(
 # 패키지는 대상마다 따로 설치된다 (scripts/fetch_skia.ps1 -Target).
 if(LUIL_PLATFORM STREQUAL "android")
     set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep-android-arm64")
+elseif(LUIL_PLATFORM STREQUAL "macos")
+    set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep-mac-arm64")
 elseif(EXISTS "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep/include/core/SkCanvas.h"
     OR NOT EXISTS "${LUIL_THIRD_PARTY_DIRECTORY}/skia/include/core/SkCanvas.h")
     set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep")
@@ -187,7 +201,7 @@ if(LUIL_PLATFORM STREQUAL "windows")
     set(LUIL_SKIA_LOTTIE_COMPONENTS
         skottie.lib sksg.lib jsonreader.lib skresources.lib skshaper.lib)
     set(LUIL_SKIA_AVIF_COMPONENTS avif_decoder.lib libavif.lib libgav1.lib libyuv.lib)
-else()
+elseif(LUIL_PLATFORM STREQUAL "android")
     set(LUIL_SKIA_TARGET "android-arm64")
     # android-arm64 패키지의 정적 아카이브다 (skia-prep docs/skia-build.md 8.4).
     #  - 157 r1부터 rust 아카이브의 중복 Skia 오브젝트를 패키지에서 걷는다 (8.5).
@@ -239,21 +253,73 @@ else()
     set(LUIL_SKIA_LOTTIE_COMPONENTS
         libskottie.a libsksg.a libjsonreader.a libskresources.a libskshaper.a)
     set(LUIL_SKIA_AVIF_COMPONENTS libavif_decoder.a libavif.a libgav1.a libyuv.a)
+elseif(LUIL_PLATFORM STREQUAL "macos")
+    # **이 갈래의 값은 전부 임시다.** mac-arm64 패키지가 아직 없어 실물과 맞대 보지 못했다.
+    # skia-prep이 패키지를 내면 그 `args.gn`·아카이브 목록·대상 이름으로 고친다.
+    # 그때까지 configure는 "패키지가 없다"에서 멈추므로 틀린 값이 조용히 쓰이지는 않는다.
+    set(LUIL_SKIA_TARGET "mac-arm64")
+    # win-x64 목록에서 Direct3D 몫(spirv_cross·d3d12allocator)을 뺀 것이다.
+    # 글꼴은 CoreText라 Android의 FreeType·expat 묶음이 없다.
+    set(LUIL_SKIA_COMPONENTS
+        libskia.a
+        libskcms.a
+        libjpeg.a
+        libjpeg12.a
+        libjpeg16.a
+        libwebp.a
+        libwebp_sse41.a
+        libwuffs.a
+        librust_png_ffi_rs.a
+        libcxx_cc.a)
+    set(LUIL_SKIA_RUST_PNG_SYSTEM_LIBRARIES "")
+    # Skia가 요구하는 시스템 프레임워크다. 글꼴이 CoreText, GPU가 Metal이다.
+    set(LUIL_SKIA_SYSTEM_LIBRARIES
+        "-framework CoreFoundation"
+        "-framework CoreGraphics"
+        "-framework CoreText"
+        "-framework CoreServices"
+        "-framework Foundation"
+        "-framework Metal")
+    # GPU는 Metal(Ganesh)이다. 코덱은 다른 대상과 같다.
+    set(LUIL_SKIA_REQUIRED_ARGUMENTS
+        "skia_use_metal=true"
+        "skia_use_libjpeg_turbo_decode=true"
+        "skia_use_libjpeg_turbo_encode=true"
+        "skia_use_libwebp_decode=true"
+        "skia_use_libwebp_encode=true"
+        "skia_use_wuffs=true"
+        "skia_use_rust_png_decode=true"
+        "skia_use_rust_png_encode=true")
+    # Xcode의 clang이다. luil도 같은 것으로 컴파일한다.
+    set(LUIL_SKIA_REQUIRED_TOOLCHAIN "clang")
+
+    set(LUIL_SKIA_SVG_COMPONENTS libsvg.a libskshaper.a libskresources.a)
+    set(LUIL_SKIA_TEXT_COMPONENTS
+        libskparagraph.a libskshaper.a libskunicode_icu.a libskunicode_core.a libharfbuzz.a)
+    set(LUIL_SKIA_TEXT_FALLBACK_COMPONENTS libskunicode_libgrapheme.a)
+    set(LUIL_SKIA_LOTTIE_COMPONENTS
+        libskottie.a libsksg.a libjsonreader.a libskresources.a libskshaper.a)
+    set(LUIL_SKIA_AVIF_COMPONENTS libavif_decoder.a libavif.a libgav1.a libyuv.a)
 endif()
 
 if(PROJECT_IS_TOP_LEVEL)
     set(CMAKE_CXX_STANDARD ${LUIL_CXX_STANDARD})
     set(CMAKE_CXX_STANDARD_REQUIRED ON)
     set(CMAKE_CXX_EXTENSIONS OFF)
+    # Objective-C++ 소스도 같은 표준으로 컴파일한다 (macOS의 플랫폼 조립).
+    set(CMAKE_OBJCXX_STANDARD ${LUIL_CXX_STANDARD})
+    set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
+    set(CMAKE_OBJCXX_EXTENSIONS OFF)
 endif()
 
 # 기본 구성에는 라이브러리 target만 둔다.
 # test와 개발 도구 target은 명시적으로 켤 때만 만들어진다.
 #   cmake --preset vs2026-tests     → test target과 CTest 등록 포함
 #   -DLUIL_BUILD_TOOLING=ON      → 소스 style 검사 target 포함
-# 설치·Direct3D·웹뷰는 Windows의 것이라 Android에서는 일반 변수로 먼저 꺼 둔다.
+# 설치·Direct3D·웹뷰는 Windows의 것이라 다른 플랫폼에서는 일반 변수로 먼저 꺼 둔다.
 # 아래 option이 그 값을 따른다 (CMP0077).
-if(LUIL_PLATFORM STREQUAL "android")
+#  - macOS의 설치는 플랫폼 조립이 선 뒤에 정한다. 지금은 core만 서서 설치할 것이 없다.
+if(NOT LUIL_PLATFORM STREQUAL "windows")
     set(LUIL_ENABLE_DIRECT3D OFF)
     set(LUIL_ENABLE_WEBVIEW OFF)
     set(LUIL_ENABLE_MSVC_ANALYZE OFF)
@@ -398,7 +464,7 @@ if(LUIL_PLATFORM STREQUAL "windows")
     )
     luil_validate_msvc(MINIMUM_VERSION "${LUIL_MINIMUM_MSVC_VERSION}")
     luil_configure_msvc_link_directories()
-else()
+elseif(LUIL_PLATFORM STREQUAL "android")
     include("${LUIL_CMAKE_DIRECTORY}/compiler/clang.cmake")
     include("${LUIL_CMAKE_DIRECTORY}/platform/android.cmake")
 
@@ -407,6 +473,14 @@ else()
         ABI "arm64-v8a"
         MINIMUM_API_LEVEL 26
         STL "c++_static"
+    )
+elseif(LUIL_PLATFORM STREQUAL "macos")
+    include("${LUIL_CMAKE_DIRECTORY}/compiler/clang.cmake")
+    include("${LUIL_CMAKE_DIRECTORY}/platform/macos.cmake")
+
+    luil_validate_macos_platform(
+        ARCHITECTURE "${LUIL_MACOS_ARCHITECTURE}"
+        MINIMUM_VERSION "${LUIL_MINIMUM_MACOS_VERSION}"
     )
 endif()
 
@@ -422,11 +496,15 @@ if(LUIL_PLATFORM STREQUAL "windows")
         ENABLE_ANALYZE "${LUIL_ENABLE_MSVC_ANALYZE}"
         WARNINGS_AS_ERRORS "${LUIL_WARNINGS_AS_ERRORS}"
     )
-else()
+elseif(LUIL_PLATFORM STREQUAL "android" OR LUIL_PLATFORM STREQUAL "macos")
+    # 둘이 같은 규율을 쓴다. 둘 다 clang 계열이고, 위의 갈래가 clang.cmake를 들였다.
     luil_apply_clang_options(
         luil_options
         WARNINGS_AS_ERRORS "${LUIL_WARNINGS_AS_ERRORS}"
     )
+endif()
+if(LUIL_PLATFORM STREQUAL "macos")
+    luil_apply_macos_options(luil_options)
 endif()
 
 # 소비자에게 전파되는 사용 요건이다.
@@ -468,6 +546,11 @@ if(LUIL_PLATFORM STREQUAL "windows" AND (LUIL_BUILD_EXAMPLES OR LUIL_BUILD_TESTS
     add_subdirectory(examples)
 elseif(LUIL_PLATFORM STREQUAL "android" AND LUIL_BUILD_EXAMPLES)
     add_subdirectory(examples/android)
+elseif(LUIL_PLATFORM STREQUAL "macos" AND LUIL_BUILD_EXAMPLES)
+    # 예제는 플랫폼 조립(`luil`)을 링크한다. 그것이 아직 없으니 조용히 넘기지 않고 멈춘다.
+    message(FATAL_ERROR
+        "LUIL_BUILD_EXAMPLES is not available on macOS yet. "
+        "Only luil_core and its tests build there for now.")
 endif()
 if(LUIL_BUILD_TESTS)
     add_subdirectory(tests)

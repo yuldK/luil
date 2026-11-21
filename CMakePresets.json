@@ -14,6 +14,11 @@
                 "strategy": "set"
             },
             "binaryDir": "${sourceDir}/build/${presetName}",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
             "cacheVariables": {
                 "CMAKE_SYSTEM_VERSION": "10.0.22621.0",
                 "LUIL_BUILD_TESTS": "OFF",
@@ -138,6 +143,29 @@
                 "LUIL_BUILD_EXAMPLES": "ON",
                 "ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES": "ON"
             }
+        },
+        {
+            "name": "macos-arm64-core",
+            "displayName": "macOS arm64 core library and tests",
+            "description": "Needs the Xcode command line tools and Ninja. Builds luil_core and its tests only; the platform layer is not there yet.",
+            "generator": "Ninja Multi-Config",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Darwin"
+            },
+            "cacheVariables": {
+                "CMAKE_OSX_ARCHITECTURES": "arm64",
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0",
+                "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
+                "LUIL_BUILD_TESTS": "ON",
+                "LUIL_ENABLE_SVG": "ON",
+                "LUIL_ENABLE_TEXT_SHAPING": "ON",
+                "LUIL_ENABLE_TEXT_SHAPING_FALLBACK": "ON",
+                "LUIL_ENABLE_AVIF": "ON",
+                "LUIL_ENABLE_LOTTIE": "ON"
+            }
         }
     ],
     "buildPresets": [
@@ -230,6 +258,16 @@
             "name": "android-arm64-release",
             "configurePreset": "android-arm64",
             "configuration": "Release"
+        },
+        {
+            "name": "macos-arm64-core-debug",
+            "configurePreset": "macos-arm64-core",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-arm64-core-release",
+            "configurePreset": "macos-arm64-core",
+            "configuration": "Release"
         }
     ],
     "testPresets": [
@@ -313,6 +351,28 @@
         {
             "name": "android-arm64-release",
             "configurePreset": "android-arm64",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error"
+            }
+        },
+        {
+            "name": "macos-arm64-core-debug",
+            "configurePreset": "macos-arm64-core",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error"
+            }
+        },
+        {
+            "name": "macos-arm64-core-release",
+            "configurePreset": "macos-arm64-core",
             "configuration": "Release",
             "output": {
                 "outputOnFailure": true

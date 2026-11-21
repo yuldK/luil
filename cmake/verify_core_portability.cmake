@@ -32,10 +32,19 @@ else()
 endif()
 
 # 플랫폼 SDK 헤더와 MSVC 전용 헤더다. 비교 전에 소문자로 바꾸므로 소문자로 적는다.
+#  - Apple과 Android의 것은 디렉터리(프레임워크) 이름으로 적는다. 끝의 `/`까지가 이름이라
+#    같은 글자로 시작하는 luil 헤더(`foundation_...h`)를 잡지 않는다.
+set(windows_header_pattern
+    "windows|winuser|wingdi|winbase|winnls|winhttp|winsock2|ws2tcpip|objbase|combaseapi|unknwn|wrl|d3d1[12]|dxgi|dcomp|dwrite|dwmapi|uiautomation|oleacc|ole2|shellapi|shlobj|imm|msctf|commctrl|intrin|webview2")
+set(apple_header_pattern
+    "cocoa/|appkit/|uikit/|foundation/|corefoundation/|coregraphics/|coretext/|coreservices/|quartzcore/|metal/|metalkit/|webkit/|security/|usernotifications/|avfoundation/|carbon/|objc/|dispatch/|mach/|targetconditionals")
+set(android_header_pattern
+    "jni\\.h|android/|game-activity/|game-text-input/")
 set(platform_header_pattern
-    "(windows|winuser|wingdi|winbase|winnls|winhttp|winsock2|ws2tcpip|objbase|combaseapi|unknwn|wrl|d3d1[12]|dxgi|dcomp|dwrite|dwmapi|uiautomation|oleacc|ole2|shellapi|shlobj|imm|msctf|commctrl|intrin|webview2)[^>\"]*")
+    "(${windows_header_pattern}|${apple_header_pattern}|${android_header_pattern})[^>\"]*")
 # luil 안에서 core 위의 계층이다.
-set(upper_layer_pattern "(luil/)?(win32|net)/")
+#  - macOS 계층의 디렉터리 이름은 아직 정하지 않았다. 어느 쪽으로 정해도 잡히게 둘 다 적는다.
+set(upper_layer_pattern "(luil/)?(win32|android|mac|macos|net)/")
 
 set(violations "")
 set(checked_count 0)
@@ -46,11 +55,12 @@ foreach(directory IN LISTS checked_directories)
     file(GLOB_RECURSE files "${directory}/*.h" "${directory}/*.cpp")
     foreach(file IN LISTS files)
         math(EXPR checked_count "${checked_count} + 1")
-        file(STRINGS "${file}" include_lines REGEX "^[ \t]*#[ \t]*include")
+        # `#import`도 본다. clang은 C++ 소스에서도 그것을 받는다.
+        file(STRINGS "${file}" include_lines REGEX "^[ \t]*#[ \t]*(include|import)")
         foreach(line IN LISTS include_lines)
             string(TOLOWER "${line}" lowered)
-            if(lowered MATCHES "#[ \t]*include[ \t]*[<\"]${platform_header_pattern}[>\"]"
-                OR line MATCHES "#[ \t]*include[ \t]*\"${upper_layer_pattern}")
+            if(lowered MATCHES "#[ \t]*(include|import)[ \t]*[<\"]${platform_header_pattern}[>\"]"
+                OR line MATCHES "#[ \t]*(include|import)[ \t]*\"${upper_layer_pattern}")
                 file(RELATIVE_PATH relative "${SOURCE_DIRECTORY}/.." "${file}")
                 string(STRIP "${line}" stripped)
                 list(APPEND violations "${relative}: ${stripped}")
