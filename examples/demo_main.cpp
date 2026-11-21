@@ -881,7 +881,8 @@ namespace demo {
                     frame->window_placement_request = placement_request_;
                 }
                 // 창 페이지가 고른 전체 화면 상태다. 비어 있으면 싣지 않아 명령과 배치 요청이 정한다.
-                //  - 배치 보고의 `placement_.fullscreen`은 여기에 넣지 않는다. 그 값은 캡션을 접는 데만 쓴다.
+                //  - 배치 보고의 `placement_.fullscreen`은 여기에 넣지 않는다. 그 값은 화면을 짓는 데(캡션 접기, 끝 옮기기를
+                //    둘지)만 쓴다.
                 frame->fullscreen = windows_.frame_fullscreen();
                 // popup은 이번 frame에서 배치된 element의 자리를 쓰므로 tree를 만든 뒤 단다.
                 // 현재 페이지의 것만 뜬다 (다른 페이지의 열림 상태는 이동 때 닫았다).

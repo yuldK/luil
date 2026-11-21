@@ -36,14 +36,17 @@ namespace demo {
             return folder.u8string();
         }
 
-        // 네이티브로 그리는 글 문서다.
-        // 웹뷰가 푸는 HTML과 나란히 두어 무엇이 무엇을 그리는지 보이게 한다.
         // 떠 있는 판의 크기와 본문 가장자리에서 떨어진 거리다 (논리 픽셀). 본문이 낮으면 판도 그만큼 낮아진다.
         constexpr float floating_width { 380.0f };
         constexpr float floating_height { 240.0f };
         constexpr float floating_margin { 12.0f };
         constexpr float floating_title_height { 24.0f };
 
+        // 웹뷰가 떠 있는 판으로 옮겨 간 HTML 탭의 본문에 서는 글이다. 판 아래에도 우리 element가 그대로 있음을 보인다.
+        constexpr std::u8string_view floating_document { u8"이 탭의 문서는 떠 있는 판 안의 웹뷰가 그린다. 이 글은 그 아래에서 label_element가 그린다." };
+
+        // 네이티브로 그리는 글 문서다.
+        // 웹뷰가 푸는 HTML과 나란히 두어 무엇이 무엇을 그리는지 보이게 한다.
         constexpr std::u8string_view text_document {
             u8"이 탭은 웹뷰가 아니다. 글은 label_element가 그린다.\n"
             u8"탭 막대도, 이 아래 알림 줄도 우리 tree의 것이다.\n"
@@ -352,8 +355,9 @@ namespace demo {
         }
         else
         {
-            // 웹뷰가 판으로 옮겨 간 HTML 탭의 본문에도 이 글이 선다. 판 아래에 우리 element가 그대로 있음을 보인다.
-            content = make_label(luil::ui_element_id { kind_text, u8"webview-text" }, std::u8string { text_document }, 13.0f, luil::label_color_role::primary);
+            // 글 탭이면 글 문서를, 웹뷰가 판으로 옮겨 간 HTML 탭이면 그 사정을 적은 글을 둔다.
+            const bool html { current != nullptr && current->path.empty() == false };
+            content = make_label(luil::ui_element_id { kind_text, u8"webview-text" }, std::u8string { html ? floating_document : text_document }, 13.0f, luil::label_color_role::primary);
         }
 
         if (floating_)

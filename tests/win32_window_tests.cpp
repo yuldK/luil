@@ -533,13 +533,23 @@ TEST_CASE("Frame fullscreen waits while the window is minimized and applies afte
         SendMessageW(probe.window, luil::win32::ui_command_request_message, 0, 0);
         REQUIRE(probe.reports.size() == count);
 
-        ShowWindow(probe.window, SW_SHOWNOACTIVATE);
-        REQUIRE_FALSE(IsIconic(probe.window));
-        // 되살아난 창이 미룬 대조를 wake로 넘겼다.
         MSG message {};
         constexpr UINT wake { luil::win32::snapshot_wake_message };
-        while (PeekMessageW(&message, probe.window, wake, wake, PM_REMOVE))
-            DispatchMessageW(&message);
+        const auto drain_wakes = [&] {
+            while (PeekMessageW(&message, probe.window, wake, wake, PM_REMOVE))
+                DispatchMessageW(&message);
+        };
+        // 게시가 큐에 넣어 둔 wake를 최소화된 채로 먼저 비운다. 남겨 두면 되살린 뒤의 적용이 그 wake의 것인지
+        // 되살아난 창이 새로 낸 wake의 것인지 가릴 수 없다.
+        drain_wakes();
+        REQUIRE(IsIconic(probe.window));
+        REQUIRE(probe.reports.size() == count);
+
+        ShowWindow(probe.window, SW_SHOWNOACTIVATE);
+        REQUIRE_FALSE(IsIconic(probe.window));
+        // 되살아난 창이 미룬 대조를 wake로 넘겼다. `ShowWindow` 안의 `WM_SIZE`가 넣은 것이라 돌아온 즉시 큐에 있다.
+        REQUIRE(PeekMessageW(&message, probe.window, wake, wake, PM_NOREMOVE));
+        drain_wakes();
         drain_placement_reports(probe.window);
         REQUIRE(probe.reports.back().fullscreen);
         const RECT full { actual_bounds(probe.window) };
@@ -550,6 +560,25 @@ TEST_CASE("Frame fullscreen waits while the window is minimized and applies afte
         probe.publish(host, normal);
         REQUIRE(probe.reports.back() == saved);
         REQUIRE_FALSE(IsIconic(probe.window));
+
+        // 전체 화면 배치 요청도 최소화된 동안에는 게시 번호를 소비하지 않고 미룬다.
+        const auto before_request { probe.reports.size() };
+        ShowWindow(probe.window, SW_SHOWMINNOACTIVE);
+        auto request { std::make_shared<luil::ui_frame>() };
+        request->window_placement_request = saved;
+        request->window_placement_request->fullscreen = true;
+        request->window_placement_revision = 1;
+        probe.publish(host, request);
+        drain_wakes();
+        REQUIRE(IsIconic(probe.window));
+        REQUIRE(probe.reports.size() == before_request);
+        ShowWindow(probe.window, SW_SHOWNOACTIVATE);
+        REQUIRE(PeekMessageW(&message, probe.window, wake, wake, PM_NOREMOVE));
+        drain_wakes();
+        drain_placement_reports(probe.window);
+        REQUIRE(probe.reports.back().fullscreen);
+        const RECT again { actual_bounds(probe.window) };
+        REQUIRE(EqualRect(&again, &monitor.rcMonitor));
     };
     probe.run(saved, std::make_shared<luil::ui_frame>());
 }

@@ -939,6 +939,9 @@ namespace luil::win32 {
             &token));
 
         report_presentation(*target);
+        // 선 웹뷰가 곧바로 자리를 받도록 앵커 창을 다시 그리게 한다. 자리는 그리기에서만 주는데, 다시 그릴 계기가
+        // 없는 화면에서는 첫 그리기가 첫 항해의 끝에야 와서 문서가 크기를 받지 못한 채 열린다.
+        InvalidateRect(target->window, nullptr, FALSE);
         // 서기 전에 온 명령을 이제 흘려보낸다.
         flush_commands(*target);
     }
@@ -1178,6 +1181,10 @@ namespace luil::win32 {
         const bool scale_changed { target->has_applied == false || target->applied.scale != layout.scale };
         target->applied = layout;
         target->has_applied = true;
+        // 여기서 주는 크기가 미리 준 값을 덮는다. 다시 숨어 기다리게 되면 `prepare_size`가 새로 주게 한다.
+        target->prepared_width = 0;
+        target->prepared_height = 0;
+        target->prepared_scale = 0.0f;
 
         // **자리는 visual의 변환이 정한다.** `put_Bounds`의 left·top은 그리기에도
         // 입력에도 쓰이지 않아 늘 0이다 — 그 둘을 주어도 페이지는 여전히 visual
