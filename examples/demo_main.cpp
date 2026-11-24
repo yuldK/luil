@@ -1772,6 +1772,8 @@ int main(const int argc, const char* const* const argv)
     environment.driver = &driver;
     environment.policy = &policy;
     environment.delegate = &delegate;
+    // 첫째이면 같은 이름의 둘째가 보낸 인자를 받는다. instance는 main의 지역이라 앱보다 오래 산다.
+    environment.instance = &instance;
     return luil::macos::run_application(config, environment);
 }
 #endif

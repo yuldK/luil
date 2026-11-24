@@ -2,6 +2,7 @@
 
 #include "luil/app/app_delegate.h"
 #include "luil/app/app_host.h"
+#include "luil/app/platform_services.h"
 #include "luil/app/renderer_policy.h"
 #include "luil/ui/ui_interaction.h"
 
@@ -44,6 +45,10 @@ namespace luil::macos {
         logic_driver* driver { nullptr };
         interaction_policy* policy { nullptr };
         app_delegate* delegate { nullptr };
+        // 첫째 인스턴스면 같은 이름의 둘째가 보낸 인자를 받는다 (`single_instance::send_to_primary`). 비어 있으면 받지 않는다.
+        //  - 받은 인자는 delegate가 `win32::window_delegate`를 구현했을 때 그 `on_instance_arguments`로 간다 (Windows와 같다).
+        //  - 둘째가 앞으로 세워 달라고 했으면 보이는 주 창을 앞으로 세운다. 숨은 주 창은 보이게 하지 않는다.
+        const single_instance* instance { nullptr };
     };
 
     // AppKit 앱을 돌린다. 앱의 `main`에서 부르고, 창이 닫혀 종료가 끝나면 돌아온다.

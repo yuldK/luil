@@ -29,6 +29,7 @@
 #include "macos/macos_text.h"
 #include "macos/metal_skia_renderer.h"
 #include "macos/notification_center.h"
+#include "macos/single_instance_receiver.h"
 #include "macos/surface_capture.h"
 #include "macos/tray_icon_macos.h"
 #include "macos/webview_host.h"
@@ -1043,6 +1044,28 @@ namespace luil::macos {
             }
         }
 
+        // 둘째 인스턴스가 보낸 인자다. 앱이 받았으면 참이다 (둘째의 `ok`).
+        [[nodiscard]] bool receive_instance_arguments(const instance_arguments& arguments, const bool activate)
+        {
+            if (host_ == nullptr || stopped_ || window_delegate_ == nullptr)
+                return false;
+            bool accepted { false };
+            try
+            {
+                accepted = window_delegate_->on_instance_arguments(*host_, arguments);
+            }
+            catch (...)
+            {
+                log_error(u8"The instance arguments delegate threw an exception.");
+            }
+            if (activate && main_hidden_ == false && main_.window != nil)
+            {
+                [NSApp activateIgnoringOtherApps:YES];
+                [main_.window makeKeyAndOrderFront:nil];
+            }
+            return accepted;
+        }
+
         void post_permission(const app_permission permission, const permission_state state)
         {
             if (host_ == nullptr || environment_.delegate == nullptr || stopped_)
@@ -1173,6 +1196,13 @@ namespace luil::macos {
                 window_delegate_->on_native_window_created(*host_, (__bridge void*)main_.window);
             if (environment_.delegate != nullptr)
                 environment_.delegate->on_started(*host_);
+            // 둘째 인스턴스의 인자를 받는다. on_started 뒤, 창을 보이기 전에 단다.
+            if (environment_.instance != nullptr && environment_.instance->primary())
+                if (const platform_result opened { set_instance_receiver(*environment_.instance, [state = wake_](const instance_arguments& arguments, const bool activate) {
+                        return state->target != nullptr && state->target->receive_instance_arguments(arguments, activate);
+                    }) };
+                    opened.status != platform_status::ok)
+                    log_error(u8"Single instance receiver: " + opened.error);
             return true;
         }
 
@@ -1187,6 +1217,8 @@ namespace luil::macos {
                 timer_ = nil;
             }
             set_notification_receiver(nullptr);
+            if (environment_.instance != nullptr)
+                clear_instance_receiver(*environment_.instance);
             // 전역 단축키를 풀고 메뉴 막대 항목과 Dock 타일을 거둔다.
             hotkeys_.reset();
             tray_.reset();
