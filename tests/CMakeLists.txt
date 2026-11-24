@@ -527,6 +527,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "${LUIL_SOURCE_DIRECTORY}"
             "${LUIL_TEST_DIRECTORY}")
     target_compile_options(luil_macos_platform_tests PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+    target_compile_definitions(luil_macos_platform_tests PRIVATE "LUIL_VIDEO_SAMPLES=\"${PROJECT_SOURCE_DIR}/examples/video/assets\"")
     target_link_libraries(luil_macos_platform_tests
         PRIVATE
             luil::luil
@@ -551,6 +552,11 @@ if(LUIL_PLATFORM STREQUAL "macos")
         set_tests_properties(luil_macos_demo_smoke_gpu_fallback PROPERTIES PASS_REGULAR_EXPRESSION "renderer cpu \\(fallback\\)")
         set_tests_properties(luil_macos_demo_smoke_gpu PROPERTIES PASS_REGULAR_EXPRESSION "renderer metal")
         set_tests_properties(luil_macos_demo_smoke_gpu_required PROPERTIES WILL_FAIL TRUE)
+    endif()
+    # 장 재생기 예제는 견본을 열고 첫 frame을 그린 뒤 끝난다.
+    if(TARGET luil_video)
+        add_test(NAME luil_macos_video_smoke COMMAND "$<TARGET_FILE:luil_video>" --smoke-test)
+        set_tests_properties(luil_macos_video_smoke PROPERTIES LABELS smoke TIMEOUT 60)
     endif()
     luil_set_ide_folder("Tests" luil_core_tests luil_net_tests luil_macos_platform_tests)
     if(LUIL_ENABLE_TEXT_SHAPING)

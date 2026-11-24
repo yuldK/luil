@@ -398,7 +398,7 @@ namespace luil::win32 {
     class window_delegate : public app_delegate
     {
     public:
-        // 주 창의 네이티브 표면을 앱이 소유할 자리다 (media_player). HWND를 void*로 받으며 보관은 UI thread만 한다.
+        // 주 창의 네이티브 표면을 앱이 소유할 자리다 (media_player). HWND(macOS는 `NSWindow*`)를 void*로 받으며 보관은 UI thread만 한다.
         // on_started 앞에 한 번 오고, on_native_window_destroying에서 반드시 놓는다.
         virtual void on_native_window_created(app_host& host, void* window)
         {

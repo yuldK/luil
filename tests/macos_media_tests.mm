@@ -307,6 +307,40 @@ TEST_CASE("video frames: a wide clip is copied with its long side capped at 1920
     CHECK(player.image().height() == 64);
 }
 
+// 예제의 견본(MP4·AVI·TS)을 실제로 여는가다. 어느 형식을 여는지는 OS 판의 코덱에 달려 숨은 test로 둔다.
+//  - macOS 27에서 셋 다 열리고 재생 시계가 간다. MPEG-TS는 AVPlayerItemVideoOutput이 장을 주지 않아 소리와 시계뿐이다(실측).
+TEST_CASE("video frames: the example samples decode", "[macos][media][.samples]")
+{
+    for (const auto& [name, decodes] : { std::pair { "ridge.mp4", true }, std::pair { "ridge.avi", true }, std::pair { "ridge.ts", false } })
+    {
+        luil::win32::video_frame_player player {};
+        player.open(std::filesystem::path { LUIL_VIDEO_SAMPLES } / name);
+        int frames { 0 };
+        const auto update = [&](const std::chrono::milliseconds timeout) {
+            const auto deadline { std::chrono::steady_clock::now() + timeout };
+            while (player.needs_tick() && std::chrono::steady_clock::now() < deadline)
+            {
+                const auto previous { player.image().backing() };
+                player.update();
+                if (player.image().valid() && player.image().backing() != previous)
+                    ++frames;
+                static_cast<void>(CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.004, true));
+            }
+        };
+        update(3s);
+        INFO(name << " error " << reinterpret_cast<const char*>(player.error().c_str()));
+        REQUIRE(player.state() == luil::win32::media_state::ready);
+        player.play();
+        update(500ms);
+        CHECK(player.state() == luil::win32::media_state::playing);
+        if (decodes)
+            CHECK(frames >= 5);
+        else
+            CHECK(frames == 0);
+        CHECK(player.position().count() > 200);
+    }
+}
+
 TEST_CASE("video frames: missing and non-media files fail with a message", "[macos][media]")
 {
     const scratch_folder folder {};

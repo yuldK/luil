@@ -90,3 +90,23 @@ add_custom_command(TARGET luil_demo POST_BUILD
     COMMENT "Copying the demo sample images"
     VERBATIM)
 luil_sign_macos_bundle(luil_demo)
+
+# video — 장 재생기(`win32::video_frame_player`, AVFoundation)의 화면을 AppKit host에 세운다. 화면·driver는 Windows와 같은 파일이고,
+# 진입점은 video/main.cpp의 macOS 갈래다.
+#  - 견본 영상·자막은 번들의 자원 폴더 `Contents/Resources/video`에 둔다 (demo의 견본 그림과 같은 까닭이다).
+#  - AVFoundation은 AVI·MPEG-TS 파일을 열지 못한다. 그 두 견본은 실패 상태로 보인다.
+add_executable(luil_video
+    "${luil_examples_directory}/video/main.cpp"
+    "${luil_examples_directory}/video/scene.cpp"
+    "${luil_examples_directory}/video/scene.h")
+target_include_directories(luil_video PRIVATE "${luil_examples_directory}")
+luil_add_string_table(luil_video NAME video_strings DIRECTORY "${luil_examples_directory}/video/strings" BASE ko)
+target_link_libraries(luil_video PRIVATE luil::luil luil_options)
+luil_add_macos_bundle(luil_video IDENTIFIER "io.github.yuldk.luil.video" NAME "luil video")
+add_custom_command(TARGET luil_video POST_BUILD
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory_if_different
+        "${luil_examples_directory}/video/assets"
+        "$<TARGET_BUNDLE_CONTENT_DIR:luil_video>/Resources/video"
+    COMMENT "Copying the video demo samples and subtitles"
+    VERBATIM)
+luil_sign_macos_bundle(luil_video)

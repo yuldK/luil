@@ -17,12 +17,13 @@ namespace luil::win32 {
     };
 
     // 논리 스레드가 만들고 닫는다. UI 트리는 마지막으로 복사된 불변 프레임만 가진다.
+    // Windows는 Media Engine, macOS는 AVPlayer와 AVPlayerItemVideoOutput이다. 두 플랫폼 모두 소리를 함께 낸다.
     class video_frame_player final
     {
     public:
         video_frame_player();
         ~video_frame_player();
-        // 같은 MTA 논리 스레드에서 호출한다. 다시 열면 이전 재생기를 닫는다.
+        // 같은 MTA 논리 스레드(macOS는 아무 thread 하나)에서 호출한다. 다시 열면 이전 재생기를 닫는다.
         void open(const std::filesystem::path& path);
         void play();
         // 처음 장으로 되감는다. 이후 play()로 다시 재생할 수 있다.
@@ -36,6 +37,7 @@ namespace luil::win32 {
         // image()가 가진 장의 원본 표시 시각이다. 단위는 100 ns다.
         [[nodiscard]] std::int64_t frame_timestamp_100ns() const;
         // 엔진에서 제공하는 누적 계수다. 조회할 수 없는 계수는 빈 값이다.
+        // macOS는 접근 기록의 버린 장 수만 있고(로컬 파일은 대개 빈 값), 그린 장 수는 늘 빈 값이다.
         [[nodiscard]] video_frame_statistics statistics() const;
         [[nodiscard]] const std::u8string& error() const;
 

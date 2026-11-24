@@ -1,10 +1,18 @@
 #include "video/scene.h"
 
+#if defined(_WIN32)
 #include <windows.h>
+#elif defined(__APPLE__)
+#include "luil/macos/macos_app.h"
+#include <mach-o/dyld.h>
+#endif
 #include <atomic>
 #include <algorithm>
 #include <array>
+#include <cstdint>
 #include <cstdio>
+#include <optional>
+#include <vector>
 
 namespace video_demo {
     namespace {
@@ -38,12 +46,14 @@ namespace video_demo {
 
             void start() override
             {
+#if defined(_WIN32)
                 if (log_path_.empty() == false && _wfopen_s(&frame_log_, log_path_.c_str(), L"wx") == 0)
                 {
                     LARGE_INTEGER frequency {};
                     QueryPerformanceFrequency(&frequency);
                     std::fprintf(frame_log_, "# qpc_frequency,%lld\npts_100ns,transfer_qpc\n", frequency.QuadPart);
                 }
+#endif
                 player_ = std::make_unique<luil::win32::video_frame_player>();
                 luil::image_decode_error error {};
                 poster_ = luil::load_image_file((samples_ / "ridge.jpg").u8string(), error);
@@ -136,12 +146,16 @@ namespace video_demo {
                     play_when_ready_ = false;
                     player_->play();
                 }
+#if defined(_WIN32)
                 if (frame_log_ != nullptr && player_->image().valid() && previous != player_->image().backing())
                 {
                     LARGE_INTEGER counter {};
                     QueryPerformanceCounter(&counter);
                     std::fprintf(frame_log_, "%lld,%lld\n", player_->frame_timestamp_100ns(), counter.QuadPart);
                 }
+#else
+                static_cast<void>(previous);
+#endif
             }
 
             std::shared_ptr<const luil::ui_frame> make_frame() override
@@ -311,6 +325,58 @@ namespace video_demo {
     }
 }
 
+namespace video_demo {
+    namespace {
+        // 두 진입점이 함께 읽는 실행 인자다.
+        struct launch
+        {
+            std::filesystem::path source {};
+            std::filesystem::path subtitle {};
+            std::filesystem::path log_path {};
+            luil::renderer_mode renderer { luil::renderer_mode::automatic };
+            bool smoke_test {};
+        };
+
+        // 잘못된 인자면 빈 값이다. 자막을 주지 않으면 영상 옆의 같은 이름 `.srt`다.
+        std::optional<launch> parse_launch(const std::vector<std::u8string>& args, const std::filesystem::path& samples)
+        {
+            launch result { .source = samples / "ridge.mp4" };
+            for (const auto& arg : args)
+            {
+                if (arg.starts_with(u8"--renderer="))
+                {
+                    if (const auto mode { luil::parse_renderer_mode(arg.substr(11)) }; mode)
+                        result.renderer = *mode;
+                    else
+                        return std::nullopt;
+                }
+                if (arg.starts_with(u8"--video="))
+                {
+                    if (arg.size() == 8)
+                        return std::nullopt;
+                    std::error_code error {};
+                    result.source = std::filesystem::absolute(std::filesystem::path { arg.substr(8) }, error);
+                    if (error)
+                        return std::nullopt;
+                }
+                if (arg.starts_with(u8"--frame-log="))
+                    result.log_path = std::filesystem::path { arg.substr(12) };
+                if (arg.starts_with(u8"--srt="))
+                    result.subtitle = std::filesystem::path { arg.substr(6) };
+                if (arg == u8"--smoke-test")
+                    result.smoke_test = true;
+            }
+            if (result.subtitle.empty())
+            {
+                result.subtitle = result.source;
+                result.subtitle.replace_extension(".srt");
+            }
+            return result;
+        }
+    }
+}
+
+#if defined(_WIN32)
 int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
 {
     luil::win32::enable_per_monitor_dpi_awareness();
@@ -320,50 +386,19 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     if (length == 0 || length == std::size(module))
         return 1;
     const auto samples { std::filesystem::path { module }.parent_path() / "video" };
-    std::filesystem::path source { samples / "ridge.mp4" };
-    auto renderer { luil::renderer_mode::automatic };
-    std::filesystem::path subtitle {};
-    std::filesystem::path log_path {};
-    if (const auto args { luil::win32::command_line_arguments() }; args)
-    {
-        for (const auto& arg : *args)
-        {
-            if (arg.starts_with(u8"--renderer="))
-            {
-                if (const auto mode { luil::parse_renderer_mode(arg.substr(11)) }; mode)
-                    renderer = *mode;
-                else
-                    return 1;
-            }
-            if (arg.starts_with(u8"--video="))
-            {
-                if (arg.size() == 8)
-                    return 1;
-                std::error_code error {};
-                source = std::filesystem::absolute(std::filesystem::path { arg.substr(8) }, error);
-                if (error)
-                    return 1;
-            }
-            if (arg.starts_with(u8"--frame-log="))
-                log_path = std::filesystem::path { arg.substr(12) };
-            if (arg.starts_with(u8"--srt="))
-                subtitle = std::filesystem::path { arg.substr(6) };
-        }
-    }
-    if (subtitle.empty())
-    {
-        subtitle = source;
-        subtitle.replace_extension(".srt");
-    }
+    const auto args { luil::win32::command_line_arguments() };
+    const auto options { video_demo::parse_launch(args ? *args : std::vector<std::u8string> {}, samples) };
+    if (options.has_value() == false)
+        return 1;
     const auto languages { luil::user_ui_languages() };
     luil::set_text_languages(languages);
     const auto strings { luil::select_strings(video_strings::table, languages) };
-    video_demo::driver driver { strings, samples, source, subtitle, log_path };
+    video_demo::driver driver { strings, samples, options->source, options->subtitle, options->log_path };
     video_demo::delegate delegate {};
     luil::win32::window_config config {};
     config.class_name = L"Luil.VideoDemo";
     config.caption.title = video_strings::text(strings, video_strings::key::window_title);
-    config.renderer = renderer;
+    config.renderer = options->renderer;
     config.accept_file_drop = true;
     config.initial_width = 880;
     config.initial_height = 610;
@@ -372,3 +407,42 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     environment.delegate = &delegate;
     return luil::win32::run_application_window(config, environment);
 }
+#elif defined(__APPLE__)
+// macOS 진입점이다. driver·delegate·화면은 Windows와 같고 창은 AppKit host가 세운다.
+//  - 견본은 앱 번들의 `Contents/Resources/video`에 있다 (examples/macos.cmake).
+//  - 재생기는 AVFoundation이다. AVI·MPEG-TS 견본은 열지 못해 실패 상태와 오류 문구를 보인다.
+//  - `--frame-log=`는 Windows의 QPC 기록이라 받지 않는다.
+int main(const int argc, const char* const* const argv)
+{
+    std::uint32_t size { 0 };
+    static_cast<void>(_NSGetExecutablePath(nullptr, &size));
+    std::vector<char> buffer(size + 1, '\0');
+    if (_NSGetExecutablePath(buffer.data(), &size) != 0)
+        return 1;
+    std::error_code error {};
+    const std::filesystem::path executable { std::filesystem::weakly_canonical(std::filesystem::path { buffer.data() }, error) };
+    if (error)
+        return 1;
+    const auto samples { executable.parent_path().parent_path() / "Resources" / "video" };
+    auto options { video_demo::parse_launch(luil::macos::command_line_arguments(argc, argv), samples) };
+    if (options.has_value() == false)
+        return 1;
+    options->log_path.clear();
+    const auto languages { luil::user_ui_languages() };
+    luil::set_text_languages(languages);
+    const auto strings { luil::select_strings(video_strings::table, languages) };
+    video_demo::driver driver { strings, samples, options->source, options->subtitle, options->log_path };
+    video_demo::delegate delegate {};
+    luil::macos::application_config config {};
+    config.title = std::u8string { video_strings::text(strings, video_strings::key::window_title) };
+    config.renderer = options->renderer;
+    config.smoke_test = options->smoke_test;
+    config.accept_file_drop = true;
+    config.initial_width = 880;
+    config.initial_height = 610;
+    luil::macos::application_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+    return luil::macos::run_application(config, environment);
+}
+#endif
