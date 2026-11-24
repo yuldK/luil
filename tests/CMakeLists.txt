@@ -466,6 +466,11 @@ if(LUIL_PLATFORM STREQUAL "macos")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/macos/instance_message.cpp"
             macos_instance_message_tests.cpp)
+    # 동영상 재생기의 상태 짝과 시각 변환도 AVFoundation을 모르는 순수 층이다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/macos/media_rules.cpp"
+            macos_media_rules_tests.cpp)
     catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
     # HTTP client·charset 변환·WebSocket 전송은 NSURLSession·CoreFoundation 위에 서고 실제 되돌이 서버와 주고받는다.
     # Android의 luil_net_tests와 같은 묶음이다. 라이브러리(luil)는 AppKit host를 끌어오므로 링크하지 않고 net 소스를
@@ -510,10 +515,12 @@ if(LUIL_PLATFORM STREQUAL "macos")
     catch_discover_tests(luil_net_tests PROPERTIES TIMEOUT 120)
     # 플랫폼 서비스를 실제 OS로 본다. Keychain에 쓰고 지우는 비밀 저장소, 임시 폴더를 보는 FSEvents 파일 감시,
     # 잠금과 Unix 소켓의 단일 인스턴스다 (둘째 프로세스는 이 실행 파일을 숨은 test 하나로 다시 띄운다).
+    # 동영상 재생기 둘(AVPlayer)은 AVAssetWriter로 그 자리에서 만든 짧은 영상을 연다 (macos_media_tests.mm).
     #  - 플랫폼 층(luil)을 링크하므로 core test와 따로 선다 (Windows의 luil_tests 자리다).
     add_executable(luil_macos_platform_tests
         file_watcher_tests.cpp
         macos_drop_data_tests.mm
+        macos_media_tests.mm
         macos_single_instance_tests.cpp
         secret_store_tests.cpp)
     target_include_directories(luil_macos_platform_tests
@@ -521,6 +528,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "${LUIL_SOURCE_DIRECTORY}"
             "${LUIL_TEST_DIRECTORY}")
     target_compile_options(luil_macos_platform_tests PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+    target_compile_definitions(luil_macos_platform_tests PRIVATE "LUIL_VIDEO_SAMPLES=\"${PROJECT_SOURCE_DIR}/examples/video/assets\"")
     target_link_libraries(luil_macos_platform_tests
         PRIVATE
             luil::luil
@@ -545,6 +553,11 @@ if(LUIL_PLATFORM STREQUAL "macos")
         set_tests_properties(luil_macos_demo_smoke_gpu_fallback PROPERTIES PASS_REGULAR_EXPRESSION "renderer cpu \\(fallback\\)")
         set_tests_properties(luil_macos_demo_smoke_gpu PROPERTIES PASS_REGULAR_EXPRESSION "renderer metal")
         set_tests_properties(luil_macos_demo_smoke_gpu_required PROPERTIES WILL_FAIL TRUE)
+    endif()
+    # 장 재생기 예제는 견본을 열고 첫 frame을 그린 뒤 끝난다.
+    if(TARGET luil_video)
+        add_test(NAME luil_macos_video_smoke COMMAND "$<TARGET_FILE:luil_video>" --smoke-test)
+        set_tests_properties(luil_macos_video_smoke PROPERTIES LABELS smoke TIMEOUT 60)
     endif()
     luil_set_ide_folder("Tests" luil_core_tests luil_net_tests luil_macos_platform_tests)
     if(LUIL_ENABLE_TEXT_SHAPING)

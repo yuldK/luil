@@ -121,10 +121,10 @@ ctest --preset macos-arm64-debug
 open build/macos-arm64/Debug/luil_demo.app
 ```
 
-예제는 앱 번들(`luil_hello.app`, `luil_demo.app`)이다. OS 알림(UserNotifications)이 번들 식별자가 있고 서명된 앱에서만 서기 때문이다. [`examples/macos.cmake`](../../examples/macos.cmake)가 [`examples/macos/Info.plist.in`](../../examples/macos/Info.plist.in)을 대상마다 채우고(번들 식별자 `io.github.yuldk.luil.hello`·`io.github.yuldk.luil.demo`, 최소 판 11.0, `NSHighResolutionCapable`), 빌드 뒤 `codesign --force --sign -`로 ad-hoc 서명한다. 배포용 서명(Developer ID·공증)은 아니다.
+예제는 앱 번들(`luil_hello.app`, `luil_demo.app`, `luil_video.app`)이다. OS 알림(UserNotifications)이 번들 식별자가 있고 서명된 앱에서만 서기 때문이다. [`examples/macos.cmake`](../../examples/macos.cmake)가 [`examples/macos/Info.plist.in`](../../examples/macos/Info.plist.in)을 대상마다 채우고(번들 식별자 `io.github.yuldk.luil.hello`·`io.github.yuldk.luil.demo`·`io.github.yuldk.luil.video`, 최소 판 11.0, `NSHighResolutionCapable`), 빌드 뒤 `codesign --force --sign -`로 ad-hoc 서명한다. 배포용 서명(Developer ID·공증)은 아니다.
 
 - `open`으로 띄우면 Launch Services가 번들로 세운다. 터미널에 로그를 보려면 안의 실행 파일을 바로 띄운다: `build/macos-arm64/Debug/luil_demo.app/Contents/MacOS/luil_demo`. smoke test(`$<TARGET_FILE:...>`)도 이 실행 파일을 부른다.
-- demo의 견본 그림은 `Contents/Resources/assets`에 둔다. `Contents/MacOS`에 코드가 아닌 파일이 있으면 codesign이 번들 서명을 거절해서다. demo의 `executable_directory()`가 번들 안에서는 그 자원 폴더를 답한다 (Windows는 그대로 실행 파일 옆이다).
+- demo의 견본 그림은 `Contents/Resources/assets`에, 동영상 데모의 견본은 `Contents/Resources/video`에 둔다. `Contents/MacOS`에 코드가 아닌 파일이 있으면 codesign이 번들 서명을 거절해서다. demo의 `executable_directory()`가 번들 안에서는 그 자원 폴더를 답한다 (Windows는 그대로 실행 파일 옆이다).
 
 test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`). 키 변환(`src/macos/macos_input.cpp`)은 AppKit을 모르는 순수 층이라 core test에 들어가고, 예제의 `--smoke-test`가 창을 보이지 않은 채 첫 frame을 그려 host를 확인한다. 플랫폼 서비스는 `luil`을 링크한 `luil_macos_platform_tests`가 실제 OS로 본다 (Windows의 `luil_tests` 자리다).
 
@@ -158,6 +158,7 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 비밀 저장소 | 로그인 keychain의 일반 암호 항목이다. `service`가 서비스, `name`이 계정 이름이다. NUL을 품은 이름은 거절한다 ([비밀 저장소](../secret-store-design.md#macos)) |
 | 파일 감시 | 감시마다 FSEvents stream 하나(파일 단위 이벤트)다. 쌓이는 표지는 지금 있는지·파일 번호·본 이름으로 가른다 ([파일 감시](../file-watch-design.md#macos)) |
 | 단일 인스턴스 | 사용자 임시 폴더의 잠금 파일(`flock`)이 첫째를 가린다. 둘째는 그 옆의 Unix 소켓으로 인자와 작업 폴더를 보낸다. 첫째는 배경 thread가 받아 메인 thread의 받는 함수에 건넨다. host는 `application_environment::instance`가 첫째면 받은 인자를 `window_delegate::on_instance_arguments`로 넘긴다 ([인자 넘기기](../single-instance-args-design.md#macos)) |
+| 동영상 | `win32::media_player`는 AVPlayer와 내용 view 맨 위의 AVPlayerLayer view(`parent_window`는 `NSWindow*`), `win32::video_frame_player`는 AVPlayerItemVideoOutput의 BGRA 장이다. AVFoundation·CoreMedia·CoreVideo를 링크한다 ([동영상 재생](../video-playback-design.md#macos)) |
 
 개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
 

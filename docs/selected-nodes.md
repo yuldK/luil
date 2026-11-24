@@ -78,6 +78,7 @@ Format 2의 윤곽 점, device/variation 보정, 누락·손상된 표, 맞지 �
 
 운영체제 코덱을 쓰므로 별도 미디어 의존성을 받지 않는다. CMake는 Windows에 `mfplay`, `mfuuid`, `propsys`를 잇는다.
 Android/Linux 재생 백엔드는 추가하지 않았다. `parent_window == nullptr`면 오디오 전용이다.
+macOS는 같은 헤더와 훅을 AVFoundation으로 세운다. `parent_window`는 `NSWindow*`이고 UI thread는 메인 thread다 ([동영상 재생의 macOS](video-playback-design.md#macos)).
 
 미디어 객체와 HWND는 UI thread에 둔다. `window_delegate`의 다음 훅으로 `run_application_window`에도 연결할 수 있다.
 

@@ -13,7 +13,7 @@ namespace luil {
     };
 
     // frame이 있으면 원본 비율로 그리고 같은 영역에 overlay를 배치한다.
-    // 네이티브 표면만 쓸 때는 빈 frame을 넘긴다. Windows UI thread가 이 bounds로 media_player::set_video_bounds를 부른다.
+    // 네이티브 표면만 쓸 때는 빈 frame을 넘긴다. UI thread(Windows·macOS)가 이 bounds로 media_player::set_video_bounds를 부른다.
     // HWND는 tree에 담지 않는다. 플랫폼·재생기 수명은 앱의 UI thread가 소유한다.
     class video_element final : public ui_element
     {
