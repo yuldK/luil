@@ -135,26 +135,33 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 경계 | macOS |
 | --- | --- |
 | 실행 루프와 깨우기 | `NSApplication`의 run loop. 다른 thread의 깨우기는 `CFRunLoopPerformBlock`(공통 모드)이라 창 크기를 끄는 동안에도 돈다 |
-| 창과 표면 | 주 창과 보조 창(`ui_frame::windows`). 소유된 보조 창은 주 창 위에 뜨는 `NSPanel`, 독립 창은 보통 창이다. 창마다 렌더러·popup·입력 router를 따로 갖는다. 제목 막대는 시스템의 것이라 `ui_platform::window_caption`이 거짓이고 `caption_element`는 자리를 차지하지 않는다 |
+| 창과 표면 | 주 창과 보조 창(`ui_frame::windows`), 도킹 표면(`ui_frame::docked_surfaces`). 소유된 보조 창은 주 창 위에 뜨는 `NSPanel`, 독립 창은 보통 창, 도킹 표면은 테두리 없고 활성화되지 않는 판이다. 창마다 렌더러·popup·입력 router·웹뷰를 따로 갖는다. 제목 막대는 시스템의 것이라 `ui_platform::window_caption`이 거짓이고 `caption_element`는 자리를 차지하지 않는다 |
+| 배치·전체 화면 | 주 창 배치를 `window_delegate::make_window_placement_message`로 알리고(확대·전체 화면이면 돌아갈 자리), `window_placement_request`와 `ui_frame::fullscreen`을 따른다. 모니터 목록은 `ui_frame::displays`로 알린다 |
+| 배경 효과 | 창 내용 맨 아래의 `NSVisualEffectView`(창 뒤 섞기)다. mica는 창 바탕, mica_alt는 창 아래 바탕, acrylic은 HUD 재질이다. 투명도 줄이기·대비 늘리기면 세우지 않고 까닭을 알린다. popup에는 없다 |
 | 화면 좌표 | 주 화면 왼쪽 위 원점, 아래로 는다. 단위는 점 × 주 화면 배율이다 (`screen_point`, `window_placement`, `window_screen_anchor`) |
 | 렌더러 | Metal(Ganesh)이 먼저다. view layer의 자식 `CAMetalLayer`에 그리고, 만들거나 그리다 실패하면 CPU(Skia raster → CGImage layer 내용)로 물러선다. 한 번 물러서면 다시 쓰지 않는다. `gpu`·`direct3d`는 Metal을 요구한다. 보이지 않는 창(최소화·완전히 가림)에는 그리지 않는다 |
 | 배율 | 창이 놓인 화면의 `backingScaleFactor`(레티나 2) |
 | 글꼴 | `SkFontMgr_New_CoreText`, 기본 UI 서체는 시스템 서체(`.AppleSystemUIFont`). codicon은 라이브러리에 싣는다 |
-| 입력 | 마우스·트랙패드·키보드. Command가 주 단축키, Option이 낱말 이동이고 Command+화살표는 줄·글의 처음과 끝이다. Control+클릭은 오른쪽 클릭이다 |
+| 입력 | 마우스·트랙패드·키보드. Command가 주 단축키(`key_chord::control`의 자리, 단축키 글은 ⌥⇧⌘ 꼴 — `ui_platform::command_key_shortcuts`), Option이 낱말 이동이고 Command+화살표는 줄·글의 처음과 끝이다. Control+클릭은 오른쪽 클릭이다. 앱 정의 커서는 `application_config::resolve_cursor`가 `NSCursor`로 옮긴다 |
 | 텍스트 입력 | `NSTextInputClient`. 조합 글은 `post_composition`으로 보이고 확정은 insert 편집이다 (한글 입력기) |
 | popup | 앵커 사슬이 끝나는 창 위에 겹쳐 그린다 (Android와 같은 overlay) |
-| 웹뷰 | WKWebView. Skia view의 형제 NSView로 위층·아래층에 선다 ([웹뷰 합성](../webview-composition-design.md#macos-wkwebview)) |
+| 웹뷰 | WKWebView. 그 창(주 창·보조 창·도킹 표면) Skia view의 형제 NSView로 위층·아래층에 선다 ([웹뷰 합성](../webview-composition-design.md#macos-wkwebview)) |
 | OS 알림 | UserNotifications(`UNUserNotificationCenter`). 앱 번들에서만 서고 맨 실행 파일은 `unsupported`다. 권한은 `app_permission::notifications`로 묻는다 ([OS 알림](../os-notification-design.md#macos)) |
-| 클립보드 | 일반 붙여넣기 판의 글과 HTML |
+| 클립보드 | 일반 붙여넣기 판의 글·HTML·그림(PNG와 TIFF)·파일 URL. 잘라내기의 뜻은 이 라이브러리의 형식으로 싣고, 번호는 `changeCount`다. 바뀜은 앞에 있는 동안 번호를 견줘 알린다 |
+| 파일 대화 상자 | `NSOpenPanel`·`NSSavePanel`을 소유 창의 sheet로 연다. 거르개는 모든 거르개의 확장자를 합친다 |
+| OS 끌어 놓기 | `accept_file_drop`이면 창 view가 파일·주소·글·그림 끌기를 받는다. 원시 데이터는 끌기의 `NSPasteboard*`이고 `drop_data.h` 도우미가 읽는다 |
+| 화면 남기기 | `capture_request`·`record_request`를 그리기와 같은 상태로 raster에 다시 태워 무손실 WebP로 남긴다 |
+| 작업 표시줄·트레이·전역 단축키 | 진행률·오버레이는 Dock 타일, 점프 목록은 Dock 메뉴(누르면 그 인자로 새로 띄운다), 트레이는 메뉴 막대 상태 항목, 전역 단축키는 Carbon `RegisterEventHotKey`(조합의 Ctrl이 Command)다 |
+| 햅틱 | `NSHapticFeedbackManager`(Force Touch 트랙패드) |
 | 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
 | HTTP·WebSocket | `http_client`는 NSURLSession 위에 서고 몸 풀기와 배달은 client의 thread가 한다 (다른 플랫폼과 같다). WebSocket은 NSURLSessionWebSocketTask다. gzip·deflate는 시스템이 늘 풀고, 상태 줄의 이유 글과 헤더의 차례는 오지 않으며, 로컬 닫기는 상대의 답을 기다리지 않는다 ([`macos_http_client.mm`](../../src/net/macos/macos_http_client.mm), [`websocket_transport.mm`](../../src/net/macos/websocket_transport.mm)) |
 | 비밀 저장소 | 로그인 keychain의 일반 암호 항목이다. `service`가 서비스, `name`이 계정 이름이다. NUL을 품은 이름은 거절한다 ([비밀 저장소](../secret-store-design.md#macos)) |
 | 파일 감시 | 감시마다 FSEvents stream 하나(파일 단위 이벤트)다. 쌓이는 표지는 지금 있는지·파일 번호·본 이름으로 가른다 ([파일 감시](../file-watch-design.md#macos)) |
-| 단일 인스턴스 | 사용자 임시 폴더의 잠금 파일(`flock`)이 첫째를 가린다. 둘째는 그 옆의 Unix 소켓으로 인자와 작업 폴더를 보낸다. 첫째는 배경 thread가 받아 메인 thread의 받는 함수에 건넨다. host는 `macos::set_instance_receiver`로 단다 ([인자 넘기기](../single-instance-args-design.md#macos)) |
+| 단일 인스턴스 | 사용자 임시 폴더의 잠금 파일(`flock`)이 첫째를 가린다. 둘째는 그 옆의 Unix 소켓으로 인자와 작업 폴더를 보낸다. 첫째는 배경 thread가 받아 메인 thread의 받는 함수에 건넨다. host는 `application_environment::instance`가 첫째면 받은 인자를 `window_delegate::on_instance_arguments`로 넘긴다 ([인자 넘기기](../single-instance-args-design.md#macos)) |
 
 개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
 
 | 변수 | 뜻 |
 | --- | --- |
 | `LUIL_MACOS_FRAME_CAPTURE=<png>` | 그린 frame마다 그 파일을 덮어쓴다 |
-| `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다. `snapshot`은 웹뷰까지 합성한 창 내용을, 창 id를 주면 그 보조 창을 PNG로 적고 `window <id>`는 다음 명령을 그 창에 보낸다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |
+| `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다. `snapshot`은 웹뷰까지 합성한 창 내용을, 창 id를 주면 그 창을 PNG로 적고 `window <id>`는 다음 명령을 그 창에 보낸다. `drop`은 파일 끌어 놓기, `sheet`는 파일 패널, `capture`·`record`는 화면 남기기를 밟는다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |

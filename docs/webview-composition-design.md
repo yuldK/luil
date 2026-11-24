@@ -191,7 +191,7 @@ Demo에서 잰 결과는 다음과 같다(runtime 155.0.4283.62).
 
 macOS host는 같은 공개 계약(`ui_webview`, `webview_element`, `webview_policy`, `webview_event`)을 WKWebView로 세운다. 구현은 [`src/macos/webview_host.mm`](../src/macos/webview_host.mm)이고, 자리·가림 판단은 Windows와 같은 [`plan_webview_layout`](../src/host/webview_layout.h)과 [`webview_message_gate`](../src/host/webview_message_gate.h)를 쓴다.
 
-**구조.** 창 내용은 뒤집힌 그릇 view 하나이고, 그 안에 Skia view와 웹뷰들이 형제 NSView로 선다. 위층은 Skia view 위, 아래층은 그 아래다. Skia view의 layer는 불투명하지 않아 `frame_state::holes`로 비운 알파 0 자리로 아래층 웹뷰가 보인다. CPU 렌더러에서도 그대로 서므로 `presentation_changed`는 늘 표시 가능으로 알린다. 같은 id의 층을 바꾸면 view의 순서만 바꾸고 페이지는 그대로다.
+**구조.** 창(주 창·보조 창·도킹 표면)마다 웹뷰 host 하나가 서고, `ui_webview::anchor`가 그 창의 id인 웹뷰만 세운다. 창 내용은 뒤집힌 그릇 view 하나이고, 그 안에 Skia view와 웹뷰들이 형제 NSView로 선다. 위층은 Skia view 위, 아래층은 그 아래다. Skia view의 layer는 불투명하지 않아 `frame_state::holes`로 비운 알파 0 자리로 아래층 웹뷰가 보인다. CPU 렌더러에서도 그대로 서므로 `presentation_changed`는 늘 표시 가능으로 알린다. 같은 id의 층을 바꾸면 view의 순서만 바꾸고 페이지는 그대로다.
 
 **첫 그림.** 위층은 첫 `didFinishNavigation`까지 숨되 자리의 크기는 먼저 준다. 아래층은 그때부터 구멍을 연다. Windows와 같은 규칙이다.
 

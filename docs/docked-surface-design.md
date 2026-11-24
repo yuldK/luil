@@ -156,3 +156,7 @@ frame.focus = luil::focus_request { .id = ++revision, .surface = u8"widget", .ta
   - 누르는 동안과 끌어 놓는 동안 앞 창이 바뀌지 않는가.
   - 브라우저에서 그림을 끌어 오면 끄는 그림이 표면 위에서도 보이고, 놓으면 가상 파일 이름과 URL이 표면에 찍히는가.
   - 도킹 표면에 앵커한 popup은 아직 띄워 본 적이 없다. 위 "popup과의 관계"는 앵커 해석을 보조 창과 같은 길에 이은 것에 기댄 설명이다.
+
+## macOS
+
+테두리 없고 활성화되지 않는 판(`NSPanel`, `NSWindowStyleMaskNonactivatingPanel`)이다. 상태 막대 높이(`NSStatusWindowLevel`)에 뜨고 모든 데스크톱 공간에 함께 서며, 활성화를 청하면(`focus_request::activate`) 키보드를 받는다. 자리는 [`resolve_docked_bounds`](../src/host/docked_placement.h)가 모니터 목록으로 푼 화면 사각형이고(화면 좌표는 주 화면 왼쪽 위 원점, 점 × 주 화면 배율), 화면 구성이 바뀌면 다시 푼다. 보조 창의 길(tree·metrics·popup 앵커·웹뷰·끌어 놓기)을 그대로 쓴다.

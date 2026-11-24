@@ -72,11 +72,16 @@ namespace luil::macos {
     //  - 화면 좌표(`screen_point`, `window_placement`, `window_screen_anchor`)는 주 화면 왼쪽 위가 원점이고 아래로 늘며,
     //    점에 주 화면의 배율을 곱한 픽셀이다.
     //  - frame의 popup은 앵커 사슬이 끝나는 창 위에 겹쳐 그린다 (popup-overlay-design.md).
-    //  - frame의 웹뷰(`ui_frame::webviews`)는 WKWebView로 자리표 자리에 선다 (webview-composition-design.md의 macOS 갈래).
-    //    주 창의 것만 선다. 보조 창의 웹뷰는 아직 서지 않는다.
-    //  - 마우스·트랙패드·키보드 입력을 옮긴다. Command가 주 단축키, Option이 낱말 이동이다. 텍스트 칸에 초점이
-    //    서면 입력기(한글 조합 등)가 붙는다. 클립보드는 일반 붙여넣기 판(NSPasteboard)의 글이다.
-    //  - 시스템의 밝은·어두운 모양과 강조색, 움직임 줄이기 설정을 따른다.
+    //  - frame의 웹뷰(`ui_frame::webviews`)는 WKWebView로 그 앵커 창(주 창·보조 창·도킹 표면)의 자리표 자리에 선다
+    //    (webview-composition-design.md의 macOS 갈래).
+    //  - 도킹 표면(`ui_frame::docked_surfaces`)은 테두리 없고 활성화되지 않는 판이다. 자리는 모니터 목록으로 푼다.
+    //  - 마우스·트랙패드·키보드 입력을 옮긴다. Command가 주 단축키(`key_chord::control`의 자리), Option이 낱말 이동이다.
+    //    텍스트 칸에 초점이 서면 입력기(한글 조합 등)가 붙는다.
+    //  - 클립보드는 일반 붙여넣기 판(NSPasteboard)의 글·HTML·그림·파일이다. 파일 대화 상자는 sheet, OS 끌어 놓기는 창 view가 받는다.
+    //  - delegate가 `win32::window_delegate`도 구현했으면 Windows와 같은 훅을 부른다: 주 창 배치·배경 효과·작업 표시줄(Dock)·
+    //    점프 목록(Dock 메뉴)·트레이(메뉴 막대 상태 항목)·전역 단축키의 보고, 파일 놓기의 물러섬, 둘째 인스턴스의 인자,
+    //    네이티브 창(`NSWindow*`)의 생성·frame·소멸.
+    //  - 시스템의 밝은·어두운 모양과 강조색, 대비·움직임·투명도 줄이기 설정을 따른다.
     //  - 창의 닫기 단추와 Command+Q는 앱이 frame에 실은 닫힘 훅(`ui_frame::close`)을 먼저 부른다. 훅이 없으면
     //    (또는 `ui_command::application_exit`이면) `app_host::shutdown`이 종료 신호를 돌린 뒤 창이 사라지고 이 함수가 돌아온다.
     // 반환값은 0이면 정상 종료, 아니면 시작에 실패한 것이다.

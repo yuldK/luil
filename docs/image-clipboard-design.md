@@ -226,3 +226,7 @@ inline constexpr std::size_t max_clipboard_image_bytes { 256u * 1024u * 1024u };
 - HTML·RTF 형식(R3 rich_edit). 벡터 메타파일과 SVG 형식. 그림 파일 경로(`CF_HDROP`)를 그림으로 읽는 일은 파일 클립보드가 맡는다.
 - 지연 렌더링과 넣기 결과를 앱에 돌려주는 답. 글·파일 복사처럼 결과가 없다.
 - 움직이는 그림. 첫 장만 다룬다.
+
+## macOS
+
+넣기는 한 항목에 PNG(앱이 지어 준 것, 없으면 픽셀을 ImageIO로 지은 것)와 TIFF, HTML, 글을 함께 싣는다. 읽기는 PNG를, 없으면 TIFF를 PNG로 옮겨 `encoded`로 준다 (Skia 코덱에는 TIFF가 없다). `clipboard_image_copy`가 참이다 ([`macos_clipboard.mm`](../src/macos/macos_clipboard.mm)).

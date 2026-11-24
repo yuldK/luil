@@ -137,3 +137,12 @@ drag event에는 표면 id가 실린다. 보조 창은 자기 tree에서 대상�
 ## 검증
 
 [`tests/win32_drop_tests.cpp`](../tests/win32_drop_tests.cpp)는 경로 순서와 상한, 빈 payload, COM 전달, copy-only 협상, copy를 허락하지 않은 source의 거절, 가린 자리의 NONE 답, element 액션, fallback과 불투명 표면이 막은 fallback을 확인한다. 형식 이름과 표준 상수의 왕복, 가상 파일만 실은 source의 형식 목록(같은 형식 한 번), host로 가는 형식과 `Drop`의 객체, 링크만 허락한 source의 거절, 형식만 실린 끌기가 받는 element 위에서만 받히는 것과 그 `on_drop`이 원시 객체로 가상 파일 이름·`FileContents`(되감은 흐름)·URL을 꺼내는 것, 도우미의 상한과 없는 형식도 같은 파일이다. 실제 브라우저 끌기와 끄는 그림은 사람 손으로 확인한다 (데모 창 페이지의 도킹 표면). [`tests/raster_draw_tests.cpp`](../tests/raster_draw_tests.cpp)는 OS가 drag visual을 소유해도 대상 강조가 남는지 확인한다. 자리마다 받기를 가르는 대상이 거절한 자리에서 아래 대상이 답하는 것과, 안에서 시작한 끌기의 받는 대상 없는 놓기·취소·불투명 표면 규칙은 [`tests/ui_interaction_tests.cpp`](../tests/ui_interaction_tests.cpp)가 확인한다.
+
+## macOS
+
+`application_config::accept_file_drop`을 켜면 주 창·보조 창·도킹 표면의 Skia view가 끌기를 받는다 ([`macos_app.mm`](../src/macos/macos_app.mm)). 받는 형식은 파일 URL, 주소, 글, PNG, TIFF다.
+
+- 들어옴·움직임·떠남은 Windows처럼 표시만 세우고(`file_drag_*_event`), 답과 놓기는 그 창의 tree에 직접 묻는다. popup 위는 받지 않는다 (Windows의 popup은 drop을 등록하지 않는다).
+- 효과는 늘 복사다. 놓는 순간의 수식 키는 Command·Control이 `control`, Option이 `alt`다.
+- 원시 데이터(`native_drop_data`)는 끌기의 `NSPasteboard*`다. [`drop_data.h`](../include/luil/win32/drop_data.h)의 도우미가 붙여넣기 판의 형식(UTI)을 읽고, 흔한 Win32 이름(`CF_UNICODETEXT`, `UniformResourceLocatorW`, `HTML Format`, `PNG`)을 같은 뜻의 형식으로 옮긴다. 가상 파일은 파일 약속(`NSFilePromiseReceiver`)의 이름만 읽고 내용은 바이트로 오지 않는다.
+- 받는 element가 없으면 delegate가 `win32::window_delegate`를 구현했을 때 `on_file_dropped`로 물러선다.

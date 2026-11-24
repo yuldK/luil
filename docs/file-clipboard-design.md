@@ -46,3 +46,7 @@ luil은 클립보드에 `IDataObject`를 올리지 않고(`OleSetClipboard`가 �
 Android는 파일 경로를 클립보드로 주고받는 관례가 없다(content URI를 쓴다). 넣기는 아무 일도 하지 않고, 읽기는 `supported` 거짓과 빈 목록(`sequence` 0)으로 답한다. 답은 그래도 오므로 앱이 기다리다 멈추지 않는다. 클립보드 변화 알림은 보내지 않는다.
 
 그림 URI는 [그림 클립보드](image-clipboard-design.md)의 `clipboard_data_paste_request`가 읽는다. 그 길은 Android에서도 그림 내용을 바이트로 돌려준다.
+
+## macOS
+
+일반 붙여넣기 판에 경로마다 파일 URL 항목 하나를 싣는다 ([`macos_clipboard.mm`](../src/macos/macos_clipboard.mm)). 잘라내기의 뜻은 첫 항목의 이 라이브러리 형식 `org.luil.file-clipboard-intent`("cut")에 싣는다 — Finder에는 잘라내기 클립보드가 없어 Finder는 늘 복사로 붙인다. 번호는 붙여넣기 판의 `changeCount`이고, 바뀜(`clipboard_change`)은 앱이 앞에 있는 동안 반 초마다·앞으로 올 때·넣은 뒤에 번호를 견줘 알린다. 붙여넣기 판은 디스크에 없는 파일의 URL을 다른 프로세스에 건네지 않는다.

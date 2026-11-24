@@ -23,3 +23,7 @@ Android는 UI를 열지 않고 `unsupported`를 같은 ID로 한 번 반환한�
 중복 ID·재진입은 플랫폼 독립 gate 테스트로, 메시지 포화 후 재전달은 app host 테스트로 확인한다.
 Windows의 modal 실행, 보조 창 소유권,
 취소·복수 경로·저장과 Android의 결과 전달은 해당 플랫폼에서 실행 검증해야 한다.
+
+## macOS
+
+`NSOpenPanel`·`NSSavePanel`을 소유 창(popup이면 그 사슬의 뿌리 창)의 sheet로 연다 ([`file_dialog_macos.mm`](../src/macos/file_dialog_macos.mm)). 비동기라 답은 run loop가 나중에 돌려주고, 그동안 gate가 다음 요청을 막는다. 패널에는 거르개를 고르는 칸이 없어 모든 거르개의 확장자를 합쳐 거르고, `*`가 있으면 거르지 않는다. 제목은 패널의 안내 글이다.

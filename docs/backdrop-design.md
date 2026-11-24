@@ -174,3 +174,7 @@ flag와 색 막은 앱이 고른다(`window_config::acrylic_accent`, `win32::acr
 - 효과만 바뀌면 같은 창에 다시 건다. 표면의 표시 방식은 효과 때문에 바뀌지 않는다.
 - 활성화되지 않는 표면은 시스템 효과를 쓰지 않는다.
 - 바꿀 수 없는 까닭을 바꿀 수 있는 까닭보다 먼저 알린다.
+
+## macOS
+
+창 내용 맨 아래에 `NSVisualEffectView`(창 뒤 섞기)를 깔고 Skia 바탕을 `backdrop_background`로 칠한다. mica는 창 바탕 재질, mica_alt는 창 아래 바탕 재질, acrylic은 HUD 재질이다. 투명도 줄이기는 `transparency_disabled`, 대비 늘리기는 `high_contrast`로 세우지 않는다. popup은 같은 view에 겹쳐 그리므로 효과가 없다. 보고는 delegate가 `win32::window_delegate`를 구현했을 때 `make_backdrop_message`로 간다.
