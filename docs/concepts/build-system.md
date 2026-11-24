@@ -137,14 +137,15 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 입력 | 마우스·트랙패드·키보드. Command가 주 단축키, Option이 낱말 이동이고 Command+화살표는 줄·글의 처음과 끝이다. Control+클릭은 오른쪽 클릭이다 |
 | 텍스트 입력 | `NSTextInputClient`. 조합 글은 `post_composition`으로 보이고 확정은 insert 편집이다 (한글 입력기) |
 | popup | 창 위에 겹쳐 그린다 (Android와 같은 overlay) |
+| 웹뷰 | WKWebView. Skia view의 형제 NSView로 위층·아래층에 선다 ([웹뷰 합성](../webview-composition-design.md#macos-wkwebview)) |
 | 클립보드 | 일반 붙여넣기 판의 글과 HTML |
 | 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
 
-아직 없는 것은 "지원 안 함"으로 답한다: 보조 창·도킹 표면(무시), 파일 대화 상자, 비밀 저장소(Keychain), OS 알림, 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
+아직 없는 것은 "지원 안 함"으로 답한다: 보조 창·도킹 표면(무시, 그 창의 웹뷰도 서지 않는다), 파일 대화 상자, 비밀 저장소(Keychain), OS 알림, 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
 
 개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
 
 | 변수 | 뜻 |
 | --- | --- |
 | `LUIL_MACOS_FRAME_CAPTURE=<png>` | 그린 frame마다 그 파일을 덮어쓴다 |
-| `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |
+| `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다. `snapshot`은 웹뷰까지 합성한 창 내용을 PNG로 적는다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |

@@ -18,6 +18,8 @@
 #include "macos/input_script.h"
 #include "macos/macos_input.h"
 #include "macos/macos_text.h"
+#include "macos/webview_host.h"
+#include "luil/ui/webview_element.h"
 
 #include "include/core/SkFont.h"
 #include "include/core/SkTypeface.h"
@@ -26,6 +28,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #include <algorithm>
+#include <array>
 #include <atomic>
 #include <chrono>
 #include <cmath>
@@ -44,6 +47,10 @@ namespace luil::macos {
 // 창 내용 영역의 view다. 이벤트를 C++ 앱으로 넘기고, 입력기(NSTextInputClient)의 창구가 된다.
 @interface LuilView : NSView <NSTextInputClient>
 @property(nonatomic, assign) luil::macos::application* owner;
+@end
+
+// 창 내용의 그릇이다. Skia view와 웹뷰가 형제로 선다. 자식의 자리를 왼쪽 위 원점(물리 픽셀을 배율로 나눈 점)으로 적도록 뒤집는다.
+@interface LuilContainerView : NSView
 @end
 
 // 창의 닫기·크기·배율·초점 알림을 C++ 앱으로 넘긴다.
@@ -364,6 +371,17 @@ namespace luil::macos {
         void mouse_moved(NSEvent* const event)
         {
             const NSPoint point { surface_point(event) };
+            // 웹뷰 위다. 웹뷰가 포인터를 받으므로 tree의 hover를 거두고 커서는 웹뷰에 맡긴다.
+            if (webviews_ != nullptr && webviews_->covers(static_cast<float>(point.x), static_cast<float>(point.y)))
+            {
+                if (pointer_over_webview_ == false)
+                {
+                    pointer_over_webview_ = true;
+                    post_events({ raw_input_event { pointer_left_event { {}, pointer_device::mouse } } });
+                }
+                return;
+            }
+            pointer_over_webview_ = false;
             pointer_moved_event moved {};
             moved.x = static_cast<float>(point.x);
             moved.y = static_cast<float>(point.y);
@@ -612,6 +630,58 @@ namespace luil::macos {
             return [window_ convertRectToScreen:in_window];
         }
 
+        // 창 내용의 합성을 PNG로 적는다 (개발용, 입력 대본의 `snapshot`). 아래층 웹뷰 → Skia frame → 위층 웹뷰의 차례다.
+        void snapshot(NSString* const path)
+        {
+            if (webviews_ == nullptr || path == nil)
+                return;
+            CGImageRef const frame { (__bridge CGImageRef)view_.layer.contents };
+            if (frame == nullptr)
+                return;
+            CGImageRetain(frame);
+            const int width { surface_width_ };
+            const int height { surface_height_ };
+            NSString* const target { [path copy] };
+            webviews_->snapshot([frame, width, height, target](std::vector<webview_host::snapshot_layer> layers) {
+                CGColorSpaceRef const space { CGColorSpaceCreateWithName(kCGColorSpaceSRGB) };
+                CGContextRef const context { CGBitmapContextCreate(nullptr, static_cast<std::size_t>(width), static_cast<std::size_t>(height), 8, 0, space,
+                    static_cast<CGBitmapInfo>(kCGImageAlphaPremultipliedFirst) | static_cast<CGBitmapInfo>(kCGBitmapByteOrder32Little)) };
+                CGColorSpaceRelease(space);
+                if (context != nullptr)
+                {
+                    // CoreGraphics는 왼쪽 아래가 원점이다. 위에서부터 잰 자리를 뒤집는다.
+                    const auto rect = [height](const int x, const int y, const int w, const int h) { return CGRectMake(x, height - y - h, w, h); };
+                    CGContextSetFillColorWithColor(context, [NSColor windowBackgroundColor].CGColor);
+                    CGContextFillRect(context, CGRectMake(0, 0, width, height));
+                    for (const auto underlay : { true, false })
+                    {
+                        if (underlay == false)
+                            CGContextDrawImage(context, CGRectMake(0, 0, width, height), frame);
+                        for (const webview_host::snapshot_layer& layer : layers)
+                            if (layer.image != nullptr && (layer.layer == webview_layer::underlay) == underlay)
+                                CGContextDrawImage(context, rect(layer.x, layer.y, layer.width, layer.height), static_cast<CGImageRef>(layer.image));
+                    }
+                    if (CGImageRef const composed { CGBitmapContextCreateImage(context) }; composed != nullptr)
+                    {
+                        NSBitmapImageRep* const bitmap { [[NSBitmapImageRep alloc] initWithCGImage:composed] };
+                        [[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:target atomically:YES];
+                        CGImageRelease(composed);
+                    }
+                    CGContextRelease(context);
+                }
+                for (const webview_host::snapshot_layer& layer : layers)
+                    if (layer.image != nullptr)
+                        CGImageRelease(static_cast<CGImageRef>(layer.image));
+                CGImageRelease(frame);
+            });
+        }
+
+        // view 좌표의 점(점 단위)이 아래층 웹뷰의 구멍 안인가. 참이면 포인터가 Skia view를 지나 웹뷰로 간다.
+        [[nodiscard]] bool passes_through(const NSPoint point) const
+        {
+            return webviews_ != nullptr && webviews_->passes_through(static_cast<float>(point.x * scale_), static_cast<float>(point.y * scale_));
+        }
+
         // 메뉴의 편집 명령이다 (오려 두기·복사하기·붙여넣기·전체 선택). Command 단축키와 같은 키로 보낸다.
         void menu_edit(const key_code key, const bool shift)
         {
@@ -686,6 +756,15 @@ namespace luil::macos {
             if (app_message message { metrics_message() }; message.empty() == false)
                 host_config.initial_messages.push_back(std::move(message));
             host_ = std::make_unique<app_host>(std::move(host_config), *environment_.driver, environment_.policy);
+            webviews_->set_deliver([this](app_message message) {
+                if (host_ != nullptr)
+                    host_->post_app_message(std::move(message));
+            });
+            // 페이지를 눌러 키보드 초점이 웹뷰로 갔다. 논리 초점을 그 자리표로 옮긴다 (Windows의 `GotFocus`와 같은 자리).
+            webviews_->set_focus_reporter([this](const std::u8string& id) {
+                if (host_ != nullptr)
+                    host_->post_raw_input(access_focus_event { ui_element_id { ui_element_kind::webview, id }, {}, now() });
+            });
 
             create_renderer();
             if (renderer_ == nullptr)
@@ -705,6 +784,9 @@ namespace luil::macos {
                 [timer_ invalidate];
                 timer_ = nil;
             }
+            // 웹뷰 사건이 끝나는 host로 가지 않게 먼저 거둔다.
+            if (webviews_ != nullptr)
+                webviews_->shutdown();
             host_->shutdown();
         }
 
@@ -748,13 +830,21 @@ namespace luil::macos {
             window_delegate_.owner = this;
             window_.delegate = window_delegate_;
 
-            view_ = [[LuilView alloc] initWithFrame:frame];
+            // 창 내용은 그릇 view 하나이고, 그 안에 Skia view와 웹뷰들이 형제로 선다 (macos/webview_host.h).
+            //  - Skia view는 불투명하지 않다. 아래층 웹뷰의 구멍(알파 0)으로 그 아래가 보인다.
+            container_ = [[LuilContainerView alloc] initWithFrame:frame];
+            container_.wantsLayer = YES;
+            container_.layer.backgroundColor = [NSColor windowBackgroundColor].CGColor;
+            view_ = [[LuilView alloc] initWithFrame:container_.bounds];
             view_.owner = this;
+            view_.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
             view_.wantsLayer = YES;
             view_.layer.contentsGravity = kCAGravityTopLeft;
-            view_.layer.backgroundColor = [NSColor windowBackgroundColor].CGColor;
-            window_.contentView = view_;
+            view_.layer.opaque = NO;
+            [container_ addSubview:view_];
+            window_.contentView = container_;
             [window_ makeFirstResponder:view_];
+            webviews_ = std::make_unique<webview_host>(container_, view_);
             NSTrackingArea* const tracking { [[NSTrackingArea alloc] initWithRect:NSZeroRect
                                                                           options:NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | NSTrackingActiveInKeyWindow | NSTrackingInVisibleRect
                                                                             owner:view_
@@ -1111,6 +1201,8 @@ namespace luil::macos {
             if (frame == overlay_frame_ && frame != nullptr)
                 return;
             overlay_frame_ = frame;
+            if (webviews_ != nullptr)
+                webviews_->synchronize(frame != nullptr ? std::span<const ui_webview> { frame->webviews } : std::span<const ui_webview> {});
             auto previous { std::move(overlays_) };
             overlays_.clear();
             if (frame != nullptr)
@@ -1350,6 +1442,64 @@ namespace luil::macos {
             dispatch(environment_.policy->make_text_edit_action(edit));
         }
 
+        // frame의 웹뷰마다 자리표의 자리를 웹뷰에 앉히고, 아래층이 비울 구멍을 낸다 (Win32 `apply_webviews`와 같은 규칙).
+        //  - 가림은 자리표의 가운데와 안쪽 네 모서리 hit test다. popup은 같은 view에 겹쳐 그리므로 자리와 겹치는 popup도 가림이다.
+        //  - 초점이 자리표에 **닿는 순간** 키보드 초점을 페이지로 넘긴다.
+        [[nodiscard]] std::span<const pixel_rect> apply_webviews(const ui_tree* const tree, const interaction_snapshot& interaction)
+        {
+            webview_holes_.clear();
+            if (webviews_ == nullptr || overlay_frame_ == nullptr)
+                return webview_holes_;
+            const ui_element_id focused { interaction_for_surface(interaction, std::u8string {}).focused };
+            for (const ui_webview& want : overlay_frame_->webviews)
+            {
+                if (want.anchor.empty() == false || want.id.empty())
+                    continue;
+                const ui_element_id placeholder_id { ui_element_kind::webview, want.id };
+                const auto* const placeholder { tree != nullptr ? dynamic_cast<const webview_element*>(tree->find(placeholder_id)) : nullptr };
+                const std::optional<rect_f> visible { placeholder != nullptr ? tree->visible_bounds(*placeholder) : std::nullopt };
+                const float tree_scale { placeholder != nullptr ? placeholder->scale() : scale_ };
+                const webview_layout layout {
+                    plan_webview_layout(visible, surface_width_, surface_height_, tree != nullptr && webview_occluded(*tree, placeholder, visible), tree_scale, want.layer),
+                };
+                // 다른 배율로 배치된 tree(화면을 옮긴 직후)의 자리는 주지 않는다. 새 배율의 tree가 오면 크기와 배율을 함께 준다.
+                const bool arranged_for_surface { std::abs(tree_scale - scale_) < 0.001f };
+                if (arranged_for_surface || placeholder == nullptr)
+                    webviews_->apply_layout(want.id, layout, scale_);
+                if (last_webview_focus_ != placeholder_id && focused == placeholder_id)
+                    static_cast<void>(webviews_->move_focus_in(want.id));
+                if (layout.punch_hole() && webviews_->opens_hole(want.id))
+                    webview_holes_.push_back(pixel_rect { layout.x, layout.y, layout.width, layout.height });
+            }
+            last_webview_focus_ = focused;
+            return webview_holes_;
+        }
+
+        [[nodiscard]] bool webview_occluded(const ui_tree& tree, const ui_element* const placeholder, const std::optional<rect_f>& visible) const
+        {
+            if (placeholder == nullptr || visible.has_value() == false)
+                return true;
+            for (const overlay_entry& entry : overlays_)
+            {
+                const pixel_rect& area { entry.bounds };
+                if (static_cast<float>(area.x) < visible->x + visible->width && visible->x < static_cast<float>(area.x + area.width)
+                    && static_cast<float>(area.y) < visible->y + visible->height && visible->y < static_cast<float>(area.y + area.height))
+                    return true;
+            }
+            const float inset { 1.0f };
+            const std::array<std::pair<float, float>, 5> probes {
+                std::pair { visible->x + visible->width / 2.0f, visible->y + visible->height / 2.0f },
+                std::pair { visible->x + inset, visible->y + inset },
+                std::pair { visible->x + visible->width - inset, visible->y + inset },
+                std::pair { visible->x + inset, visible->y + visible->height - inset },
+                std::pair { visible->x + visible->width - inset, visible->y + visible->height - inset },
+            };
+            for (const auto& [x, y] : probes)
+                if (tree.hit_test(x, y) != placeholder)
+                    return true;
+            return false;
+        }
+
         [[nodiscard]] bool render()
         {
             frame_state state {};
@@ -1369,6 +1519,7 @@ namespace luil::macos {
             for (const overlay_entry& entry : overlays_)
                 layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id), entry.scroll_y });
             state.overlays = layers;
+            state.holes = apply_webviews(tree.get(), interaction);
             const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
             state.theme = resolve_color_theme(appearance.theme, system_.high_contrast, system_.prefers_light);
             state.high_contrast = system_.contrast_colors;
@@ -1430,7 +1581,12 @@ namespace luil::macos {
         std::unique_ptr<app_host> host_ {};
         std::unique_ptr<renderer_host> renderer_ {};
         NSWindow* window_ { nil };
+        NSView* container_ { nil };
         LuilView* view_ { nil };
+        std::unique_ptr<webview_host> webviews_ {};
+        std::vector<pixel_rect> webview_holes_ {};
+        ui_element_id last_webview_focus_ {};
+        bool pointer_over_webview_ { false };
         LuilWindowDelegate* window_delegate_ { nil };
         LuilApplicationDelegate* application_delegate_ { nil };
         NSTimer* timer_ { nil };
@@ -1505,6 +1661,15 @@ namespace {
     }
 }
 
+@implementation LuilContainerView
+
+- (BOOL)isFlipped
+{
+    return YES;
+}
+
+@end
+
 @implementation LuilView {
     BOOL secondaryPress;
 }
@@ -1528,6 +1693,14 @@ namespace {
 - (BOOL)wantsUpdateLayer
 {
     return YES;
+}
+
+// 아래층 웹뷰의 구멍 자리는 이 view를 지나 그 아래의 웹뷰로 간다.
+- (NSView*)hitTest:(NSPoint)point
+{
+    if (self.owner != nullptr && self.superview != nil && self.owner->passes_through([self convertPoint:point fromView:self.superview]))
+        return nil;
+    return [super hitTest:point];
 }
 
 - (void)updateLayer
@@ -1556,6 +1729,9 @@ namespace {
 {
     if (self.owner == nullptr)
         return;
+    // 웹뷰가 쥐고 있던 키보드 초점을 되찾는다.
+    if (self.window.firstResponder != self)
+        [self.window makeFirstResponder:self];
     // Control+클릭은 macOS의 오른쪽 클릭이다.
     const bool secondary { ([event modifierFlags] & NSEventModifierFlagControl) != 0 };
     self.owner->mouse_button(event, secondary ? luil::pointer_button::right : luil::pointer_button::left, true);
@@ -1571,6 +1747,8 @@ namespace {
 
 - (void)rightMouseDown:(NSEvent*)event
 {
+    if (self.window.firstResponder != self)
+        [self.window makeFirstResponder:self];
     if (self.owner != nullptr)
         self.owner->mouse_button(event, luil::pointer_button::right, true);
 }
@@ -1632,6 +1810,12 @@ namespace {
     static_cast<void>(selector);
     if (self.owner != nullptr)
         self.owner->do_command();
+}
+
+- (void)luilSnapshot:(NSString*)path
+{
+    if (self.owner != nullptr)
+        self.owner->snapshot(path);
 }
 
 - (void)luilUndo:(id)sender

@@ -977,6 +977,9 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/desktop_compat.cpp
         macos/input_script.h
         macos/input_script.mm
+        "${public_headers}/app/webview.h"
+        macos/webview_host.h
+        macos/webview_host.mm
         "${public_headers}/app/platform_services.h"
         macos/platform_services_macos.mm
         luil/url_scheme.cpp
@@ -1004,6 +1007,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "-framework Foundation"
             "-framework CoreGraphics"
             "-framework ImageIO"
+            "-framework WebKit"
         PRIVATE
             luil_options)
 endif()

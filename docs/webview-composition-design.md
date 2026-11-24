@@ -187,6 +187,41 @@ Demo에서 잰 결과는 다음과 같다(runtime 155.0.4283.62).
 
 자리표가 계속 선 채 접근성 HWND가 붙거나 떨어지면 그 자리표에서 `ChildrenInvalidated`를 한 번 낸다. 같은 HWND를 가진 frame을 다시 그려도 알리지 않는다. 실험에서 WebView2의 page provider는 `IRawElementProviderFragmentRoot`를 지원했다. 이를 `GetEmbeddedFragmentRoots`에서 돌려준 빌드에서도 관리 UIA2의 RawView·ControlView 첫 자식과 자손 수는 모두 비어 있었다. 이 실험 경로는 공개하지 않는다.
 
+## macOS (WKWebView)
+
+macOS host는 같은 공개 계약(`ui_webview`, `webview_element`, `webview_policy`, `webview_event`)을 WKWebView로 세운다. 구현은 [`src/macos/webview_host.mm`](../src/macos/webview_host.mm)이고, 자리·가림 판단은 Windows와 같은 [`plan_webview_layout`](../src/host/webview_layout.h)과 [`webview_message_gate`](../src/host/webview_message_gate.h)를 쓴다.
+
+**구조.** 창 내용은 뒤집힌 그릇 view 하나이고, 그 안에 Skia view와 웹뷰들이 형제 NSView로 선다. 위층은 Skia view 위, 아래층은 그 아래다. Skia view의 layer는 불투명하지 않아 `frame_state::holes`로 비운 알파 0 자리로 아래층 웹뷰가 보인다. CPU 렌더러에서도 그대로 서므로 `presentation_changed`는 늘 표시 가능으로 알린다. 같은 id의 층을 바꾸면 view의 순서만 바꾸고 페이지는 그대로다.
+
+**첫 그림.** 위층은 첫 `didFinishNavigation`까지 숨되 자리의 크기는 먼저 준다. 아래층은 그때부터 구멍을 연다. Windows와 같은 규칙이다.
+
+**가림.** 자리표의 가운데와 안쪽 네 모서리 hit test에, **popup과의 겹침**을 더한다. macOS host의 popup은 별도 창이 아니라 같은 Skia view에 겹쳐 그리므로, 위층 웹뷰가 popup을 덮지 않으려면 겹치는 순간 숨어야 한다. 아래층은 구멍을 닫는다.
+
+**포인터와 키보드.** 웹뷰는 NSView라 포인터를 스스로 받는다. 아래층의 구멍 자리는 Skia view의 `hitTest:`가 비켜 아래 웹뷰로 보낸다. 웹뷰 위에 포인터가 오면 Skia view는 tree에 떠남을 알리고 커서를 웹뷰에 맡긴다. 페이지를 누르면 WKWebView가 첫 응답자가 되고, host가 논리 초점을 자리표로 옮긴다(`access_focus_event`). Skia view를 누르면 첫 응답자를 되찾는다. Tab으로 논리 초점이 자리표에 **닿는 순간** 키보드 초점을 페이지로 넘긴다. 페이지 끝에서 밖으로 나오는 Tab은 아직 없다.
+
+**다리.** 문서 시작에 스크립트를 넣어 WebView2와 같은 꼴의 `window.chrome.webview`를 세운다. `postMessage(값)`은 JSON으로 적어 `WKScriptMessageHandler`로 보내고, 앱이 보낸 `post_message`는 `message` 사건의 `data`(풀린 값)로 낸다. WebView2용으로 쓴 페이지가 고치지 않고 돈다. 주 문서에만 넣는다.
+
+**정책.**
+
+| 정책 | macOS |
+| --- | --- |
+| 스킴·`javascript:` | 주 문서 항해를 `decidePolicyForNavigationAction`에서 거른다. 앱이 여는 주소도 같다 |
+| 새 창 | `targetFrame`이 없는 항해다. 두 번째 창은 만들지 않는다. 정책이 열면 주 문서의 링크 누름(`WKNavigationTypeLinkActivated`)만 이 웹뷰에서 연다 |
+| 내려받기 | `shouldPerformDownload`(11.3), `Content-Disposition: attachment`, 보일 수 없는 MIME을 취소하고 알린다 |
+| 권한 | 카메라·마이크(`requestMediaCapturePermission`, 12.0)는 거절하고 알린다. 위치는 공개 API가 없어 WebKit이 스스로 거절한다(페이지는 거부를 받는다). 이 거절은 `permission_denied`로 알리지 못한다 |
+| 스크립트 | 항해마다 `WKWebpagePreferences.allowsContentJavaScript`로 싣는다 (다음 항해부터 든다) |
+| 개발자 도구 | `inspectable`(13.3) |
+| 기본 메뉴 | 정책이 닫으면 `willOpenMenu:`에서 항목을 비운다 |
+| 대화상자 | `alert`·`confirm`·`prompt`를 창의 sheet로 낸다. 정책이 닫으면 곧바로 취소로 답한다 |
+| 확대·스와이프 | `allowsMagnification`, `allowsBackForwardNavigationGestures` |
+| 브라우저 단축키 | WKWebView에는 F12·Ctrl+F 같은 브라우저 단축키가 없어 다룰 것이 없다 |
+
+**프로필.** macOS 14부터는 `user_data_folder`에서 이름 기반 UUID를 지어 `WKWebsiteDataStore dataStoreForIdentifier:`로 자리마다 저장소를 가른다. 13 이하에서는 기본 저장소 하나를 함께 쓴다. 폴더 경로 자체에 파일을 쓰지는 않는다. 비어 있으면 웹뷰를 만들지 않고 `creation_failed`(`environment_failed`)로 알린다.
+
+**프로세스 실패.** `webViewWebContentProcessDidTerminate`가 `render_process_failed`이고 Windows처럼 10초 안의 두 번째는 다시 읽지 않는다. 브라우저 프로세스의 갈래는 없다.
+
+**확인한 것.** 데모의 ‘웹뷰’ 페이지를 입력 대본으로 눌러 웹뷰까지 합성한 창 내용을 찍었다(macOS 27.2): 위층·아래층 모두 자리표에 맞게 서고 CSS 100px가 물리 200px(배율 2)였다. 층 전환, 탭을 오가며 숨김과 다시 섬, 모달 대화가 덮을 때의 숨김, 페이지→앱 메시지, 300개 쏟기의 `events_dropped`, 내려받기·새 창의 차단 알림을 확인했다. 앱→페이지 `post_message`, 실제 트랙패드 스크롤, 페이지 안의 IME는 확인하지 않았다.
+
 ## 검증
 
 데모의 ‘웹뷰’ 페이지는 ‘페이지를 자리표 위에 얹는다 (위층)’ 확인란으로 같은 웹뷰의 층을 오간다. 기본은 위층이고, 끄면 앱의 기본값인 아래층(구멍 뚫기·가림 시 구멍 닫기)을 같은 화면에서 확인한다. 아래 실측은 위층에서 잰 것이다.

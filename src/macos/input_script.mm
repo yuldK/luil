@@ -227,6 +227,14 @@ namespace {
             else
                 [client insertText:text replacementRange:NSMakeRange(NSNotFound, 0)];
         }
+        else if (command == "snapshot")
+        {
+            std::string rest {};
+            std::getline(words, rest);
+            NSString* const path { [[NSString stringWithUTF8String:rest.c_str()] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] };
+            if ([view respondsToSelector:@selector(luilSnapshot:)])
+                [view performSelector:@selector(luilSnapshot:) withObject:path];
+        }
         else if (command == "quit")
             [window performClose:nil];
     }

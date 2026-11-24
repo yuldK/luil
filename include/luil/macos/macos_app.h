@@ -46,6 +46,8 @@ namespace luil::macos {
     //  - 크기와 배율은 창 내용 영역의 것을 `app_delegate::make_metrics_message`로 알린다. 배율은 창이 놓인 화면의
     //    `backingScaleFactor`다. 다른 배율의 화면으로 옮기면 다시 알린다.
     //  - frame의 popup은 창 위에 겹쳐 그린다 (popup-overlay-design.md). 보조 창(`ui_frame::windows`)은 무시한다.
+    //  - frame의 웹뷰(`ui_frame::webviews`)는 WKWebView로 자리표 자리에 선다 (webview-composition-design.md의 macOS 갈래).
+    //    주 창의 것만 선다.
     //  - 마우스·트랙패드·키보드 입력을 옮긴다. Command가 주 단축키, Option이 낱말 이동이다. 텍스트 칸에 초점이
     //    서면 입력기(한글 조합 등)가 붙는다. 클립보드는 일반 붙여넣기 판(NSPasteboard)의 글이다.
     //  - 시스템의 밝은·어두운 모양과 강조색, 움직임 줄이기 설정을 따른다.

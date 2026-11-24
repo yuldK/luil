@@ -19,6 +19,7 @@
 //   type <글>               — 글자마다 키를 누른다 (입력기를 거친다)
 //   marked <글>             — 입력기의 조합 글을 세운다 (`setMarkedText:`)
 //   commit <글>             — 입력기가 글을 확정한다 (`insertText:`)
+//   snapshot <png>          — 창 내용(웹뷰를 포함한 합성)을 PNG로 적는다 (view가 `luilSnapshot:`에 답할 때)
 //   quit                    — 앱의 닫기 길을 밟는다 (`performClose:`)
 void luil_run_input_script(NSWindow* window, NSView* view);
 #endif
