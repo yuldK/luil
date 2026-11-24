@@ -109,6 +109,11 @@ namespace luil {
             close_ = close.get();
             add_child(std::move(close));
         }
+
+        // 창 caption이 없는 플랫폼(macOS·모바일)에서는 보이지 않는다. 자리가 0이라 그려지지도 눌리지도 않지만, 보이는 경로에
+        // 남으면 보조 기술이 화면에 없는 창 단추를 읽는다 (접근 색인은 보이는 경로 위의 것만 담는다).
+        if (current_ui_platform().window_caption == false)
+            set_visible(false);
     }
 
     // 오른쪽 끝에서 닫기 → 최대화 → 최소화 → 앱 단추 순으로 쌓는다.

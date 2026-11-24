@@ -60,6 +60,8 @@ TEST_CASE("A window caption takes no room on a platform without one", "[ui][plat
     const luil::ui_element* const close { tree.find(luil::caption_button_element_id(luil::caption_button_hover::close)) };
     REQUIRE(close != nullptr);
     REQUIRE(close->bounds().height == 0.0f);
+    // 화면에 없는 창 단추를 보조 기술이 읽지 않는다.
+    REQUIRE(tree.access_top_level().empty());
 }
 
 TEST_CASE("An app bar puts navigation on the left and actions on the right", "[ui][app-bar]")
