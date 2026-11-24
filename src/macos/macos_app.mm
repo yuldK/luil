@@ -3,6 +3,7 @@
 #include "host/file_dialog_gate.h"
 #include "host/focus_request_tracker.h"
 #include "host/font_registry.h"
+#include "host/docked_placement.h"
 #include "host/frame_state.h"
 #include "host/notification_queue.h"
 #include "host/overlay_input.h"
@@ -61,6 +62,10 @@ namespace luil::macos {
 @interface LuilView : NSView <NSTextInputClient>
 @property(nonatomic, assign) luil::macos::application* owner;
 @property(nonatomic, assign) luil::macos::native_surface* surface;
+@end
+
+// 도킹 표면의 판이다. 테두리가 없어도 활성화를 청하면(`focus_request::activate`) 키보드를 받는다.
+@interface LuilDockPanel : NSPanel
 @end
 
 // 창 내용의 그릇이다. Skia view와 웹뷰가 형제로 선다. 자식의 자리를 왼쪽 위 원점(물리 픽셀을 배율로 나눈 점)으로 적도록 뒤집는다.
@@ -255,6 +260,9 @@ namespace luil::macos {
         NSVisualEffectView* effect { nil };
         bool backdrop_applied { false };
         std::optional<std::pair<window_backdrop, int>> reported_backdrop {};
+        // 도킹 표면이다 (`ui_frame::docked_surfaces`). `want`에는 그 tree와 metrics만 옮겨 든다. 자리가 풀리지 않으면 숨는다.
+        bool docked { false };
+        std::optional<screen_rect> docked_bounds {};
         // 이 창에 선 웹뷰들과, 아래층이 비울 구멍, 마지막으로 본 초점이다 (`ui_webview::anchor`가 이 창).
         std::unique_ptr<webview_host> webviews {};
         std::vector<pixel_rect> webview_holes {};
@@ -1231,13 +1239,28 @@ namespace luil::macos {
 
         // 창 하나와 그 view를 세운다 (자리는 부르는 쪽이 정한다).
         //  - 주 창과 독립 창은 보통 창이다. 소유된 보조 창은 떠 있는 판(`NSPanel`)이라 주 창 위에 서고, 앱이 뒤로 가면 함께 숨는다.
+        //  - 도킹 표면은 테두리 없이 활성화되지 않는 판이다. 언제나 위에 뜨고 모든 데스크톱 공간에 함께 선다.
         void create_window(native_surface& surface, const NSSize content, const NSSize minimum, NSString* const title, const bool panel)
         {
             const NSRect frame { NSMakeRect(0, 0, content.width, content.height) };
             NSWindowStyleMask style { NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable };
             if (panel == false)
                 style |= NSWindowStyleMaskMiniaturizable;
-            if (panel)
+            if (surface.docked)
+            {
+                LuilDockPanel* const window { [[LuilDockPanel alloc] initWithContentRect:frame
+                                                                               styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
+                                                                                 backing:NSBackingStoreBuffered
+                                                                                   defer:NO] };
+                window.floatingPanel = YES;
+                window.level = NSStatusWindowLevel;
+                window.becomesKeyOnlyIfNeeded = YES;
+                window.hidesOnDeactivate = NO;
+                window.collectionBehavior = NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorStationary | NSWindowCollectionBehaviorIgnoresCycle
+                    | NSWindowCollectionBehaviorFullScreenAuxiliary;
+                surface.window = window;
+            }
+            else if (panel)
             {
                 NSPanel* const window { [[NSPanel alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO] };
                 window.floatingPanel = YES;
@@ -2170,13 +2193,8 @@ namespace luil::macos {
                 host_->post_app_message(std::move(message));
         }
 
-        // 모니터 목록을 앱에 알린다 (`ui_frame::displays`). 처음 실린 frame에서 한 번, 그 뒤로는 화면 구성이 바뀔 때마다다.
-        //  - id는 CoreGraphics 화면 번호다. 사각형은 이 파일 첫머리의 화면 좌표 약속을 따르고, 작업 영역은 메뉴 막대와 Dock을 뺀 곳이다.
-        void report_displays(const ui_frame* const frame, const bool changed)
+        [[nodiscard]] static std::vector<display_info> current_displays()
         {
-            if (frame == nullptr || frame->displays == nullptr || host_ == nullptr || (displays_reported_ && changed == false))
-                return;
-            displays_reported_ = true;
             std::vector<display_info> displays {};
             const auto rect_of = [](const NSRect rect) {
                 const screen_point top_left { to_screen_pixels(NSMakePoint(NSMinX(rect), NSMaxY(rect))) };
@@ -2196,7 +2214,88 @@ namespace luil::macos {
                 display.primary = index == 0;
                 displays.push_back(std::move(display));
             }
-            if (app_message message { frame->displays(displays) }; message.empty() == false)
+            return displays;
+        }
+
+        // frame의 도킹 표면 목록에 맞춘다 (docked-surface-design.md의 macOS 갈래). 새 id는 세우고, 빠진 id는 거두고, 있는 id는
+        // tree·metrics를 바꿔 들고 자리를 다시 푼다.
+        //  - 자리는 `resolve_docked_bounds`가 모니터 목록으로 푼 화면 사각형이다 (이 파일 첫머리의 화면 좌표 약속). 풀리지 않으면 숨긴다.
+        //  - 판은 테두리·제목 막대·Dock 항목이 없고, 눌러도 앱을 앞으로 세우지 않는다. 키보드는 앱이 활성화를 청할 때만 받는다.
+        //  - 주 창을 숨겨도 남는다 (`main_hidden`과 무관하다).
+        void reconcile_docked(const ui_frame* const frame)
+        {
+            std::vector<const ui_docked_surface*> wanted {};
+            if (frame != nullptr)
+                for (const ui_docked_surface& docked : frame->docked_surfaces)
+                    if (docked.id.empty() == false && std::ranges::none_of(wanted, [&docked](const ui_docked_surface* const other) { return other->id == docked.id; }))
+                        wanted.push_back(&docked);
+            std::erase_if(secondary_, [this, &wanted](std::unique_ptr<native_surface>& surface) {
+                if (surface->docked == false || std::ranges::any_of(wanted, [&surface](const ui_docked_surface* const docked) { return docked->id == surface->id; }))
+                    return false;
+                destroy_window(*surface);
+                return true;
+            });
+            if (wanted.empty())
+                return;
+            const std::vector<display_info> displays { current_displays() };
+            for (const ui_docked_surface* const docked : wanted)
+            {
+                native_surface* surface { find_surface(docked->id) };
+                if (surface != nullptr && surface->docked == false)
+                    continue;
+                const bool created { surface == nullptr };
+                if (created)
+                {
+                    secondary_.push_back(std::make_unique<native_surface>());
+                    surface = secondary_.back().get();
+                    surface->id = docked->id;
+                    surface->docked = true;
+                    surface->want.independent = true;
+                }
+                surface->want.id = docked->id;
+                surface->want.tree = docked->tree;
+                surface->want.metrics = docked->metrics;
+                if (created)
+                {
+                    create_window(*surface, NSMakeSize(1, 1), NSMakeSize(1, 1), make_ns_string(docked->title), false);
+                    surface->router.set_touch_config(config_.touch);
+                    create_renderer(*surface);
+                    create_webviews(*surface);
+                }
+                if (NSString* const title { make_ns_string(docked->title) }; title != nil)
+                    surface->window.title = title;
+                place_docked(*surface, resolve_docked_bounds(docked->placement, displays));
+                surface->dirty = true;
+            }
+        }
+
+        // 도킹 표면 하나를 풀린 자리에 앉힌다. 같은 자리면 그대로 둔다.
+        void place_docked(native_surface& surface, const std::optional<screen_rect> bounds)
+        {
+            if (bounds == surface.docked_bounds && surface.window.visible == (bounds.has_value() ? YES : NO))
+                return;
+            surface.docked_bounds = bounds;
+            if (bounds.has_value() == false)
+            {
+                [surface.window orderOut:nil];
+                return;
+            }
+            const CGFloat scale { primary_scale() };
+            const NSPoint top_left { from_screen_pixels(bounds->left, bounds->top) };
+            const NSSize size { std::max<CGFloat>(1, bounds->width() / scale), std::max<CGFloat>(1, bounds->height() / scale) };
+            [surface.window setFrame:NSMakeRect(top_left.x, top_left.y - size.height, size.width, size.height) display:NO];
+            [surface.window orderFrontRegardless];
+            refresh_metrics(surface);
+        }
+
+        // 모니터 목록을 앱에 알린다 (`ui_frame::displays`). 처음 실린 frame에서 한 번, 그 뒤로는 화면 구성이 바뀔 때마다다.
+        //  - id는 CoreGraphics 화면 번호다. 사각형은 이 파일 첫머리의 화면 좌표 약속을 따르고, 작업 영역은 메뉴 막대와 Dock을 뺀 곳이다.
+        void report_displays(const ui_frame* const frame, const bool changed)
+        {
+            if (frame == nullptr || frame->displays == nullptr || host_ == nullptr || (displays_reported_ && changed == false))
+                return;
+            displays_reported_ = true;
+            if (app_message message { frame->displays(current_displays()) }; message.empty() == false)
                 host_->post_app_message(std::move(message));
         }
 
@@ -2209,6 +2308,8 @@ namespace luil::macos {
             const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
             report_displays(frame.get(), true);
             report_placement(main_);
+            // 도킹 표면의 자리는 모니터에 달렸다. 같은 요청으로 다시 푼다.
+            reconcile_docked(frame.get());
             pump();
         }
 
@@ -2223,6 +2324,8 @@ namespace luil::macos {
                     if (window.id.empty() == false && window.width > 0.0f && window.height > 0.0f)
                         wanted.push_back(&window);
             std::erase_if(secondary_, [this, &wanted](std::unique_ptr<native_surface>& surface) {
+                if (surface->docked)
+                    return false;
                 if (std::ranges::any_of(wanted, [&surface](const ui_window* const window) { return window->id == surface->id; }))
                     return false;
                 destroy_window(*surface);
@@ -2250,11 +2353,7 @@ namespace luil::macos {
                 }
                 surface->dirty = true;
             }
-            if (frame != nullptr && frame->docked_surfaces.empty() == false && warned_docked_ == false)
-            {
-                warned_docked_ = true;
-                log_error(u8"Docked surfaces (ui_frame::docked_surfaces) are not supported on macOS and are ignored.");
-            }
+            reconcile_docked(frame);
         }
 
         // 보조 창 하나를 세운다. 자리는 저장 배치 → 화면 닻 → 주 창 기준 자리의 차례로 정한다 (app_host.h의 약속).
@@ -2902,7 +3001,6 @@ namespace luil::macos {
         std::optional<key_input> current_key_ {};
         native_surface* key_surface_ { nullptr };
         bool key_handled_ { false };
-        bool warned_docked_ { false };
         // 주 창 배치다. 마지막으로 옮긴 요청의 revision, 마지막 보통 상태의 사각형, 전체 화면에 들기 전의 확대 여부다.
         std::uint64_t applied_placement_revision_ { 0 };
         std::optional<window_placement> normal_placement_ {};
@@ -2955,6 +3053,15 @@ namespace {
         return std::strlen([prefix UTF8String]);
     }
 }
+
+@implementation LuilDockPanel
+
+- (BOOL)canBecomeKeyWindow
+{
+    return YES;
+}
+
+@end
 
 @implementation LuilContainerView
 
