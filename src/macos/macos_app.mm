@@ -1707,9 +1707,12 @@ namespace luil::macos {
                     surface.dirty = true;
                 // 보이지 않는 창(최소화, 다른 창이 다 가림)에는 그리지 않는다. Metal의 `nextDrawable`이 그동안 최대 1초를 막고,
                 // caret 깜빡임 같은 예고가 그 막힘을 frame마다 되풀이한다. 다시 보이면 `on_occlusion_changed`가 그린다.
+                //  - 접근성 계층은 그리지 않아도 맞춘다. 보조 기술과 자동화 도구는 가려진 창도 읽는다.
                 if (window_visible(surface) == false)
                 {
                     surface.update_deadline.reset();
+                    if (surface.dirty)
+                        update_accessibility(surface, surface.main() ? host_->acquire_ui_tree() : surface.want.tree);
                     return;
                 }
                 if (surface.dirty && surface.renderer != nullptr)
