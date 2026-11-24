@@ -233,6 +233,7 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
   - 본 이름은 감시마다 65536개까지 쥔다. 넘으면 잊고, 잊은 이름의 다음 고침은 created로 올 수 있다. 감시를 걸기 직전에 만든 파일도 표지가 남아 첫 고침이 created로 올 수 있다. 둘 다 "다시 읽어라"라 앱의 일은 같다.
   - 아주 짧게 생겼다 사라진 이름은 한 이벤트(`Created | Removed`)로 와 removed로 낸다. 감시 전부터 있던 파일의 지움을 놓치지 않으려고 이쪽을 고른다. 앱이 본 적 없는 이름의 removed가 올 수 있다.
 - 이벤트는 fseventsd를 거쳐 와 바쁠 때 수백 ms 늦는다. `remove`는 끝 묶음을 짓기 전에 `FSEventStreamFlushSync`로 그때까지의 이벤트를 받아 처리한다. 끝 묶음에 `remove` 앞의 변경이 실린다.
+- 같은 늦음 때문에 `kFSEventStreamEventIdSinceNow`여도 `add` 앞에 만든 것의 만듦이 `add` 뒤에 온다(실측: 여러 test가 함께 돌 때, 이벤트 번호도 시작 뒤의 것이다). 남으면 뒤의 이름 바꿈이 합치기 표대로 created로 바뀐다. `add`는 `FSEventStreamStart` 뒤 `FSEventStreamFlushSync`로 쌓인 것을 받아 버린다. 그래도 fseventsd의 밀린 몫은 더 늦게 올 수 있어, 지금 없는 이름의 만듦뿐인 이벤트와, 처음 보는 이름인데 ctime이 감시 직전보다 앞선 것도 버린다. ctime은 만듦·고침·이름 바꿈·복사가 새로 하고 앱이 되돌릴 수 없어, Finder 복사처럼 만든 때·고친 때를 옮겨 온 파일도 감시 뒤의 것으로 본다. 나노초가 0인 거친 시각(HFS+·FAT)은 2초를 두고 견준다.
 - 뿌리가 지워지거나 옮겨지면(`RootChanged`, 뿌리 볼륨의 `Unmount`) `lost`다. `MustScanSubDirs`·`UserDropped`·`KernelDropped`는 그 감시의 rescan이다.
 - `stop`은 thread를 join한 뒤 stream을 queue에서 멈추고(`Stop`·`Invalidate`·`Release`) queue가 그 일을 마치기를 `stop_budget` 안에서 기다린다. 콜백이 닿는 몫은 stream의 `info`가 함께 쥐어, 넘겨도 늦은 콜백이 부서진 감시자를 만지지 않는다.
 - 한계: 넘침을 일으킬 test 손잡이가 없다. fseventsd가 사용자 공간에서 쌓아 test 크기의 폭주로는 넘치지 않는다. 네트워크 볼륨은 다른 기계의 변경이 오지 않는다.

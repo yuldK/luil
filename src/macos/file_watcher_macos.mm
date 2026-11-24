@@ -68,7 +68,19 @@ namespace luil {
             // 콜백 때 그 경로에 무엇이 있었는가.
             bool exists { false };
             std::uint64_t current_inode { 0 };
+            // 콜백 때 그 경로의 것의 상태가 바뀐 때(ctime)다 (`exists`일 때만). 만듦·고침·이름 바꿈·복사가 모두 새로 하고 앱이 되돌릴 수 없다.
+            timespec changed {};
         };
+
+        // `earlier`가 `later`보다 분명히 앞인가. 나노초가 0인 시각은 거친 파일 시스템(HFS+의 1초, FAT의 2초)의 것으로 보고 2초를 둔다.
+        [[nodiscard]] bool clearly_before(const timespec& earlier, const timespec& later) noexcept
+        {
+            if (earlier.tv_sec == 0 && earlier.tv_nsec == 0)
+                return false;
+            if (earlier.tv_nsec == 0)
+                return earlier.tv_sec + 2 < later.tv_sec;
+            return earlier.tv_sec < later.tv_sec || (earlier.tv_sec == later.tv_sec && earlier.tv_nsec < later.tv_nsec);
+        }
 
         struct add_request
         {
@@ -144,6 +156,7 @@ namespace luil {
                     {
                         event.exists = true;
                         event.current_inode = static_cast<std::uint64_t>(information.st_ino);
+                        event.changed = information.st_ctimespec;
                     }
                     events.push_back(std::move(event));
                 }
@@ -173,6 +186,8 @@ namespace luil {
             std::unordered_map<std::string, std::uint64_t> seen {};
             // 바로 앞 이벤트가 이름 바꿈의 옛 이름이었으면 그 파일 번호다. 다음 이벤트가 같은 번호로 있으면 새 이름이다.
             std::optional<std::uint64_t> moved_from {};
+            // stream을 세우기 직전의 벽시계다. 이보다 먼저 생긴 것의 만듦은 감시 전의 일이다.
+            timespec started {};
             file_watch_batch batch;
         };
 
@@ -298,6 +313,7 @@ namespace luil {
             ticket_value = ++shared->next_ticket;
         }
         target->ticket = file_watch_ticket { ticket_value };
+        static_cast<void>(::clock_gettime(CLOCK_REALTIME, &target->started));
 
         @autoreleasepool
         {
@@ -326,6 +342,13 @@ namespace luil {
             FSEventStreamRelease(target->stream);
             error = u8"The system refused to start watching the folder.";
             return {};
+        }
+        // `SinceNow`여도 fseventsd가 아직 건네지 않은 `add` 앞의 변경이 뒤늦게 온다. 바쁠 때 실측했다.
+        // 지금까지 쌓인 것을 받아 버린다. fseventsd의 밀린 몫까지 다 비우지는 못해, 뒤늦은 만듦은 `handle`이 생긴 때로 한 번 더 거른다.
+        FSEventStreamFlushSync(target->stream);
+        {
+            const std::lock_guard lock { shared->mutex };
+            std::erase_if(shared->events, [ticket_value](const raw_event& event) { return event.ticket == ticket_value; });
         }
         const file_watch_ticket ticket { target->ticket };
         watches.emplace(ticket.value, std::move(target));
@@ -415,11 +438,25 @@ namespace luil {
         if ((flags & content_flags) == 0)
             return;
 
+        // `add` 앞의 일이 뒤늦게 온 것은 버린다. 이름 바꿈의 짝은 건드리지 않는다.
+        //  - 지금 없는 이름의 만듦뿐인 이벤트: 그 뒤의 지움·이름 바꿈은 제 이벤트로 온다.
+        //  - 처음 보는 이름인데 상태가 감시 전부터 그대로다: 그 뒤로 아무것도 바뀌지 않았다. Finder 복사처럼 만든 때·고친 때를
+        //    옮겨 와도 ctime은 새로 서므로 감시 뒤의 만듦을 버리지 않는다.
+        const bool pairs { event.exists && target.moved_from.has_value() && *target.moved_from == event.inode };
+        if (event.exists == false && (flags & content_flags) == kFSEventStreamEventFlagItemCreated)
+            return;
+        if (event.exists && pairs == false && target.seen.contains(*relative) == false && clearly_before(event.changed, target.started))
+        {
+            if (target.seen.size() < seen_limit)
+                target.seen[*relative] = event.current_inode;
+            return;
+        }
+
         const std::u8string reported { macos::widen(*relative) };
-        const std::optional<std::uint64_t> moved_from { std::exchange(target.moved_from, std::nullopt) };
+        target.moved_from.reset();
         if (event.exists)
         {
-            if (moved_from.has_value() && *moved_from == event.inode)
+            if (pairs)
                 target.batch.moved_to(reported, cookie_of(event.inode), now);
             // 본 이름이면 고침이다. 파일 번호가 바뀌었어도(지우고 다시 만듦, 덮어쓴 이름 바꿈) 순 변화는 고침이다.
             else if (target.seen.contains(*relative))

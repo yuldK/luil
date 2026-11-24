@@ -434,6 +434,25 @@ TEST_CASE("Changes after a create or a rename come as modified despite the flags
     REQUIRE(seen.size() == 1);
     REQUIRE(seen.front() == change(file_change_kind::modified, u8"b.txt"));
 }
+
+// fseventsd가 바쁘면 `add` 앞에 만든 것의 만듦이 `add` 뒤에 온다. 그것이 남으면 뒤의 이름 바꿈이 created로 합쳐진다.
+// 감시 전의 일은 버리고 이름 바꿈은 이름 바꿈으로 오는지 본다 (여러 test가 함께 돌 때 드러난다).
+TEST_CASE("Items made just before the watch are renamed, not created", "[file_watch][platform]")
+{
+    const scratch_folder folder {};
+    write_file(folder.file(u8"before.txt"), "x");
+    std::filesystem::create_directories(folder.file(u8"folder-before"));
+    recorder sink {};
+    const auto watcher { make_watcher(test_config(sink)) };
+    static_cast<void>(add(*watcher, folder.text(), luil::file_watch_scope::folder));
+
+    std::filesystem::rename(folder.file(u8"before.txt"), folder.file(u8"after.txt"));
+    std::filesystem::rename(folder.file(u8"folder-before"), folder.file(u8"folder-after"));
+    REQUIRE(sink.wait_change(change(file_change_kind::renamed, u8"after.txt", u8"before.txt")));
+    REQUIRE(sink.wait_change(change(file_change_kind::renamed, u8"folder-after", u8"folder-before")));
+    for (const file_change& seen : sink.changes())
+        REQUIRE(seen.kind == file_change_kind::renamed);
+}
 #endif
 
 TEST_CASE("Removing the watched folder ends the watch as lost", "[file_watch][platform]")
