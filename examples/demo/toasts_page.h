@@ -60,6 +60,8 @@ namespace demo {
         send,
         replace,
         close,
+        // 알림 권한을 묻는다 (`app_host::request_permission`). 묻는 OS(macOS·Android)에서만 대화가 뜬다.
+        request_permission,
     };
 
     // OS 알림 단추를 눌렀다. 셸이 받아 OS를 부른다 (페이지는 플랫폼을 부르지 않는다).
@@ -78,6 +80,13 @@ namespace demo {
     struct os_notification_result_intent
     {
         luil::platform_result result {};
+    };
+
+    // 알림 권한의 지금 상태다. 물었으면 답이 올 때까지 `pending`이고, 답은 `app_delegate::make_permission_message`로 온다.
+    struct os_notification_permission_intent
+    {
+        luil::permission_state state { luil::permission_state::not_required };
+        bool pending { false };
     };
 
     // 라이브러리가 알린 알림 사건이다 (`app_delegate::make_notification_message`).
@@ -179,6 +188,7 @@ namespace demo {
         std::optional<luil::notification_availability> os_status_ {};
         std::optional<luil::platform_result> os_result_ {};
         std::optional<luil::notification_event> os_event_ {};
+        std::optional<os_notification_permission_intent> os_permission_ {};
         // 안내 풍선의 상태다. 연 시각이 나타남 움직임을 그린다.
         bool tip_open_ { false };
         bool tip_modal_ { true };

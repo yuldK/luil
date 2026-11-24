@@ -68,6 +68,24 @@ namespace demo {
         }
 
         // 답의 갈래 이름은 API 값 그대로 적는다. 실패 글은 OS가 준 진단이라 뒤에 붙인다.
+        [[nodiscard]] std::u8string permission_text(const std::optional<os_notification_permission_intent>& permission)
+        {
+            if (permission.has_value() == false)
+                return u8"묻기 전";
+            if (permission->pending)
+                return u8"물었다 — 답을 기다린다";
+            switch (permission->state)
+            {
+            case luil::permission_state::granted:
+                return u8"허락됨";
+            case luil::permission_state::denied:
+                return u8"거절됨";
+            case luil::permission_state::not_required:
+                break;
+            }
+            return u8"묻지 않아도 된다";
+        }
+
         [[nodiscard]] std::u8string result_text(const std::optional<luil::platform_result>& result)
         {
             if (result.has_value() == false)
@@ -182,6 +200,11 @@ namespace demo {
         if (const auto* const event { message.get<os_notification_event_intent>() }; event != nullptr)
         {
             os_event_ = event->event;
+            return true;
+        }
+        if (const auto* const permission { message.get<os_notification_permission_intent>() }; permission != nullptr)
+        {
+            os_permission_ = *permission;
             return true;
         }
         if (const auto* const open { message.get<tip_open_intent>() }; open != nullptr)
@@ -454,7 +477,7 @@ namespace demo {
 
     void toasts_page::add_os_notification_card(page_layout& page) const
     {
-        page.begin_card(u8"OS 알림", u8"앱 창 밖 Windows 알림 센터에 올립니다. 알림을 누르면 데모가 앞으로 오고 사건 줄이 바뀝니다.");
+        page.begin_card(u8"OS 알림", u8"앱 창 밖 OS 알림 센터에 올립니다. 알림을 누르면 데모가 앞으로 오고 사건 줄이 바뀝니다.");
         luil::stack_config row_config {};
         row_config.direction = luil::stack_direction::row;
         row_config.spacing = 8.0f;
@@ -468,13 +491,20 @@ namespace demo {
         add_button(u8"os-notification-send", u8"OS 알림 보내기", os_notification_action::send);
         add_button(u8"os-notification-replace", u8"OS 알림 바꾸기", os_notification_action::replace);
         add_button(u8"os-notification-close", u8"OS 알림 거두기", os_notification_action::close);
+        add_button(u8"os-notification-permission", u8"알림 권한 묻기", os_notification_action::request_permission);
         page.add(std::move(row), luil::text_button_height);
         page.gap(8.0f);
         page.add(make_label({ kind_text, u8"os-notification-status" }, u8"OS 알림 상태: " + availability_text(os_status_), 12.0f, luil::label_color_role::dim), 22.0f);
         page.add(make_label({ kind_text, u8"os-notification-result" }, u8"OS 알림 결과: " + result_text(os_result_), 12.0f, luil::label_color_role::dim), 22.0f);
         page.add(make_label({ kind_text, u8"os-notification-event" }, u8"OS 알림 사건: " + event_text(os_event_), 12.0f, luil::label_color_role::dim), 22.0f);
+        page.add(make_label({ kind_text, u8"os-notification-permission" }, u8"OS 알림 권한: " + permission_text(os_permission_), 12.0f, luil::label_color_role::dim), 22.0f);
+#ifdef _WIN32
         // 데모는 시작할 때마다 앱 식별 `luil.Demo`를 HKCU에 쓴다. 지우는 길을 함께 적는다.
         page.add(make_label({ kind_text, u8"os-notification-hint" }, u8"앱 식별 luil.Demo를 HKCU에 씁니다. 지우려면 luil_demo.exe --unregister-app-identity로 띄웁니다.", 11.0f, luil::label_color_role::dim), 22.0f);
+#else
+        // macOS는 앱 번들에서만 알림 센터가 서고, 처음 한 번 권한을 묻는다.
+        page.add(make_label({ kind_text, u8"os-notification-hint" }, u8"앱 번들(luil_demo.app)에서만 섭니다. 보내기 전에 알림 권한을 한 번 묻습니다.", 11.0f, luil::label_color_role::dim), 22.0f);
+#endif
         page.end_card();
     }
 

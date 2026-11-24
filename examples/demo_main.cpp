@@ -368,6 +368,18 @@ namespace demo {
             //  - 보내기와 바꾸기는 같은 id라 바꾸기가 알림 센터의 그 알림을 바꾼다. 보내기만 그림을 싣는다.
             void run_os_notification(const os_notification_action action)
             {
+                // 권한을 묻는다. 묻지 않았으면(필요 없음·이미 답함) 지금 상태를 곧바로 보인다. 답은 delegate의 권한 메시지로 온다.
+                if (action == os_notification_action::request_permission)
+                {
+                    luil::win32::app_host* const host { host_.load() };
+                    os_notification_permission_intent permission {};
+                    if (host != nullptr && host->request_permission(luil::app_permission::notifications))
+                        permission.pending = true;
+                    else if (host != nullptr)
+                        permission.state = host->permission(luil::app_permission::notifications);
+                    static_cast<void>(toasts_.handle(luil::app_message { permission }));
+                    return;
+                }
                 luil::platform_result result {};
                 if (action == os_notification_action::close)
                     result = luil::close_notification(os_notification_id);
@@ -407,6 +419,13 @@ namespace demo {
                 if (const auto* const request { message.get<os_notification_request_intent>() }; request != nullptr)
                 {
                     run_os_notification(request->action);
+                    return;
+                }
+                // 권한의 답이 왔다. 상태(권한 필요 → 사용 가능)도 함께 다시 읽는다.
+                if (const auto* const permission { message.get<os_notification_permission_intent>() }; permission != nullptr)
+                {
+                    static_cast<void>(toasts_.handle(message));
+                    static_cast<void>(toasts_.handle(luil::app_message { os_notification_status_intent { luil::notification_status() } }));
                     return;
                 }
                 if (const auto* const beat { message.get<network_heartbeat_intent>() }; beat != nullptr)
@@ -1465,6 +1484,14 @@ namespace demo {
                 host.post_app_message(luil::app_message { os_notification_status_intent { luil::notification_status() } });
                 // 지역 값은 시작할 때 한 번 읽는다. 데스크톱 데모에는 앞으로 올 때의 lifecycle 메시지가 없어 다시 읽지 않는다.
                 host.post_app_message(luil::app_message { os_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } });
+            }
+
+            // 물은 권한에 사용자가 답했다. 토스트 페이지의 권한 줄과 상태 줄이 바뀐다.
+            [[nodiscard]] luil::app_message make_permission_message(const luil::app_permission permission, const luil::permission_state state) override
+            {
+                if (permission != luil::app_permission::notifications)
+                    return {};
+                return luil::app_message { os_notification_permission_intent { state, false } };
             }
 
             // 사용자가 OS 알림을 누르거나 닫았다. 토스트 페이지가 사건 줄로 보인다.
