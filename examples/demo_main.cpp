@@ -1763,6 +1763,8 @@ int main(const int argc, const char* const* const argv)
     config.minimum_width = options.minimum_client_width;
     config.minimum_height = options.minimum_client_height;
     config.renderer = options.renderer;
+    config.simulate_gpu_failure = options.simulate_direct3d_failure;
+    config.simulate_gpu_loss_after_frames = options.simulate_direct3d_loss_after_frames;
     config.smoke_test = options.smoke_test;
     config.touch = options.touch;
     luil::macos::application_environment environment {};

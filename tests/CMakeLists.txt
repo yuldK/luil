@@ -463,7 +463,17 @@ if(LUIL_PLATFORM STREQUAL "macos")
     endif()
     if(TARGET luil_demo)
         add_test(NAME luil_macos_demo_smoke COMMAND "$<TARGET_FILE:luil_demo>" --smoke-test)
-        set_tests_properties(luil_macos_demo_smoke PROPERTIES LABELS smoke TIMEOUT 60)
+        # 렌더러 갈래마다 한 frame이다. 기본은 Metal, `cpu`는 CPU, `gpu`는 Metal을 요구하고, 만들기 실패를 넣으면
+        # `automatic`은 CPU로 물러서고 `gpu`는 시작하지 않는다 (Windows의 Direct3D smoke와 같은 짝이다).
+        add_test(NAME luil_macos_demo_smoke_cpu COMMAND "$<TARGET_FILE:luil_demo>" --smoke-test --renderer=cpu)
+        add_test(NAME luil_macos_demo_smoke_gpu COMMAND "$<TARGET_FILE:luil_demo>" --smoke-test --renderer=gpu)
+        add_test(NAME luil_macos_demo_smoke_gpu_fallback COMMAND "$<TARGET_FILE:luil_demo>" --smoke-test --simulate-direct3d-failure)
+        add_test(NAME luil_macos_demo_smoke_gpu_required COMMAND "$<TARGET_FILE:luil_demo>" --smoke-test --renderer=gpu --simulate-direct3d-failure)
+        set_tests_properties(luil_macos_demo_smoke luil_macos_demo_smoke_cpu luil_macos_demo_smoke_gpu luil_macos_demo_smoke_gpu_fallback luil_macos_demo_smoke_gpu_required
+            PROPERTIES LABELS smoke TIMEOUT 60)
+        set_tests_properties(luil_macos_demo_smoke_gpu_fallback PROPERTIES PASS_REGULAR_EXPRESSION "renderer cpu \\(fallback\\)")
+        set_tests_properties(luil_macos_demo_smoke_gpu PROPERTIES PASS_REGULAR_EXPRESSION "renderer metal")
+        set_tests_properties(luil_macos_demo_smoke_gpu_required PROPERTIES WILL_FAIL TRUE)
     endif()
     luil_set_ide_folder("Tests" luil_core_tests)
     if(LUIL_ENABLE_TEXT_SHAPING)

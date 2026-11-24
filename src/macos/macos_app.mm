@@ -15,6 +15,8 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/ui_platform.h"
 #include "macos/cpu_skia_renderer.h"
+#include "macos/frame_capture.h"
+#include "macos/metal_skia_renderer.h"
 #include "macos/input_script.h"
 #include "macos/macos_input.h"
 #include "macos/macos_text.h"
@@ -351,6 +353,12 @@ namespace luil::macos {
             pump();
         }
 
+        void on_occlusion_changed()
+        {
+            dirty_ = true;
+            pump();
+        }
+
         void on_moved()
         {
             static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_moved));
@@ -630,15 +638,33 @@ namespace luil::macos {
             return [window_ convertRectToScreen:in_window];
         }
 
+        // 지금 그리는 렌더러를 한 줄 남긴다. 처음과 물러선 뒤에만이다 (Android의 logcat 줄과 같은 자리).
+        void report_renderer()
+        {
+            if (renderer_ == nullptr)
+                return;
+            const std::u8string_view name { renderer_backend_name(renderer_->backend()) };
+            if (reported_backend_.has_value() && *reported_backend_ == renderer_->backend())
+                return;
+            reported_backend_ = renderer_->backend();
+            std::fprintf(stderr, "luil: renderer %.*s%s\n", static_cast<int>(name.size()), reinterpret_cast<const char*>(name.data()), renderer_->used_fallback() ? " (fallback)" : "");
+        }
+
         // 창 내용의 합성을 PNG로 적는다 (개발용, 입력 대본의 `snapshot`). 아래층 웹뷰 → Skia frame → 위층 웹뷰의 차례다.
         void snapshot(NSString* const path)
         {
             if (webviews_ == nullptr || path == nil)
                 return;
-            CGImageRef const frame { (__bridge CGImageRef)view_.layer.contents };
+            // 바탕은 Skia가 그린 frame이다. Metal은 GPU에서 되읽어야 하므로 한 frame을 되읽기로 다시 그린다.
+            if (renderer_ != nullptr && host_ != nullptr)
+            {
+                request_frame_readback();
+                dirty_ = true;
+                static_cast<void>(render());
+            }
+            CGImageRef const frame { copy_latest_frame() };
             if (frame == nullptr)
                 return;
-            CGImageRetain(frame);
             const int width { surface_width_ };
             const int height { surface_height_ };
             NSString* const target { [path copy] };
@@ -703,12 +729,6 @@ namespace luil::macos {
                 log_error(u8"run_application needs a logic driver.");
                 return false;
             }
-            if (renderer_mode_requires_gpu(config_.renderer))
-            {
-                log_error(u8"The macOS host has no GPU renderer yet. Use the automatic or cpu renderer.");
-                return false;
-            }
-
             refresh_user_ui_language();
             // 데스크톱이다. 창의 제목 막대는 시스템의 것이라 앱이 caption을 그리지 않는다.
             set_ui_platform({
@@ -859,9 +879,19 @@ namespace luil::macos {
             CALayer* const layer { view_.layer };
             renderer_factories factories {};
             factories.gpu_name = u8"Metal";
+            factories.create_gpu = [layer, simulate = config_.simulate_gpu_failure]() -> renderer_factory_result {
+                if (simulate)
+                    return { nullptr, u8"The smoke test injected a Metal creation failure." };
+                renderer_factory_result result { create_metal_skia_renderer((__bridge void*)layer) };
+                // `automatic`의 물러섬은 이 이유를 버리므로 여기서 남긴다.
+                if (result.renderer == nullptr)
+                    log_error(u8"Metal renderer: " + result.error);
+                return result;
+            };
             factories.create_cpu = [layer] { return create_cpu_skia_renderer((__bridge void*)layer); };
+            const renderer_fault_injection fault { .at_creation = false, .after_frames = config_.simulate_gpu_loss_after_frames };
             std::u8string error {};
-            renderer_ = renderer_host::create(config_.renderer, renderer_fault_injection {}, std::move(factories), error);
+            renderer_ = renderer_host::create(config_.renderer, fault, std::move(factories), error);
             if (renderer_ == nullptr)
             {
                 log_error(error);
@@ -869,6 +899,7 @@ namespace luil::macos {
             }
             if (renderer_->resize(surface_width_, surface_height_, error) == false)
                 log_error(error);
+            report_renderer();
         }
 
         // 창 내용 영역의 물리 크기와 배율을 읽는다.
@@ -923,6 +954,12 @@ namespace luil::macos {
                 return;
             if (app_message message { metrics_message() }; message.empty() == false)
                 host_->post_app_message(std::move(message));
+        }
+
+        [[nodiscard]] bool window_visible() const
+        {
+            // smoke test는 창을 보이지 않은 채 한 frame을 그린다.
+            return config_.smoke_test || window_ == nil || (window_.occlusionState & NSWindowOcclusionStateVisible) != 0;
         }
 
         // 시스템의 밝은·어두운 모양, 강조색, 대비, 움직임 줄이기, 투명도 줄이기를 읽는다.
@@ -982,8 +1019,12 @@ namespace luil::macos {
             }
             if (update_deadline_.has_value() && now() >= *update_deadline_)
                 dirty_ = true;
-            if (dirty_ && renderer_ != nullptr)
+            // 보이지 않는 창(최소화, 다른 창이 다 가림)에는 그리지 않는다. Metal의 `nextDrawable`이 그동안 최대 1초를 막고,
+            // caret 깜빡임 같은 예고가 그 막힘을 frame마다 되풀이한다. 다시 보이면 `on_occlusion_changed`가 그린다.
+            if (dirty_ && renderer_ != nullptr && window_visible())
                 static_cast<void>(render());
+            else if (window_visible() == false)
+                update_deadline_.reset();
             arm_timer();
         }
 
@@ -1538,6 +1579,10 @@ namespace luil::macos {
             const bool drawn { renderer_->render(state, error) };
             if (drawn == false || error.empty() == false)
                 log_error(error);
+            report_renderer();
+            // GPU를 요구한 모드는 물러서지 않는다. 그릴 길이 없으므로 끝낸다 (Android와 같다).
+            if (drawn == false && renderer_mode_requires_gpu(config_.renderer) && quitting_ == false)
+                quit();
             dirty_ = false;
 
             // 시간이 흘러야 바뀌는 그림(애니메이션·tooltip 지연·caret 깜빡임)의 다음 시각이다.
@@ -1580,6 +1625,7 @@ namespace luil::macos {
         std::shared_ptr<wake_state> wake_ { std::make_shared<wake_state>() };
         std::unique_ptr<app_host> host_ {};
         std::unique_ptr<renderer_host> renderer_ {};
+        std::optional<renderer_backend> reported_backend_ {};
         NSWindow* window_ { nil };
         NSView* container_ { nil };
         LuilView* view_ { nil };
@@ -1950,6 +1996,13 @@ namespace {
     static_cast<void>(notification);
     if (self.owner != nullptr)
         self.owner->on_resized();
+}
+
+- (void)windowDidChangeOcclusionState:(NSNotification*)notification
+{
+    static_cast<void>(notification);
+    if (self.owner != nullptr)
+        self.owner->on_occlusion_changed();
 }
 
 - (void)windowDidMove:(NSNotification*)notification

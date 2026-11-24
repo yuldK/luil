@@ -19,8 +19,13 @@ namespace luil::macos {
         // 사용자가 이보다 작게 줄일 수 없는 창 내용 크기다.
         int minimum_width { 480 };
         int minimum_height { 320 };
-        // 렌더러다. 지금은 CPU 렌더러만 있다 — `automatic`·`cpu`는 CPU로 그리고, GPU를 요구하는 값은 시작에 실패한다.
+        // 렌더러다. `automatic`은 Metal(Ganesh)을 먼저 쓰고, 만들거나 그리다 실패하면 CPU로 물러선다. 한 번 물러서면 다시
+        // Metal을 쓰지 않는다. `gpu`(`direct3d`도 같은 뜻으로 받는다)는 Metal을 세우지 못하면 시작하지 않고, 그리다 잃으면 끝낸다.
         renderer_mode renderer { renderer_mode::automatic };
+        // Metal 렌더러를 **만들 때** 실패시킨다 (smoke test). Windows `window_config`의 `simulate_direct3d_failure`와 같은 자리다.
+        bool simulate_gpu_failure { false };
+        // Metal로 이만큼 그린 뒤 다음 frame을 실패시킨다 (0이면 하지 않는다). `simulate_direct3d_loss_after_frames`와 같다.
+        int simulate_gpu_loss_after_frames { 0 };
         // 한 frame만 그리고 끝낸다 (renderer smoke test). 창은 보이지 않는다.
         bool smoke_test { false };
         // 터치 몸짓의 시작 설정이다. 트랙패드는 마우스로 오므로 길게 누르기와 끌어 스크롤하기는 붙지 않는다.

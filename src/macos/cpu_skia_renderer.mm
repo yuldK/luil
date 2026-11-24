@@ -2,6 +2,7 @@
 
 #include "host/font_registry.h"
 #include "luil/text/fonts.h"
+#include "macos/frame_capture.h"
 
 #include "include/core/SkCanvas.h"
 #include "include/core/SkColorSpace.h"
@@ -13,10 +14,7 @@
 #import <QuartzCore/QuartzCore.h>
 
 #include <CoreGraphics/CoreGraphics.h>
-#include <ImageIO/ImageIO.h>
 
-#include <cstdlib>
-#include <cstring>
 
 #include <cstddef>
 #include <memory>
@@ -28,25 +26,6 @@ namespace luil::macos {
         void release_pixels(void* const info, const void*, std::size_t)
         {
             static_cast<SkData*>(info)->unref();
-        }
-
-        // 개발용 frame 갈무리다. 환경 변수 `LUIL_MACOS_FRAME_CAPTURE`에 PNG 경로를 주면 그린 frame마다 그 파일을 덮어쓴다.
-        //  - 화면 기록 권한 없이 그린 결과를 그대로 보려는 것이다 (자동 검증·버그 보고). 정하지 않으면 아무 일도 없다.
-        void capture_frame(CGImageRef const image)
-        {
-            static const char* const path { std::getenv("LUIL_MACOS_FRAME_CAPTURE") };
-            if (path == nullptr || *path == '\0')
-                return;
-            CFURLRef const url { CFURLCreateFromFileSystemRepresentation(nullptr, reinterpret_cast<const UInt8*>(path), static_cast<CFIndex>(std::strlen(path)), false) };
-            if (url == nullptr)
-                return;
-            if (CGImageDestinationRef const destination { CGImageDestinationCreateWithURL(url, CFSTR("public.png"), 1, nullptr) }; destination != nullptr)
-            {
-                CGImageDestinationAddImage(destination, image, nullptr);
-                static_cast<void>(CGImageDestinationFinalize(destination));
-                CFRelease(destination);
-            }
-            CFRelease(url);
         }
 
         class cpu_skia_renderer final : public skia_renderer
@@ -132,7 +111,8 @@ namespace luil::macos {
                 layer_.contentsScale = state.dpi_scale;
                 layer_.contents = (__bridge id)image;
                 [CATransaction commit];
-                capture_frame(image);
+                // 개발용 갈무리가 마지막 frame을 붙잡는다 (frame_capture.h).
+                publish_frame(image);
                 CGImageRelease(image);
                 return true;
             }

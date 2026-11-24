@@ -40,6 +40,8 @@ namespace luil {
             return u8"cpu";
         case renderer_backend::vulkan:
             return u8"vulkan";
+        case renderer_backend::metal:
+            return u8"metal";
         }
         return u8"unknown";
     }

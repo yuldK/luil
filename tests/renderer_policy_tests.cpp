@@ -17,6 +17,7 @@ TEST_CASE("Renderer backends have fixed names", "[renderer]")
     REQUIRE(luil::renderer_backend_name(luil::renderer_backend::direct3d) == u8"direct3d");
     REQUIRE(luil::renderer_backend_name(luil::renderer_backend::cpu) == u8"cpu");
     REQUIRE(luil::renderer_backend_name(luil::renderer_backend::vulkan) == u8"vulkan");
+    REQUIRE(luil::renderer_backend_name(luil::renderer_backend::metal) == u8"metal");
 }
 
 TEST_CASE("The platform GPU mode selects like Direct3D", "[renderer]")

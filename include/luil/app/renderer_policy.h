@@ -24,6 +24,8 @@ namespace luil {
         cpu,
         // Android의 GPU 경로다. 기존 값의 수를 바꾸지 않으려고 끝에 둔다.
         vulkan,
+        // macOS의 GPU 경로다 (Ganesh Metal). 같은 이유로 끝에 둔다.
+        metal,
     };
 
     enum class renderer_selection_status

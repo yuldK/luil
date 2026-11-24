@@ -961,7 +961,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
         VERBATIM)
 
     # macos: AppKit 위의 앱 host다.
-    # 창 하나·popup overlay·입력과 입력기·CPU 렌더러, CoreText 글꼴과 내장 codicon, 플랫폼 도구다.
+    # 창 하나·popup overlay·입력과 입력기·Metal과 CPU 렌더러·웹뷰(WKWebView), CoreText 글꼴과 내장 codicon, 플랫폼 도구다.
     #  - 비밀 저장소·OS 알림·파일 감시·HTTP 전송은 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
@@ -974,6 +974,10 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/macos_text.h
         macos/cpu_skia_renderer.h
         macos/cpu_skia_renderer.mm
+        macos/frame_capture.h
+        macos/frame_capture.mm
+        macos/metal_skia_renderer.h
+        macos/metal_skia_renderer.mm
         macos/desktop_compat.cpp
         macos/input_script.h
         macos/input_script.mm
@@ -1008,6 +1012,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "-framework CoreGraphics"
             "-framework ImageIO"
             "-framework WebKit"
+            "-framework Metal"
         PRIVATE
             luil_options)
 endif()

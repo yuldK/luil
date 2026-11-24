@@ -131,7 +131,7 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | --- | --- |
 | 실행 루프와 깨우기 | `NSApplication`의 run loop. 다른 thread의 깨우기는 `CFRunLoopPerformBlock`(공통 모드)이라 창 크기를 끄는 동안에도 돈다 |
 | 창과 표면 | 창 하나. 제목 막대는 시스템의 것이라 `ui_platform::window_caption`이 거짓이고 `caption_element`는 자리를 차지하지 않는다 |
-| 렌더러 | CPU. Skia raster를 CGImage로 layer 내용에 낸다. Metal 렌더러는 아직 없다 (`gpu`·`direct3d`를 요구하면 시작하지 않는다) |
+| 렌더러 | Metal(Ganesh)이 먼저다. view layer의 자식 `CAMetalLayer`에 그리고, 만들거나 그리다 실패하면 CPU(Skia raster → CGImage layer 내용)로 물러선다. 한 번 물러서면 다시 쓰지 않는다. `gpu`·`direct3d`는 Metal을 요구한다. 보이지 않는 창(최소화·완전히 가림)에는 그리지 않는다 |
 | 배율 | 창이 놓인 화면의 `backingScaleFactor`(레티나 2) |
 | 글꼴 | `SkFontMgr_New_CoreText`, 기본 UI 서체는 시스템 서체(`.AppleSystemUIFont`). codicon은 라이브러리에 싣는다 |
 | 입력 | 마우스·트랙패드·키보드. Command가 주 단축키, Option이 낱말 이동이고 Command+화살표는 줄·글의 처음과 끝이다. Control+클릭은 오른쪽 클릭이다 |
