@@ -291,8 +291,13 @@ namespace {
                 NSString* const role { [element respondsToSelector:@selector(accessibilityRole)] ? [element accessibilityRole] : @"?" };
                 NSString* const label { [element respondsToSelector:@selector(accessibilityLabel)] ? [element accessibilityLabel] : nil };
                 id const value { [element respondsToSelector:@selector(accessibilityValue)] ? [element accessibilityValue] : nil };
-                std::fprintf(stderr, "luil ax %*s%s \"%s\" %s\n", depth * 2, "", role.UTF8String ?: "", label.UTF8String ?: "",
-                    value != nil ? [[value description] UTF8String] : "");
+                // 행이면 차례와 골라짐을 덧붙인다.
+                const bool row { [role isEqualToString:NSAccessibilityRowRole] };
+                NSString* const extra { row ? [NSString stringWithFormat:@" [row %ld%s]", static_cast<long>([element accessibilityIndex]),
+                                                   [element isAccessibilitySelected] ? " selected" : ""]
+                                            : @"" };
+                std::fprintf(stderr, "luil ax %*s%s \"%s\" %s%s\n", depth * 2, "", role.UTF8String ?: "", label.UTF8String ?: "",
+                    value != nil ? [[value description] UTF8String] : "", extra.UTF8String);
                 if ([element respondsToSelector:@selector(accessibilityChildren)])
                     for (id const child in [element accessibilityChildren])
                         self(self, child, depth + 1);

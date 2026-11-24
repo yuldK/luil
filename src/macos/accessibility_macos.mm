@@ -76,7 +76,7 @@ namespace luil::macos {
 
         [[nodiscard]] bool row_role(const access_role role) noexcept
         {
-            return role == access_role::tree_item || role == access_role::data_item;
+            return ax_row_role(role);
         }
 
         // 글을 받는 칸인가 (Value·Text의 자리). 콤보도 글 칸이면 글을 받는다.
@@ -799,6 +799,26 @@ namespace luil::macos {
     return _state->elements_of(*found.surface, rows);
 }
 
+// 행의 차례다 (0부터). 가장 가까운 목록·계층·표의 행 목록(AXRows)에서의 자리다.
+- (NSInteger)accessibilityIndex
+{
+    const auto found { [self luilResolve] };
+    if (found.element == nullptr)
+        return 0;
+    luil::ui_element_id walk { _identity };
+    while (const luil::ui_element* const parent { luil::access_parent(found.tree(), walk) })
+    {
+        if (luil::macos::ax_row_container_role(parent->accessibility().role))
+        {
+            NSArray* const rows { [_state->element_for(_surface, parent->id()) accessibilityRows] };
+            const NSUInteger index { [rows indexOfObjectIdenticalTo:self] };
+            return index == NSNotFound ? 0 : static_cast<NSInteger>(index);
+        }
+        walk = parent->id();
+    }
+    return 0;
+}
+
 - (NSArray*)accessibilitySelectedRows
 {
     return [self accessibilitySelectedChildren];
@@ -1065,7 +1085,9 @@ namespace luil::macos {
     if (selector == @selector(accessibilityTabs))
         return info.role == luil::access_role::tab_list ? YES : NO;
     if (selector == @selector(accessibilityRows) || selector == @selector(accessibilitySelectedRows))
-        return info.role == luil::access_role::table || info.role == luil::access_role::tree ? YES : NO;
+        return luil::macos::ax_row_container_role(info.role) ? YES : NO;
+    if (selector == @selector(accessibilityIndex))
+        return luil::macos::row_role(info.role) ? YES : NO;
     if (selector == @selector(setAccessibilitySelectedTextRange:) || selector == @selector(setAccessibilitySelectedText:))
         return luil::macos::text_document_of(*found.element).has_value() && _state->edit_target(found).has_value() ? YES : NO;
     if (selector == @selector(accessibilityNumberOfCharacters) || selector == @selector(accessibilitySelectedTextRange) || selector == @selector(accessibilitySelectedText)

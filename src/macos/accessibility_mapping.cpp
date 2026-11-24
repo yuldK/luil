@@ -65,13 +65,13 @@ namespace luil::macos {
 
         [[nodiscard]] bool row_role(const access_role role) noexcept
         {
-            return role == access_role::tree_item || role == access_role::data_item;
+            return ax_row_role(role);
         }
 
-        // 선택 알림의 낱말이다. 표·계층은 행(AXSelectedRows)으로, 그 밖은 자식(AXSelectedChildren)으로 읽힌다.
+        // 선택 알림의 낱말이다. 목록·표·계층은 행(AXSelectedRows)으로, 그 밖은 자식(AXSelectedChildren)으로 읽힌다.
         [[nodiscard]] ax_notification_kind selection_kind_of(const access_role container) noexcept
         {
-            return container == access_role::tree || container == access_role::table ? ax_notification_kind::selected_rows_changed : ax_notification_kind::selected_children_changed;
+            return ax_row_container_role(container) ? ax_notification_kind::selected_rows_changed : ax_notification_kind::selected_children_changed;
         }
 
         void push_unique(std::vector<ax_notification>& notifications, ax_notification notification)
@@ -129,11 +129,12 @@ namespace luil::macos {
         // 글을 받으면 콤보 상자, 고르기만 하면 팝업 단추다 (NSComboBox·NSPopUpButton).
         case access_role::combo_box:
             return { context.text_input ? "AXComboBox" : "AXPopUpButton" };
+        // 목록은 한 열짜리 표다 (NSTableView 위의 사이드바·원본 목록과 같다). 항목은 행이고 이름이 그 label이다.
+        //  - VoiceOver가 "행 n / 전체"로 읽고, 고름은 고른 행(AXSelectedRows)으로 알린다.
         case access_role::list:
-            return { "AXList" };
-        // 목록 항목은 글로 서고 AXSelected로 골라짐을 알린다 (Chromium의 listbox option과 같은 관례다).
+            return { "AXTable" };
         case access_role::list_item:
-            return { "AXStaticText" };
+            return { "AXRow", "AXTableRow" };
         case access_role::header:
             return { "AXGroup" };
         // 표의 열 머리글이다. 누르면 정렬하는 단추로 선다.
@@ -189,7 +190,17 @@ namespace luil::macos {
 
     bool ax_reads_name_as_value(const access_role role) noexcept
     {
-        return role == access_role::static_text || role == access_role::list_item;
+        return role == access_role::static_text;
+    }
+
+    bool ax_row_role(const access_role role) noexcept
+    {
+        return role == access_role::list_item || role == access_role::tree_item || role == access_role::data_item;
+    }
+
+    bool ax_row_container_role(const access_role role) noexcept
+    {
+        return role == access_role::list || role == access_role::tree || role == access_role::table;
     }
 
     ax_value ax_value_of(const access_info& info)

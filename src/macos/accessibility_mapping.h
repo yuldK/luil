@@ -42,9 +42,14 @@ namespace luil::macos {
     // 어휘의 역할을 AX 역할로 옮기는 표다. 여기 한 곳뿐이다 (UIA의 `control_type_for`와 같은 자리다).
     [[nodiscard]] ax_role_names ax_role_of(const access_info& info, const ax_role_context& context = {}) noexcept;
 
-    // 이름을 값(AXValue)으로 읽는 역할인가 (AXStaticText로 서는 글·목록 항목).
+    // 이름을 값(AXValue)으로 읽는 역할인가 (AXStaticText로 서는 글).
     //  - VoiceOver는 글의 AXValue를 읽는다. 이름을 label로도 주면 두 번 읽는다 — label은 비운다.
     [[nodiscard]] bool ax_reads_name_as_value(access_role role) noexcept;
+
+    // 행(AXRow)으로 서는 역할인가. 목록 항목·계층 항목·표의 행이다. 그 그릇(목록·계층·표)이 행 목록(AXRows)과 고른 행을 답한다.
+    [[nodiscard]] bool ax_row_role(access_role role) noexcept;
+    // 행 목록을 답하는 그릇인가 (AXTable·AXOutline).
+    [[nodiscard]] bool ax_row_container_role(access_role role) noexcept;
 
     enum class ax_value_kind
     {

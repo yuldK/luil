@@ -105,6 +105,11 @@ TEST_CASE("macOS accessibility roles follow AppKit controls")
     REQUIRE(luil::macos::ax_role_of(info_of(access_role::radio_group)) == names { "AXRadioGroup" });
     REQUIRE(luil::macos::ax_role_of(info_of(access_role::tree_item)) == names { "AXRow", "AXOutlineRow" });
     REQUIRE(luil::macos::ax_role_of(info_of(access_role::data_item)) == names { "AXRow", "AXTableRow" });
+    // 목록은 한 열짜리 표이고 항목은 그 행이다 (NSTableView 사이드바와 같다).
+    REQUIRE(luil::macos::ax_role_of(info_of(access_role::list)) == names { "AXTable" });
+    REQUIRE(luil::macos::ax_role_of(info_of(access_role::list_item)) == names { "AXRow", "AXTableRow" });
+    REQUIRE(luil::macos::ax_row_role(access_role::list_item));
+    REQUIRE(luil::macos::ax_row_container_role(access_role::list));
     REQUIRE(luil::macos::ax_role_of(info_of(access_role::progress)) == names { "AXProgressIndicator" });
     REQUIRE(luil::macos::ax_role_of(info_of(access_role::dialog)) == names { "AXGroup", "AXApplicationDialog" });
 
@@ -174,8 +179,10 @@ TEST_CASE("macOS accessibility values follow the AppKit conventions")
         const access_info text { info_of(access_role::static_text, u8"Saved") };
         REQUIRE(luil::macos::ax_value_of(text) == luil::macos::ax_value { ax_value_kind::text, 0.0, u8"Saved" });
         REQUIRE(luil::macos::ax_label_of(text).empty());
+        // 목록 항목은 행이라 이름이 label이다.
         const access_info row { info_of(access_role::list_item, u8"Inbox") };
-        REQUIRE(luil::macos::ax_value_of(row).text == u8"Inbox");
+        REQUIRE(luil::macos::ax_label_of(row) == u8"Inbox");
+        REQUIRE(luil::macos::ax_value_of(row).kind == ax_value_kind::none);
     }
 
     SECTION("an empty text field still has a text value")
@@ -377,7 +384,7 @@ TEST_CASE("macOS accessibility turns snapshot changes into notifications")
         luil::access_snapshot after { before };
         after.entries[1].info.selected = false;
         after.entries[2].info.selected = true;
-        REQUIRE(luil::macos::ax_notifications(before, after) == std::vector<ax_notification> { { ax_notification_kind::selected_children_changed, item(u8"list") } });
+        REQUIRE(luil::macos::ax_notifications(before, after) == std::vector<ax_notification> { { ax_notification_kind::selected_rows_changed, item(u8"list") } });
     }
 
     SECTION("tree rows announce expansion and the tree announces selected rows")
