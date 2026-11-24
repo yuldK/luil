@@ -1,11 +1,13 @@
 #include "demo/webview_page.h"
 #include "demo/basics_page.h"
 
+#include "luil/ui/caption_element.h"
 #include "luil/ui/check_element.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/image_decode.h"
 #include "luil/ui/layer_element.h"
 #include "luil/ui/panel_element.h"
+#include "luil/ui/root_element.h"
 #include "luil/ui/stack_element.h"
 #include "luil/ui/tab_bar_element.h"
 #include "luil/ui/webview_element.h"
@@ -33,6 +35,12 @@ namespace demo {
         }
 
         // 떠 있는 판의 크기와 본문 가장자리에서 떨어진 거리다 (논리 픽셀). 본문이 낮으면 판도 그만큼 낮아진다.
+        // 웹뷰를 따로 띄운 창이다 (논리 크기).
+        constexpr std::u8string_view webview_window_id { u8"webview-window" };
+        constexpr float webview_window_width { 640.0f };
+        constexpr float webview_window_height { 420.0f };
+        constexpr std::u8string_view window_document { u8"이 탭의 문서는 따로 띄운 창의 웹뷰가 그린다. 창을 닫으면 웹뷰가 이 자리로 돌아온다." };
+
         constexpr float floating_width { 380.0f };
         constexpr float floating_height { 240.0f };
         constexpr float floating_margin { 12.0f };
@@ -156,6 +164,18 @@ namespace demo {
             floating_ = floating->floating;
             return true;
         }
+        if (const auto* const window { message.get<webview_window_toggle_intent>() }; window != nullptr)
+        {
+            window_open_ = window->open;
+            if (window_open_ == false)
+                window_metrics_ = {};
+            return true;
+        }
+        if (const auto* const metrics { message.get<webview_window_metrics_intent>() }; metrics != nullptr)
+        {
+            window_metrics_ = *metrics;
+            return true;
+        }
         if (const auto* const corner { message.get<webview_floating_corner_intent>() }; corner != nullptr)
         {
             floating_left_ = corner->left;
@@ -231,7 +251,56 @@ namespace demo {
         view.navigate_revision = navigate_revision_;
         view.navigate_url = requested_url_;
         view.on_event = [](luil::win32::webview_event event) { return luil::app_message { webview_report_intent { std::move(event) } }; };
+        // 따로 띄운 창에 둘 때는 그 창이 앵커다. 앵커가 바뀌면 웹뷰는 새 창에 다시 서고 문서를 다시 연다.
+        if (window_open_)
+            view.anchor = std::u8string { webview_window_id };
         return view;
+    }
+
+    std::vector<luil::win32::ui_window> webview_page::make_windows() const
+    {
+        std::vector<luil::win32::ui_window> windows {};
+        if (window_open_ == false)
+            return windows;
+        luil::caption_config caption {};
+        caption.title = u8"웹뷰 창";
+        caption.buttons = { .minimize = false, .maximize = false, .close = true };
+        caption.close_tooltip = u8"Close";
+
+        // metrics가 오기 전(창이 만들어지는 그 frame)에는 요청 크기로 배치한다.
+        const float scale { window_metrics_.scale > 0.0f ? window_metrics_.scale : 1.0f };
+        const float width { window_metrics_.width > 0.0f ? window_metrics_.width : webview_window_width * scale };
+        const float height { window_metrics_.height > 0.0f ? window_metrics_.height : webview_window_height * scale };
+        auto root { std::make_unique<luil::root_element>(std::u8string { webview_window_id }) };
+        root->arrange({ { 0.0f, 0.0f, width, height }, scale });
+        const float caption_height { luil::caption_element::height_for(caption) * scale };
+        auto caption_bar { std::make_unique<luil::caption_element>(caption) };
+        caption_bar->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+        root->add(std::move(caption_bar));
+
+        // 창 전체가 웹뷰의 자리표다. 본문의 자리표와 같은 id라 웹뷰는 이 창의 자리를 따라간다.
+        luil::webview_config placeholder {};
+        placeholder.webview = webview_id();
+        placeholder.name = u8"문서 미리 보기";
+        placeholder.placeholder = base_url_.empty() ? u8"되돌이 서버를 기다린다" : u8"웹뷰가 서지 않았다";
+        auto slot { std::make_unique<luil::webview_element>(luil::ui_element_id { luil::ui_element_kind::webview, webview_id() }, std::move(placeholder)) };
+        slot->arrange({ { 0.0f, caption_height, width, height - caption_height }, scale });
+        root->add(std::move(slot));
+
+        luil::win32::ui_window window {};
+        window.id = std::u8string { webview_window_id };
+        window.caption = std::move(caption);
+        window.x = 120.0f;
+        window.y = 120.0f;
+        window.width = webview_window_width;
+        window.height = webview_window_height;
+        window.minimum_width = 320.0f;
+        window.minimum_height = 240.0f;
+        window.tree = std::make_shared<const luil::ui_tree>(std::move(root));
+        window.metrics = [](const float w, const float h, const float s) { return luil::app_message { webview_window_metrics_intent { w, h, s } }; };
+        window.close = [] { return luil::make_app_action(webview_window_toggle_intent { false }); };
+        windows.push_back(std::move(window));
+        return windows;
     }
 
     std::unique_ptr<luil::ui_element> webview_page::build(const float width, const float height, const float scale)
@@ -322,9 +391,19 @@ namespace demo {
         corners->add(std::make_unique<luil::check_element>(std::move(top)), 200.0f);
         column->add(std::move(corners), luil::check_row_height);
         column->add_gap(6.0f);
+        // 웹뷰를 보조 창으로 옮긴다. 웹뷰가 다른 표면(창)에 서는 길이다.
+        luil::check_config detached {};
+        detached.owner = u8"webview-window";
+        detached.style = luil::check_style::checkbox;
+        detached.label = u8"웹뷰를 따로 띄운 창에 둔다";
+        detached.checked = window_open_;
+        detached.tooltip = u8"웹뷰가 보조 창의 자리표에 선다. 창을 닫으면 본문으로 돌아온다";
+        detached.toggle = luil::make_message_action(webview_window_toggle_intent { window_open_ == false });
+        column->add(std::make_unique<luil::check_element>(std::move(detached)), luil::check_row_height);
+        column->add_gap(6.0f);
 
         const tab* const current { selected() };
-        const float body { height > 0.0f ? height - 368.0f : 320.0f };
+        const float body { height > 0.0f ? height - 368.0f - (luil::check_row_height + 6.0f) : 320.0f };
         const float body_height { body > 80.0f ? body : 80.0f };
 
         // 웹뷰의 자리표다. 본문에 서든 떠 있는 판 안에 서든 같은 element고, 웹뷰는 이것이 배치된 자리를 따라간다.
@@ -338,7 +417,7 @@ namespace demo {
         };
 
         std::unique_ptr<luil::ui_element> content {};
-        if (current != nullptr && current->path.empty() == false && floating_ == false)
+        if (current != nullptr && current->path.empty() == false && floating_ == false && window_open_ == false)
             content = make_slot();
         else if (current != nullptr && current->key == u8"image")
         {
@@ -351,7 +430,7 @@ namespace demo {
         {
             // 글 탭이면 글 문서를, 웹뷰가 판으로 옮겨 간 HTML 탭이면 그 사정을 적은 글을 둔다.
             const bool html { current != nullptr && current->path.empty() == false };
-            content = make_label(luil::ui_element_id { kind_text, u8"webview-text" }, std::u8string { html ? floating_document : text_document }, 13.0f, luil::label_color_role::primary);
+            content = make_label(luil::ui_element_id { kind_text, u8"webview-text" }, std::u8string { html ? (window_open_ ? window_document : floating_document) : text_document }, 13.0f, luil::label_color_role::primary);
         }
 
         if (floating_)

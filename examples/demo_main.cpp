@@ -904,6 +904,9 @@ namespace demo {
                 // 테마 페이지의 배경 효과 견본 창이다.
                 for (luil::win32::ui_window& window : theme_.make_windows())
                     frame->windows.push_back(std::move(window));
+                // 웹뷰 페이지가 웹뷰를 옮겨 둔 창이다. 웹뷰는 그 창을 앵커로 싣는다.
+                for (luil::win32::ui_window& window : webview_.make_windows())
+                    frame->windows.push_back(std::move(window));
                 // 창 페이지의 도킹 표면이다. 페이지를 옮겨도 화면 가장자리에 남는다.
                 frame->docked_surfaces = windows_.make_docked_surfaces();
                 // 모니터 목록이다. 도킹 표면 구역이 주 모니터의 크기·배율을 보인다.

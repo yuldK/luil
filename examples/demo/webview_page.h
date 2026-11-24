@@ -60,6 +60,20 @@ namespace demo {
         bool top { false };
     };
 
+    // 웹뷰를 따로 띄운 창(보조 창)에 둔다. 창을 닫으면 본문으로 돌아온다 (`ui_webview::anchor`가 그 창).
+    struct webview_window_toggle_intent
+    {
+        bool open { false };
+    };
+
+    // 웹뷰 창의 크기·배율이 정해졌다.
+    struct webview_window_metrics_intent
+    {
+        float width { 0.0f };
+        float height { 0.0f };
+        float scale { 1.0f };
+    };
+
     class webview_page
     {
     public:
@@ -79,6 +93,8 @@ namespace demo {
         //    다시 싣는 것과 같은 일이고, 그것이 라이브러리가 새로 세우는 계기다
         //    (webview.h의 `browser_process_failed`).
         [[nodiscard]] std::optional<luil::win32::ui_webview> webview() const;
+        // 웹뷰를 따로 띄운 창이다. 켜 둔 동안 웹뷰는 그 창의 자리표에 선다.
+        [[nodiscard]] std::vector<luil::win32::ui_window> make_windows() const;
 
     private:
         // 탭 하나다.
@@ -108,6 +124,9 @@ namespace demo {
         bool floating_ { false };
         bool floating_left_ { false };
         bool floating_top_ { false };
+        // 켜면 웹뷰가 본문 대신 따로 띄운 창에 선다. 떠 있는 판보다 앞선다.
+        bool window_open_ { false };
+        webview_window_metrics_intent window_metrics_ {};
         // 브라우저 프로세스가 죽은 횟수다. 웹뷰의 id에 붙여 **다른 웹뷰로** 다시 싣는다 —
         // 목록에서 뺐다가 다시 싣는 것과 같은 일을 한 frame에 한다 (webview.h).
         unsigned generation_ { 0 };
