@@ -196,6 +196,12 @@ frame->taskbar.jump_list = list;
 - unsupported다. host는 `ui_frame::taskbar`를 통째로 읽지 않으므로 `jump_list`도 받고 무시한다. 로그도 없다. 능력 플래그(`taskbar`)는 거짓이다.
 - 가까운 기능은 런처 숏컷(`ShortcutManager`)이다. JNI로 부를 수는 있으나 숏컷이 여는 Intent를 살아 있는 Activity가 받으려면 `onNewIntent`가 든다. `GameActivity`에 그 콜백이 없고 하위 클래스는 Java라 [Java 0줄 방침](android-port-plan.md)과 부딪힌다([인자 넘기기](single-instance-args-design.md)의 Android 절과 같은 까닭). 범위 밖이다.
 
+### macOS
+
+- 점프 목록은 Dock 메뉴다. [dock_macos.h](../src/macos/dock_macos.h)의 `dock_host`가 같은 `jump_list_sync`로 목록이 바뀌었을 때만 `NSMenu`를 새로 짓고, host의 `applicationDockMenu:`가 `dock_menu()`를 돌려준다(host가 아직 잇지 않았다). 작업마다 항목 하나이고 설명은 툴팁이다. 아이콘 칸은 읽지 않는다.
+- 항목을 고르면 이 실행 파일을 작업의 인자로 새로 띄운다. 번들(.app)이면 `NSWorkspace`에 새 인스턴스(`createsNewApplicationInstance`)를, 맨 실행 파일이면 `NSTask`다. 떠 있는 첫째에 넘기는 일은 Windows와 같이 앱의 `single_instance`가 한다(macOS의 `single_instance`는 아직 없어 지금은 둘째가 그대로 뜬다).
+- 메뉴는 앱이 떠 있는 동안만 있다. Windows처럼 앱이 끝난 뒤에 남지 않는다. 보고는 `jump_list_report`의 `applied`·`removed`·`failed`이고 `unavailable`은 없다. 제목이 비었거나 NUL·잘못된 UTF-8이 든 목록은 `failed`이고 앞서 지은 메뉴가 남는다.
+
 ## 다른 노드와의 약속
 
 - **작업 표시줄(R1).** `taskbar.h`에 타입 둘과 칸 하나, `taskbar_sync.h`·`.cpp`에 `jump_list_sync`를 더한다. 기존 `taskbar_sync`와 `taskbar_button`은 고치지 않는다. 진행률·오버레이의 기본값 판정(`is_default`)은 점프 목록을 보지 않는다. 단추 보고(`taskbar_report`)는 진행률·오버레이만 말한다. 구현 커밋이 [taskbar-design.md](taskbar-design.md)의 머리말·"앱 식별"·"점프 목록"·범위 밖을 이 문서로 잇고 `propsys` 말을 고친다.

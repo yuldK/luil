@@ -178,6 +178,13 @@ G6은 설명 글의 기본값을 정하는 결정이다. 이 노드의 `descript
 - host는 `ui_frame::taskbar`를 읽지 않는다. 받고 무시하고 로그도 남기지 않는다. `ui_frame::windows`는 한 번 오류를 남기지만, 이 필드는 `device_request`처럼 앱이 플랫폼마다 frame을 다르게 짓지 않게 하려는 것이다.
 - Android에는 작업 표시줄이 없다. 가까운 기능은 진행 표시가 달린 알림이고 알림은 os_notify가 다룬다. JNI도 Java도 쓰지 않는다. 이 필드의 Android 지원은 unsupported다.
 
+### macOS
+
+- [dock_macos.h](../src/macos/dock_macos.h)의 `dock_host`가 앱의 Dock 타일(`NSApp.dockTile`) 하나에 옮긴다. 어떤 호출을 할지는 같은 `taskbar_sync`가 고르고, 타일은 늘 있으므로 만들 때 `button_created`를 한 번 부르고 `waiting`이 없다. host가 아직 잇지 않았다(주 창 frame마다 `update`를 부를 자리).
+- 요청이 있으면 content view를 건다. 앱 아이콘(`applicationIconImage`) 위 아래쪽에 막대(정상은 강조색, 오류는 빨강, 일시정지는 노랑, 불확정은 빗금 친 꽉 찬 막대)와, 그 위 오른쪽 아래에 오버레이 그림이다. 기본값이 되면 view를 떼어 평소 아이콘으로 돌린다. 자리와 색 갈래는 AppKit을 모르는 [dock_plan.h](../src/macos/dock_plan.h)가 정하고 core test가 본다.
+- 오버레이 설명은 view의 접근성 이름으로만 싣는다. Dock이 읽지는 않는다. 배지 글(`badgeLabel`)은 쓰지 않는다.
+- 타일은 앱마다 하나라 주 창의 요청만 옮긴다. 독립 창의 `ui_window::taskbar`는 받고 무시한다. 보고는 Win32의 `taskbar_report`를 그대로 쓰고 표면은 늘 주 창이다(`off`·`applied`, 그림 변환이 실패하면 `failed`).
+
 ## 다른 노드와의 약속
 
 이 노드가 Win32 창 계층 공통 자리의 첫 사용자다. tray·hotkey·os_notify는 아래를 따른다.

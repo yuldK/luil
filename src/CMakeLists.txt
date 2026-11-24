@@ -962,6 +962,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
 
     # macos: AppKit 위의 앱 host다.
     # 창 하나·popup overlay·입력과 입력기·Metal과 CPU 렌더러·웹뷰(WKWebView), CoreText 글꼴과 내장 codicon, 플랫폼 도구다.
+    #  - Dock 타일·메뉴(macos/dock_macos.mm)는 작업 표시줄 요청의 macOS 갈래다. 무엇을 낼지는 core의 host/taskbar_sync가 고른다.
     #  - 비밀 저장소·OS 알림·파일 감시·HTTP 전송은 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
@@ -976,6 +977,10 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/macos_text.h
         macos/cpu_skia_renderer.h
         macos/cpu_skia_renderer.mm
+        macos/dock_macos.h
+        macos/dock_macos.mm
+        macos/dock_plan.cpp
+        macos/dock_plan.h
         macos/file_dialog_macos.h
         macos/file_dialog_macos.mm
         macos/frame_capture.h
