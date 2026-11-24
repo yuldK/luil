@@ -964,6 +964,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
     # 창 하나·popup overlay·입력과 입력기·Metal과 CPU 렌더러·웹뷰(WKWebView), CoreText 글꼴과 내장 codicon, 플랫폼 도구다.
     # OS 알림은 UserNotifications이고 앱 번들에서만 선다 (macos/notification_macos.mm).
     #  - 전역 단축키는 Carbon `RegisterEventHotKey`로 건다 (macos/hotkey_macos.mm). 어떤 호출을 할지는 core의 host/hotkey_sync가 고른다.
+    #  - Dock 타일·메뉴(macos/dock_macos.mm)는 작업 표시줄 요청의 macOS 갈래다. 무엇을 낼지는 core의 host/taskbar_sync가 고른다.
     #  - 비밀 저장소·파일 감시·HTTP 전송은 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
@@ -980,6 +981,10 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/macos_text.h
         macos/cpu_skia_renderer.h
         macos/cpu_skia_renderer.mm
+        macos/dock_macos.h
+        macos/dock_macos.mm
+        macos/dock_plan.cpp
+        macos/dock_plan.h
         macos/file_dialog_macos.h
         macos/file_dialog_macos.mm
         macos/frame_capture.h
