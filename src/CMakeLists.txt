@@ -968,6 +968,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
     #  - 비밀 저장소는 Keychain의 일반 암호 항목이다 (macos/secret_store_macos.mm).
     #  - 파일 감시는 감시마다 FSEvents stream 하나다 (macos/file_watcher_macos.mm).
     #  - 단일 인스턴스는 사용자 임시 폴더의 flock, 인자 넘기기는 그 옆의 Unix 소켓이다 (macos/single_instance_macos.mm).
+    #  - 동영상은 AVFoundation이다. 네이티브 표면은 AVPlayerLayer(macos/media_player_macos.mm), 장 복사는
+    #    AVPlayerItemVideoOutput(macos/video_frame_player_macos.mm)이고, 공개 헤더는 Windows와 같은 win32/ 헤더다.
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
         "${public_headers}/macos/macos_app.h"
@@ -1018,6 +1020,12 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/notification_macos.mm
         macos/notification_rules.cpp
         macos/notification_rules.h
+        "${public_headers}/win32/media_player.h"
+        "${public_headers}/win32/video_frame_player.h"
+        macos/media_rules.cpp
+        macos/media_rules.h
+        macos/media_player_macos.mm
+        macos/video_frame_player_macos.mm
         "${luil_codicon_source}")
     # net: HTTP 값과 NSURLSession 위에 선 `http_client`, NSURLSessionWebSocketTask 위의 WebSocket 전송이다.
     # charset은 utf-16을 손으로, 나머지는 CoreFoundation의 표로 옮긴다.
@@ -1032,7 +1040,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
     add_library(luil::luil ALIAS luil)
     target_include_directories(luil
         PRIVATE
-            "${LUIL_SOURCE_DIRECTORY}")
+            "${LUIL_SOURCE_DIRECTORY}"
+            "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}")
     # Objective-C++ 소스는 ARC로 컴파일한다. 창·view·시계의 수명을 손으로 세지 않는다.
     target_compile_options(luil PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
     target_link_libraries(luil
@@ -1054,6 +1063,9 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "-framework Carbon"
             "-framework Security"
             "-framework CoreServices"
+            "-framework AVFoundation"
+            "-framework CoreMedia"
+            "-framework CoreVideo"
         PRIVATE
             luil_options)
 endif()
