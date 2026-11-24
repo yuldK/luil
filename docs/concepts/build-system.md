@@ -144,10 +144,11 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 텍스트 입력 | `NSTextInputClient`. 조합 글은 `post_composition`으로 보이고 확정은 insert 편집이다 (한글 입력기) |
 | popup | 앵커 사슬이 끝나는 창 위에 겹쳐 그린다 (Android와 같은 overlay) |
 | 웹뷰 | WKWebView. Skia view의 형제 NSView로 위층·아래층에 선다 ([웹뷰 합성](../webview-composition-design.md#macos-wkwebview)) |
+| OS 알림 | UserNotifications(`UNUserNotificationCenter`). 앱 번들에서만 서고 맨 실행 파일은 `unsupported`다. 권한은 `app_permission::notifications`로 묻는다 ([OS 알림](../os-notification-design.md#macos)) |
 | 클립보드 | 일반 붙여넣기 판의 글과 HTML |
 | 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
 
-아직 없는 것은 "지원 안 함"으로 답한다: 도킹 표면(무시), 보조 창의 웹뷰(무시), 파일 대화 상자, 비밀 저장소(Keychain), OS 알림, 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
+아직 없는 것은 "지원 안 함"으로 답한다: 도킹 표면(무시), 보조 창의 웹뷰(무시), 파일 대화 상자, 비밀 저장소(Keychain), 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
 
 개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
 

@@ -223,7 +223,8 @@ targetSdk 37 이상인 앱은 이것 없이 로컬 주소로 가는 TCP 연결�
   같은 길이다. 앱의 매니페스트에 `<uses-permission android:name="android.permission.POST_NOTIFICATIONS" />`가 있어야 한다
   (mobile demo는 flavor 매니페스트에 둔다). targetSdk가 33보다 낮은 앱이 13 이상 기기에서 돌면 시스템이 첫 알림 채널을
   만들 때 스스로 묻는다. 그때 권한은 `not_required`이고 답 전까지 `notification_status()`가 `blocked`다. Windows는 늘
-  `not_required`이고, 사용자가 끈 알림은 `notification_status()`가 말한다.
+  `not_required`이고, 사용자가 끈 알림은 `notification_status()`가 말한다. macOS는 앱 번들이면 처음 한 번
+  UserNotifications의 허락을 묻고(`requestAuthorization`), 번들이 아니면 `not_required`다 ([OS 알림](os-notification-design.md#macos)).
 - **Android 16의 시험 스위치는 따르지 않는다.** Android 16은 `adb shell am compat enable RESTRICT_LOCAL_NETWORK
   <패키지>`(재부팅 필요)로 같은 차단을 시험할 수 있지만, 그때 보는 권한은 `NEARBY_WIFI_DEVICES`라 실제 기기의
   동작과 다르다. 그래서 Android 16 기기에서는 `not_required`로 답한다.

@@ -1,6 +1,6 @@
 # OS 알림
 
-앱 창 밖, 운영 체제의 알림 자리(Windows 토스트와 알림 센터, Android 알림 창)에 알림을 올리고 바꾸고 거둔다. 사용자가 누르면 앱이 앞으로 서고 누른 알림의 id가 앱 메시지로 온다. 창 안에 그리는 [toast_element](../include/luil/ui/toast_element.h)와는 다른 기능이다. 공개 형식은 새 헤더 `include/luil/app/notification.h`의 `notification`·`notification_event`·`notification_availability`와 자유 함수 `show_notification`·`close_notification`·`close_all_notifications`·`notification_status`·`notification_launch`, `app_delegate::make_notification_message`, `app_permission::notifications`, `ui_platform_capabilities::notifications`, Win32의 `window_config::identity`(`win32::app_identity`)와 `win32::unregister_app_identity`다.
+앱 창 밖, 운영 체제의 알림 자리(Windows 토스트와 알림 센터, Android 알림 창, macOS 알림 센터)에 알림을 올리고 바꾸고 거둔다. 사용자가 누르면 앱이 앞으로 서고 누른 알림의 id가 앱 메시지로 온다. 창 안에 그리는 [toast_element](../include/luil/ui/toast_element.h)와는 다른 기능이다. 공개 형식은 새 헤더 `include/luil/app/notification.h`의 `notification`·`notification_event`·`notification_availability`와 자유 함수 `show_notification`·`close_notification`·`close_all_notifications`·`notification_status`·`notification_launch`, `app_delegate::make_notification_message`, `app_permission::notifications`, `ui_platform_capabilities::notifications`, Win32의 `window_config::identity`(`win32::app_identity`)와 `win32::unregister_app_identity`다.
 
 Windows 쪽은 앱 식별(AUMID)을 이 노드가 처음 세운다. [작업 표시줄 문서](taskbar-design.md) 215줄이 미룬 일이다.
 
@@ -92,6 +92,8 @@ namespace luil::win32 {
 | `src/win32/app_identity.h`·`.cpp` | AUMID 검증, 레지스트리 항목 짓기·쓰기·지우기, 활성화기 CLSID |
 | `src/win32/notification_win32.h`·`.cpp` | 식별 적용(프로세스 AUMID), WinRT 호출, 이벤트 연결, 임시 그림, COM 활성화기. 헤더는 주 창이 잇는 비공개 자리다 |
 | `src/android/notification_android.cpp` | 채널·`Notification.Builder`·`PendingIntent`를 JNI로 부른다 |
+| `src/macos/notification_rules.h`·`.cpp` | macOS의 AppKit을 모르는 몫. 설정→공개 답·권한 상태, 알림→요청 값, 응답→사건, 띄운 눌림 가리기(`notification_launch_tracker`), 받는 자리가 서기 전의 사건 쥐기(`notification_relay`). core test에서 돈다 |
+| `src/macos/notification_macos.mm`·`notification_center.h` | `UNUserNotificationCenter` 호출과 delegate. 헤더는 AppKit host가 잇는 비공개 자리다(받는 자리, 권한 조회·묻기) |
 
 ## 규칙
 
@@ -215,6 +217,21 @@ namespace luil::win32 {
 - 매니페스트는 고치지 않는다. 지금 Activity는 `launchMode`가 없다([AndroidManifest.xml](../examples/android/app/src/main/AndroidManifest.xml) 21줄). 바꾸면 모든 예제의 수명이 바뀐다. 소비자가 바꾸는 것은 소비자 몫이다. mobile demo flavor 매니페스트에만 `POST_NOTIFICATIONS`를 더한다.
 - 살아 있는 앱의 눌림 사건, `dismissed`, `failed`, 단추·답장·예약은 unsupported다(결정 5·6).
 
+### macOS
+
+결정 1~11 뒤에 더한 갈래다. UserNotifications(`UNUserNotificationCenter`, macOS 10.14+)를 부르고, 최소 판 11이라 `UNNotificationPresentationOptionBanner`·`List`를 그대로 쓴다. 옛 `NSUserNotificationCenter`는 11부터 폐기라 쓰지 않는다.
+
+- **앱 번들.** 알림 센터는 번들 식별자가 있는 앱 번들에서만 선다. 맨 실행 파일에서 `currentNotificationCenter`를 부르면 예외가 나므로, `[NSBundle mainBundle]`의 식별자가 없거나 번들 경로가 `.app`이 아니면 알림 센터를 건드리지 않고 `notification_status()`가 `unsupported`, 공개 함수가 `unsupported`다(id 검사는 그 앞이다). 서명이 없는 번들은 알림 센터가 받지 않을 수 있어 예제는 ad-hoc 서명한다([빌드 체계](concepts/build-system.md#macos)). Windows의 앱 식별 등록에 해당하는 일은 번들의 Info.plist가 한다.
+- **올리기.** 요청 id가 알림 id이고 같은 id의 요청은 알림 센터가 바꾸기로 다룬다. 제목·본문은 같은 규칙으로 자르고(`prepare_notification_text`), `silent`가 아니면 기본 소리를 단다. 그림은 긴 변 256 px PNG로 임시 폴더(`$TMPDIR/luil-notifications/<id>-<UUID>.png`)에 써서 `UNNotificationAttachment`로 붙인다. 알림 센터가 받으면 그 파일을 제 저장소로 옮기므로 라이브러리가 지울 것이 없고, 붙이기나 올리기가 실패하면 지운다. 그림을 붙이지 못하면 그림 없이 올린다(Android와 같다). 알림 센터의 답(`addNotificationRequest`의 완료)을 5초까지 기다려 `ok`·`failed`를 돌려준다. 답이 늦으면 `failed`이고 진단 글이 알림이 뒤늦게 뜰 수 있다고 말한다.
+- **거두기.** `close_notification`은 그 id의 전달된 알림과 대기 요청을, `close_all_notifications`는 이 앱의 것을 모두 거둔다. 알림 센터가 답을 주지 않는 호출이라 늘 `ok`다.
+- **상태와 권한.** `getNotificationSettings`를 5초까지 기다려 읽는다. 아직 묻지 않았으면 `permission_needed`, 거절이면 `blocked`, 허락(조용한 허락 포함)이면 `available`이다. 허락했어도 배너(`alertSetting`)와 알림 센터(`notificationCenterSetting`)를 모두 껐으면 보일 자리가 없어 `blocked`다. 답이 오지 않으면 결정 9의 Windows 규칙처럼 `available`로 보고 올린다. `notification_status()`는 묻지 않는다.
+- **묻기는 앱이 한다.** `show_notification`도 허락을 묻지 않는다. 묻지 않은 앱의 올리기는 `failed`이고 앱은 `app_permission::notifications`를 묻는다. Android의 `POST_NOTIFICATIONS`와 같은 길이다. 올리기가 묻게 하면 앱이 모르는 순간에 OS 대화가 뜨고, 앱이 그 답을 `make_permission_message`로 받지 못한다. `notification_center.h`의 `notification_permission`(조회)과 `request_notification_permission`(`requestAuthorization`, 배너와 소리)을 host가 `app_host::config::permission`·`request_permission`에 잇는다. 묻기의 답은 메인 thread에서 오고 host가 `make_permission_message`로 낸다. 앱 번들이 아니면 `not_required`다.
+- **사건.** delegate(`UNUserNotificationCenterDelegate`)는 알림 센터를 처음 쓸 때 건다. 앱이 앞에 있어도 배너를 띄우고 알림 센터에 남기며 소리는 올릴 때 단 것만 낸다(`willPresentNotification`). 응답(`didReceiveNotificationResponse`)은 메인 thread로 옮겨 사건으로 낸다. 기본 동작(알림 누름)과 그 밖의 동작은 `activated`, 닫음(`UNNotificationDismissActionIdentifier`)은 `dismissed`다. 닫음은 범주의 `CustomDismissAction`이 있어야 오므로 라이브러리는 모든 알림에 범주 `luil.default` 하나를 단다. 단추는 달지 않는다(결정 6). id 규칙 밖의 응답(라이브러리가 올리지 않은 알림)은 버린다. `failed` 사건은 없다. 거절은 올리기의 답으로 이미 돌려준다.
+- **받는 자리.** 사건은 `notification_center.h`의 `set_notification_receiver`로 건 함수에 메인 thread에서 간다. host는 그 사건을 제 `notification_queue`에 넣고 `deliver_notification_events`로 `make_notification_message`를 불러 게시하고, 눌림이면 주 창을 앞으로 세운다(Windows와 같은 몫). 자리가 서기 전의 사건은 `notification_relay`가 결정 8의 규칙(64개, `lost_before`)으로 쥐었다가 걸 때 차례대로 낸다.
+- **꺼진 앱의 눌림.** 알림 센터는 꺼진 앱의 알림을 누르면 앱을 띄우고 시작 뒤 delegate에 응답을 준다. 그래서 host는 `[NSApp run]` 전에 받는 자리를 건다(그때 delegate가 선다). 시작을 마치기 전(`NSApplicationDidFinishLaunchingNotification` 전)에 온 눌림, 그리고 마칠 때 AppKit이 알림으로 떴다고 알린(`NSApplicationLaunchUserNotificationKey`) 실행의 첫 눌림이 `launched`다. `notification_launch`는 늘 거짓이다. 인자로 오는 표식이 없다.
+- **thread.** 공개 함수는 어느 thread에서나 부른다. 알림 센터의 완료 처리기는 다른 thread로 오므로 메인 thread에서 기다려도 막히지 않는다. 받는 자리·띄운 눌림 표식은 메인 thread에서만 만진다. 전역 상태는 정적 소멸을 하지 않는다.
+- **능력.** `ui_platform_capabilities::notifications`는 앱 번들일 때 참이다(`set_ui_platform`, macos_app.mm가 `notification_center_available()`을 싣는다). 권한이 없어도 참이다. 능력은 길이 있는지이고 권한은 `permission`이 말한다(Android와 같다).
+
 ## 다른 노드와의 약속
 
 - **인자 넘기기(줄 4, 앞).** `window_config`의 식별 칸은 이 노드가 낸다(그 문서 결정 2의 전제). 알림 눌림은 `send_to_primary`를 쓰지 않는다. 결정 4 b에서 떠 있는 첫째는 COM으로 받는다. 첫째가 끝나는 중의 경합에서만 COM이 띄운 둘째가 앱의 G7 길로 `-luil-notification` 인자를 넘기고, 앱은 `notification_launch`로 걸러낸다. 그 문서의 약속 절은 이미 이 뜻으로 고쳤다. `win32_window.cpp`는 그 노드 뒤에 직렬로 고친다. `on_started` 뒤와 `host_.reset()` 세 자리 앞은 같은 hunk가 될 수 있어 그 노드의 줄 뒤에 잇는다. 앞으로 세우는 helper는 그 노드가 `advance_focus_request`에서 뽑은 것을 쓴다. 병합 순서는 인자 넘기기, os_notify, image_clip이다.
@@ -242,6 +259,8 @@ namespace luil::win32 {
   - 클릭이 앞으로 세울 권한을 주는가. 다른 앱을 앞에 두고 누른다.
   - Android 런처 intent PendingIntent가 Activity를 하나로 두는가. 실기기에서 `dumpsys activity activities`의 GameActivity 수를 센다. 채널·제목·contentIntent는 `dumpsys notification --noredact`, 권한은 `pm grant`·`pm revoke`, 콜드 스타트 extra는 `am force-stop` 뒤 알림을 사람이 누른다.
 - 격리 데스크톱에는 셸이 없어 토스트가 그려지지 않는다고 본다(추정). 알림 서비스는 세션 단위라 격리 데스크톱에서 올린 토스트가 사용자 화면에 뜰 수도 있다(추정). 그래서 자동 test는 `Show`를 부르지 않고, UIA 되읽기는 데모 label의 결과까지다. 배너·알림 센터·클릭은 사용자 데스크톱에서 허락을 받고 본다.
+- `tests/macos_notification_tests.cpp`(macOS `luil_core_tests`): 설정 → 공개 답(묻지 않음·거절·허락·조용한 허락·모르는 값, 배너와 알림 센터를 모두 끈 허락), 권한 상태, 요청 값(id·자르기·소리·범주, 규칙 밖 id·잘못된 UTF-8의 거절), 응답 → 사건(누름·그 밖의 동작·닫음, 닫음에는 `launched`가 없음, 규칙 밖 id는 사건 없음), 띄운 눌림 가리기, 받는 자리가 서기 전의 사건 쥐기·64개 상한의 `lost_before`·던지는 받는 자리. 알림 센터를 부르지 않고 권한도 묻지 않는다.
+- macOS 실측(이 저장소의 개발 기계, 묻지 않은 상태): 번들 demo의 토스트 페이지가 `OS 알림 상태: 권한 필요`, 보내기가 권한을 묻지 않고 `failed`였다. 번들 밖으로 꺼낸 같은 실행 파일은 `지원 안 함`이고 예외 없이 돌았다. 허락 대화, 배너, 같은 id 바꾸기, 누름·닫음 사건, 꺼진 앱 띄우기는 host가 받는 자리와 권한을 이은 뒤 사람이 본다.
 - 사람 확인: 배너와 알림 센터의 모양, 같은 id 바꾸기, 거두기, 끈 설정과 집중 지원의 결과, 꺼진 뒤 알림 센터에서 누르기, 관리자 권한 실행, 식별을 단 앱의 작업 표시줄 진행률과 고정 단추. Android 실기기의 알림 창·잠금 화면, 권한 대화상자(허용·거절·다시 묻지 않음), 살아 있을 때 누르면 같은 Activity가 앞으로 오는지.
 
 ## 범위 밖

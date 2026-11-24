@@ -42,7 +42,8 @@ luil_sign_macos_bundle(luil_hello)
 
 # demo — 데스크톱 demo를 AppKit host에 세운다. 페이지는 Windows와 같은 파일이고, 진입점은 demo_main.cpp의 macOS 갈래다.
 #  - 되돌이 HTTP 서버는 test 도우미의 POSIX 소켓 쪽이다 (Android test와 같은 파일).
-#  - Windows에만 있는 기능(보조 창·웹뷰·작업 표시줄·알림 영역·OS 알림)은 페이지가 서되 그 자리는 "지원 안 함"으로 답한다.
+#  - Windows에만 있는 기능(작업 표시줄·알림 영역)은 페이지가 서되 그 자리는 "지원 안 함"으로 답한다.
+#  - OS 알림은 알림 센터에 올린다. 알림 권한은 host가 `app_permission::notifications`로 묻는다 (os-notification-design.md의 "macOS").
 add_executable(luil_demo
     "${luil_examples_directory}/demo_main.cpp"
     "${luil_examples_directory}/demo/common.cpp"
