@@ -450,11 +450,12 @@ endif()
 if(LUIL_PLATFORM STREQUAL "macos")
     # 빌드한 기계에서 그대로 돈다. 기기도 실행기도 없으므로 발견도 빌드 뒤에 바로 한다.
     #  - core만 링크하는 실행 파일 둘이다. AppKit host 자체는 예제의 smoke test(`--smoke-test`)가 띄워 본다.
-    # macOS 키 변환은 AppKit을 모르는 순수 층이라 core test에 함께 넣는다 (Android 입력 변환과 같다).
+    # macOS 키 변환과 상태 항목 누름 풀이(macos/tray_icon_macos.h의 inline 도우미)는 AppKit을 모르는 순수 층이라 core test에 함께 넣는다 (Android 입력 변환과 같다).
     target_sources(luil_core_tests
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/macos/macos_input.cpp"
-            macos_input_tests.cpp)
+            macos_input_tests.cpp
+            macos_tray_tests.cpp)
     catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
     # AppKit host가 창을 보이지 않은 채 첫 frame을 그리고 끝나는지 본다 (예제를 켠 구성에서만).
     if(TARGET luil_hello)
