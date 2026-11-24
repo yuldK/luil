@@ -107,7 +107,7 @@ namespace luil {
     };
 
     // 폴더 하나, 그 아래 전부, 또는 파일 하나의 변경을 OS 알림으로 받아 묶음으로 건넨다 (file-watch-design.md).
-    // Windows는 `ReadDirectoryChangesW`, Android는 inotify다.
+    // Windows는 `ReadDirectoryChangesW`, Android는 inotify, macOS는 FSEvents(감시마다 파일 단위 stream 하나)다.
     //
     // **thread를 하나 소유한다.** 일반 worker는 앱 정책이고 그 판단은 그대로다. 이것은 `net::http_client`처럼 OS API를
     // 옳게 쓰는 데 필요한 부품이다. OS 알림은 막히는 기다림으로 오고 logic thread는 막힐 수 없다.

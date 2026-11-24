@@ -456,9 +456,10 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "${LUIL_SOURCE_DIRECTORY}/macos/macos_input.cpp"
             macos_input_tests.cpp)
     catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
-    # 플랫폼 서비스를 실제 OS로 본다. Keychain에 쓰고 지우는 비밀 저장소다.
+    # 플랫폼 서비스를 실제 OS로 본다. Keychain에 쓰고 지우는 비밀 저장소, 임시 폴더를 보는 FSEvents 파일 감시다.
     #  - 플랫폼 층(luil)을 링크하므로 core test와 따로 선다 (Windows의 luil_tests 자리다).
     add_executable(luil_macos_platform_tests
+        file_watcher_tests.cpp
         secret_store_tests.cpp)
     target_include_directories(luil_macos_platform_tests
         PRIVATE
