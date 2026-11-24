@@ -962,7 +962,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
 
     # macos: AppKit 위의 앱 host다.
     # 창 하나·popup overlay·입력과 입력기·Metal과 CPU 렌더러·웹뷰(WKWebView), CoreText 글꼴과 내장 codicon, 플랫폼 도구다.
-    #  - 비밀 저장소·OS 알림·파일 감시·HTTP 전송은 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
+    # OS 알림은 UserNotifications이고 앱 번들에서만 선다 (macos/notification_macos.mm).
+    #  - 비밀 저장소·파일 감시·HTTP 전송은 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
         "${public_headers}/macos/macos_app.h"
@@ -993,6 +994,10 @@ if(LUIL_PLATFORM STREQUAL "macos")
         luil/url_scheme.cpp
         "${public_headers}/app/secret_store.h"
         "${public_headers}/app/notification.h"
+        macos/notification_center.h
+        macos/notification_macos.mm
+        macos/notification_rules.cpp
+        macos/notification_rules.h
         macos/macos_unsupported.cpp
         "${luil_codicon_source}")
     list(APPEND luil_macos_files ${luil_net_files})
@@ -1018,6 +1023,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "-framework WebKit"
             "-framework Metal"
             "-framework UniformTypeIdentifiers"
+            "-framework UserNotifications"
         PRIVATE
             luil_options)
 endif()

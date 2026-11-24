@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-// 앱 창 밖, 운영 체제의 알림 자리(Windows 토스트와 알림 센터, Android 알림 창)에 알림을 올리고 바꾸고 거둔다
+// 앱 창 밖, 운영 체제의 알림 자리(Windows 토스트와 알림 센터, Android 알림 창, macOS 알림 센터)에 알림을 올리고 바꾸고 거둔다
 // (docs/os-notification-design.md). 창 안에 그리는 `toast_stack_element`와는 다른 기능이다.
 //  - 선언은 여기, 정의는 플랫폼 층에 있다 (`platform_services.h`와 같다).
 //  - 사용자가 누른 알림은 `app_delegate::make_notification_message`로 UI thread에 온다.
@@ -31,7 +31,7 @@ namespace luil {
     enum class notification_event_kind
     {
         activated, // 사용자가 눌렀다
-        dismissed, // 사용자가 닫았다 (Windows만)
+        dismissed, // 사용자가 닫았다 (Windows·macOS)
         failed,    // 올린 뒤 OS가 거절했다 (Windows만)
     };
 
@@ -57,12 +57,13 @@ namespace luil {
         blocked,
         // `app_permission::notifications`를 받아야 한다.
         permission_needed,
-        // 이 플랫폼·구성에는 길이 없다 (Windows 앱 식별이 없거나 서지 않았다).
+        // 이 플랫폼·구성에는 길이 없다 (Windows 앱 식별이 없거나 서지 않았다, macOS 앱 번들이 아니다).
         unsupported,
     };
 
     // 모두 어느 thread에서나 부른다.
     //  - Windows는 앱 식별(`win32::window_config::identity`)이 선 뒤에야 쓸 수 있다. `run_application_window` 전에는 `unsupported`다.
+    //  - macOS는 번들 식별자가 있는 앱 번들(`.app`)에서만 쓸 수 있다. 맨 실행 파일은 `unsupported`다.
     [[nodiscard]] notification_availability notification_status();
     // 알림을 올린다. 같은 id가 있으면 바꾼다.
     //  - id가 규칙 밖이거나 글이 잘못된 UTF-8이면 OS를 부르지 않고 `failed`다.
@@ -76,6 +77,6 @@ namespace luil {
     // 이 실행이 알림 클릭으로 뜬 것인가다 (Windows 활성화기의 표식 `-luil-notification`과 COM이 덧붙이는 `-Embedding`).
     //  - 앱은 이때 인자를 파일로 읽지 않는다. 첫째가 끝나는 중에 COM이 띄운 둘째는 이 표식을 첫째에 넘길 수 있어
     //    (`single_instance::send_to_primary`) 받은 인자(`instance_arguments`)를 거를 때도 쓴다.
-    //  - Android는 늘 거짓이다. 콜드 스타트 눌림은 `notification_event::launched`로 온다.
+    //  - Android와 macOS는 늘 거짓이다. 콜드 스타트 눌림은 `notification_event::launched`로 온다.
     [[nodiscard]] bool notification_launch(std::span<const std::u8string> arguments) noexcept;
 }
