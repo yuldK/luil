@@ -2,7 +2,7 @@
 
 Luil은 각 Win32 surface를 UI Automation fragment로 공개한다. Element는 `access_info`로 플랫폼 중립적인 의미를 설명하고, Win32 provider가 이를 UIA control type, property, pattern, navigation, hit testing, event로 변환한다.
 
-공개 접근성 모델은 [`include/luil/ui/accessibility.h`](../include/luil/ui/accessibility.h)에 선언되어 있다. Windows provider는 [`src/win32/uia_provider.h`](../src/win32/uia_provider.h)와 [`src/win32/uia_provider.cpp`](../src/win32/uia_provider.cpp)에 구현되어 있다. 실행 가능한 pattern은 [접근성 동작](accessibility-action-design.md)에서 설명한다.
+공개 접근성 모델은 [`include/luil/ui/accessibility.h`](../include/luil/ui/accessibility.h)에 선언되어 있다. Windows provider는 [`src/win32/uia_provider.h`](../src/win32/uia_provider.h)와 [`src/win32/uia_provider.cpp`](../src/win32/uia_provider.cpp)에 구현되어 있다. 실행 가능한 pattern은 [접근성 동작](accessibility-action-design.md)에서 설명한다. macOS(VoiceOver)의 짝은 [macOS 절](#macos-voiceover)에 있다.
 
 ## Element 설명
 
@@ -138,6 +138,21 @@ Library가 보장하는 것은 시작 시점이다. 주 window는 초기 배치�
 `CreateDesktop`으로 만든 별도 desktop에서는 그리기가 정상으로 돌고 tree도 완전하다. Direct3D와 CPU renderer 모두 동작한다. UIA client는 desktop 단위이므로 같은 desktop에 있어야 조회와 조작이 된다. 그 desktop은 입력 desktop이 아니라 foreground window가 서지 않으며, 사람이 쓰는 desktop의 foreground와 cursor는 영향을 받지 않는다.
 
 Client가 surface window를 고를 때 `Process.MainWindowHandle`이나 "자식이 있는 window"에 기대면 안 된다. App process에는 시스템이 만든 보이는 top-level window(`UAC Input Indicator` 등)가 함께 있고 그것도 자식을 갖는다. Luil surface는 `AutomationId`가 `kind:owner` 꼴인 element를 가진 window다.
+
+## macOS (VoiceOver)
+
+macOS의 짝은 [`src/macos/accessibility_macos.h`](../src/macos/accessibility_macos.h)의 `accessibility_bridge`다. 창 표면(주 창·보조 창·도킹 판)의 Skia view 하나에 다리 하나가 서고, view의 접근 자식이 tree의 접근 요소(`NSAccessibilityElement`)다. 역할 표·값·실행의 번역·좌표·UTF-16 offset·발행본 대조는 AppKit을 모르는 [`accessibility_mapping.cpp`](../src/macos/accessibility_mapping.cpp)가 맡고 core test([`tests/macos_accessibility_tests.cpp`](../tests/macos_accessibility_tests.cpp))로 돈다. 어휘·접근 tree·도달 가능성·실행 계획은 UIA와 같은 함수를 쓴다.
+
+- **정체**: 요소 객체는 (표면 표식, `ui_element_id`)를 쥐고 물을 때마다 지금 tree에서 다시 찾는다. 같은 id는 frame을 넘어 같은 객체라 VoiceOver의 자리가 재빌드를 넘어 이어진다. 지금 tree에 없는 객체는 `update`가 `NSAccessibilityUIElementDestroyedNotification`을 쏘고 놓는다. `accessibilityIdentifier`는 UIA AutomationId와 같은 `kind:owner`이고 popup의 요소는 `popup id/`가 앞에 붙는다.
+- **popup**: 같은 view에 겹쳐 그리므로 별도 창이 아니라 view 아래의 가지다. 주 tree의 최상위 요소 뒤에 popup마다 그 최상위 요소가 선다. 자리는 판(`overlay_entry::bounds`)에서 흘린 양을 뺀 원점이고 판으로 자른다. 좌표 질의는 위의 popup부터 묻고, 판 안을 맞혔으면 그 아래는 가려진 자리다.
+- **좌표**: tree는 물리 픽셀이고 view는 점이다. 점 = 픽셀 ÷ `backingScaleFactor`이고 view는 뒤집혀 있다(왼쪽 위 원점). 화면 좌표는 view → 창 → 화면으로 AppKit이 옮긴다. `accessibilityHitTest:`의 인자는 화면 좌표다.
+- **역할**: 표의 한 곳(`ax_role_of`)이 옮긴다. 스위치는 `AXCheckBox`+`AXSwitch`, 탭은 `AXRadioButton`+`AXTabButton`, 글 칸은 `AXTextField`(여러 줄은 `AXTextArea`, 암호는 `AXSecureTextField`), 글을 받지 않는 combo는 `AXPopUpButton`, 목록 항목은 `AXStaticText`(AXSelected로 골라짐), 계층·표는 `AXOutline`·`AXTable`과 `AXRow`, view 안의 dialog·경고·상태 줄·길잡이는 하위 역할을 단 `AXGroup`(WebKit의 ARIA 관례)이다. 흘리는 판(`access_info::scroll`)은 `AXScrollArea`다.
+- **값**: 체크는 0·1·2(일부), 라디오·탭은 골라짐 0·1, 범위는 지금 값, 글 칸은 글이다. 글(`static_text`)과 목록 항목은 이름이 곧 AXValue라 label을 비운다 — VoiceOver가 두 번 읽지 않는다. AXHelp는 UIA HelpText와 같은 글(오류 글이 먼저)이다.
+- **실행**: `AXPress`는 상태를 든 것이면 그 상태의 명령(뒤집기·고르기·펼침의 반대쪽), 아니면 누르는 역할의 누름이다(UIA의 `invokable`과 같은 갈래). `AXIncrement`·`AXDecrement`는 범위의 걸음(알리지 않으면 범위의 20분의 1)만큼 절대 값을 정한다. `AXShowMenu`는 펼침, `AXCancel`은 펼친 것을 접기, 한 줄 칸의 `AXConfirm`은 Enter 키다. 값 쓰기는 글 칸이면 `replace_all`, 범위면 `set_value`, 선택 구간 쓰기는 `place_caret` 두 번이다. 내걸기는 `isAccessibilitySelectorAllowed:`가 정하고 누름은 계획까지 묻는다. 거절(비활성·가둠 뒤·숨은 것·이미 그 상태의 누름)은 UIA와 같다.
+- **배분**: 누름·켬끔·고르기는 `access_click_event`, 초점은 `access_focus_event`, 확정 키는 `key_pressed_event`로 host의 `post_raw_input`에 곧바로 간다. 그 밖의 계획된 액션과 편집은 보조 기술의 호출 안에서 앱을 부르지 않도록 메인 run loop의 다음 차례(공통 모드)로 미뤄 host의 dispatch·편집 창구로 낸다 — Win32의 `access_dispatch_message` 자리다.
+- **알림**: `update`가 발행본이 바뀐 tree마다 `diff_access_snapshots`를 견줘 옮긴다. 이름은 `TitleChanged`, 값은 `ValueChanged`, 선택은 감싼 container의 `SelectedChildrenChanged`(표·계층은 `SelectedRowsChanged`), 행의 펼침은 `RowExpanded`·`RowCollapsed`, 구조는 그 부모(빈 id면 view의 접근 조상)의 `LayoutChanged`다. 새 오류 글은 높은 우선, live region은 그 안의 글을 모아 assertive면 높은·polite면 중간 우선의 `AnnouncementRequested`다. 초점이 옮겨 가면 그 요소의 `FocusedUIElementChanged`, 초점 칸의 caret·선택이 옮겨 가면 `SelectedTextChanged`다. 보조 기술이 받아 가지 않은 요소에는 쏘지 않는다.
+- **host의 몫**: view를 만들 때 다리를 짓고, 새 frame이나 상호작용이 게시될 때 `update`(표면 표식·tree·popup 목록·거르지 않은 상호작용·배율)를 부른다. view의 `accessibilityChildren`·`accessibilityHitTest:`·`accessibilityFocusedUIElement`를 `children`·`hit_test`·`focused_element`로 넘긴다(nil이면 super). view는 접근 요소가 아니어도 된다 — AppKit이 무시된 view의 자식을 창 아래로 올리고, 최상위 요소의 부모는 view의 접근 조상이다. 초점 질의는 view가 first responder일 때 창에서 내려온다.
+- **아직 없는 것**: 창 밖 model 항목(`access_item_model`)은 지어진 행만 선다. 흘리기 동작(`AXScrollToVisible`은 macOS 26부터의 상수, 쪽 단위 흘리기)과 표의 열·칸 좌표, 서식 속성(attributed string은 맨 글이다), 펼침이 바뀐 팝업 단추의 자체 알림은 없다. 글 칸의 보이는 구간은 문서 전체로 답한다.
 
 ## 검증
 
