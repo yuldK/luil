@@ -18,8 +18,10 @@
 #include "luil/ui/webview_element.h"
 #include "luil/win32/win32_window.h"
 #include "macos/cpu_skia_renderer.h"
+#include "macos/dock_macos.h"
 #include "macos/file_dialog_macos.h"
 #include "macos/frame_capture.h"
+#include "macos/hotkey_macos.h"
 #include "macos/input_script.h"
 #include "macos/macos_clipboard.h"
 #include "macos/macos_input.h"
@@ -27,6 +29,7 @@
 #include "macos/metal_skia_renderer.h"
 #include "macos/notification_center.h"
 #include "macos/surface_capture.h"
+#include "macos/tray_icon_macos.h"
 #include "macos/webview_host.h"
 
 #include "include/core/SkFont.h"
@@ -491,6 +494,12 @@ namespace luil::macos {
         {
             post_lifecycle(active ? app_lifecycle::foreground : app_lifecycle::background);
             watch_clipboard(active);
+            // 걸지 못한 전역 단축키는 앱이 앞으로 올 때 한 번 다시 건다 (Win32의 주 창 활성화와 같은 자리).
+            if (active && hotkeys_ != nullptr && host_ != nullptr)
+            {
+                hotkeys_->reactivated();
+                apply_hotkeys(host_->acquire_frame().get());
+            }
             pump();
         }
 
@@ -534,7 +543,14 @@ namespace luil::macos {
             post_appearance();
             post_metrics(main_);
             if (host_ != nullptr)
+            {
                 apply_backdrops(host_->acquire_frame().get());
+                if (tray_ != nullptr)
+                {
+                    const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                    tray_->update(frame != nullptr ? frame->tray : std::nullopt, system_.high_contrast);
+                }
+            }
             mark_all_dirty();
             pump();
         }
@@ -1060,8 +1076,11 @@ namespace luil::macos {
                 .command_key_shortcuts = true,
                 .capabilities = {
                     .haptics = true,
+                    .taskbar = true,
                     .notifications = notification_center_available(),
                     .clipboard_image_copy = true,
+                    .tray = true,
+                    .global_hotkeys = true,
                 },
             });
             set_font_fallback(&font_resolver_);
@@ -1150,6 +1169,7 @@ namespace luil::macos {
                 state->target->notification_events_.push(std::move(event));
                 state->target->deliver_notification_events();
             });
+            create_shell_hosts();
             // 주 창의 네이티브 표면을 앱에 건넨다 (`NSWindow*`). on_started 앞에 한 번이다.
             if (window_delegate_ != nullptr)
                 window_delegate_->on_native_window_created(*host_, (__bridge void*)main_.window);
@@ -1169,6 +1189,10 @@ namespace luil::macos {
                 timer_ = nil;
             }
             set_notification_receiver(nullptr);
+            // 전역 단축키를 풀고 메뉴 막대 항목과 Dock 타일을 거둔다.
+            hotkeys_.reset();
+            tray_.reset();
+            dock_.reset();
             if (window_delegate_ != nullptr)
             {
                 try
@@ -1971,6 +1995,7 @@ namespace luil::macos {
             apply_main_visibility(frame != nullptr && frame->main_hidden);
             apply_backdrops(frame.get());
             report_displays(frame.get(), false);
+            apply_shell(frame.get());
             if (frame != nullptr && window_delegate_ != nullptr)
             {
                 try
@@ -1991,6 +2016,86 @@ namespace luil::macos {
             mark_all_dirty();
         }
 
+        // 셸 쪽 표시다: 메뉴 막대 상태 항목(알림 영역 아이콘), Dock 타일·메뉴(작업 표시줄), 전역 단축키.
+        //  - 보고는 Win32와 같은 `win32::window_delegate`의 메시지로 낸다. delegate가 그것을 구현하지 않았으면 내지 않는다.
+        void create_shell_hosts()
+        {
+            const auto post = [this](app_message message) {
+                if (host_ != nullptr && message.empty() == false)
+                    host_->post_app_message(std::move(message));
+            };
+            const auto report = [this, post](auto make) {
+                if (window_delegate_ == nullptr)
+                    return;
+                try
+                {
+                    post(make(*window_delegate_));
+                }
+                catch (...)
+                {
+                    log_error(u8"The shell report delegate threw an exception.");
+                }
+            };
+            tray_ = std::make_unique<tray_icon_host>();
+            tray_->set_dispatch([this](input_action action) { dispatch(std::move(action)); });
+            tray_->set_report([report](const win32::tray_report& value) { report([&value](win32::window_delegate& delegate) { return delegate.make_tray_message(value); }); });
+            tray_->set_error_log([](const std::u8string& error) { log_error(error); });
+            dock_ = std::make_unique<dock_host>();
+            dock_->set_report([report](const win32::taskbar_report& value) { report([&value](win32::window_delegate& delegate) { return delegate.make_taskbar_message(value); }); });
+            dock_->set_jump_list_report(
+                [report](const win32::jump_list_report& value) { report([&value](win32::window_delegate& delegate) { return delegate.make_jump_list_message(value); }); });
+            hotkeys_ = std::make_unique<hotkey_host>();
+            hotkeys_->set_report([report](const win32::hotkey_report& value) { report([&value](win32::window_delegate& delegate) { return delegate.make_hotkey_message(value); }); });
+            // 눌림은 눌린 순간의 frame에 실린 같은 id의 것을 부른다.
+            hotkeys_->set_pressed([this](const std::u8string& id) {
+                if (host_ == nullptr)
+                    return;
+                const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+                if (frame == nullptr)
+                    return;
+                for (const global_hotkey& hotkey : frame->hotkeys)
+                    if (hotkey.id == id && hotkey.pressed != nullptr)
+                    {
+                        try
+                        {
+                            dispatch(hotkey.pressed());
+                        }
+                        catch (...)
+                        {
+                            log_error(u8"The global hotkey action threw an exception.");
+                        }
+                        return;
+                    }
+            });
+        }
+
+        void apply_shell(const ui_frame* const frame)
+        {
+            if (tray_ != nullptr)
+                tray_->update(frame != nullptr ? frame->tray : std::nullopt, system_.high_contrast);
+            // Dock 타일은 앱마다 하나라 주 창의 요청만 읽는다. 독립 창의 `ui_window::taskbar`는 받기만 한다.
+            if (dock_ != nullptr)
+                dock_->update(frame != nullptr ? frame->taskbar : taskbar_request {});
+            apply_hotkeys(frame);
+        }
+
+        void apply_hotkeys(const ui_frame* const frame)
+        {
+            if (hotkeys_ == nullptr || host_ == nullptr)
+                return;
+            // 키 잡기 칸이 초점을 가진 동안은 건 조합을 풀어 그 칸이 키를 받게 한다 (Win32와 같다).
+            const bool key_capture { frame != nullptr && frame->hotkeys.empty() == false && host_->acquire_interaction().key_capture };
+            hotkeys_->update(frame != nullptr ? std::span<const global_hotkey> { frame->hotkeys } : std::span<const global_hotkey> {}, key_capture);
+        }
+
+    public:
+        // Dock 아이콘의 메뉴다 (점프 목록). 작업이 없으면 nil이다.
+        [[nodiscard]] NSMenu* dock_menu() const noexcept
+        {
+            return dock_ != nullptr ? dock_->dock_menu() : nil;
+        }
+
+    private:
         // 창마다 배경 효과를 세우거나 거둔다 (docs/backdrop-design.md의 macOS 갈래).
         //  - 효과는 창 내용 맨 아래의 `NSVisualEffectView`(창 뒤를 섞는다)다. mica는 창 바탕 재질, mica_alt는 창 아래 바탕 재질,
         //    acrylic은 떠 있는 판(HUD) 재질이다. Skia view는 그 위에 `backdrop_background`의 알파만큼 비치게 칠한다.
@@ -2770,6 +2875,9 @@ namespace luil::macos {
         // 지금 들어와 있는 OS 끌기의 내용이다 (들어올 때 한 번 읽는다).
         drag_payload drag_payload_ {};
         notification_queue notification_events_ {};
+        std::unique_ptr<tray_icon_host> tray_ {};
+        std::unique_ptr<dock_host> dock_ {};
+        std::unique_ptr<hotkey_host> hotkeys_ {};
         // 이 앱이 마지막으로 넣은 클립보드 번호와 마지막으로 알린 번호다.
         std::optional<std::uint32_t> owned_clipboard_sequence_ {};
         std::optional<std::uint32_t> reported_clipboard_sequence_ {};
@@ -3344,6 +3452,12 @@ namespace {
     static_cast<void>(context);
     if (self.owner != nullptr)
         self.owner->on_appearance_changed();
+}
+
+- (NSMenu*)applicationDockMenu:(NSApplication*)sender
+{
+    static_cast<void>(sender);
+    return self.owner != nullptr ? self.owner->dock_menu() : nil;
 }
 
 - (void)screensChanged:(NSNotification*)notification
