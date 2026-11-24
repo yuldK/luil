@@ -103,8 +103,9 @@ namespace luil::net {
         //    이기지 못한다.
         std::vector<http_header> headers {};
         // 보낼 몸이다. 비어 있으면 몸 없는 요청이다.
-        //  - Android는 GET·HEAD에 몸을 실을 수 없어 그 요청을 선을 건드리기 전에 거절한다
-        //    (`system_error`). 플랫폼이 몸 있는 GET을 몰래 POST로 바꾸기 때문이다.
+        //  - Android·macOS는 GET·HEAD에 몸을 실을 수 없어 그 요청을 선을 건드리기 전에 거절한다
+        //    (`system_error`). Android는 몸 있는 GET을 몰래 POST로 바꾸고, macOS(NSURLSession)는 보내지 않은 채
+        //    뜻이 다른 오류로 실패하기 때문이다.
         std::vector<std::uint8_t> body {};
         // 몸의 Content-Type이다. 몸이 있는데 비어 있으면
         // `application/octet-stream`으로 나간다.
@@ -133,6 +134,8 @@ namespace luil::net {
         int max_redirects { 10 };
         // gzip·deflate를 받고 자동으로 푼다 (OS가 지원하지 않으면 조용히 꺼지고
         // 요청은 그대로 성공한다).
+        //  - macOS(NSURLSession)는 푸는 것을 끌 수 없다. 거짓이면 서버에 압축하지 말라고 청할 뿐이고,
+        //    그래도 압축해 온 답은 푼 바이트로 온다.
         bool decompress { true };
 
         // 각 구간의 상한이다.
@@ -270,10 +273,12 @@ namespace luil::net {
         // (`error`가 이유를 안다).
         int status_code { 0 };
         // 상태 줄의 이유 글이다 ("Not Found"). 서버가 짓는 값이라 비어 있을 수 있다.
+        // macOS(NSURLSession)는 이 글을 내주지 않아 늘 비어 있다.
         std::u8string reason {};
         // 재지정을 따라간 뒤의 최종 URL이다. 따라가지 않았으면 요청한 URL이다.
         std::u8string final_url {};
         // 답의 헤더 전부다 (온 차례대로, 이름은 서버가 적은 대소문자 그대로).
+        // macOS(NSURLSession)는 헤더를 사전으로 내주어 차례가 남지 않고, 같은 이름의 줄은 쉼표로 이은 한 줄이다.
         std::vector<http_header> headers {};
         // 헤더에서 가른 Content-Type이다 (몸이 비어도 채워진다).
         // `body.kind`가 `assume_kind`로 뒤집혔어도 여기는 서버가 말한 그대로다.

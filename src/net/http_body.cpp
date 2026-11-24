@@ -189,8 +189,9 @@ namespace luil::net {
             try
             {
                 const auto* const first { reinterpret_cast<const char*>(payload.data()) };
-                nlohmann::json value { nlohmann::json::parse(first, first + payload.size()) };
-                body.json = std::make_shared<const nlohmann::json>(std::move(value));
+                // 중괄호로 받지 않는다. json 하나를 담은 중괄호는 initializer_list 생성자가 이겨 원소 하나짜리
+                // 배열이 된다 (Apple clang이 그렇게 고르고, `{"a":1}`이 `[{"a":1}]`로 온다).
+                body.json = std::make_shared<const nlohmann::json>(nlohmann::json::parse(first, first + payload.size()));
             }
             // HTTP 본문에서 예외가 값으로 바뀌는 **유일한 자리**다(라이브러리 전체로는 여기와 스타일 파서
             // 다른 읽기 경로도 같은 규칙이다). `allow_exceptions = false`는 값은

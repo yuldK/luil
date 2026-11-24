@@ -1,4 +1,6 @@
+#if defined(_WIN32)
 #include "net/winhttp/http_text_transcode.h"
+#endif
 
 #include "luil/net/http_body.h"
 #include "luil/net/http_media_type.h"
@@ -10,7 +12,7 @@
 #include <string_view>
 #include <vector>
 
-// Windows의 코드 페이지 변환이다. Android는 utf-8과 utf-16만 옮긴다 (http_body_tests.cpp에 그 둘이 있다).
+// Windows의 코드 페이지 변환과 macOS의 CoreFoundation 변환이다. Android는 utf-8과 utf-16만 옮긴다 (http_body_tests.cpp에 그 둘이 있다).
 namespace {
     using luil::net::http_body;
     using luil::net::http_media_type;
@@ -36,6 +38,8 @@ TEST_CASE("The default transcoder really reads euc-kr", "[net][body]")
     REQUIRE(body.as_text() == u8"한글");
 }
 
+#if defined(_WIN32)
+// 이름을 Windows 코드 페이지 번호로 옮기는 표다. macOS는 CoreFoundation이 IANA 이름을 직접 읽어 이 표가 없다.
 TEST_CASE("The charset table answers the names servers actually send", "[net][body]")
 {
     REQUIRE(luil::net::charset_code_page(u8"euc-kr") == 949u);
@@ -53,3 +57,4 @@ TEST_CASE("The charset table answers the names servers actually send", "[net][bo
     REQUIRE(luil::net::charset_code_page(u8"x-made-up") == 0u);
     REQUIRE(luil::net::charset_code_page(u8"") == 0u);
 }
+#endif

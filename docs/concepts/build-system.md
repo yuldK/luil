@@ -147,8 +147,9 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | OS 알림 | UserNotifications(`UNUserNotificationCenter`). 앱 번들에서만 서고 맨 실행 파일은 `unsupported`다. 권한은 `app_permission::notifications`로 묻는다 ([OS 알림](../os-notification-design.md#macos)) |
 | 클립보드 | 일반 붙여넣기 판의 글과 HTML |
 | 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
+| HTTP·WebSocket | `http_client`는 NSURLSession 위에 서고 몸 풀기와 배달은 client의 thread가 한다 (다른 플랫폼과 같다). WebSocket은 NSURLSessionWebSocketTask다. gzip·deflate는 시스템이 늘 풀고, 상태 줄의 이유 글과 헤더의 차례는 오지 않으며, 로컬 닫기는 상대의 답을 기다리지 않는다 ([`macos_http_client.mm`](../../src/net/macos/macos_http_client.mm), [`websocket_transport.mm`](../../src/net/macos/websocket_transport.mm)) |
 
-아직 없는 것은 "지원 안 함"으로 답한다: 도킹 표면(무시), 보조 창의 웹뷰(무시), 파일 대화 상자, 비밀 저장소(Keychain), 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
+아직 없는 것은 "지원 안 함"으로 답한다: 비밀 저장소(Keychain), 파일 감시, 단일 인스턴스 인자 전달. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
 
 개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
 
