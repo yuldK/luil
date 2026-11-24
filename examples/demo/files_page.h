@@ -144,6 +144,7 @@ namespace demo {
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_archive_list();
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_buttons() const;
         [[nodiscard]] std::unique_ptr<luil::ui_element> make_watch_buttons() const;
+        [[nodiscard]] std::unique_ptr<luil::ui_element> make_dialog_buttons() const;
         // 처음 누른 단추에서 감시자를 세우고 폴더를 건다. 파일을 바꾸기 전에 걸어야 그 변경을 놓치지 않는다.
         void ensure_watcher();
         void run_watch_operation(files_watch_operation operation);
@@ -190,5 +191,7 @@ namespace demo {
         luil::file_watch_ticket watch_ticket_ {};
         std::u8string watch_state_ { u8"감시: 꺼짐 (단추를 누르면 임시 폴더를 건다)" };
         std::u8string watch_text_ { u8"변경: 아직 없음" };
+        // 마지막 파일 대화 상자(폴더·여러 파일·저장)의 답이다.
+        std::u8string dialog_text_ { u8"대화 상자: 아직 열지 않음" };
     };
 }

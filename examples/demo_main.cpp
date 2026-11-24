@@ -441,6 +441,32 @@ namespace demo {
                     file_dialog_purpose_ = file_dialog_purpose::image;
                     return;
                 }
+                // 파일 페이지의 나머지 종류다 (폴더·여러 파일·저장 위치). 답은 그 페이지가 글로 적는다.
+                if (const auto* const pick { message.get<dialog_pick_intent>() }; pick != nullptr)
+                {
+                    luil::file_dialog_request request {};
+                    request.id = ++file_dialog_revision_;
+                    request.kind = pick->kind;
+                    switch (pick->kind)
+                    {
+                    case luil::file_dialog_kind::folder:
+                        request.title = u8"폴더 고르기";
+                        break;
+                    case luil::file_dialog_kind::open_multiple:
+                        request.title = u8"여러 파일 고르기";
+                        request.filters.push_back({ u8"그림", { u8"png", u8"gif", u8"webp" } });
+                        request.filters.push_back({ u8"글", { u8"txt", u8"md" } });
+                        break;
+                    default:
+                        request.title = u8"저장 위치 고르기";
+                        request.default_name = u8"luil-demo.txt";
+                        request.filters.push_back({ u8"글", { u8"txt" } });
+                        break;
+                    }
+                    file_dialog_ = std::move(request);
+                    file_dialog_purpose_ = file_dialog_purpose::files;
+                    return;
+                }
                 if (message.get<workbench_import_intent>() != nullptr)
                 {
                     file_dialog_ = workbench_page::patch_dialog_request(++file_dialog_revision_);
@@ -453,6 +479,25 @@ namespace demo {
                     if (file_dialog_.has_value() == false || file_dialog_->id != result->id)
                         return;
                     file_dialog_.reset();
+                    // 파일 페이지의 대화 상자는 고른 것을 그대로 적는다 (저장 위치는 파일을 만들지 않는다).
+                    if (file_dialog_purpose_ == file_dialog_purpose::files)
+                    {
+                        std::u8string text { u8"대화 상자: " };
+                        if (result->status == luil::file_dialog_status::chosen)
+                        {
+                            text += u8"골랐다 " + std::u8string { reinterpret_cast<const char8_t*>(std::to_string(result->paths.size()).c_str()) } + u8"개";
+                            for (std::size_t index { 0 }; index < result->paths.size() && index < 3; ++index)
+                                text += (index == 0 ? u8" · " : u8", ") + result->paths[index];
+                            if (result->paths.size() > 3)
+                                text += u8", …";
+                        }
+                        else if (result->status == luil::file_dialog_status::cancelled)
+                            text += u8"그만뒀다";
+                        else
+                            text += u8"실패 · " + result->error;
+                        static_cast<void>(files_.handle(luil::app_message { file_dialog_report_intent { std::move(text) } }));
+                        return;
+                    }
                     if (result->status == luil::file_dialog_status::chosen && result->paths.empty() == false)
                     {
                         if (file_dialog_purpose_ == file_dialog_purpose::patch)
@@ -1237,7 +1282,7 @@ namespace demo {
             images_page images_ {};
             std::optional<luil::file_dialog_request> file_dialog_ {};
             std::uint64_t file_dialog_revision_ { 0 };
-            enum class file_dialog_purpose { image, patch };
+            enum class file_dialog_purpose { image, patch, files };
             file_dialog_purpose file_dialog_purpose_ { file_dialog_purpose::image };
             network_page network_ {};
             zoom_page zoom_ {};

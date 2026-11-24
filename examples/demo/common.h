@@ -5,6 +5,7 @@
 //  - 셸 수준 메시지 (종료·창 크기·페이지 이동·사이드바·팝업 닫기·토스트 요청)
 //  - 페이지들이 같이 쓰는 작은 element와 도우미
 
+#include "luil/app/file_dialog.h"
 #include "luil/text/text_edit.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/label_element.h"
@@ -110,6 +111,18 @@ namespace demo {
     // 이미지 선택은 logic에서 frame의 파일 대화상자 요청으로 바꾼다.
     struct image_pick_intent
     {
+    };
+
+    // 파일 페이지의 대화 상자 단추다. logic이 그 종류의 파일 대화 상자 요청으로 바꾼다 (폴더·여러 파일·저장).
+    struct dialog_pick_intent
+    {
+        luil::file_dialog_kind kind { luil::file_dialog_kind::open };
+    };
+
+    // 그 대화 상자의 답을 파일 페이지가 적는다.
+    struct file_dialog_report_intent
+    {
+        std::u8string text {};
     };
 
     // 앱이 정의하는 포인터 모양이다 (세로 목록의 순서 바꾸기).

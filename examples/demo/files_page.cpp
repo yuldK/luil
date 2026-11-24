@@ -23,7 +23,8 @@ namespace demo {
         constexpr float button_height { 28.0f };
         // 목록 위아래의 고정 칸이다 (안내·상태 셋·버튼 줄과 그 사이 간격, 바깥 여백, 감시 구역의 상태 둘과 버튼 줄).
         constexpr float watch_height { 8.0f + 2.0f * status_height + 8.0f + button_height };
-        constexpr float fixed_height { 2.0f * 24.0f + 18.0f + 8.0f + 3.0f * status_height + 8.0f + 8.0f + button_height + watch_height };
+        constexpr float dialog_height { 8.0f + status_height + button_height };
+        constexpr float fixed_height { 2.0f * 24.0f + 18.0f + 8.0f + 3.0f * status_height + 8.0f + 8.0f + button_height + watch_height + dialog_height };
         constexpr std::u8string_view watch_file { u8"a.txt" };
         constexpr std::u8string_view renamed_file { u8"b.txt" };
 
@@ -236,6 +237,24 @@ namespace demo {
         return row;
     }
 
+    // 파일 대화 상자의 나머지 종류다. 열기(한 파일)는 이미지·작업대 페이지가 쓴다.
+    std::unique_ptr<luil::ui_element> files_page::make_dialog_buttons() const
+    {
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = 8.0f;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"files-dialog-buttons" }, config) };
+        const auto add = [&row](const std::u8string& owner, std::u8string text, const luil::file_dialog_kind kind) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_files_button, owner }, luil::text_button_config { .text = std::move(text) }) };
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(dialog_pick_intent { kind }));
+            row->add(std::move(button), 130.0f);
+        };
+        add(u8"files-dialog-folder", u8"폴더 고르기", luil::file_dialog_kind::folder);
+        add(u8"files-dialog-multiple", u8"여러 파일 고르기", luil::file_dialog_kind::open_multiple);
+        add(u8"files-dialog-save", u8"저장 위치 고르기", luil::file_dialog_kind::save);
+        return row;
+    }
+
     std::optional<std::size_t> files_page::index_of(const std::u8string& key) const
     {
         for (std::size_t index = 0; index < items_.size(); ++index)
@@ -267,6 +286,11 @@ namespace demo {
 
     bool files_page::handle(const luil::app_message& message)
     {
+        if (const auto* const result { message.get<file_dialog_report_intent>() }; result != nullptr)
+        {
+            dialog_text_ = result->text;
+            return true;
+        }
         if (const auto* const pick { message.get<files_pick_intent>() }; pick != nullptr)
         {
             // Shift는 범위의 시작부터 누른 행까지, Ctrl은 하나 더하거나 빼기, 그냥 누르면 그것 하나다.
@@ -476,6 +500,9 @@ namespace demo {
         column->add(make_label(luil::ui_element_id { kind_text, u8"files-watch-batch" }, watch_text_, 11.0f, luil::label_color_role::primary), status_height);
         column->add_gap(8.0f);
         column->add(make_watch_buttons(), button_height);
+        column->add_gap(8.0f);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"files-dialog-result" }, dialog_text_, 11.0f, luil::label_color_role::primary), status_height);
+        column->add(make_dialog_buttons(), button_height);
         return column;
     }
 
