@@ -1,5 +1,6 @@
 #pragma once
 
+#include "luil/ui/commands.h"
 #include "luil/ui/ui_events.h"
 
 #include <chrono>
@@ -44,4 +45,15 @@ namespace luil::macos {
     {
         return character >= 0xF700 && character <= 0xF8FF;
     }
+
+    // `key_code`를 Carbon 가상 키로 되돌린다 (전역 단축키, `RegisterEventHotKey`). 걸 수 없는 키는 nullopt다.
+    //  - `named_key`의 두 표를 거꾸로 읽는다. Enter는 본 자판의 Return이다 (키패드 Enter도 같은 이름으로 온다).
+    //  - 플랫폼 대역은 Win32 가상 키를 싣는다. 그 가운데 Carbon에 자리가 있는 F13~F20만 옮긴다.
+    //  - 영문자·숫자는 미국 배열의 자리다. 다른 배열에서 같은 자리가 다른 글자여도 그 자리를 건다.
+    [[nodiscard]] std::optional<std::uint16_t> carbon_key_of(key_code key) noexcept;
+
+    // 전역 단축키 조합의 수정자를 Carbon 수정자(`cmdKey`·`shiftKey`·`optionKey`의 합)로 옮긴다.
+    //  - 조합은 Windows 식으로 적는다. 주 단축키 수정자인 Ctrl이 Command, Alt가 Option이다 (`key_event_for`의
+    //    `primary_shortcut`·`word_navigation`과 같은 짝). 물리 Control은 조합으로 적을 길이 없어 걸지 않는다.
+    [[nodiscard]] std::uint32_t carbon_hotkey_modifiers_of(const key_chord& chord) noexcept;
 }

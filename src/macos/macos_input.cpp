@@ -59,12 +59,15 @@ namespace luil::macos {
             vk_grave = 0x32,
             vk_delete = 0x33,
             vk_escape = 0x35,
+            vk_f17 = 0x40,
             vk_keypad_decimal = 0x41,
             vk_keypad_multiply = 0x43,
             vk_keypad_plus = 0x45,
             vk_keypad_divide = 0x4B,
             vk_keypad_enter = 0x4C,
             vk_keypad_minus = 0x4E,
+            vk_f18 = 0x4F,
+            vk_f19 = 0x50,
             vk_keypad_0 = 0x52,
             vk_keypad_1 = 0x53,
             vk_keypad_2 = 0x54,
@@ -73,6 +76,7 @@ namespace luil::macos {
             vk_keypad_5 = 0x57,
             vk_keypad_6 = 0x58,
             vk_keypad_7 = 0x59,
+            vk_f20 = 0x5A,
             vk_keypad_8 = 0x5B,
             vk_keypad_9 = 0x5C,
             vk_f5 = 0x60,
@@ -82,8 +86,12 @@ namespace luil::macos {
             vk_f8 = 0x64,
             vk_f9 = 0x65,
             vk_f11 = 0x67,
+            vk_f13 = 0x69,
+            vk_f16 = 0x6A,
+            vk_f14 = 0x6B,
             vk_f10 = 0x6D,
             vk_f12 = 0x6F,
+            vk_f15 = 0x71,
             vk_help = 0x72,
             vk_home = 0x73,
             vk_page_up = 0x74,
@@ -97,6 +105,14 @@ namespace luil::macos {
             vk_right = 0x7C,
             vk_down = 0x7D,
             vk_up = 0x7E,
+        };
+
+        // Carbon 수정자다 (`Events.h`의 `cmdKey`·`shiftKey`·`optionKey`).
+        enum : std::uint32_t
+        {
+            carbon_command = 1U << 8,
+            carbon_shift = 1U << 9,
+            carbon_option = 1U << 11,
         };
 
         // 글자를 만들지 않는 키다. 수정자와 상관없이 늘 키로 간다.
@@ -374,5 +390,40 @@ namespace luil::macos {
     char32_t backspace_character(const key_input& input) noexcept
     {
         return input.option ? char32_t { 0x7F } : U'\b';
+    }
+
+    std::optional<std::uint16_t> carbon_key_of(const key_code key) noexcept
+    {
+        if (key == key_code::none)
+            return std::nullopt;
+        // 플랫폼 대역의 Win32 F13~F20(`VK_F13`=0x7C)이다. F21 이상은 Carbon 자리가 없다.
+        constexpr std::uint32_t first_platform { static_cast<std::uint32_t>(key_code::first_platform_key) };
+        if (const std::uint32_t value { static_cast<std::uint32_t>(key) }; value >= first_platform)
+        {
+            constexpr std::array<std::uint16_t, 8> function_keys { vk_f13, vk_f14, vk_f15, vk_f16, vk_f17, vk_f18, vk_f19, vk_f20 };
+            const std::uint32_t virtual_key { value - first_platform };
+            if (virtual_key >= 0x7C && virtual_key < 0x7C + function_keys.size())
+                return function_keys[virtual_key - 0x7C];
+            return std::nullopt;
+        }
+        // 두 표를 차례로 훑는다. 같은 이름을 내는 자리가 둘인 것은 Enter뿐이고 작은 값(Return)이 먼저다.
+        for (std::uint16_t code = 0; code < 0x80; ++code)
+        {
+            if (control_key(code) == key || positional_key(code) == key)
+                return code;
+        }
+        return std::nullopt;
+    }
+
+    std::uint32_t carbon_hotkey_modifiers_of(const key_chord& chord) noexcept
+    {
+        std::uint32_t modifiers { 0 };
+        if (chord.control)
+            modifiers |= carbon_command;
+        if (chord.shift)
+            modifiers |= carbon_shift;
+        if (chord.alt)
+            modifiers |= carbon_option;
+        return modifiers;
     }
 }
