@@ -118,8 +118,13 @@ pwsh -Command "& ./scripts/fetch_skia.ps1 -Target mac-arm64 -Configuration Debug
 cmake --preset macos-arm64
 cmake --build --preset macos-arm64-debug
 ctest --preset macos-arm64-debug
-build/macos-arm64/Debug/luil_demo
+open build/macos-arm64/Debug/luil_demo.app
 ```
+
+예제는 앱 번들(`luil_hello.app`, `luil_demo.app`)이다. OS 알림(UserNotifications)이 번들 식별자가 있고 서명된 앱에서만 서기 때문이다. [`examples/macos.cmake`](../../examples/macos.cmake)가 [`examples/macos/Info.plist.in`](../../examples/macos/Info.plist.in)을 대상마다 채우고(번들 식별자 `io.github.yuldk.luil.hello`·`io.github.yuldk.luil.demo`, 최소 판 11.0, `NSHighResolutionCapable`), 빌드 뒤 `codesign --force --sign -`로 ad-hoc 서명한다. 배포용 서명(Developer ID·공증)은 아니다.
+
+- `open`으로 띄우면 Launch Services가 번들로 세운다. 터미널에 로그를 보려면 안의 실행 파일을 바로 띄운다: `build/macos-arm64/Debug/luil_demo.app/Contents/MacOS/luil_demo`. smoke test(`$<TARGET_FILE:...>`)도 이 실행 파일을 부른다.
+- demo의 견본 그림은 `Contents/Resources/assets`에 둔다. `Contents/MacOS`에 코드가 아닌 파일이 있으면 codesign이 번들 서명을 거절해서다. demo의 `executable_directory()`가 번들 안에서는 그 자원 폴더를 답한다 (Windows는 그대로 실행 파일 옆이다).
 
 test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`). 키 변환(`src/macos/macos_input.cpp`)은 AppKit을 모르는 순수 층이라 core test에 들어가고, 예제의 `--smoke-test`가 창을 보이지 않은 채 첫 frame을 그려 host를 확인한다.
 

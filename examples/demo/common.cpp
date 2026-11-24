@@ -54,7 +54,17 @@ namespace demo {
     std::filesystem::path executable_directory()
     {
         const std::filesystem::path path { executable_path() };
-        return path.empty() ? path : path.parent_path();
+        if (path.empty())
+            return path;
+#if defined(__APPLE__)
+        // 앱 번들(`<이름>.app/Contents/MacOS/<실행 파일>`) 안이면 자산은 `Contents/Resources`에 있다.
+        //  - codesign은 `Contents/MacOS`에 코드가 아닌 파일이 있으면 번들 서명을 거절한다 (examples/macos.cmake).
+        const std::filesystem::path code { path.parent_path() };
+        const std::filesystem::path contents { code.parent_path() };
+        if (code.filename() == "MacOS" && contents.filename() == "Contents" && contents.parent_path().extension() == ".app")
+            return contents / "Resources";
+#endif
+        return path.parent_path();
     }
 
     std::filesystem::path user_data_directory()

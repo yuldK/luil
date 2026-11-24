@@ -35,6 +35,7 @@ namespace demo {
 
     // 실행 파일과 그 폴더다. 자산은 그 옆에 선다 — 작업 폴더로 찾으면 무엇으로 띄웠느냐에 따라 자리가 달라진다.
     // 읽지 못하면 빈 경로다.
+    //  - macOS 앱 번들 안이면 폴더는 실행 파일 옆(`Contents/MacOS`)이 아니라 자원 폴더(`Contents/Resources`)다.
     [[nodiscard]] std::filesystem::path executable_path();
     [[nodiscard]] std::filesystem::path executable_directory();
     // 데모가 사용자별로 적는 자료(창 배치·웹뷰 프로필)의 폴더다. 만들지는 않는다. 읽지 못하면 빈 경로다.
