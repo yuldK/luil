@@ -456,6 +456,47 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "${LUIL_SOURCE_DIRECTORY}/macos/macos_input.cpp"
             macos_input_tests.cpp)
     catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
+    # HTTP client·charset 변환·WebSocket 전송은 NSURLSession·CoreFoundation 위에 서고 실제 되돌이 서버와 주고받는다.
+    # Android의 luil_net_tests와 같은 묶음이다. 라이브러리(luil)는 AppKit host를 끌어오므로 링크하지 않고 net 소스를
+    # 직접 넣는다.
+    #  - WebSocket은 test 안의 작은 서버(macos_websocket_tests.cpp)와 주고받는다. 전송 대역으로 닫기 경쟁을 보는 축은
+    #    core test에 따로 있다 (websocket_client_tests.cpp).
+    #  - 본문의 그림 해독이 core의 그림 요소를 거쳐 글꼴 registry까지 끌어온다. 플랫폼 hook은 core test와 같은 대역으로
+    #    채운다 (core_platform_stub.cpp).
+    #  - 되돌이 서버는 POSIX 소켓 쪽이다 (Android와 같은 파일).
+    add_executable(luil_net_tests
+        core_platform_stub.cpp
+        "${LUIL_SOURCE_DIRECTORY}/net/http_body.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/http_media_type.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/http_message.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/http_request_rules.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/macos/macos_http_client.mm"
+        "${LUIL_SOURCE_DIRECTORY}/net/macos/macos_text_transcode.cpp"
+        "${LUIL_SOURCE_DIRECTORY}/net/macos/websocket_transport.mm"
+        "${LUIL_SOURCE_DIRECTORY}/net/websocket_client.cpp"
+        http_body_tests.cpp
+        http_client_tests.cpp
+        http_media_type_tests.cpp
+        http_text_transcode_tests.cpp
+        loopback_http_server.cpp
+        loopback_http_server_tests.cpp
+        loopback_socket_posix.cpp
+        macos_charset_tests.cpp
+        macos_websocket_tests.cpp)
+    target_include_directories(luil_net_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}"
+            "${LUIL_TEST_DIRECTORY}")
+    target_compile_options(luil_net_tests PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+    target_link_libraries(luil_net_tests
+        PRIVATE
+            luil::luil_core
+            luil_nlohmann_json
+            luil_options
+            Catch2::Catch2WithMain
+            "-framework Foundation"
+            "-framework CoreFoundation")
+    catch_discover_tests(luil_net_tests PROPERTIES TIMEOUT 120)
     # AppKit host가 창을 보이지 않은 채 첫 frame을 그리고 끝나는지 본다 (예제를 켠 구성에서만).
     if(TARGET luil_hello)
         add_test(NAME luil_macos_hello_smoke COMMAND "$<TARGET_FILE:luil_hello>" --smoke-test)
@@ -475,7 +516,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
         set_tests_properties(luil_macos_demo_smoke_gpu PROPERTIES PASS_REGULAR_EXPRESSION "renderer metal")
         set_tests_properties(luil_macos_demo_smoke_gpu_required PROPERTIES WILL_FAIL TRUE)
     endif()
-    luil_set_ide_folder("Tests" luil_core_tests)
+    luil_set_ide_folder("Tests" luil_core_tests luil_net_tests)
     if(LUIL_ENABLE_TEXT_SHAPING)
         catch_discover_tests(luil_text_shaping_tests PROPERTIES TIMEOUT 120)
     endif()

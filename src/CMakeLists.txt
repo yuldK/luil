@@ -962,7 +962,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
 
     # macos: AppKit 위의 앱 host다.
     # 창 하나·popup overlay·입력과 입력기·Metal과 CPU 렌더러·웹뷰(WKWebView), CoreText 글꼴과 내장 codicon, 플랫폼 도구다.
-    #  - 비밀 저장소·OS 알림·파일 감시·HTTP 전송은 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
+    #  - 비밀 저장소·OS 알림·파일 감시는 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
         "${public_headers}/macos/macos_app.h"
@@ -991,8 +991,15 @@ if(LUIL_PLATFORM STREQUAL "macos")
         "${public_headers}/app/notification.h"
         macos/macos_unsupported.cpp
         "${luil_codicon_source}")
+    # net: HTTP 값과 NSURLSession 위에 선 `http_client`, NSURLSessionWebSocketTask 위의 WebSocket 전송이다.
+    # charset은 utf-16을 손으로, 나머지는 CoreFoundation의 표로 옮긴다.
+    #  - 값·규칙·WebSocket client의 몸은 플랫폼 공통 묶음이다 (위의 luil_net_files).
     list(APPEND luil_macos_files ${luil_net_files})
-    luil_add_source_filter(luil_macos_files "net" net/smb_client_unsupported.cpp)
+    luil_add_source_filter(luil_macos_files "net"
+        net/macos/macos_http_client.mm
+        net/macos/macos_text_transcode.cpp
+        net/macos/websocket_transport.mm
+        net/smb_client_unsupported.cpp)
     add_library(luil STATIC ${luil_macos_files})
     add_library(luil::luil ALIAS luil)
     target_include_directories(luil
@@ -1009,6 +1016,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "-framework AppKit"
             "-framework QuartzCore"
             "-framework Foundation"
+            "-framework CoreFoundation"
             "-framework CoreGraphics"
             "-framework ImageIO"
             "-framework WebKit"

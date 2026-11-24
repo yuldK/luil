@@ -606,6 +606,9 @@ TEST_CASE("http client applies the body limit to decompressed bytes", "[net][cli
     REQUIRE(sink.wait_for(2, 10s));
     CHECK(sink.at(1).error.kind == http_error_kind::body_too_large);
 
+#if !defined(__APPLE__)
+    // NSURLSession은 gzip을 끄는 길 없이 풀어 건넨다. `decompress == false`여도 앱이 받는 것은 푼 "ok"라
+    // 선의 바이트를 묻는 아래 둘은 macOS에서 물을 수 없다 (macos_http_client.mm의 머리 주석).
     http_request encoded {};
     encoded.url = server.url("/small");
     encoded.headers.push_back({ u8"Accept-Encoding", u8"gzip" });
@@ -624,6 +627,7 @@ TEST_CASE("http client applies the body limit to decompressed bytes", "[net][cli
     REQUIRE(sink.wait_for(4, 10s));
     CHECK(sink.at(3).error.empty());
     CHECK(std::ranges::equal(sink.at(3).body.data(), gzip_ok));
+#endif
 }
 
 // 빈 gzip 몸은 빈 몸이다 (머리를 읽다 EOF로 실패하지 않는다). deflate는 머리 없이 보내는 서버가 흔해 그것을 푼다.
@@ -816,9 +820,10 @@ TEST_CASE("http client reports a closed port as a failed connection", "[net][cli
     CHECK(sink.at(0).error.kind == http_error_kind::cannot_connect);
 }
 
-#if defined(__ANDROID__)
-// HttpURLConnection은 몸 있는 GET을 POST로 바꾼다. 다른 동사가 서버에 닿지 않게 미리 거절한다.
-TEST_CASE("Android refuses a body on GET or HEAD before touching the wire", "[net][client][android]")
+#if defined(__ANDROID__) || defined(__APPLE__)
+// HttpURLConnection은 몸 있는 GET을 POST로 바꾸고, NSURLSession은 보내지 않은 채 뜻이 다른 오류(`-1103`)로 실패한다.
+// 다른 동사나 엉뚱한 오류가 앱에 닿지 않게 미리 거절한다.
+TEST_CASE("Android and macOS refuse a body on GET or HEAD before touching the wire", "[net][client]")
 {
     loopback_http_server server {};
     REQUIRE(server.port() != 0);
@@ -845,7 +850,9 @@ TEST_CASE("Android refuses a body on GET or HEAD before touching the wire", "[ne
     CHECK(error.empty() == false);
     CHECK(server.request_count() == 0);
 }
+#endif
 
+#if defined(__ANDROID__)
 // https 연결은 다른 연결에 맡기는 껍데기라 확장 메서드의 이름이 그 안까지 닿지 않는다. 엉뚱한 동사(GET)가 나가지 않게
 // 선을 건드리기 전에 거절한다.
 TEST_CASE("Android refuses an extension method over https before touching the wire", "[net][client][android]")

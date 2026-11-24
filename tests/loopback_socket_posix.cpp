@@ -51,6 +51,31 @@ namespace luil::testing::loopback_socket {
             address.sin_port = htons(port);
             return inet_pton(AF_INET, "127.0.0.1", &address.sin_addr) == 1;
         }
+
+#if defined(__APPLE__)
+        // macOS는 묶기만 하고 듣지 않는 포트로 온 SYN을 RST 없이 버린다 (연결이 시한까지 걸린다). 그 소켓을 잠깐
+        // 세운 듣는 소켓에 이어 두면 포트는 그대로 쥐고, 들어오는 연결은 맞는 자리가 없어 RST로 거절된다.
+        //  - 받은 쪽은 곧 닫는다. 쥔 소켓은 CLOSE_WAIT로 남아 상대 주소를 잃지 않는다.
+        [[nodiscard]] bool hold_refusing(const int held) noexcept
+        {
+            const int listener { open_stream() };
+            if (listener < 0)
+                return false;
+            sockaddr_in address {};
+            socklen_t address_size { sizeof(address) };
+            const bool listening { loopback_address(0, address) && bind(listener, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0 && ::listen(listener, 1) == 0 };
+            bool connected { listening && getsockname(listener, reinterpret_cast<sockaddr*>(&address), &address_size) == 0 && connect(held, reinterpret_cast<const sockaddr*>(&address), sizeof(address)) == 0 };
+            if (connected)
+            {
+                const int accepted { accept_stream(listener) };
+                connected = accepted >= 0;
+                if (connected)
+                    ::close(accepted);
+            }
+            ::close(listener);
+            return connected;
+        }
+#endif
     }
 
     bool startup() noexcept
@@ -85,6 +110,13 @@ namespace luil::testing::loopback_socket {
             return loopback_no_socket;
         }
         port = ntohs(bound.sin_port);
+#if defined(__APPLE__)
+        if (listen == false && hold_refusing(opened) == false)
+        {
+            ::close(opened);
+            return loopback_no_socket;
+        }
+#endif
         return static_cast<std::uintptr_t>(opened);
     }
 
