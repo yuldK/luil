@@ -974,6 +974,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/macos_text.h
         macos/cpu_skia_renderer.h
         macos/cpu_skia_renderer.mm
+        macos/file_dialog_macos.h
+        macos/file_dialog_macos.mm
         macos/frame_capture.h
         macos/frame_capture.mm
         macos/metal_skia_renderer.h
@@ -1013,6 +1015,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "-framework ImageIO"
             "-framework WebKit"
             "-framework Metal"
+            "-framework UniformTypeIdentifiers"
         PRIVATE
             luil_options)
 endif()

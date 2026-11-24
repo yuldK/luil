@@ -1767,6 +1767,7 @@ int main(const int argc, const char* const* const argv)
     config.simulate_gpu_loss_after_frames = options.simulate_direct3d_loss_after_frames;
     config.smoke_test = options.smoke_test;
     config.touch = options.touch;
+    config.accept_file_drop = true;
     luil::macos::application_environment environment {};
     environment.driver = &driver;
     environment.policy = &policy;

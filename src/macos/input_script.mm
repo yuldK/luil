@@ -1,11 +1,32 @@
 #include "macos/input_script.h"
 
+#include <cstdio>
 #include <cstdlib>
 #include <fstream>
 #include <memory>
 #include <sstream>
 #include <string>
 #include <vector>
+
+// 대본의 `drop`이 view에 건네는 끌기다. view가 묻는 두 가지(자리·붙여넣기 판)만 답한다.
+@interface LuilScriptDragging : NSObject
+@property(nonatomic, strong) NSPasteboard* board;
+@property(nonatomic, assign) NSPoint location;
+@end
+
+@implementation LuilScriptDragging
+
+- (NSPasteboard*)draggingPasteboard
+{
+    return self.board;
+}
+
+- (NSPoint)draggingLocation
+{
+    return self.location;
+}
+
+@end
 
 namespace {
     struct script_state
@@ -38,8 +59,10 @@ namespace {
         [NSApp postEvent:event atStart:NO];
     }
 
-    void post_key(NSWindow* const window, const unsigned short code, NSString* const characters, NSString* const base, const NSEventModifierFlags flags)
+    void post_key(NSWindow* const owner, const unsigned short code, NSString* const characters, NSString* const base, const NSEventModifierFlags flags)
     {
+        // 창에 sheet(파일 패널 등)가 붙어 있으면 키는 그 sheet로 간다.
+        NSWindow* const window { owner.attachedSheet != nil ? owner.attachedSheet : owner };
         for (const NSEventType type : { NSEventTypeKeyDown, NSEventTypeKeyUp })
         {
             NSEvent* const event { [NSEvent keyEventWithType:type
@@ -117,6 +140,16 @@ namespace {
             return true;
         }
         return false;
+    }
+
+    // 글자 키의 소문자다. 글자 키가 아니면 비었다.
+    [[nodiscard]] NSString* character_of_key(const unsigned short code)
+    {
+        static const char* const lower { "asdfhgzxcv\0bqweryt123465=97-80]ou[ip\0lj'k;\\,/nm." };
+        if (code >= 48 || lower[code] == '\0')
+            return @"";
+        const unichar value { static_cast<unichar>(lower[code]) };
+        return [NSString stringWithCharacters:&value length:1];
     }
 
     void run_line(script_state& state, const std::string& line, double& delay)
@@ -205,7 +238,10 @@ namespace {
                 else if (modifier == "control")
                     flags |= NSEventModifierFlagControl;
             }
-            NSString* const characters { key_characters(static_cast<unsigned short>(code)) };
+            NSString* characters { key_characters(static_cast<unsigned short>(code)) };
+            // 글자 키면 그 글자를 싣는다 (Command+Shift+G 같은 단축키가 글자로 맞춰진다).
+            if (characters.length == 0)
+                characters = character_of_key(static_cast<unsigned short>(code));
             post_key(window, static_cast<unsigned short>(code), characters, characters, flags);
         }
         else if (command == "type")
@@ -257,6 +293,53 @@ namespace {
             {
                 state.view = target;
                 state.window = target.window;
+            }
+        }
+        else if (command == "drop")
+        {
+            // 파일 하나를 그 자리에 끌어 와 놓는다. view의 끌어 놓기 길(`draggingEntered:` → `performDragOperation:`)을 밟는다.
+            double x { 0 };
+            double y { 0 };
+            std::string rest {};
+            words >> x >> y;
+            std::getline(words, rest);
+            NSString* const path { [[NSString stringWithUTF8String:rest.c_str()] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] };
+            NSPasteboard* const board { [NSPasteboard pasteboardWithUniqueName] };
+            [board clearContents];
+            [board writeObjects:@[ [NSURL fileURLWithPath:path] ]];
+            LuilScriptDragging* const info { [LuilScriptDragging new] };
+            info.board = board;
+            info.location = window_point(view, x, y);
+            id<NSDraggingDestination> const target { (id<NSDraggingDestination>)view };
+            const NSDragOperation entered { [target draggingEntered:(id<NSDraggingInfo>)info] };
+            const NSDragOperation updated { [target draggingUpdated:(id<NSDraggingInfo>)info] };
+            const BOOL dropped { updated != NSDragOperationNone && [target performDragOperation:(id<NSDraggingInfo>)info] };
+            if (updated == NSDragOperationNone)
+                [target draggingExited:(id<NSDraggingInfo>)info];
+            std::fprintf(stderr, "luil script: drop entered=%lu dropped=%d\n", static_cast<unsigned long>(entered), dropped ? 1 : 0);
+            [board releaseGlobally];
+        }
+        else if (command == "sheet")
+        {
+            // 창에 붙은 sheet를 다룬다. 낱말 없이는 그 종류만 적는다.
+            //   sheet cancel | name <저장 이름> | folder <경로>
+            std::string action {};
+            std::string argument {};
+            words >> action;
+            std::getline(words, argument);
+            NSWindow* const sheet { window.attachedSheet };
+            NSString* const value { [[NSString stringWithUTF8String:argument.c_str()] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] };
+            std::fprintf(stderr, "luil script: sheet %s\n", sheet != nil ? NSStringFromClass([sheet class]).UTF8String : "(none)");
+            if ([sheet isKindOfClass:[NSSavePanel class]])
+            {
+                NSSavePanel* const panel { (NSSavePanel*)sheet };
+                // 패널은 다른 프로세스가 그린다 (`ok:`가 없다). 고르기는 키(Command+Shift+G로 경로)로 하고, 여기서는 그만두기만 한다.
+                if (action == "cancel")
+                    [panel cancel:nil];
+                else if (action == "name")
+                    panel.nameFieldStringValue = value;
+                else if (action == "folder")
+                    panel.directoryURL = [NSURL fileURLWithPath:value isDirectory:YES];
             }
         }
         else if (command == "quit")

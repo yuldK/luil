@@ -21,6 +21,8 @@
 //   commit <글>             — 입력기가 글을 확정한다 (`insertText:`)
 //   snapshot <png> [창 id]  — 창 내용(주 창은 웹뷰를 포함한 합성, 보조 창은 그 창의 frame)을 PNG로 적는다 (view가 `luilSnapshot:`에 답할 때)
 //   window <id>             — 다음 명령을 그 창(보조 창 id, `main`이면 주 창)에 보낸다
+//   drop <x> <y> <경로>      — 파일 하나를 그 자리에 끌어 와 놓는다 (view의 끌어 놓기 길을 밟는다)
+//   sheet [cancel|name <이름>|folder <경로>] — 창에 붙은 sheet(파일 패널)를 다룬다. 키 명령은 sheet가 있으면 그리로 간다
 //   quit                    — 지금 창의 닫기 길을 밟는다 (`performClose:`)
 void luil_run_input_script(NSWindow* window, NSView* view);
 #endif

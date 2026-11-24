@@ -28,6 +28,10 @@ namespace luil::macos {
         int simulate_gpu_loss_after_frames { 0 };
         // 한 frame만 그리고 끝낸다 (renderer smoke test). 창은 보이지 않는다.
         bool smoke_test { false };
+        // 주 창·보조 창이 OS 파일 끌기를 받는다 (Finder에서 끌어 온 파일, 다른 앱의 주소·글·그림).
+        // 놓인 자리의 drop 대상 element가 받고(`ui_action_context::native_drop_data`는 끌기의 `NSPasteboard*`다), 없으면
+        // delegate가 `win32::window_delegate`를 구현했을 때 그 `on_file_dropped`가 본다 (os-dragdrop-design.md).
+        bool accept_file_drop { false };
         // 터치 몸짓의 시작 설정이다. 트랙패드는 마우스로 오므로 길게 누르기와 끌어 스크롤하기는 붙지 않는다.
         touch_gesture_config touch {};
     };

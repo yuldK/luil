@@ -15,7 +15,9 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/ui_platform.h"
 #include "luil/ui/webview_element.h"
+#include "luil/win32/win32_window.h"
 #include "macos/cpu_skia_renderer.h"
+#include "macos/file_dialog_macos.h"
 #include "macos/frame_capture.h"
 #include "macos/input_script.h"
 #include "macos/macos_input.h"
@@ -858,6 +860,105 @@ namespace luil::macos {
             pump();
         }
 
+        // --- OS 끌어 놓기 (os-dragdrop-design.md의 macOS 갈래) ---
+        //  - 끄는 동안의 들어옴·움직임·떠남은 표시(수락 대상 강조)만 세운다. 답(받음·안 받음)과 놓기의 실행은 그 창의 tree에
+        //    직접 묻는다 (Win32와 같다).
+        //  - popup 위는 받지 않는다 (Win32의 popup은 drop을 등록하지 않는다).
+
+        // 끌기가 창에 들어왔다. 받을 수 있는 자리면 참이다.
+        bool drag_entered(native_surface& surface, const NSPoint point, std::vector<std::u8string> files, std::vector<std::u8string> formats)
+        {
+            drag_payload_ = {};
+            drag_payload_.custom_visual = true;
+            drag_payload_.files = files;
+            drag_payload_.formats = formats;
+            const float x { static_cast<float>(point.x) };
+            const float y { static_cast<float>(point.y) };
+            if (host_ != nullptr)
+            {
+                file_drag_entered_event event { x, y, std::move(files), surface.id };
+                event.formats = std::move(formats);
+                host_->post_raw_input(std::move(event));
+            }
+            return drop_open(surface, x, y);
+        }
+
+        bool drag_moved(native_surface& surface, const NSPoint point)
+        {
+            const float x { static_cast<float>(point.x) };
+            const float y { static_cast<float>(point.y) };
+            if (host_ != nullptr)
+                host_->post_raw_input(file_drag_moved_event { x, y, surface.id });
+            return drop_open(surface, x, y);
+        }
+
+        void drag_left(native_surface& surface)
+        {
+            drag_payload_ = {};
+            if (host_ != nullptr)
+                host_->post_raw_input(file_drag_left_event { surface.id });
+        }
+
+        // 놓았다. 받았으면 참이다. `pasteboard`는 끌기의 붙여넣기 판이다 — `on_drop` 동안만 앱에 보인다.
+        bool drag_dropped(native_surface& surface, const NSPoint point, NSPasteboard* const pasteboard)
+        {
+            drag_payload payload { drag_payload_ };
+            const float x { static_cast<float>(point.x) };
+            const float y { static_cast<float>(point.y) };
+            const bool over_popup { overlay_at(surface, x, y) };
+            const std::shared_ptr<const ui_tree> held { surface.main() && host_ != nullptr ? host_->acquire_ui_tree() : nullptr };
+            const ui_tree* const tree { over_popup ? nullptr : surface.main() ? held.get() : surface.want.tree.get() };
+            const drop_hit_result hit { tree != nullptr ? tree->drop_hit_test(x, y, payload) : drop_hit_result {} };
+            const ui_element* const over { hit.target };
+            if (over != nullptr && over->drop()->on_drop)
+            {
+                // 놓는 순간의 수식 키다 (내부 끌기의 놓기와 같은 규약, Command가 Ctrl의 자리다).
+                ui_action_context context { over->id(), x, y };
+                const NSEventModifierFlags flags { [NSEvent modifierFlags] };
+                context.control = (flags & (NSEventModifierFlagCommand | NSEventModifierFlagControl)) != 0;
+                context.shift = (flags & NSEventModifierFlagShift) != 0;
+                context.alt = (flags & NSEventModifierFlagOption) != 0;
+                // 원시 데이터는 끌기의 `NSPasteboard*`다. 이 호출 동안만 유효하다.
+                context.native_drop_data = (__bridge void*)pasteboard;
+                for (input_action& action : over->drop()->on_drop(payload, context))
+                    dispatch(std::move(action));
+                drag_left(surface);
+                return true;
+            }
+            drag_left(surface);
+            // popup이나 불투명 표면(modal·메뉴·토스트)이 가렸거나, 파일 없는 끌기면 아무도 받지 않았다.
+            if (over_popup || hit.blocked || payload.files.empty())
+                return false;
+            // 수락 element가 없으면 창 전체의 물러섬이다 (`win32::window_delegate::on_file_dropped`, 경로 순서대로).
+            if (host_ != nullptr && window_delegate_ != nullptr)
+            {
+                try
+                {
+                    for (const std::u8string& path : payload.files)
+                        if (window_delegate_->on_file_dropped(*host_, path))
+                            break;
+                }
+                catch (...)
+                {
+                    log_error(u8"The file drop delegate threw an exception.");
+                }
+            }
+            return true;
+        }
+
+        [[nodiscard]] bool accepts_file_drop() const noexcept
+        {
+            return config_.accept_file_drop;
+        }
+
+        // 파일 대화 상자의 답이다. 앱에 알리고 다음 요청을 받을 수 있게 한다.
+        void complete_file_dialog(const file_dialog_result& result)
+        {
+            if (host_ != nullptr && environment_.delegate != nullptr && stopped_ == false)
+                host_->post_file_dialog_message(environment_.delegate->make_file_dialog_message(result));
+            file_dialog_gate_.finish();
+        }
+
         void on_timer()
         {
             timer_ = nil;
@@ -881,6 +982,7 @@ namespace luil::macos {
                 .rounded_popup_corners = true,
             });
             set_font_fallback(&font_resolver_);
+            window_delegate_ = dynamic_cast<win32::window_delegate*>(environment_.delegate);
 
             [NSApplication sharedApplication];
             [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
@@ -1032,6 +1134,9 @@ namespace luil::macos {
                                                                             owner:surface.view
                                                                          userInfo:nil] };
             [surface.view addTrackingArea:tracking];
+            // OS 끌어 놓기다. 파일 경로와, 파일 없이 형식만 실린 끌기(주소·글·그림)를 받는다.
+            if (config_.accept_file_drop)
+                [surface.view registerForDraggedTypes:@[ NSPasteboardTypeFileURL, NSPasteboardTypeURL, NSPasteboardTypeString, NSPasteboardTypePNG, NSPasteboardTypeTIFF ]];
             read_surface_size(surface);
         }
 
@@ -1394,6 +1499,29 @@ namespace luil::macos {
             return surface.want.tree.get();
         }
 
+        [[nodiscard]] static bool overlay_at(const native_surface& surface, const float x, const float y)
+        {
+            return std::ranges::any_of(surface.overlays, [x, y](const overlay_entry& entry) {
+                return x >= entry.bounds.x && y >= entry.bounds.y && x < entry.bounds.x + entry.bounds.width && y < entry.bounds.y + entry.bounds.height;
+            });
+        }
+
+        // 그 자리에 놓으면 누가 받는가다. 놓기와 같은 탐색이다 — 커서가 "받음"을 보인 자리에서 놓기가 사라지지 않는다.
+        //  - 받는 element가 없어도 파일이 실렸으면 창 전체가 받는다 (물러섬).
+        [[nodiscard]] bool drop_open(const native_surface& surface, const float x, const float y)
+        {
+            if (overlay_at(surface, x, y))
+                return false;
+            const std::shared_ptr<const ui_tree> held { surface.main() && host_ != nullptr ? host_->acquire_ui_tree() : nullptr };
+            const ui_tree* const tree { surface.main() ? held.get() : surface.want.tree.get() };
+            if (tree == nullptr)
+                return drag_payload_.files.empty() == false;
+            const drop_hit_result hit { tree->drop_hit_test(x, y, drag_payload_) };
+            if (hit.blocked)
+                return false;
+            return drag_payload_.files.empty() == false || hit.target != nullptr;
+        }
+
         void update_cursor(native_surface& surface, const NSPoint point)
         {
             if (host_ == nullptr)
@@ -1439,16 +1567,30 @@ namespace luil::macos {
                 file_dialog_gate_.idle();
                 return;
             }
-            auto result { file_dialog_gate_.rejection(*frame->file_dialog) };
-            if (result.has_value() == false)
+            // id 없는 요청은 열지 않고 실패로 답한다. 조용히 버리면 앱이 답을 영영 기다린다.
+            if (const std::optional<file_dialog_result> rejected { file_dialog_gate_.rejection(*frame->file_dialog) }; rejected.has_value())
             {
-                if (file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
-                    return;
-                result.emplace(frame->file_dialog->id, file_dialog_status::unsupported);
+                complete_file_dialog(*rejected);
+                return;
             }
-            if (environment_.delegate != nullptr)
-                host_->post_file_dialog_message(environment_.delegate->make_file_dialog_message(*result));
-            file_dialog_gate_.finish();
+            if (file_dialog_gate_.try_begin(frame->file_dialog->id) == false)
+                return;
+            // popup은 소유 창으로 쓰지 않고 그 사슬의 뿌리(주 창·보조 창)를 쓴다 (Win32와 같다). sheet가 열리면 popup은 초점을 잃어 닫힌다.
+            std::u8string owner_id { frame->file_dialog->owner_surface };
+            for (std::size_t depth { 0 }; depth < frame->popups.size(); ++depth)
+            {
+                const auto parent { std::find_if(frame->popups.begin(), frame->popups.end(), [&owner_id](const ui_popup& popup) { return popup.id == owner_id; }) };
+                if (parent == frame->popups.end())
+                    break;
+                owner_id = parent->anchor;
+            }
+            const native_surface* const owner { find_surface(owner_id) };
+            const std::shared_ptr<wake_state> state { wake_ };
+            // 패널은 비동기다. 답은 run loop가 나중에 돌려준다 — 그 사이 앱이 끝났으면 버린다.
+            run_file_dialog(owner != nullptr ? owner->window : main_.window, *frame->file_dialog, [state](file_dialog_result result) {
+                if (state->target != nullptr)
+                    state->target->complete_file_dialog(result);
+            });
         }
 
         void process_focus_request()
@@ -2118,6 +2260,10 @@ namespace luil::macos {
         std::optional<std::chrono::steady_clock::time_point> timer_deadline_ {};
         std::shared_ptr<const ui_frame> overlay_frame_ {};
         file_dialog_gate file_dialog_gate_ {};
+        // 지금 들어와 있는 OS 끌기의 내용이다 (들어올 때 한 번 읽는다).
+        drag_payload drag_payload_ {};
+        // 앱 delegate가 Windows의 창 delegate도 구현했으면 그것이다. 플랫폼 중립 밖의 훅(파일 놓기의 물러섬 등)을 그리로 부른다.
+        win32::window_delegate* window_delegate_ { nullptr };
         focus_request_tracker focus_tracker_ {};
         registry_font_resolver font_resolver_ {};
         system_appearance system_ {};
@@ -2219,6 +2365,65 @@ namespace {
 
 - (void)updateLayer
 {
+}
+
+// --- OS 끌어 놓기 ---
+
+- (NSPoint)luilDragPoint:(id<NSDraggingInfo>)info
+{
+    const NSPoint local { [self convertPoint:[info draggingLocation] fromView:nil] };
+    const CGFloat scale { self.window.backingScaleFactor > 0 ? self.window.backingScaleFactor : 1.0 };
+    return NSMakePoint(local.x * scale, local.y * scale);
+}
+
+- (NSDragOperation)draggingEntered:(id<NSDraggingInfo>)info
+{
+    if (self.owner == nullptr || self.surface == nullptr)
+        return NSDragOperationNone;
+    NSPasteboard* const board { [info draggingPasteboard] };
+    std::vector<std::u8string> files {};
+    NSArray<NSURL*>* const urls { [board readObjectsForClasses:@[ [NSURL class] ] options:@{ NSPasteboardURLReadingFileURLsOnlyKey : @YES }] };
+    for (NSURL* const url in urls)
+        if (url.fileURL && url.path != nil)
+            files.push_back(luil::macos::from_ns_string(url.path));
+    std::vector<std::u8string> formats {};
+    for (NSPasteboardType const type in board.types)
+        formats.push_back(luil::macos::from_ns_string(type));
+    // 받는 쪽이 놓기를 복사로 본다 (Win32와 같다). 원본은 끄는 쪽이 지우지 않는다.
+    return self.owner->drag_entered(*self.surface, [self luilDragPoint:info], std::move(files), std::move(formats)) ? NSDragOperationCopy : NSDragOperationNone;
+}
+
+- (NSDragOperation)draggingUpdated:(id<NSDraggingInfo>)info
+{
+    if (self.owner == nullptr || self.surface == nullptr)
+        return NSDragOperationNone;
+    return self.owner->drag_moved(*self.surface, [self luilDragPoint:info]) ? NSDragOperationCopy : NSDragOperationNone;
+}
+
+- (void)draggingExited:(id<NSDraggingInfo>)info
+{
+    static_cast<void>(info);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->drag_left(*self.surface);
+}
+
+- (BOOL)prepareForDragOperation:(id<NSDraggingInfo>)info
+{
+    static_cast<void>(info);
+    return self.owner != nullptr && self.surface != nullptr;
+}
+
+- (BOOL)performDragOperation:(id<NSDraggingInfo>)info
+{
+    if (self.owner == nullptr || self.surface == nullptr)
+        return NO;
+    return self.owner->drag_dropped(*self.surface, [self luilDragPoint:info], [info draggingPasteboard]) ? YES : NO;
+}
+
+// 놓기가 끝나지 않고 끝났다 (Esc, 창 밖에서 놓음). 떠남은 `draggingExited:`가 이미 알렸다.
+- (void)draggingEnded:(id<NSDraggingInfo>)info
+{
+    static_cast<void>(info);
 }
 
 - (void)mouseMoved:(NSEvent*)event

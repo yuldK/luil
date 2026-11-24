@@ -108,7 +108,8 @@ namespace luil {
         bool control { false };
         bool shift { false };
         bool alt { false };
-        // OS 끌어 놓기의 원시 데이터 객체다 (os-dragdrop-design.md). Win32에서는 `IDataObject*`이고 그 밖에는 nullptr다.
+        // OS 끌어 놓기의 원시 데이터 객체다 (os-dragdrop-design.md). Win32에서는 `IDataObject*`, macOS에서는 끌기의
+        // `NSPasteboard*`(ARC가 쥐지 않은 맨 포인터)이고 그 밖에는 nullptr다.
         //  - **이 `on_drop` 호출 동안만 유효하다.** OLE는 내용을 `Drop` 안에서 꺼내라고 하므로, 앱은 여기서 꺼낸 값을
         //    메시지에 담아 돌려준다. 포인터를 쥐어 두거나 다른 thread로 넘기지 않는다. 참조 수는 넘기지 않는다.
         //  - UI thread에서만 온다. 꺼내는 도우미는 `luil/win32/drop_data.h`에 있다.
