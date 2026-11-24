@@ -4,6 +4,7 @@
 #include "host/focus_request_tracker.h"
 #include "host/font_registry.h"
 #include "host/frame_state.h"
+#include "host/notification_queue.h"
 #include "host/overlay_input.h"
 #include "host/popup_dismiss.h"
 #include "host/popup_reconcile.h"
@@ -24,6 +25,7 @@
 #include "macos/macos_input.h"
 #include "macos/macos_text.h"
 #include "macos/metal_skia_renderer.h"
+#include "macos/notification_center.h"
 #include "macos/webview_host.h"
 
 #include "include/core/SkFont.h"
@@ -379,6 +381,8 @@ namespace luil::macos {
         void on_wake()
         {
             execute_host_commands();
+            // 앞서 inbox가 차서 내지 못한 알림 사건을 다시 낸다.
+            deliver_notification_events();
             mark_all_dirty();
             pump();
         }
@@ -978,6 +982,32 @@ namespace luil::macos {
             return config_.accept_file_drop;
         }
 
+        // 대기열의 OS 알림 사건을 앱에 낸다 (os-notification-design.md). 게시하지 못한 사건은 되돌려 다음 깨우기 때 다시 낸다.
+        //  - 눌림을 냈으면 보이는 주 창을 앞으로 세운다. 숨은 주 창(`ui_frame::main_hidden`)은 보이게 하지 않는다.
+        void deliver_notification_events()
+        {
+            if (host_ == nullptr || stopped_ || notification_events_.empty())
+                return;
+            const auto make = [this](const notification_event& event) { return environment_.delegate != nullptr ? environment_.delegate->make_notification_message(event) : app_message {}; };
+            const auto post = [this](app_message message) { return host_->post_app_message_ticketed(std::move(message)); };
+            const notification_delivery delivery { luil::deliver_notification_events(notification_events_, make, post) };
+            if (delivery.failed_calls > 0)
+                log_error(u8"The notification delegate threw an exception.");
+            if (delivery.activated && main_hidden_ == false && main_.window != nil)
+            {
+                [NSApp activateIgnoringOtherApps:YES];
+                [main_.window makeKeyAndOrderFront:nil];
+            }
+        }
+
+        void post_permission(const app_permission permission, const permission_state state)
+        {
+            if (host_ == nullptr || environment_.delegate == nullptr || stopped_)
+                return;
+            if (app_message message { environment_.delegate->make_permission_message(permission, state) }; message.empty() == false)
+                host_->post_app_message(std::move(message));
+        }
+
         // 파일 대화 상자의 답이다. 앱에 알리고 다음 요청을 받을 수 있게 한다.
         void complete_file_dialog(const file_dialog_result& result)
         {
@@ -1008,6 +1038,7 @@ namespace luil::macos {
                 .window_caption = false,
                 .rounded_popup_corners = true,
                 .capabilities = {
+                    .notifications = notification_center_available(),
                     .clipboard_image_copy = true,
                 },
             });
@@ -1049,6 +1080,18 @@ namespace luil::macos {
             host_config.wake.clipboard = [signal] { static_cast<void>(signal()); };
             host_config.interaction.double_click_time = std::chrono::milliseconds { static_cast<int>(std::lround([NSEvent doubleClickInterval] * 1000.0)) };
             host_config.interaction.touch = config_.touch;
+            // 묻는 권한은 OS 알림 하나다 (UserNotifications의 허락). 답은 메인 thread에서 앱 메시지로 낸다.
+            host_config.permission = [](const app_permission permission) {
+                return permission == app_permission::notifications ? notification_permission() : permission_state::not_required;
+            };
+            host_config.request_permission = [wake](const app_permission permission) {
+                if (permission != app_permission::notifications)
+                    return false;
+                return request_notification_permission([wake](const permission_state state) {
+                    if (wake->target != nullptr)
+                        wake->target->post_permission(app_permission::notifications, state);
+                });
+            };
             main_.router.set_touch_config(config_.touch);
             if (app_message message { observe_appearance() }; message.empty() == false)
                 host_config.initial_messages.push_back(std::move(message));
@@ -1068,6 +1111,13 @@ namespace luil::macos {
             create_renderer(main_);
             if (main_.renderer == nullptr)
                 return false;
+            // 알림의 눌림·닫음이다. 꺼진 앱을 띄운 눌림도 받도록 `[NSApp run]` 전에 건다.
+            set_notification_receiver([state = wake](notification_event event) {
+                if (state->target == nullptr)
+                    return;
+                state->target->notification_events_.push(std::move(event));
+                state->target->deliver_notification_events();
+            });
             if (environment_.delegate != nullptr)
                 environment_.delegate->on_started(*host_);
             return true;
@@ -1083,6 +1133,7 @@ namespace luil::macos {
                 [timer_ invalidate];
                 timer_ = nil;
             }
+            set_notification_receiver(nullptr);
             // 웹뷰 사건이 끝나는 host로 가지 않게 먼저 거둔다.
             if (webviews_ != nullptr)
                 webviews_->shutdown();
@@ -2483,6 +2534,7 @@ namespace luil::macos {
         file_dialog_gate file_dialog_gate_ {};
         // 지금 들어와 있는 OS 끌기의 내용이다 (들어올 때 한 번 읽는다).
         drag_payload drag_payload_ {};
+        notification_queue notification_events_ {};
         // 이 앱이 마지막으로 넣은 클립보드 번호와 마지막으로 알린 번호다.
         std::optional<std::uint32_t> owned_clipboard_sequence_ {};
         std::optional<std::uint32_t> reported_clipboard_sequence_ {};
