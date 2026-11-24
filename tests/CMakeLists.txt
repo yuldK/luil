@@ -466,6 +466,11 @@ if(LUIL_PLATFORM STREQUAL "macos")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/macos/instance_message.cpp"
             macos_instance_message_tests.cpp)
+    # VoiceOver 다리의 역할 표·값·실행 번역·좌표·UTF-16 offset·알림 대조도 AppKit을 모르는 층이라 core test에 넣는다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/macos/accessibility_mapping.cpp"
+            macos_accessibility_tests.cpp)
     catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
     # HTTP client·charset 변환·WebSocket 전송은 NSURLSession·CoreFoundation 위에 서고 실제 되돌이 서버와 주고받는다.
     # Android의 luil_net_tests와 같은 묶음이다. 라이브러리(luil)는 AppKit host를 끌어오므로 링크하지 않고 net 소스를

@@ -968,6 +968,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
     #  - 비밀 저장소는 Keychain의 일반 암호 항목이다 (macos/secret_store_macos.mm).
     #  - 파일 감시는 감시마다 FSEvents stream 하나다 (macos/file_watcher_macos.mm).
     #  - 단일 인스턴스는 사용자 임시 폴더의 flock, 인자 넘기기는 그 옆의 Unix 소켓이다 (macos/single_instance_macos.mm).
+    #  - VoiceOver 다리의 역할 표·값·알림 대조는 AppKit을 모르는 macos/accessibility_mapping.cpp가 하고 core test로 돈다.
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
         "${public_headers}/macos/macos_app.h"
@@ -1018,6 +1019,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/notification_macos.mm
         macos/notification_rules.cpp
         macos/notification_rules.h
+        macos/accessibility_mapping.cpp
+        macos/accessibility_mapping.h
         "${luil_codicon_source}")
     # net: HTTP 값과 NSURLSession 위에 선 `http_client`, NSURLSessionWebSocketTask 위의 WebSocket 전송이다.
     # charset은 utf-16을 손으로, 나머지는 CoreFoundation의 표로 옮긴다.
