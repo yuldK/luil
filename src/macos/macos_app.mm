@@ -18,6 +18,7 @@
 #include "luil/ui/ui_platform.h"
 #include "luil/ui/webview_element.h"
 #include "luil/win32/win32_window.h"
+#include "macos/accessibility_macos.h"
 #include "macos/cpu_skia_renderer.h"
 #include "macos/dock_macos.h"
 #include "macos/file_dialog_macos.h"
@@ -271,6 +272,8 @@ namespace luil::macos {
         std::unique_ptr<webview_host> webviews {};
         std::vector<pixel_rect> webview_holes {};
         ui_element_id last_webview_focus {};
+        // VoiceOver의 창구다 (NSAccessibility). view보다 먼저 끊는다.
+        std::unique_ptr<accessibility_bridge> accessibility {};
         // 이 표면의 녹화다 (`record_request`).
         frame_recorder recorder {};
         // 닫힘 요청을 낸 frame이다. 같은 frame에 거듭 온 요청은 삼킨다.
@@ -319,6 +322,9 @@ namespace luil::macos {
             for (std::unique_ptr<native_surface>& surface : secondary_)
                 destroy_window(*surface);
             secondary_.clear();
+            if (main_.accessibility != nullptr)
+                main_.accessibility->detach();
+            main_.accessibility.reset();
             main_.renderer.reset();
             set_font_fallback(nullptr);
             set_system_accent(std::nullopt);
@@ -1336,6 +1342,7 @@ namespace luil::macos {
                                                                             owner:surface.view
                                                                          userInfo:nil] };
             [surface.view addTrackingArea:tracking];
+            create_accessibility(surface);
             // OS 끌어 놓기다. 파일 경로와, 파일 없이 형식만 실린 끌기(주소·글·그림)를 받는다.
             if (config_.accept_file_drop)
                 [surface.view registerForDraggedTypes:@[ NSPasteboardTypeFileURL, NSPasteboardTypeURL, NSPasteboardTypeString, NSPasteboardTypePNG, NSPasteboardTypeTIFF ]];
@@ -2075,6 +2082,51 @@ namespace luil::macos {
             mark_all_dirty();
         }
 
+        // 창 하나의 접근성 다리를 세운다 (accessibility-design.md의 macOS 갈래).
+        //  - 누름·초점은 곧바로 입력으로, 나머지 실행(값·펼침·여럿 고르기)은 액션으로, 글 바꿈은 편집 요청으로 낸다.
+        //  - 다리가 부르는 함수는 앱이 사라진 뒤에 올 수 있다 (run loop에 미룬 실행). 깨우기 상태로 살아 있는지 본다.
+        void create_accessibility(native_surface& surface)
+        {
+            const std::shared_ptr<wake_state> state { wake_ };
+            accessibility_callbacks callbacks {};
+            callbacks.post_input = [state](raw_input_event event) {
+                if (state->target != nullptr && state->target->host_ != nullptr)
+                    state->target->host_->post_raw_input(std::move(event));
+            };
+            callbacks.dispatch = [state](std::vector<input_action> actions) {
+                for (input_action& action : actions)
+                    if (state->target != nullptr)
+                        state->target->dispatch(std::move(action));
+            };
+            callbacks.text_target = [state](const ui_element_kind kind) -> std::optional<text_input_target> {
+                if (state->target == nullptr || state->target->environment_.policy == nullptr)
+                    return std::nullopt;
+                return state->target->environment_.policy->text_target_of(kind);
+            };
+            callbacks.text_edit = [state](text_edit_request request) {
+                if (state->target != nullptr)
+                    state->target->post_edit(std::move(request));
+            };
+            surface.accessibility = std::make_unique<accessibility_bridge>(surface.view, std::move(callbacks));
+        }
+
+        // 그린 상태를 접근성 다리에 건넨다. 바뀐 tree만 견줘 알림을 쏜다.
+        void update_accessibility(native_surface& surface, const std::shared_ptr<const ui_tree>& tree)
+        {
+            if (surface.accessibility == nullptr || host_ == nullptr)
+                return;
+            accessibility_update update {};
+            update.surface = surface.id;
+            update.tree = tree;
+            for (const overlay_entry& entry : surface.overlays)
+                update.overlays.push_back(accessibility_overlay { entry.id, entry.tree,
+                    rect_f { static_cast<float>(entry.bounds.x), static_cast<float>(entry.bounds.y), static_cast<float>(entry.bounds.width), static_cast<float>(entry.bounds.height) },
+                    entry.scroll_y });
+            update.interaction = host_->acquire_interaction();
+            update.scale = surface.scale;
+            surface.accessibility->update(std::move(update));
+        }
+
         // 창 하나의 웹뷰 host를 세운다. 페이지의 메시지는 앱으로, 페이지를 눌러 옮겨 간 키보드 초점은 그 자리표의 논리 초점으로 낸다
         // (Windows의 `GotFocus`와 같은 자리).
         void create_webviews(native_surface& surface)
@@ -2462,7 +2514,10 @@ namespace luil::macos {
 
         void destroy_window(native_surface& surface)
         {
-            // 웹뷰 사건이 사라지는 창으로 가지 않게 먼저 거둔다.
+            // 웹뷰 사건과 접근성 질문이 사라지는 창으로 가지 않게 먼저 거둔다.
+            if (surface.accessibility != nullptr)
+                surface.accessibility->detach();
+            surface.accessibility.reset();
             if (surface.webviews != nullptr)
                 surface.webviews->shutdown();
             surface.webviews.reset();
@@ -2954,6 +3009,7 @@ namespace luil::macos {
         {
             prepared_frame prepared {};
             prepare(surface, prepared, true);
+            update_accessibility(surface, prepared.tree);
             const frame_state& state { prepared.state };
             const std::shared_ptr<const ui_tree>& tree { prepared.tree };
             const std::vector<overlay_layer>& layers { prepared.layers };
@@ -3333,6 +3389,28 @@ namespace {
 {
     if (self.owner != nullptr && self.surface != nullptr)
         self.owner->script_record(luil::macos::from_ns_string(path), self.surface->id);
+}
+
+// --- 접근성: 요소는 다리가 세운다. view 자신은 접근 요소가 아니다 (`isAccessibilityElement`는 기본값 NO). ---
+
+- (NSArray*)accessibilityChildren
+{
+    luil::macos::accessibility_bridge* const bridge { self.owner != nullptr && self.surface != nullptr ? self.surface->accessibility.get() : nullptr };
+    return bridge != nullptr ? bridge->children() : @[];
+}
+
+- (id)accessibilityHitTest:(NSPoint)point
+{
+    luil::macos::accessibility_bridge* const bridge { self.owner != nullptr && self.surface != nullptr ? self.surface->accessibility.get() : nullptr };
+    id const hit { bridge != nullptr ? bridge->hit_test(point) : nil };
+    return hit != nil ? hit : [super accessibilityHitTest:point];
+}
+
+- (id)accessibilityFocusedUIElement
+{
+    luil::macos::accessibility_bridge* const bridge { self.owner != nullptr && self.surface != nullptr ? self.surface->accessibility.get() : nullptr };
+    id const focused { bridge != nullptr ? bridge->focused_element() : nil };
+    return focused != nil ? focused : [super accessibilityFocusedUIElement];
 }
 
 - (NSView*)luilViewForSurface:(NSString*)surface

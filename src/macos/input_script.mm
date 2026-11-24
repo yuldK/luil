@@ -282,6 +282,26 @@ namespace {
             else if ([view respondsToSelector:@selector(luilSnapshot:)])
                 [view performSelector:@selector(luilSnapshot:) withObject:path];
         }
+        else if (command == "ax")
+        {
+            // 접근성 계층을 적는다 (역할·이름·값, 깊이 4까지). 앱 안에서 NSAccessibility 질문으로 읽으므로 권한이 없어도 된다.
+            const auto dump = [](const auto& self, id const element, const int depth) -> void {
+                if (depth > 4 || element == nil)
+                    return;
+                NSString* const role { [element respondsToSelector:@selector(accessibilityRole)] ? [element accessibilityRole] : @"?" };
+                NSString* const label { [element respondsToSelector:@selector(accessibilityLabel)] ? [element accessibilityLabel] : nil };
+                id const value { [element respondsToSelector:@selector(accessibilityValue)] ? [element accessibilityValue] : nil };
+                std::fprintf(stderr, "luil ax %*s%s \"%s\" %s\n", depth * 2, "", role.UTF8String ?: "", label.UTF8String ?: "",
+                    value != nil ? [[value description] UTF8String] : "");
+                if ([element respondsToSelector:@selector(accessibilityChildren)])
+                    for (id const child in [element accessibilityChildren])
+                        self(self, child, depth + 1);
+            };
+            for (id const child in [window accessibilityChildren])
+                dump(dump, child, 0);
+            id const focused { [window accessibilityFocusedUIElement] };
+            std::fprintf(stderr, "luil ax focused: %s \"%s\"\n", [[focused accessibilityRole] UTF8String] ?: "(none)", [[focused accessibilityLabel] UTF8String] ?: "");
+        }
         else if (command == "capture" || command == "record")
         {
             // capture <경로> — 지금 창을 WebP로 남긴다. record <경로> — 녹화를 시작한다. record만 쓰면 멈춘다.

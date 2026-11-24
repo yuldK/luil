@@ -20,6 +20,7 @@
 //   marked <글>             — 입력기의 조합 글을 세운다 (`setMarkedText:`)
 //   commit <글>             — 입력기가 글을 확정한다 (`insertText:`)
 //   snapshot <png> [창 id]  — 창 내용(주 창은 웹뷰를 포함한 합성, 보조 창은 그 창의 frame)을 PNG로 적는다 (view가 `luilSnapshot:`에 답할 때)
+//   ax                      — 창의 접근성 계층(역할·이름·값)과 초점 요소를 stderr에 적는다
 //   capture <경로>          — 지금 창을 무손실 WebP로 남긴다 (`capture_request`)
 //   record [<경로>]         — 경로가 있으면 녹화를 시작하고, 없으면 멈춰 애니메이션 WebP로 적는다 (`record_request`)
 //   window <id>             — 다음 명령을 그 창(보조 창 id, `main`이면 주 창)에 보낸다
