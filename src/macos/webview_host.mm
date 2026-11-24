@@ -410,9 +410,10 @@ namespace {
 @end
 
 namespace luil::macos {
-    webview_host::webview_host(NSView* const container, NSView* const skia_view)
+    webview_host::webview_host(NSView* const container, NSView* const skia_view, std::u8string surface)
         : container_ { container }
         , skia_view_ { skia_view }
+        , surface_ { std::move(surface) }
     {
     }
 
@@ -446,8 +447,8 @@ namespace luil::macos {
     void webview_host::synchronize(const std::span<const ui_webview> wanted)
     {
         // 빠진 것과 프로필이 바뀐 것을 거둔다. 프로필이 다르면 저장소가 달라 같은 웹뷰로 이어 갈 수 없다.
-        std::erase_if(entries_, [this, wanted](std::unique_ptr<entry>& current) {
-            const auto still { std::ranges::find_if(wanted, [&current](const ui_webview& want) { return want.anchor.empty() && want.id == current->want.id; }) };
+        std::erase_if(entries_, [this, wanted, &surface = surface_](std::unique_ptr<entry>& current) {
+            const auto still { std::ranges::find_if(wanted, [&current, &surface](const ui_webview& want) { return want.anchor == surface && want.id == current->want.id; }) };
             if (still != wanted.end() && still->user_data_folder == current->want.user_data_folder)
                 return false;
             tear_down(*current);
@@ -455,7 +456,7 @@ namespace luil::macos {
         });
         for (const ui_webview& want : wanted)
         {
-            if (want.anchor.empty() == false || want.id.empty())
+            if (want.anchor != surface_ || want.id.empty())
                 continue;
             entry* target { find(want.id) };
             if (target == nullptr)

@@ -30,7 +30,8 @@ namespace luil::macos {
     {
     public:
         // `container`는 창의 내용 view이고 `skia_view`는 그 자식인 Skia view다. 둘 다 host보다 오래 산다.
-        webview_host(NSView* container, NSView* skia_view);
+        // `surface`는 이 host가 맡는 창의 표면 id다 (주 창은 빈 값, 보조 창은 `ui_window::id`). 앵커가 같은 웹뷰만 세운다.
+        webview_host(NSView* container, NSView* skia_view, std::u8string surface = {});
         webview_host(const webview_host&) = delete;
         webview_host(webview_host&&) = delete;
         webview_host& operator=(const webview_host&) = delete;
@@ -43,7 +44,7 @@ namespace luil::macos {
         void set_focus_reporter(std::function<void(const std::u8string& id)> reporter);
 
         // frame의 웹뷰 목록과 맞춘다. 새 id는 세우고, 빠진 id는 거두고, 있는 id에는 정책과 새 revision의 명령을 낸다.
-        //  - 주 창(`anchor`가 빈 것)의 웹뷰만 선다. 보조 창이 없는 플랫폼이다.
+        //  - 앵커가 이 host의 표면 id인 웹뷰만 선다 (창마다 host 하나다).
         void synchronize(std::span<const ui_webview> wanted);
         // 자리를 앉힌다 (물리 픽셀). `surface_scale`은 Skia view의 배율이라 점(point)으로 옮기는 데 쓴다.
         void apply_layout(const std::u8string& id, const webview_layout& layout, float surface_scale);
@@ -86,6 +87,7 @@ namespace luil::macos {
         NSView* skia_view_ { nullptr };
         std::shared_ptr<std::function<void(app_message)>> deliver_ { std::make_shared<std::function<void(app_message)>>() };
         std::shared_ptr<std::function<void(const std::u8string&)>> focus_reporter_ { std::make_shared<std::function<void(const std::u8string&)>>() };
+        std::u8string surface_ {};
         std::vector<std::unique_ptr<entry>> entries_ {};
     };
 }

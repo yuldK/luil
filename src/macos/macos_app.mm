@@ -255,6 +255,10 @@ namespace luil::macos {
         NSVisualEffectView* effect { nil };
         bool backdrop_applied { false };
         std::optional<std::pair<window_backdrop, int>> reported_backdrop {};
+        // 이 창에 선 웹뷰들과, 아래층이 비울 구멍, 마지막으로 본 초점이다 (`ui_webview::anchor`가 이 창).
+        std::unique_ptr<webview_host> webviews {};
+        std::vector<pixel_rect> webview_holes {};
+        ui_element_id last_webview_focus {};
         // 이 표면의 녹화다 (`record_request`).
         frame_recorder recorder {};
         // 닫힘 요청을 낸 frame이다. 같은 frame에 거듭 온 요청은 삼킨다.
@@ -561,7 +565,7 @@ namespace luil::macos {
         {
             const NSPoint point { surface_point(surface, event) };
             // 웹뷰 위다. 웹뷰가 포인터를 받으므로 tree의 hover를 거두고 커서는 웹뷰에 맡긴다.
-            if (surface.main() && webviews_ != nullptr && webviews_->covers(static_cast<float>(point.x), static_cast<float>(point.y)))
+            if (surface.webviews != nullptr && surface.webviews->covers(static_cast<float>(point.x), static_cast<float>(point.y)))
             {
                 if (surface.pointer_over_webview == false)
                 {
@@ -820,7 +824,6 @@ namespace luil::macos {
             return [surface->window convertRectToScreen:in_window];
         }
 
-        // 창 내용의 합성을 PNG로 적는다 (개발용, 입력 대본의 `snapshot`). 주 창만이다. 아래층 웹뷰 → Skia frame → 위층 웹뷰의 차례다.
         void script_capture(const std::u8string& path, const std::u8string& surface)
         {
             dispatch(capture_request { path, surface });
@@ -834,22 +837,28 @@ namespace luil::macos {
 
         void snapshot(NSString* const path)
         {
-            if (webviews_ == nullptr || path == nil)
+            snapshot_composite(main_, path);
+        }
+
+        // 창 내용의 합성을 PNG로 적는다 (개발용, 입력 대본의 `snapshot`). 아래층 웹뷰 → Skia frame → 위층 웹뷰의 차례다.
+        void snapshot_composite(native_surface& surface, NSString* const path)
+        {
+            if (surface.webviews == nullptr || path == nil)
                 return;
             // 바탕은 Skia가 그린 frame이다. Metal은 GPU에서 되읽어야 하므로 한 frame을 되읽기로 다시 그린다.
-            if (main_.renderer != nullptr && host_ != nullptr)
+            if (surface.renderer != nullptr && host_ != nullptr)
             {
                 request_frame_readback();
-                main_.dirty = true;
-                static_cast<void>(render(main_));
+                surface.dirty = true;
+                static_cast<void>(render(surface));
             }
             CGImageRef const frame { copy_latest_frame() };
             if (frame == nullptr)
                 return;
-            const int width { main_.width };
-            const int height { main_.height };
+            const int width { surface.width };
+            const int height { surface.height };
             NSString* const target { [path copy] };
-            webviews_->snapshot([frame, width, height, target](std::vector<webview_host::snapshot_layer> layers) {
+            surface.webviews->snapshot([frame, width, height, target](std::vector<webview_host::snapshot_layer> layers) {
                 CGColorSpaceRef const space { CGColorSpaceCreateWithName(kCGColorSpaceSRGB) };
                 CGContextRef const context { CGBitmapContextCreate(nullptr, static_cast<std::size_t>(width), static_cast<std::size_t>(height), 8, 0, space,
                     static_cast<CGBitmapInfo>(kCGImageAlphaPremultipliedFirst) | static_cast<CGBitmapInfo>(kCGBitmapByteOrder32Little)) };
@@ -893,24 +902,14 @@ namespace luil::macos {
         // 보조 창 하나의 Skia frame을 PNG로 적는다 (개발용, 입력 대본의 `snapshot <png> <창 id>`).
         void snapshot_surface(const std::u8string& id, NSString* const path)
         {
-            native_surface* const surface { find_surface(id) };
-            if (surface == nullptr || surface->renderer == nullptr || host_ == nullptr || path == nil)
-                return;
-            request_frame_readback();
-            surface->dirty = true;
-            static_cast<void>(render(*surface));
-            CGImageRef const frame { copy_latest_frame() };
-            if (frame == nullptr)
-                return;
-            NSBitmapImageRep* const bitmap { [[NSBitmapImageRep alloc] initWithCGImage:frame] };
-            [[bitmap representationUsingType:NSBitmapImageFileTypePNG properties:@{}] writeToFile:path atomically:YES];
-            CGImageRelease(frame);
+            if (native_surface* const surface { find_surface(id) }; surface != nullptr)
+                snapshot_composite(*surface, path);
         }
 
-        // view 좌표의 점(점 단위)이 아래층 웹뷰의 구멍 안인가. 참이면 포인터가 Skia view를 지나 웹뷰로 간다. 웹뷰는 주 창에만 선다.
+        // view 좌표의 점(점 단위)이 아래층 웹뷰의 구멍 안인가. 참이면 포인터가 Skia view를 지나 웹뷰로 간다.
         [[nodiscard]] bool passes_through(const native_surface& surface, const NSPoint point) const
         {
-            return surface.main() && webviews_ != nullptr && webviews_->passes_through(static_cast<float>(point.x * surface.scale), static_cast<float>(point.y * surface.scale));
+            return surface.webviews != nullptr && surface.webviews->passes_through(static_cast<float>(point.x * surface.scale), static_cast<float>(point.y * surface.scale));
         }
 
         // 메뉴의 편집 명령이다 (오려 두기·복사하기·붙여넣기·전체 선택). Command 단축키와 같은 키로, 키 창에 보낸다.
@@ -1095,7 +1094,6 @@ namespace luil::macos {
             main_.id.clear();
             create_window(main_, NSMakeSize(config_.initial_width, config_.initial_height), NSMakeSize(config_.minimum_width, config_.minimum_height), make_ns_string(config_.title), false);
             [main_.window center];
-            webviews_ = std::make_unique<webview_host>(main_.container, main_.view);
             refresh_appearance();
 
             wake_->target = this;
@@ -1149,15 +1147,7 @@ namespace luil::macos {
             if (app_message message { metrics_message(main_) }; message.empty() == false)
                 host_config.initial_messages.push_back(std::move(message));
             host_ = std::make_unique<app_host>(std::move(host_config), *environment_.driver, environment_.policy);
-            webviews_->set_deliver([this](app_message message) {
-                if (host_ != nullptr)
-                    host_->post_app_message(std::move(message));
-            });
-            // 페이지를 눌러 키보드 초점이 웹뷰로 갔다. 논리 초점을 그 자리표로 옮긴다 (Windows의 `GotFocus`와 같은 자리).
-            webviews_->set_focus_reporter([this](const std::u8string& id) {
-                if (host_ != nullptr)
-                    host_->post_raw_input(access_focus_event { ui_element_id { ui_element_kind::webview, id }, {}, now() });
-            });
+            create_webviews(main_);
 
             create_renderer(main_);
             if (main_.renderer == nullptr)
@@ -1205,8 +1195,11 @@ namespace luil::macos {
                 }
             }
             // 웹뷰 사건이 끝나는 host로 가지 않게 먼저 거둔다.
-            if (webviews_ != nullptr)
-                webviews_->shutdown();
+            if (main_.webviews != nullptr)
+                main_.webviews->shutdown();
+            for (std::unique_ptr<native_surface>& surface : secondary_)
+                if (surface->webviews != nullptr)
+                    surface->webviews->shutdown();
             host_->shutdown();
         }
 
@@ -1988,9 +1981,14 @@ namespace luil::macos {
             if (frame == overlay_frame_ && frame != nullptr)
                 return;
             overlay_frame_ = frame;
-            if (webviews_ != nullptr)
-                webviews_->synchronize(frame != nullptr ? std::span<const ui_webview> { frame->webviews } : std::span<const ui_webview> {});
+            const std::span<const ui_webview> webviews { frame != nullptr ? std::span<const ui_webview> { frame->webviews } : std::span<const ui_webview> {} };
+            if (main_.webviews != nullptr)
+                main_.webviews->synchronize(webviews);
             reconcile_windows(frame.get());
+            // 보조 창의 웹뷰는 창이 선 뒤에 맞춘다. 창이 아직 없는 앵커의 웹뷰는 서지 않는다 (popup 앵커와 같은 규칙).
+            for (std::unique_ptr<native_surface>& surface : secondary_)
+                if (surface->webviews != nullptr)
+                    surface->webviews->synchronize(webviews);
             update_overlays(frame.get());
             apply_main_visibility(frame != nullptr && frame->main_hidden);
             apply_backdrops(frame.get());
@@ -2014,6 +2012,21 @@ namespace luil::macos {
                     set_fullscreen(*frame->fullscreen);
             }
             mark_all_dirty();
+        }
+
+        // 창 하나의 웹뷰 host를 세운다. 페이지의 메시지는 앱으로, 페이지를 눌러 옮겨 간 키보드 초점은 그 자리표의 논리 초점으로 낸다
+        // (Windows의 `GotFocus`와 같은 자리).
+        void create_webviews(native_surface& surface)
+        {
+            surface.webviews = std::make_unique<webview_host>(surface.container, surface.view, surface.id);
+            surface.webviews->set_deliver([this](app_message message) {
+                if (host_ != nullptr)
+                    host_->post_app_message(std::move(message));
+            });
+            surface.webviews->set_focus_reporter([this, surface_id = surface.id](const std::u8string& id) {
+                if (host_ != nullptr)
+                    host_->post_raw_input(access_focus_event { ui_element_id { ui_element_kind::webview, id }, surface_id, now() });
+            });
         }
 
         // 셸 쪽 표시다: 메뉴 막대 상태 항목(알림 영역 아이콘), Dock 타일·메뉴(작업 표시줄), 전역 단축키.
@@ -2242,12 +2255,6 @@ namespace luil::macos {
                 warned_docked_ = true;
                 log_error(u8"Docked surfaces (ui_frame::docked_surfaces) are not supported on macOS and are ignored.");
             }
-            if (frame != nullptr && warned_window_webviews_ == false
-                && std::ranges::any_of(frame->webviews, [](const ui_webview& view) { return view.anchor.empty() == false; }))
-            {
-                warned_window_webviews_ = true;
-                log_error(u8"Webviews on secondary windows are not supported on macOS yet and are ignored.");
-            }
         }
 
         // 보조 창 하나를 세운다. 자리는 저장 배치 → 화면 닻 → 주 창 기준 자리의 차례로 정한다 (app_host.h의 약속).
@@ -2292,6 +2299,7 @@ namespace luil::macos {
                 [surface.window zoom:nil];
             read_surface_size(surface);
             create_renderer(surface);
+            create_webviews(surface);
             if (main_hidden_ == false || want.independent)
                 [surface.window makeKeyAndOrderFront:nil];
             post_metrics(surface);
@@ -2317,6 +2325,10 @@ namespace luil::macos {
 
         void destroy_window(native_surface& surface)
         {
+            // 웹뷰 사건이 사라지는 창으로 가지 않게 먼저 거둔다.
+            if (surface.webviews != nullptr)
+                surface.webviews->shutdown();
+            surface.webviews.reset();
             surface.renderer.reset();
             if (surface.window == nil)
                 return;
@@ -2698,41 +2710,41 @@ namespace luil::macos {
         // frame의 웹뷰마다 자리표의 자리를 웹뷰에 앉히고, 아래층이 비울 구멍을 낸다 (Win32 `apply_webviews`와 같은 규칙).
         //  - 가림은 자리표의 가운데와 안쪽 네 모서리 hit test다. popup은 같은 view에 겹쳐 그리므로 자리와 겹치는 popup도 가림이다.
         //  - 초점이 자리표에 **닿는 순간** 키보드 초점을 페이지로 넘긴다.
-        [[nodiscard]] std::span<const pixel_rect> apply_webviews(const ui_tree* const tree, const interaction_snapshot& interaction)
+        [[nodiscard]] std::span<const pixel_rect> apply_webviews(native_surface& surface, const ui_tree* const tree, const interaction_snapshot& interaction)
         {
-            webview_holes_.clear();
-            if (webviews_ == nullptr || overlay_frame_ == nullptr)
-                return webview_holes_;
-            const ui_element_id focused { interaction_for_surface(interaction, std::u8string {}).focused };
+            surface.webview_holes.clear();
+            if (surface.webviews == nullptr || overlay_frame_ == nullptr)
+                return surface.webview_holes;
+            const ui_element_id focused { interaction_for_surface(interaction, surface.id).focused };
             for (const ui_webview& want : overlay_frame_->webviews)
             {
-                if (want.anchor.empty() == false || want.id.empty())
+                if (want.anchor != surface.id || want.id.empty())
                     continue;
                 const ui_element_id placeholder_id { ui_element_kind::webview, want.id };
                 const auto* const placeholder { tree != nullptr ? dynamic_cast<const webview_element*>(tree->find(placeholder_id)) : nullptr };
                 const std::optional<rect_f> visible { placeholder != nullptr ? tree->visible_bounds(*placeholder) : std::nullopt };
-                const float tree_scale { placeholder != nullptr ? placeholder->scale() : main_.scale };
+                const float tree_scale { placeholder != nullptr ? placeholder->scale() : surface.scale };
                 const webview_layout layout {
-                    plan_webview_layout(visible, main_.width, main_.height, tree != nullptr && webview_occluded(*tree, placeholder, visible), tree_scale, want.layer),
+                    plan_webview_layout(visible, surface.width, surface.height, tree != nullptr && webview_occluded(surface, *tree, placeholder, visible), tree_scale, want.layer),
                 };
                 // 다른 배율로 배치된 tree(화면을 옮긴 직후)의 자리는 주지 않는다. 새 배율의 tree가 오면 크기와 배율을 함께 준다.
-                const bool arranged_for_surface { std::abs(tree_scale - main_.scale) < 0.001f };
+                const bool arranged_for_surface { std::abs(tree_scale - surface.scale) < 0.001f };
                 if (arranged_for_surface || placeholder == nullptr)
-                    webviews_->apply_layout(want.id, layout, main_.scale);
-                if (last_webview_focus_ != placeholder_id && focused == placeholder_id)
-                    static_cast<void>(webviews_->move_focus_in(want.id));
-                if (layout.punch_hole() && webviews_->opens_hole(want.id))
-                    webview_holes_.push_back(pixel_rect { layout.x, layout.y, layout.width, layout.height });
+                    surface.webviews->apply_layout(want.id, layout, surface.scale);
+                if (surface.last_webview_focus != placeholder_id && focused == placeholder_id)
+                    static_cast<void>(surface.webviews->move_focus_in(want.id));
+                if (layout.punch_hole() && surface.webviews->opens_hole(want.id))
+                    surface.webview_holes.push_back(pixel_rect { layout.x, layout.y, layout.width, layout.height });
             }
-            last_webview_focus_ = focused;
-            return webview_holes_;
+            surface.last_webview_focus = focused;
+            return surface.webview_holes;
         }
 
-        [[nodiscard]] bool webview_occluded(const ui_tree& tree, const ui_element* const placeholder, const std::optional<rect_f>& visible) const
+        [[nodiscard]] static bool webview_occluded(const native_surface& surface, const ui_tree& tree, const ui_element* const placeholder, const std::optional<rect_f>& visible)
         {
             if (placeholder == nullptr || visible.has_value() == false)
                 return true;
-            for (const overlay_entry& entry : main_.overlays)
+            for (const overlay_entry& entry : surface.overlays)
             {
                 const pixel_rect& area { entry.bounds };
                 if (static_cast<float>(area.x) < visible->x + visible->width && visible->x < static_cast<float>(area.x + area.width)
@@ -2783,8 +2795,8 @@ namespace luil::macos {
             for (const overlay_entry& entry : surface.overlays)
                 prepared.layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id), entry.scroll_y });
             state.overlays = prepared.layers;
-            if (surface.main() && with_webviews)
-                state.holes = apply_webviews(prepared.tree.get(), interaction);
+            if (with_webviews)
+                state.holes = apply_webviews(surface, prepared.tree.get(), interaction);
             const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
             state.theme = resolve_color_theme(appearance.theme, system_.high_contrast, system_.prefers_light);
             state.high_contrast = system_.contrast_colors;
@@ -2864,9 +2876,6 @@ namespace luil::macos {
         native_surface main_ {};
         // 보조 창들이다. 주소가 변하지 않게 따로 잡는다 (view와 delegate가 그 주소를 쥔다).
         std::vector<std::unique_ptr<native_surface>> secondary_ {};
-        std::unique_ptr<webview_host> webviews_ {};
-        std::vector<pixel_rect> webview_holes_ {};
-        ui_element_id last_webview_focus_ {};
         LuilApplicationDelegate* application_delegate_ { nil };
         NSTimer* timer_ { nil };
         std::optional<std::chrono::steady_clock::time_point> timer_deadline_ {};
@@ -2901,7 +2910,6 @@ namespace luil::macos {
         bool fullscreen_transition_ { false };
         bool displays_reported_ { false };
         bool zooming_in_ { false };
-        bool warned_window_webviews_ { false };
         bool main_hidden_ { false };
         bool stopped_ { false };
         bool quitting_ { false };
