@@ -12,8 +12,6 @@
 #include "luil/ui/number_input.h"
 #include "luil/ui/text_area_element.h"
 
-#include <windows.h>
-
 #include <algorithm>
 #include <array>
 #include <chrono>
@@ -82,11 +80,7 @@ namespace demo {
         // 따라 자리가 달라진다.
         [[nodiscard]] std::filesystem::path module_directory()
         {
-            std::array<wchar_t, MAX_PATH> buffer {};
-            const DWORD length { GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size())) };
-            if (length == 0 || length >= buffer.size())
-                return {};
-            return std::filesystem::path { std::wstring { buffer.data(), length } }.parent_path();
+            return executable_directory();
         }
 
         // 가로는 색상, 세로는 밝기가 변하는 견본 이미지를 파일에서 읽는다.

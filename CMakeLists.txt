@@ -44,10 +44,11 @@ set(LUIL_SUPPORTED_GENERATORS
     "Visual Studio 18 2026"
 )
 # macOS의 대상이다. Skia 패키지(mac-arm64)가 정한 것과 같아야 한다.
-#  - **둘 다 아직 임시 값이다.** arm64만 할지 universal까지 할지, 최소 판을 얼마로 할지는
-#    skia-prep이 mac 패키지를 세울 때 정하고 그 값으로 맞춘다.
+#  - 아키텍처는 arm64 하나다. 패키지가 그것만 담는다.
+#  - 최소 판은 패키지의 배포 하한(toolchain.json의 macos_deployment_target)과 같은 11이다.
+#    libc++의 부동소수점 `to_chars`(chrono·`std::format`의 실수 서식)는 13.3부터라 쓰지 않는다.
 set(LUIL_MACOS_ARCHITECTURE "arm64")
-set(LUIL_MINIMUM_MACOS_VERSION "13.0")
+set(LUIL_MINIMUM_MACOS_VERSION "11.0")
 
 set(LUIL_CMAKE_DIRECTORY "${PROJECT_SOURCE_DIR}/cmake")
 set(LUIL_THIRD_PARTY_DIRECTORY "${PROJECT_SOURCE_DIR}/third_party")
@@ -254,12 +255,10 @@ elseif(LUIL_PLATFORM STREQUAL "android")
         libskottie.a libsksg.a libjsonreader.a libskresources.a libskshaper.a)
     set(LUIL_SKIA_AVIF_COMPONENTS libavif_decoder.a libavif.a libgav1.a libyuv.a)
 elseif(LUIL_PLATFORM STREQUAL "macos")
-    # **이 갈래의 값은 전부 임시다.** mac-arm64 패키지가 아직 없어 실물과 맞대 보지 못했다.
-    # skia-prep이 패키지를 내면 그 `args.gn`·아카이브 목록·대상 이름으로 고친다.
-    # 그때까지 configure는 "패키지가 없다"에서 멈추므로 틀린 값이 조용히 쓰이지는 않는다.
+    # mac-arm64 패키지의 정적 아카이브다 (skia-prep docs/skia-build.md 9장, NOTICE.json의 core).
+    # win-x64 목록에서 Direct3D 몫(spirv_cross·d3d12allocator)을 뺀 모양이다. libskia.a가
+    # expat·코덱을 담고, 글꼴은 CoreText라 Android의 FreeType·expat 묶음이 없다.
     set(LUIL_SKIA_TARGET "mac-arm64")
-    # win-x64 목록에서 Direct3D 몫(spirv_cross·d3d12allocator)을 뺀 것이다.
-    # 글꼴은 CoreText라 Android의 FreeType·expat 묶음이 없다.
     set(LUIL_SKIA_COMPONENTS
         libskia.a
         libskcms.a
@@ -272,17 +271,19 @@ elseif(LUIL_PLATFORM STREQUAL "macos")
         librust_png_ffi_rs.a
         libcxx_cc.a)
     set(LUIL_SKIA_RUST_PNG_SYSTEM_LIBRARIES "")
-    # Skia가 요구하는 시스템 프레임워크다. 글꼴이 CoreText, GPU가 Metal이다.
+    # Skia가 요구하는 시스템 프레임워크 다섯이다 (NOTICE.json core의 system_libraries).
+    # 글꼴이 CoreText, GPU가 Metal이다. 텍스트의 ICU는 시스템 libicucore를 실행 시점에 열므로
+    # 링크할 것이 없다.
     set(LUIL_SKIA_SYSTEM_LIBRARIES
         "-framework CoreFoundation"
         "-framework CoreGraphics"
         "-framework CoreText"
-        "-framework CoreServices"
         "-framework Foundation"
         "-framework Metal")
-    # GPU는 Metal(Ganesh)이다. 코덱은 다른 대상과 같다.
+    # GPU는 Metal(Ganesh)이고 글꼴은 CoreText다. 코덱은 다른 대상과 같다.
     set(LUIL_SKIA_REQUIRED_ARGUMENTS
         "skia_use_metal=true"
+        "skia_use_fonthost_mac=true"
         "skia_use_libjpeg_turbo_decode=true"
         "skia_use_libjpeg_turbo_encode=true"
         "skia_use_libwebp_decode=true"
@@ -547,10 +548,8 @@ if(LUIL_PLATFORM STREQUAL "windows" AND (LUIL_BUILD_EXAMPLES OR LUIL_BUILD_TESTS
 elseif(LUIL_PLATFORM STREQUAL "android" AND LUIL_BUILD_EXAMPLES)
     add_subdirectory(examples/android)
 elseif(LUIL_PLATFORM STREQUAL "macos" AND LUIL_BUILD_EXAMPLES)
-    # 예제는 플랫폼 조립(`luil`)을 링크한다. 그것이 아직 없으니 조용히 넘기지 않고 멈춘다.
-    message(FATAL_ERROR
-        "LUIL_BUILD_EXAMPLES is not available on macOS yet. "
-        "Only luil_core and its tests build there for now.")
+    # AppKit host 위의 hello와 데스크톱 demo다 (examples/macos.cmake).
+    include("${PROJECT_SOURCE_DIR}/examples/macos.cmake")
 endif()
 if(LUIL_BUILD_TESTS)
     add_subdirectory(tests)

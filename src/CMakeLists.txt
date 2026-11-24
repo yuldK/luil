@@ -944,9 +944,69 @@ if(LUIL_PLATFORM STREQUAL "android")
     endif()
 endif()
 
-# macOS의 플랫폼 조립(`luil`)은 아직 없다. core와 그 test만 선다.
-#  - 설 때는 위의 두 블록과 같은 모양이다: 플랫폼 소스(.mm)와 luil_net_files, 그리고 전송 하나.
-#    codicon 글꼴은 Android처럼 라이브러리 안에 싣는다 (embed_binary.cmake).
+if(LUIL_PLATFORM STREQUAL "macos")
+    # codicon 글꼴을 라이브러리 안에 싣는다. 앱 번들에 자원을 따로 넣는 단계를 만들지 않는다 (Android와 같다).
+    set(luil_codicon_source "${LUIL_GENERATED_DIRECTORY}/codicon_font.cpp")
+    add_custom_command(
+        OUTPUT "${luil_codicon_source}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT_FILE=${LUIL_ASSET_DIRECTORY}/codicon.ttf"
+            "-DOUTPUT_FILE=${luil_codicon_source}"
+            "-DSYMBOL=luil_codicon_font"
+            -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        DEPENDS
+            "${LUIL_ASSET_DIRECTORY}/codicon.ttf"
+            "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        COMMENT "Embedding the Codicons font"
+        VERBATIM)
+
+    # macos: AppKit 위의 앱 host다.
+    # 창 하나·popup overlay·입력과 입력기·CPU 렌더러, CoreText 글꼴과 내장 codicon, 플랫폼 도구다.
+    #  - 비밀 저장소·OS 알림·파일 감시·HTTP 전송은 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
+    set(luil_macos_files)
+    luil_add_source_filter(luil_macos_files "macos"
+        "${public_headers}/macos/macos_app.h"
+        macos/macos_app.mm
+        macos/macos_assets.cpp
+        macos/macos_fonts.cpp
+        macos/macos_input.cpp
+        macos/macos_input.h
+        macos/macos_text.h
+        macos/cpu_skia_renderer.h
+        macos/cpu_skia_renderer.mm
+        macos/desktop_compat.cpp
+        macos/input_script.h
+        macos/input_script.mm
+        "${public_headers}/app/platform_services.h"
+        macos/platform_services_macos.mm
+        luil/url_scheme.cpp
+        "${public_headers}/app/secret_store.h"
+        "${public_headers}/app/notification.h"
+        macos/macos_unsupported.cpp
+        "${luil_codicon_source}")
+    list(APPEND luil_macos_files ${luil_net_files})
+    luil_add_source_filter(luil_macos_files "net" net/smb_client_unsupported.cpp)
+    add_library(luil STATIC ${luil_macos_files})
+    add_library(luil::luil ALIAS luil)
+    target_include_directories(luil
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}")
+    # Objective-C++ 소스는 ARC로 컴파일한다. 창·view·시계의 수명을 손으로 세지 않는다.
+    target_compile_options(luil PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+    target_link_libraries(luil
+        PUBLIC
+            luil_core
+            luil_usage
+            "$<BUILD_INTERFACE:luil_skia>"
+            "$<BUILD_INTERFACE:luil_nlohmann_json>"
+            "-framework AppKit"
+            "-framework QuartzCore"
+            "-framework Foundation"
+            "-framework CoreGraphics"
+            "-framework ImageIO"
+        PRIVATE
+            luil_options)
+endif()
 
 # CommonMark 파서는 원본 C로 컴파일해 core 정적 라이브러리에 담는다.
 target_sources(luil_core PRIVATE

@@ -13,6 +13,7 @@ CMake configure는 준비된 파일을 검사하고 연결한다.
 ```powershell
 scripts\fetch_skia.ps1 -Configuration Debug,Release
 scripts\fetch_skia.ps1 -Target android-arm64 -Configuration Debug,Release
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target mac-arm64 -Configuration Debug,Release"
 ```
 
 패키지는 대상마다 핀 하나와 설치 자리 하나를 갖는다. `-Target`의 기본값은 `win-x64`다.
@@ -21,6 +22,7 @@ scripts\fetch_skia.ps1 -Target android-arm64 -Configuration Debug,Release
 | --- | --- | --- |
 | `win-x64` | [`third_party/skia-prep.json`](../third_party/skia-prep.json) | `third_party/skia-prep` |
 | `android-arm64` | [`third_party/skia-prep-android-arm64.json`](../third_party/skia-prep-android-arm64.json) | `third_party/skia-prep-android-arm64` |
+| `mac-arm64` | [`third_party/skia-prep-mac-arm64.json`](../third_party/skia-prep-mac-arm64.json) | `third_party/skia-prep-mac-arm64` |
 
 핀의 `target`이 고른 대상과 다르면 받거나 지우기 전에 멈춘다.
 기본 설치 위치(win-x64)는 `third_party/skia-prep`이고 아카이브 캐시는
@@ -55,7 +57,7 @@ Skia commit만으로는 판정하지 않는다. **같은 소스 commit을 다시
 | 옵션 | 용도 |
 | --- | --- |
 | `-Configuration` | 설치할 Debug·Release 구성 |
-| `-Target` | 패키지 대상 (`win-x64` 기본, `android-arm64`) |
+| `-Target` | 패키지 대상 (`win-x64` 기본, `android-arm64`, `mac-arm64`) |
 | `-Destination` | 패키지를 풀 디렉터리 |
 | `-ArchiveDirectory` | 아카이브 캐시 디렉터리 |
 | `-PinFile` | 버전과 다운로드 정보를 담은 설정 파일 |
@@ -177,6 +179,21 @@ configure는 패키지가 적어 둔 파일을 읽을 뿐 컴파일러를 찾지
 | 런타임 | Debug `/MTd`, 그 밖 `/MT` | `args.gn`의 `ndk_api`가 구성의 API 수준 이하 |
 
 소비자 링크 계약은 skia-prep `docs/skia-build.md` 8.4·8.5를 따르고, [Skia 의존성 모듈](../cmake/dependencies/skia.cmake)이 그대로 만든다.
+
+## macOS 패키지와 링크 계약
+
+`mac-arm64` 패키지는 Xcode의 Apple clang으로 세운 정적 아카이브다. GPU는 Metal(Ganesh), 글꼴은 CoreText이고 코덱은 Windows와 같다. core 목록은 Windows 모양이라 `libskia.a`가 expat·코덱을 담는다. 텍스트의 ICU는 시스템 `libicucore`를 실행 시점에 연다.
+
+| 검사 | mac-arm64 |
+| --- | --- |
+| 필수 인자 | Metal, CoreText(`skia_use_fonthost_mac`), 코덱 |
+| 컴파일러 (`toolchain.json`의 `compiler`) | `clang` |
+| ABI | `is_trivial_abi = false` |
+| 배포 하한 | `toolchain.json`의 `macos_deployment_target`(11.0)이 구성의 `CMAKE_OSX_DEPLOYMENT_TARGET` 이하 |
+| 시스템 framework | CoreFoundation, CoreGraphics, CoreText, Foundation, Metal (패키지 `NOTICE.json` core의 `system_libraries`) |
+
+Apple의 링커는 아카이브를 순서와 무관하게 풀므로 Android의 다시 훑는 묶음이 없다. 계약의 근거는 skia-prep `docs/skia-build.md` 9장이다.
+
 
 - 157 r1은 rust 아카이브에 겹쳐 들었던 Skia 오브젝트를 패키징할 때 걷는다. `--allow-multiple-definition`은 사용하지 않으며 중복 정의가 생기면 링크가 실패한다. 아카이브끼리 서로 부르는 기호는 `$<LINK_GROUP:RESCAN,...>`의 재검색 묶음으로 푼다.
 - `-landroid -llog`를 링크한다. 그 밖의 시스템 라이브러리는 libc·libm·libdl뿐이다.

@@ -10,6 +10,7 @@
 # 대상은 -Target이 고른다. 기본값은 win-x64이고, 핀과 설치 자리도 지금까지와 같다.
 #   win-x64       third_party/skia-prep.json → third_party/skia-prep
 #   android-arm64 third_party/skia-prep-android-arm64.json → third_party/skia-prep-android-arm64
+#   mac-arm64     third_party/skia-prep-mac-arm64.json → third_party/skia-prep-mac-arm64
 # 대상마다 설치 자리가 따로라 한 저장소에서 두 대상을 함께 빌드할 수 있다.
 #
 # 판번은 Skia commit 하나가 아니다. 같은 commit을 다른 도구사슬로 다시 패키징한
@@ -32,7 +33,7 @@ param(
     [ValidateSet('Debug', 'Release')]
     [string[]]$Configuration = @('Release'),
     # 받을 패키지의 대상이다. 핀의 target과 같아야 한다.
-    [ValidateSet('win-x64', 'android-arm64')]
+    [ValidateSet('win-x64', 'android-arm64', 'mac-arm64')]
     [string]$Target = 'win-x64',
     [string]$Destination,
     [string]$PinFile,
@@ -451,6 +452,9 @@ Write-Output ('Skia package ready: {0} ({1:N1} MB)' -f $Destination, ($size / 1M
 Write-Output 'Configure luil next - it checks the package on its own:'
 if ($Target -eq 'win-x64') {
     Write-Output '  cmake --preset vs2026-tests'
+} elseif ($Target -eq 'mac-arm64') {
+    # preset 이름은 패키지 대상(mac-)이 아니라 플랫폼 이름(macos-)을 쓴다.
+    Write-Output '  cmake --preset macos-arm64-core'
 } else {
     Write-Output "  cmake --preset $Target-core"
 }

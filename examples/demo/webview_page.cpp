@@ -12,8 +12,6 @@
 
 #include "luil/generated/codicons.h"
 
-#include <windows.h>
-
 #include <algorithm>
 #include <array>
 #include <string>
@@ -28,12 +26,10 @@ namespace demo {
         // 조용히 물러서지 않는다 (luil/win32/webview.h).
         [[nodiscard]] std::u8string profile_directory()
         {
-            wchar_t buffer[MAX_PATH] {};
-            const DWORD length { GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, MAX_PATH) };
-            if (length == 0 || length >= MAX_PATH)
+            const std::filesystem::path directory { user_data_directory() };
+            if (directory.empty())
                 return {};
-            const std::filesystem::path folder { std::filesystem::path { buffer } / L"luil-demo" / L"webview" };
-            return folder.u8string();
+            return (directory / L"webview").u8string();
         }
 
         // 떠 있는 판의 크기와 본문 가장자리에서 떨어진 거리다 (논리 픽셀). 본문이 낮으면 판도 그만큼 낮아진다.
@@ -191,11 +187,9 @@ namespace demo {
     {
         // 자리는 실행 파일 옆이다 — 작업 디렉터리로 찾으면 무엇으로 띄웠느냐에 따라
         // 달라진다 (basics_page와 같은 규칙).
-        std::array<wchar_t, MAX_PATH> buffer {};
-        const DWORD length { GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size())) };
-        if (length == 0 || length >= buffer.size())
+        const std::filesystem::path directory { executable_directory() };
+        if (directory.empty())
             return;
-        const std::filesystem::path directory { std::filesystem::path { std::wstring { buffer.data(), length } }.parent_path() };
         const std::filesystem::path path { directory / L"assets" / L"gradient.png" };
         picture_ = luil::load_image_file(path.u8string(), { .max_width = 880, .max_height = 880 }, picture_error_);
     }

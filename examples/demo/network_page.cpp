@@ -9,8 +9,6 @@
 
 #include <nlohmann/json.hpp>
 
-#include <windows.h>
-
 #include <array>
 #include <atomic>
 #include <filesystem>
@@ -131,6 +129,8 @@ namespace demo {
                 return u8"unsupported_scheme";
             case luil::net::http_error_kind::invalid_header:
                 return u8"invalid_header";
+            case luil::net::http_error_kind::invalid_method:
+                return u8"invalid_method";
             case luil::net::http_error_kind::name_not_resolved:
                 return u8"name_not_resolved";
             case luil::net::http_error_kind::cannot_connect:
@@ -228,11 +228,7 @@ namespace demo {
         // (basics_page.cpp와 같은 판단이고 같은 코드다).
         [[nodiscard]] std::filesystem::path module_directory()
         {
-            std::array<wchar_t, MAX_PATH> buffer {};
-            const DWORD length { GetModuleFileNameW(nullptr, buffer.data(), static_cast<DWORD>(buffer.size())) };
-            if (length == 0 || length >= buffer.size())
-                return {};
-            return std::filesystem::path { std::wstring { buffer.data(), length } }.parent_path();
+            return executable_directory();
         }
 
         [[nodiscard]] std::vector<std::uint8_t> read_asset(const std::wstring_view name)

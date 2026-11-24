@@ -5,8 +5,6 @@
 #include "luil/ui/panel_element.h"
 #include "luil/ui/stack_element.h"
 
-#include <process.h>
-
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -178,7 +176,7 @@ namespace demo {
             }
         }
         if (watch_folder_.empty())
-            watch_folder_ = std::filesystem::temp_directory_path() / (L"luil-demo-watch-" + std::to_wstring(_getpid()));
+            watch_folder_ = std::filesystem::temp_directory_path() / (L"luil-demo-watch-" + std::to_wstring(process_id()));
         std::error_code created {};
         std::filesystem::create_directories(watch_folder_, created);
         watch_ticket_ = watcher_->add(watch_folder_.u8string(), luil::file_watch_scope::folder, error);

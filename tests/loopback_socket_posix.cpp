@@ -1,6 +1,7 @@
 #include "loopback_socket.h"
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <poll.h>
 #include <sys/socket.h>
@@ -15,6 +16,32 @@ namespace luil::testing::loopback_socket {
         [[nodiscard]] int native(const std::uintptr_t socket) noexcept
         {
             return static_cast<int>(socket);
+        }
+
+        // 실행 중 띄운 프로세스가 물려받지 않는 TCP 소켓이다. Linux는 만들 때 한 번에, macOS는 만든 뒤 표식을 단다
+        // (`SOCK_CLOEXEC`·`accept4`가 없다).
+        [[nodiscard]] int open_stream() noexcept
+        {
+#if defined(SOCK_CLOEXEC)
+            return socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP);
+#else
+            const int opened { socket(AF_INET, SOCK_STREAM, IPPROTO_TCP) };
+            if (opened >= 0)
+                static_cast<void>(fcntl(opened, F_SETFD, FD_CLOEXEC));
+            return opened;
+#endif
+        }
+
+        [[nodiscard]] int accept_stream(const int listener) noexcept
+        {
+#if defined(SOCK_CLOEXEC)
+            return accept4(listener, nullptr, nullptr, SOCK_CLOEXEC);
+#else
+            const int client { ::accept(listener, nullptr, nullptr) };
+            if (client >= 0)
+                static_cast<void>(fcntl(client, F_SETFD, FD_CLOEXEC));
+            return client;
+#endif
         }
 
         [[nodiscard]] bool loopback_address(const std::uint16_t port, sockaddr_in& address) noexcept
@@ -39,7 +66,7 @@ namespace luil::testing::loopback_socket {
     {
         // SO_REUSEADDR를 두지 않는다. POSIX에서는 뜻이 Windows와 달라, 묶기만 하고 듣지 않는
         // 죽은 포트의 거절 보장이 흐려진다.
-        const int opened { socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP) };
+        const int opened { open_stream() };
         if (opened < 0)
             return loopback_no_socket;
 
@@ -63,7 +90,7 @@ namespace luil::testing::loopback_socket {
 
     std::uintptr_t connect_loopback(const std::uint16_t port) noexcept
     {
-        const int opened { socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, IPPROTO_TCP) };
+        const int opened { open_stream() };
         if (opened < 0)
             return loopback_no_socket;
 
@@ -88,7 +115,7 @@ namespace luil::testing::loopback_socket {
 
     std::uintptr_t accept(const std::uintptr_t socket, bool& transient) noexcept
     {
-        const int client { accept4(native(socket), nullptr, nullptr, SOCK_CLOEXEC) };
+        const int client { accept_stream(native(socket)) };
         if (client >= 0)
         {
             transient = false;

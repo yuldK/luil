@@ -6,6 +6,8 @@
 #include "luil/ui/ui_interaction.h"
 #include "luil/ui/ui_tree.h"
 
+#include "chrono_string_maker.h"
+
 #include <catch2/catch_test_macros.hpp>
 
 #include <chrono>

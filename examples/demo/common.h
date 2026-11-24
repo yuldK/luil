@@ -21,6 +21,7 @@
 
 #include <chrono>
 #include <cstdint>
+#include <filesystem>
 #include <functional>
 #include <memory>
 #include <optional>
@@ -29,6 +30,19 @@
 #include <vector>
 
 namespace demo {
+    // --- 플랫폼의 자리 ---
+    // 페이지마다 따로 OS를 부르지 않게 한곳에 둔다 (Windows와 macOS의 몸이 common.cpp에 있다).
+
+    // 실행 파일과 그 폴더다. 자산은 그 옆에 선다 — 작업 폴더로 찾으면 무엇으로 띄웠느냐에 따라 자리가 달라진다.
+    // 읽지 못하면 빈 경로다.
+    [[nodiscard]] std::filesystem::path executable_path();
+    [[nodiscard]] std::filesystem::path executable_directory();
+    // 데모가 사용자별로 적는 자료(창 배치·웹뷰 프로필)의 폴더다. 만들지는 않는다. 읽지 못하면 빈 경로다.
+    //  - Windows: `%LOCALAPPDATA%\luil-demo`, macOS: `~/Library/Application Support/luil-demo`
+    [[nodiscard]] std::filesystem::path user_data_directory();
+    // 이 프로세스의 번호다. 같은 데모를 둘 띄워도 임시 폴더가 겹치지 않게 이름에 붙인다.
+    [[nodiscard]] unsigned long process_id() noexcept;
+
     // --- kind 등록부 ---
     // 라이브러리는 값을 해석하지 않고 정체성으로만 쓴다.
     // 앱 kind는 application_element_kind()로 정의한다.

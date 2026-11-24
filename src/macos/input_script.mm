@@ -1,0 +1,263 @@
+#include "macos/input_script.h"
+
+#include <cstdlib>
+#include <fstream>
+#include <memory>
+#include <sstream>
+#include <string>
+#include <vector>
+
+namespace {
+    struct script_state
+    {
+        std::vector<std::string> lines {};
+        std::size_t next { 0 };
+        NSWindow* __weak window { nil };
+        NSView* __weak view { nil };
+    };
+
+    [[nodiscard]] NSPoint window_point(NSView* const view, const double x, const double y)
+    {
+        // 대본의 좌표는 view(뒤집힌 좌표계)의 점이다. 이벤트는 창 좌표(왼쪽 아래 원점)로 싣는다.
+        return [view convertPoint:NSMakePoint(x, y) toView:nil];
+    }
+
+    void post_mouse(NSWindow* const window, NSView* const view, const NSEventType type, const double x, const double y, const NSInteger clicks)
+    {
+        NSEvent* const event { [NSEvent mouseEventWithType:type
+                                                  location:window_point(view, x, y)
+                                             modifierFlags:0
+                                                 timestamp:[[NSProcessInfo processInfo] systemUptime]
+                                              windowNumber:window.windowNumber
+                                                   context:nil
+                                               eventNumber:0
+                                                clickCount:clicks
+                                                  pressure:type == NSEventTypeLeftMouseUp || type == NSEventTypeRightMouseUp ? 0.0f : 1.0f] };
+        [NSApp postEvent:event atStart:NO];
+    }
+
+    void post_key(NSWindow* const window, const unsigned short code, NSString* const characters, NSString* const base, const NSEventModifierFlags flags)
+    {
+        for (const NSEventType type : { NSEventTypeKeyDown, NSEventTypeKeyUp })
+        {
+            NSEvent* const event { [NSEvent keyEventWithType:type
+                                                    location:NSZeroPoint
+                                               modifierFlags:flags
+                                                   timestamp:[[NSProcessInfo processInfo] systemUptime]
+                                                windowNumber:window.windowNumber
+                                                     context:nil
+                                                  characters:characters
+                                 charactersIgnoringModifiers:base
+                                                   isARepeat:NO
+                                                     keyCode:code] };
+            [NSApp postEvent:event atStart:NO];
+        }
+    }
+
+    // 가상 키의 글자다. 대본이 쓰는 키만 둔다.
+    [[nodiscard]] NSString* key_characters(const unsigned short code)
+    {
+        switch (code)
+        {
+        case 0x24:
+            return @"\r";
+        case 0x30:
+            return @"\t";
+        case 0x31:
+            return @" ";
+        case 0x33:
+            return @"\x7f";
+        case 0x35:
+            return @"\x1b";
+        case 0x7B:
+            return [NSString stringWithFormat:@"%C", static_cast<unichar>(NSLeftArrowFunctionKey)];
+        case 0x7C:
+            return [NSString stringWithFormat:@"%C", static_cast<unichar>(NSRightArrowFunctionKey)];
+        case 0x7D:
+            return [NSString stringWithFormat:@"%C", static_cast<unichar>(NSDownArrowFunctionKey)];
+        case 0x7E:
+            return [NSString stringWithFormat:@"%C", static_cast<unichar>(NSUpArrowFunctionKey)];
+        case 0x08:
+            return @"c";
+        case 0x09:
+            return @"v";
+        case 0x00:
+            return @"a";
+        case 0x06:
+            return @"z";
+        case 0x07:
+            return @"x";
+        default:
+            return @"";
+        }
+    }
+
+    // 미국 배열의 글자 하나를 가상 키로 옮긴다. 대문자는 Shift를 단다.
+    [[nodiscard]] bool key_for_character(const unichar character, unsigned short& code, bool& shift)
+    {
+        static const char* const lower { "asdfhgzxcv\0bqweryt123465=97-80]ou[ip\0lj'k;\\,/nm." };
+        shift = false;
+        unichar value { character };
+        if (value >= 'A' && value <= 'Z')
+        {
+            shift = true;
+            value = static_cast<unichar>(value - 'A' + 'a');
+        }
+        for (unsigned short index { 0 }; index < 48; ++index)
+            if (lower[index] != '\0' && static_cast<unichar>(lower[index]) == value)
+            {
+                code = index;
+                return true;
+            }
+        if (value == ' ')
+        {
+            code = 0x31;
+            return true;
+        }
+        return false;
+    }
+
+    void run_line(script_state& state, const std::string& line, double& delay)
+    {
+        NSWindow* const window { state.window };
+        NSView* const view { state.view };
+        if (window == nil || view == nil)
+            return;
+        std::istringstream words { line };
+        std::string command {};
+        words >> command;
+        if (command == "wait")
+        {
+            words >> delay;
+            delay /= 1000.0;
+        }
+        else if (command == "move")
+        {
+            double x { 0 };
+            double y { 0 };
+            words >> x >> y;
+            post_mouse(window, view, NSEventTypeMouseMoved, x, y, 0);
+        }
+        else if (command == "click")
+        {
+            double x { 0 };
+            double y { 0 };
+            std::string button {};
+            words >> x >> y >> button;
+            const bool right { button == "right" };
+            post_mouse(window, view, NSEventTypeMouseMoved, x, y, 0);
+            post_mouse(window, view, right ? NSEventTypeRightMouseDown : NSEventTypeLeftMouseDown, x, y, 1);
+            post_mouse(window, view, right ? NSEventTypeRightMouseUp : NSEventTypeLeftMouseUp, x, y, 1);
+        }
+        else if (command == "drag")
+        {
+            double x1 { 0 };
+            double y1 { 0 };
+            double x2 { 0 };
+            double y2 { 0 };
+            words >> x1 >> y1 >> x2 >> y2;
+            post_mouse(window, view, NSEventTypeLeftMouseDown, x1, y1, 1);
+            for (int step { 1 }; step <= 8; ++step)
+            {
+                const double t { step / 8.0 };
+                post_mouse(window, view, NSEventTypeLeftMouseDragged, x1 + (x2 - x1) * t, y1 + (y2 - y1) * t, 0);
+            }
+            post_mouse(window, view, NSEventTypeLeftMouseUp, x2, y2, 1);
+        }
+        else if (command == "scroll")
+        {
+            double x { 0 };
+            double y { 0 };
+            int lines { 0 };
+            words >> x >> y >> lines;
+            post_mouse(window, view, NSEventTypeMouseMoved, x, y, 0);
+            CGEventRef const wheel { CGEventCreateScrollWheelEvent(nullptr, kCGScrollEventUnitLine, 1, lines) };
+            if (wheel != nullptr)
+            {
+                const NSPoint screen { [window convertPointToScreen:window_point(view, x, y)] };
+                CGEventSetLocation(wheel, CGPointMake(screen.x, NSMaxY(window.screen.frame) - screen.y));
+                if (NSEvent* const event { [NSEvent eventWithCGEvent:wheel] }; event != nil)
+                    [view scrollWheel:event];
+                CFRelease(wheel);
+            }
+        }
+        else if (command == "key")
+        {
+            unsigned code { 0 };
+            words >> std::hex >> code >> std::dec;
+            NSEventModifierFlags flags { 0 };
+            for (std::string modifier {}; words >> modifier;)
+            {
+                if (modifier == "cmd")
+                    flags |= NSEventModifierFlagCommand;
+                else if (modifier == "shift")
+                    flags |= NSEventModifierFlagShift;
+                else if (modifier == "option")
+                    flags |= NSEventModifierFlagOption;
+                else if (modifier == "control")
+                    flags |= NSEventModifierFlagControl;
+            }
+            NSString* const characters { key_characters(static_cast<unsigned short>(code)) };
+            post_key(window, static_cast<unsigned short>(code), characters, characters, flags);
+        }
+        else if (command == "type")
+        {
+            std::string rest {};
+            std::getline(words, rest);
+            NSString* const text { [[NSString stringWithUTF8String:rest.c_str()] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] };
+            for (NSUInteger index { 0 }; index < text.length; ++index)
+            {
+                const unichar character { [text characterAtIndex:index] };
+                unsigned short code { 0 };
+                bool shift { false };
+                if (key_for_character(character, code, shift) == false)
+                    continue;
+                NSString* const value { [NSString stringWithCharacters:&character length:1] };
+                post_key(window, code, value, [value lowercaseString], shift ? NSEventModifierFlagShift : 0);
+            }
+        }
+        else if (command == "marked" || command == "commit")
+        {
+            std::string rest {};
+            std::getline(words, rest);
+            NSString* const text { [[NSString stringWithUTF8String:rest.c_str()] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] };
+            id<NSTextInputClient> const client { (id<NSTextInputClient>)view };
+            if (command == "marked")
+                [client setMarkedText:text selectedRange:NSMakeRange(text.length, 0) replacementRange:NSMakeRange(NSNotFound, 0)];
+            else
+                [client insertText:text replacementRange:NSMakeRange(NSNotFound, 0)];
+        }
+        else if (command == "quit")
+            [window performClose:nil];
+    }
+
+    void schedule(const std::shared_ptr<script_state>& state, const double delay)
+    {
+        // 블록은 C++ 참조를 참조로 잡는다. 값으로 잡히게 지역 사본을 둔다.
+        const std::shared_ptr<script_state> held { state };
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, static_cast<std::int64_t>(delay * 1e9)), dispatch_get_main_queue(), ^{
+          if (held->next >= held->lines.size())
+              return;
+          double next_delay { 0.05 };
+          run_line(*held, held->lines[held->next++], next_delay);
+          schedule(held, next_delay);
+        });
+    }
+}
+
+void luil_run_input_script(NSWindow* const window, NSView* const view)
+{
+    const char* const path { std::getenv("LUIL_MACOS_INPUT_SCRIPT") };
+    if (path == nullptr || *path == '\0')
+        return;
+    std::ifstream file { path };
+    if (file.is_open() == false)
+        return;
+    auto state { std::make_shared<script_state>() };
+    for (std::string line {}; std::getline(file, line);)
+        if (line.empty() == false && line.front() != '#')
+            state->lines.push_back(line);
+    state->window = window;
+    state->view = view;
+    schedule(state, 0.5);
+}

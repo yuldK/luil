@@ -116,6 +116,16 @@ cmake --build --preset android-arm64-release
 ctest --preset android-arm64-release
 ```
 
+macOS arm64(Apple Silicon, macOS 11 이상)에서도 세운다. AppKit host 위에서 hello와 데스크톱 demo가
+뜬다. Xcode와 Ninja가 필요하다 ([빌드 체계](docs/concepts/build-system.md#macos)).
+
+```sh
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target mac-arm64 -Configuration Debug,Release"
+cmake --preset macos-arm64
+cmake --build --preset macos-arm64-debug
+ctest --preset macos-arm64-debug
+```
+
 ## 문서
 
 - [문서 안내](docs/README.md): 기능별 사용법과 설계 문서

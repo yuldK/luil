@@ -14,8 +14,6 @@
 #include "luil/ui/ui_tree.h"
 #include "luil/win32/drop_data.h"
 
-#include <windows.h>
-
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -509,16 +507,20 @@ namespace demo {
         // 플랫폼 도구는 logic thread에서 부른다. 탐색기와 메모장은 따로 뜨는 창이라 이쪽은 결과만 적는다.
         if (message.get<reveal_executable_intent>() != nullptr)
         {
-            wchar_t module[MAX_PATH] {};
-            const DWORD length { GetModuleFileNameW(nullptr, module, MAX_PATH) };
-            const std::filesystem::path executable { std::wstring { module, length } };
+            const std::filesystem::path executable { executable_path() };
             const luil::platform_result result { luil::reveal_in_file_manager(executable.u8string()) };
             platform_report_ = result.ok() ? u8"탐색기에서 실행 파일을 골라 두었다." : u8"탐색기를 열지 못했다 — " + result.error;
             return true;
         }
         if (message.get<launch_notepad_intent>() != nullptr)
         {
+#if defined(__APPLE__)
+            // macOS의 메모장 자리는 텍스트 편집기다. 앱은 `open -a`로 띄운다.
+            const std::vector<std::u8string> arguments { u8"-a", u8"TextEdit" };
+            const luil::platform_result result { luil::launch_program(u8"/usr/bin/open", arguments) };
+#else
             const luil::platform_result result { luil::launch_program(u8"notepad.exe", {}) };
+#endif
             platform_report_ = result.ok() ? u8"메모장을 띄웠다." : u8"메모장을 띄우지 못했다 — " + result.error;
             return true;
         }

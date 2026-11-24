@@ -106,10 +106,13 @@ function(luil_check_skia_abi flavor build_directory arguments_text)
     # CRT 검사는 MSVC CRT가 있는 대상의 것이다. 대상은 이름으로 가른다 — 설치본의 package config도
     # 이 파일을 쓰고, 거기에는 LUIL_PLATFORM이 없다.
     #  - Android는 대신 패키지가 기대하는 최저 API 수준을 본다.
-    #  - macOS의 최소 판은 platform/macos.cmake가 본다. 패키지의 args.gn과 맞대는 검사는
-    #    mac 패키지가 그 값을 어떻게 적는지 정해진 뒤에 더한다.
+    #  - macOS는 패키지의 배포 하한을 본다. luil 자신의 하한은 platform/macos.cmake가 본다.
     if(LUIL_SKIA_TARGET MATCHES "^android-")
         luil_check_skia_android_api("${build_directory}" "${arguments_text}")
+        return()
+    endif()
+    if(LUIL_SKIA_TARGET MATCHES "^mac-")
+        luil_check_skia_macos_deployment("${build_directory}")
         return()
     endif()
     if(NOT LUIL_SKIA_TARGET MATCHES "^win-")
@@ -160,6 +163,34 @@ function(luil_check_skia_android_api build_directory arguments_text)
             "The Skia package needs Android API ${package_api} or newer, "
             "but this configure targets ${ANDROID_PLATFORM_LEVEL}.\n"
             "Raise ANDROID_PLATFORM to android-${package_api}.")
+    endif()
+endfunction()
+
+# mac 패키지가 세워진 배포 하한이 이 구성의 것 이하인지 본다. 하한은 toolchain.json이 적는다
+# (args.gn에는 없다 — Skia의 GN이 스스로 붙인다). 구성이 더 낮으면 ld가 아카이브마다
+# `built for newer macOS version`을 내고, 그보다 오래된 macOS에서 기호를 찾지 못한다.
+function(luil_check_skia_macos_deployment build_directory)
+    set(toolchain_file "${build_directory}/toolchain.json")
+    set(package_minimum "")
+    if(EXISTS "${toolchain_file}")
+        file(READ "${toolchain_file}" toolchain_text)
+        string(JSON package_minimum ERROR_VARIABLE toolchain_error
+            GET "${toolchain_text}" macos_deployment_target)
+        if(toolchain_error)
+            set(package_minimum "")
+        endif()
+    endif()
+    if(NOT package_minimum)
+        message(FATAL_ERROR
+            "Skia's toolchain.json does not record macos_deployment_target.\n"
+            "Build directory: ${build_directory}\n"
+            "Fetch the pinned package: scripts/fetch_skia.ps1 -Target ${LUIL_SKIA_TARGET} -Force")
+    endif()
+    if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS package_minimum)
+        message(FATAL_ERROR
+            "The Skia package needs macOS ${package_minimum} or newer, "
+            "but this configure targets ${CMAKE_OSX_DEPLOYMENT_TARGET}.\n"
+            "Raise CMAKE_OSX_DEPLOYMENT_TARGET to ${package_minimum}.")
     endif()
 endfunction()
 

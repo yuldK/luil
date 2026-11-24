@@ -98,21 +98,53 @@ core test 실행 파일은 플랫폼 계층을 링크하지 않는다. core가 �
 
 ## macOS
 
-**아직 실물로 확인하지 못한 구성이다.** Mac과 mac-arm64 Skia 패키지가 준비되기 전에 CMake의 갈래만 먼저 세웠다. 지금은 Android의 2단계와 같은 자리, 곧 플랫폼을 모르는 층(`luil_core`)과 그 test(`luil_core_tests`)까지만 구성한다. 플랫폼 조립(`luil`)·예제·설치는 없고, `LUIL_BUILD_EXAMPLES`를 켜면 configure가 멈춘다.
+플랫폼을 모르는 층(`luil_core`)과 그 test, AppKit 위의 앱 host(`luil`), 예제 둘(`luil_hello`, `luil_demo`)을 세운다. 설치는 아직 없다.
 
 | 항목 | 값 |
 | --- | --- |
-| 플랫폼 | `LUIL_MACOS_ARCHITECTURE`, **임시로 arm64 하나** (universal을 받을지는 Skia 패키지를 세울 때 정한다). 최소 판은 `LUIL_MINIMUM_MACOS_VERSION`, **임시로 13.0** |
+| 플랫폼 | `LUIL_MACOS_ARCHITECTURE`는 arm64 하나다 (패키지가 그것만 담는다). 최소 판 `LUIL_MINIMUM_MACOS_VERSION`은 패키지의 배포 하한과 같은 11.0이다 |
 | 생성기 | 가리지 않는다. preset은 Ninja Multi-Config |
-| 컴파일러 | Xcode의 clang. 플랫폼 조립이 쓸 Objective-C++(`OBJCXX`)도 함께 켠다 |
-| Skia | 대상 이름 `mac-arm64`, 자리 `third_party/skia-prep-mac-arm64`. **아카이브 목록·요구 인자·프레임워크는 임시 값**이고 패키지가 나오면 맞춘다 |
+| 컴파일러 | Xcode의 clang. 앱 host는 Objective-C++(`OBJCXX`, ARC)다 |
+| Skia | 대상 이름 `mac-arm64`, 자리 `third_party/skia-prep-mac-arm64` ([Skia 빌드 준비](../skia-build.md#macos-패키지와-링크-계약)) |
 
 [`platform/macos.cmake`](../../cmake/platform/macos.cmake)가 아키텍처와 `CMAKE_OSX_DEPLOYMENT_TARGET`을 검사한다. [`compiler/clang.cmake`](../../cmake/compiler/clang.cmake)의 `-Wall -Wextra -Werror`는 컴파일러 ID `Clang`과 `AppleClang`, 언어 `CXX`와 `OBJCXX`에 모두 건다. Xcode의 clang은 ID가 `AppleClang`이라 하나만 적으면 경고 규율이 오류 없이 빠진다. Apple의 `AssertMacros.h`가 `check`·`verify`·`require`를 매크로로 덮지 않게 `__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0`도 건다. 공개 헤더에 `check`라는 이름이 있어서다.
 
+최소 판은 11이라 libc++의 부동소수점 `to_chars`(13.3부터)를 쓸 수 없다. chrono 값의 `operator<<`와 실수 `std::format`이 그것을 부르므로, test가 날짜·요일을 Catch2로 적을 때는 [`chrono_string_maker.h`](../../tests/chrono_string_maker.h)를 거친다.
+
+preset은 둘이다. `macos-arm64-core`는 core·앱 host 라이브러리·core test를, `macos-arm64`는 예제와 그 smoke test까지 세운다.
+
 ```sh
-cmake --preset macos-arm64-core
-cmake --build --preset macos-arm64-core-debug
-ctest --preset macos-arm64-core-debug
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target mac-arm64 -Configuration Debug,Release"
+cmake --preset macos-arm64
+cmake --build --preset macos-arm64-debug
+ctest --preset macos-arm64-debug
+build/macos-arm64/Debug/luil_demo
 ```
 
-test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`).
+test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`). 키 변환(`src/macos/macos_input.cpp`)은 AppKit을 모르는 순수 층이라 core test에 들어가고, 예제의 `--smoke-test`가 창을 보이지 않은 채 첫 frame을 그려 host를 확인한다.
+
+### 앱 host
+
+진입점은 [`luil::macos::run_application`](../../include/luil/macos/macos_app.h)이다. 메인 thread가 luil의 UI thread이고, 앱 delegate는 Android처럼 플랫폼 중립 부분(`app_delegate`)만 불린다 — Windows의 `window_delegate`를 구현한 앱 delegate를 그대로 넘긴다.
+
+| 경계 | macOS |
+| --- | --- |
+| 실행 루프와 깨우기 | `NSApplication`의 run loop. 다른 thread의 깨우기는 `CFRunLoopPerformBlock`(공통 모드)이라 창 크기를 끄는 동안에도 돈다 |
+| 창과 표면 | 창 하나. 제목 막대는 시스템의 것이라 `ui_platform::window_caption`이 거짓이고 `caption_element`는 자리를 차지하지 않는다 |
+| 렌더러 | CPU. Skia raster를 CGImage로 layer 내용에 낸다. Metal 렌더러는 아직 없다 (`gpu`·`direct3d`를 요구하면 시작하지 않는다) |
+| 배율 | 창이 놓인 화면의 `backingScaleFactor`(레티나 2) |
+| 글꼴 | `SkFontMgr_New_CoreText`, 기본 UI 서체는 시스템 서체(`.AppleSystemUIFont`). codicon은 라이브러리에 싣는다 |
+| 입력 | 마우스·트랙패드·키보드. Command가 주 단축키, Option이 낱말 이동이고 Command+화살표는 줄·글의 처음과 끝이다. Control+클릭은 오른쪽 클릭이다 |
+| 텍스트 입력 | `NSTextInputClient`. 조합 글은 `post_composition`으로 보이고 확정은 insert 편집이다 (한글 입력기) |
+| popup | 창 위에 겹쳐 그린다 (Android와 같은 overlay) |
+| 클립보드 | 일반 붙여넣기 판의 글과 HTML |
+| 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
+
+아직 없는 것은 "지원 안 함"으로 답한다: 보조 창·도킹 표면(무시), 파일 대화 상자, 비밀 저장소(Keychain), OS 알림, 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
+
+개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
+
+| 변수 | 뜻 |
+| --- | --- |
+| `LUIL_MACOS_FRAME_CAPTURE=<png>` | 그린 frame마다 그 파일을 덮어쓴다 |
+| `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |

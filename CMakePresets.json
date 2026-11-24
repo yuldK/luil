@@ -147,7 +147,7 @@
         {
             "name": "macos-arm64-core",
             "displayName": "macOS arm64 core library and tests",
-            "description": "Needs the Xcode command line tools and Ninja. Builds luil_core and its tests only; the platform layer is not there yet.",
+            "description": "Needs Xcode and Ninja. Builds luil_core, the AppKit host library and the core tests.",
             "generator": "Ninja Multi-Config",
             "binaryDir": "${sourceDir}/build/${presetName}",
             "condition": {
@@ -157,7 +157,7 @@
             },
             "cacheVariables": {
                 "CMAKE_OSX_ARCHITECTURES": "arm64",
-                "CMAKE_OSX_DEPLOYMENT_TARGET": "13.0",
+                "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0",
                 "CMAKE_CONFIGURATION_TYPES": "Debug;Release",
                 "LUIL_BUILD_TESTS": "ON",
                 "LUIL_ENABLE_SVG": "ON",
@@ -165,6 +165,16 @@
                 "LUIL_ENABLE_TEXT_SHAPING_FALLBACK": "ON",
                 "LUIL_ENABLE_AVIF": "ON",
                 "LUIL_ENABLE_LOTTIE": "ON"
+            }
+        },
+        {
+            "name": "macos-arm64",
+            "displayName": "macOS arm64 library, examples and tests",
+            "description": "Needs Xcode and Ninja. Adds the hello and demo examples on the AppKit host.",
+            "inherits": "macos-arm64-core",
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "cacheVariables": {
+                "LUIL_BUILD_EXAMPLES": "ON"
             }
         }
     ],
@@ -267,6 +277,16 @@
         {
             "name": "macos-arm64-core-release",
             "configurePreset": "macos-arm64-core",
+            "configuration": "Release"
+        },
+        {
+            "name": "macos-arm64-debug",
+            "configurePreset": "macos-arm64",
+            "configuration": "Debug"
+        },
+        {
+            "name": "macos-arm64-release",
+            "configurePreset": "macos-arm64",
             "configuration": "Release"
         }
     ],
@@ -373,6 +393,28 @@
         {
             "name": "macos-arm64-core-release",
             "configurePreset": "macos-arm64-core",
+            "configuration": "Release",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error"
+            }
+        },
+        {
+            "name": "macos-arm64-debug",
+            "configurePreset": "macos-arm64",
+            "configuration": "Debug",
+            "output": {
+                "outputOnFailure": true
+            },
+            "execution": {
+                "noTestsAction": "error"
+            }
+        },
+        {
+            "name": "macos-arm64-release",
+            "configurePreset": "macos-arm64",
             "configuration": "Release",
             "output": {
                 "outputOnFailure": true

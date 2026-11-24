@@ -79,10 +79,14 @@
 
 #include "luil/generated/codicons.h"
 
+#if defined(_WIN32)
 #include <windows.h>
 
 #include <shobjidl.h>
 #include <wrl/client.h>
+#elif defined(__APPLE__)
+#include "luil/macos/macos_app.h"
+#endif
 
 #include <array>
 #include <atomic>
@@ -160,17 +164,8 @@ namespace demo {
         }
 
         // 데모의 앱 식별이다 (`window_config::identity`). `--unregister-app-identity`가 같은 id를 지운다.
-        constexpr std::u8string_view demo_app_identity { u8"luil.Demo" };
-
-        // 실행 파일이 있는 폴더다. 읽지 못하면 빈 경로다.
-        [[nodiscard]] std::filesystem::path executable_directory()
-        {
-            wchar_t buffer[MAX_PATH] {};
-            const DWORD length { GetModuleFileNameW(nullptr, buffer, MAX_PATH) };
-            if (length == 0 || length >= MAX_PATH)
-                return {};
-            return std::filesystem::path { std::wstring { buffer, length } }.parent_path();
-        }
+        //  - 앱 식별은 Windows의 것이라 다른 플랫폼에서는 쓰지 않는다.
+        [[maybe_unused]] constexpr std::u8string_view demo_app_identity { u8"luil.Demo" };
 
         // 읽지 못하면 빈 경로이고 감시가 서지 않는다.
 
@@ -183,11 +178,10 @@ namespace demo {
         // 환경 변수를 읽지 못하면 빈 경로이고 저장·복원이 그대로 빠진다.
         [[nodiscard]] std::filesystem::path placement_file_path()
         {
-            wchar_t buffer[MAX_PATH] {};
-            const DWORD length { GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, MAX_PATH) };
-            if (length == 0 || length >= MAX_PATH)
+            const std::filesystem::path directory { user_data_directory() };
+            if (directory.empty())
                 return {};
-            return std::filesystem::path { buffer } / L"luil-demo" / L"placement.txt";
+            return directory / L"placement.txt";
         }
 
 
@@ -301,11 +295,11 @@ namespace demo {
             // 비어 있으면 복원하지 않는다 (첫 실행·--position이 이긴 실행).
             // `page`가 비어 있지 않으면 그 페이지로 시작한다 (--page=).
             demo_driver(const std::optional<luil::win32::window_placement> restore, std::u8string page, const bool primary_instance)
-                : restore_ { restore }
+                : primary_instance_ { primary_instance }
+                , restore_ { restore }
                 , placement_request_ { restore }
                 , placement_revision_ { restore.has_value() ? 1u : 0u }
                 , page_ { page.empty() ? std::u8string { page_overview } : std::move(page) }
-                , primary_instance_ { primary_instance }
             {
             }
 
@@ -760,18 +754,12 @@ namespace demo {
                 const float menu_bar_row { luil::menu_bar_height * scale };
                 const float menu_bar_top { caption_bottom ? 0.0f : caption_height };
                 const float content_top { menu_bar_top + menu_bar_row };
-                if (placement_.fullscreen == false)
-                {
-                    auto caption { std::make_unique<luil::caption_element>(caption_config) };
-                    caption->arrange({ .slot = { 0.0f, caption_top, width, caption_height }, .scale = scale, .style = style });
-                    root->add(std::move(caption));
-
-                    // 제목 표시줄 가운데의 명령 찾기 단추다. caption 위에 겹쳐 세우고 client 표시를 달면
-                    // 끌기 띠 위에서도 눌린다 (caption-button-design.md).
+                // 명령 찾기 단추다 (command-palette-design.md). caption client 표시와 툴팁의 단축키는 라이브러리가 단다.
+                //  - 제목 표시줄이 있으면 그 가운데에 겹쳐 세운다. client 표시를 달면 끌기 띠 위에서도 눌린다 (caption-button-design.md).
+                //  - 창 caption이 시스템의 것인 플랫폼(macOS)에서는 caption이 자리를 차지하지 않는다. 메뉴 막대 줄 가운데에 둔다.
+                const auto add_search = [&](const float row_top, const float row_height) {
                     constexpr float search_width { 240.0f };
                     constexpr float search_inset { 4.0f };
-                    // 명령 팔레트의 진입 단추다 (command-palette-design.md). caption client 표시와 툴팁의 단축키는
-                    // 라이브러리가 단다.
                     luil::command_palette_entry_config search_config {
                         .owner = u8"caption/search",
                         .text = u8"명령 찾기…",
@@ -780,9 +768,16 @@ namespace demo {
                         .open = luil::make_message_action(palette_open_intent {}),
                     };
                     auto search { luil::make_command_palette_entry(std::move(search_config)) };
-                    search->arrange(
-                        { { (width - search_width * scale) / 2.0f, caption_top + search_inset * scale, search_width * scale, caption_height - search_inset * 2.0f * scale }, scale });
+                    search->arrange({ { (width - search_width * scale) / 2.0f, row_top + search_inset * scale, search_width * scale, row_height - search_inset * 2.0f * scale }, scale });
                     root->add(std::move(search));
+                };
+                if (placement_.fullscreen == false)
+                {
+                    auto caption { std::make_unique<luil::caption_element>(caption_config) };
+                    caption->arrange({ .slot = { 0.0f, caption_top, width, caption_height }, .scale = scale, .style = style });
+                    root->add(std::move(caption));
+                    if (caption_height > 0.0f)
+                        add_search(caption_top, caption_height);
                 }
 
                 // 캡션 아래는 사이드바 + 현재 페이지의 가로 stack이다.
@@ -825,6 +820,8 @@ namespace demo {
                     last->arrange({ { width - (last_label_width + label_gap) * scale, menu_bar_top, last_label_width * scale, menu_bar_row }, scale });
                     root->add(std::move(last));
                 }
+                if (placement_.fullscreen == false && caption_height <= 0.0f)
+                    add_search(menu_bar_top, menu_bar_row);
 
                 // 사이드바 접힘 스프링의 상태다. 접힌 동안은 사이드바 내용이 없어서 이 label이 폭을 말한다.
                 {
@@ -1548,7 +1545,12 @@ namespace {
             requested = requested || arguments[index] == u8"--unregister-app-identity";
         if (requested == false)
             return std::nullopt;
+#if defined(_WIN32)
         const luil::platform_result result { luil::win32::unregister_app_identity(demo::demo_app_identity) };
+#else
+        // 앱 식별은 Windows의 것이다 (AUMID). 다른 플랫폼에는 지울 것이 없다.
+        const luil::platform_result result { luil::platform_status::unsupported, u8"The app identity is a Windows registration.", std::nullopt };
+#endif
         if (result.ok())
             return 0;
         return result.status == luil::platform_status::not_found ? 3 : 4;
@@ -1646,6 +1648,7 @@ namespace {
     }
 }
 
+#if defined(_WIN32)
 int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
 {
     luil::win32::enable_per_monitor_dpi_awareness();
@@ -1719,3 +1722,53 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     }
     return luil::win32::run_application_window(config, environment);
 }
+#elif defined(__APPLE__)
+// macOS 진입점이다. 인자 읽기·배치 복원·driver 조립은 Windows와 같고, 창은 AppKit host가 세운다.
+//  - 인자는 Windows의 창 설정(`win32::window_config`)에 같은 `parse_arguments`로 읽고, 뜻이 있는 값만 macOS 설정으로 옮긴다.
+//    Direct3D·표시 방식·자리 같은 Windows 값은 받기만 하고 쓰지 않는다.
+//  - smoke test도 driver를 꽂는다. 창을 보이지 않은 채 첫 frame을 그리고 끝난다.
+int main(const int argc, const char* const* const argv)
+{
+    const std::vector<std::u8string> arguments { luil::macos::command_line_arguments(argc, argv) };
+    const luil::single_instance instance { u8"luil-demo" };
+    if (const std::optional<int> sent { send_to_first_instance(instance, arguments) }; sent.has_value())
+        return *sent;
+    if (const std::optional<int> removed { unregister_identity(arguments) }; removed.has_value())
+        return *removed;
+
+    luil::win32::window_config options {};
+    options.caption = demo::make_caption_config(instance.primary());
+    std::u8string start_page {};
+    bool caption_bottom { false };
+    luil::window_backdrop backdrop { luil::window_backdrop::none };
+    std::u8string page_transition { demo::shell_menu_page_transition_slide };
+    std::optional<std::chrono::milliseconds> page_transition_length {};
+    if (parse_arguments(without_notification_flags(arguments), options, start_page, caption_bottom, backdrop, page_transition, page_transition_length) == false)
+        return 2;
+
+    std::optional<luil::win32::window_placement> restore {};
+    if (options.smoke_test == false)
+        restore = demo::load_placement();
+
+    demo::demo_driver driver { restore, start_page, instance.primary() };
+    driver.set_window_options(caption_bottom, false, backdrop);
+    driver.set_page_transition(std::move(page_transition), page_transition_length);
+    demo::demo_policy policy {};
+    demo::demo_delegate delegate { driver };
+
+    luil::macos::application_config config {};
+    config.title = options.caption.title;
+    config.initial_width = options.initial_width;
+    config.initial_height = options.initial_height;
+    config.minimum_width = options.minimum_client_width;
+    config.minimum_height = options.minimum_client_height;
+    config.renderer = options.renderer;
+    config.smoke_test = options.smoke_test;
+    config.touch = options.touch;
+    luil::macos::application_environment environment {};
+    environment.driver = &driver;
+    environment.policy = &policy;
+    environment.delegate = &delegate;
+    return luil::macos::run_application(config, environment);
+}
+#endif

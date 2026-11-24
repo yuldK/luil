@@ -1,0 +1,24 @@
+{
+    "schema": 2,
+    "source": "https://github.com/yuldK/skia-prep",
+    "tag": "skia-157-b94213a11b3a-mac-arm64-r1",
+    "asset_base_url": "https://github.com/yuldK/skia-prep/releases/download/skia-157-b94213a11b3a-mac-arm64-r1",
+    "target": "mac-arm64",
+    "png_codec": "rust",
+    "skia_commit": "b94213a11b3a2edadfae89f0c57a7f4ab72772c9",
+    "skia_milestone": "157",
+    "package_revision": 1,
+    "toolchain": "clang",
+    "assets": {
+        "Release": {
+            "file": "skia-prep-b94213a11b3a-r1-mac-arm64-release.zip",
+            "size": 12066441,
+            "sha256": "f679a503c443a492f0dc65772ce390c86c8d4980c4ffdf2793d386e2c63471f3"
+        },
+        "Debug": {
+            "file": "skia-prep-b94213a11b3a-r1-mac-arm64-debug.zip",
+            "size": 185865196,
+            "sha256": "66c552952c2455236adad437c91c94b4a36ff9cd8ba11713e5ef88eb311cb2d2"
+        }
+    }
+}

@@ -12,9 +12,80 @@
 #include "include/core/SkRect.h"
 
 #include <algorithm>
+#include <cstdlib>
+#include <string>
 #include <utility>
+#include <vector>
+
+#if defined(_WIN32)
+#include <windows.h>
+#else
+#include <unistd.h>
+#if defined(__APPLE__)
+#include <mach-o/dyld.h>
+#endif
+#endif
 
 namespace demo {
+    std::filesystem::path executable_path()
+    {
+#if defined(_WIN32)
+        wchar_t buffer[MAX_PATH] {};
+        const DWORD length { GetModuleFileNameW(nullptr, buffer, MAX_PATH) };
+        if (length == 0 || length >= MAX_PATH)
+            return {};
+        return std::filesystem::path { std::wstring { buffer, length } };
+#elif defined(__APPLE__)
+        std::uint32_t size { 0 };
+        static_cast<void>(_NSGetExecutablePath(nullptr, &size));
+        std::vector<char> buffer(size + 1, '\0');
+        if (_NSGetExecutablePath(buffer.data(), &size) != 0)
+            return {};
+        std::error_code error {};
+        const std::filesystem::path resolved { std::filesystem::weakly_canonical(std::filesystem::path { buffer.data() }, error) };
+        return error ? std::filesystem::path { buffer.data() } : resolved;
+#else
+        std::error_code error {};
+        const std::filesystem::path resolved { std::filesystem::read_symlink("/proc/self/exe", error) };
+        return error ? std::filesystem::path {} : resolved;
+#endif
+    }
+
+    std::filesystem::path executable_directory()
+    {
+        const std::filesystem::path path { executable_path() };
+        return path.empty() ? path : path.parent_path();
+    }
+
+    std::filesystem::path user_data_directory()
+    {
+#if defined(_WIN32)
+        wchar_t buffer[MAX_PATH] {};
+        const DWORD length { GetEnvironmentVariableW(L"LOCALAPPDATA", buffer, MAX_PATH) };
+        if (length == 0 || length >= MAX_PATH)
+            return {};
+        return std::filesystem::path { buffer } / L"luil-demo";
+#else
+        const char* const home { std::getenv("HOME") };
+        if (home == nullptr || *home == '\0')
+            return {};
+#if defined(__APPLE__)
+        return std::filesystem::path { home } / "Library" / "Application Support" / "luil-demo";
+#else
+        return std::filesystem::path { home } / ".local" / "share" / "luil-demo";
+#endif
+#endif
+    }
+
+    unsigned long process_id() noexcept
+    {
+#if defined(_WIN32)
+        return GetCurrentProcessId();
+#else
+        return static_cast<unsigned long>(::getpid());
+#endif
+    }
+
     namespace {
         // 본문의 바깥 여백과 카드의 안쪽 여백이다 (논리 픽셀).
         constexpr luil::edge_insets page_padding { 40.0f, 32.0f, 40.0f, 32.0f };
