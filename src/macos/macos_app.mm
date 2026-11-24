@@ -367,6 +367,8 @@ namespace luil::macos {
             [main_.window makeKeyAndOrderFront:nil];
             [NSApp activateIgnoringOtherApps:YES];
             pump();
+            // 처음 선 자리를 알린다. 앱이 저장해 둘 첫 배치다.
+            report_placement(main_);
             luil_run_input_script(main_.window, main_.view);
             [NSApp run];
             stop();
@@ -1274,24 +1276,184 @@ namespace luil::macos {
                 host_->post_app_message(std::move(message));
         }
 
-        // 보조 창의 자리를 앱에 알린다 (`ui_window::placement`). 같은 값이면 다시 알리지 않는다.
-        //  - x·y는 창 내용의 왼쪽 위, 크기는 내용의 픽셀이다. 둘 다 이 파일 첫머리의 화면 좌표 약속(주 화면 배율)을 따른다.
-        void report_placement(native_surface& surface)
+        // 창 내용의 지금 자리다. x·y는 창 내용의 왼쪽 위, 크기는 내용의 픽셀이다. 둘 다 이 파일 첫머리의 화면 좌표 약속(주 화면
+        // 배율)을 따른다.
+        [[nodiscard]] static window_placement content_placement(NSWindow* const window)
         {
-            if (surface.main() || surface.want.placement == nullptr || host_ == nullptr || surface.window == nil)
-                return;
-            const NSRect content { [surface.window contentRectForFrameRect:surface.window.frame] };
+            const NSRect content { [window contentRectForFrameRect:window.frame] };
             const screen_point top_left { to_screen_pixels(NSMakePoint(NSMinX(content), NSMaxY(content))) };
             const CGFloat scale { primary_scale() };
-            window_placement placement { top_left.x, top_left.y, static_cast<int>(std::lround(content.size.width * scale)), static_cast<int>(std::lround(content.size.height * scale)),
-                surface.window.zoomed == YES, false };
-            if (surface.reported_placement == placement)
+            return { top_left.x, top_left.y, static_cast<int>(std::lround(content.size.width * scale)), static_cast<int>(std::lround(content.size.height * scale)),
+                window.zoomed == YES, false };
+        }
+
+        // 창의 자리를 앱에 알린다. 같은 값이면 다시 알리지 않는다.
+        //  - 보조 창은 `ui_window::placement`, 주 창은 delegate의 `win32::window_delegate::make_window_placement_message`다.
+        //  - 주 창이 확대(zoom)됐거나 전체 화면이면 x·y·크기는 지금 사각형이 아니라 돌아갈 자리다 (`window_placement`의 약속).
+        //    그 자리는 마지막으로 보통 상태였을 때의 사각형이다.
+        //  - 전체 화면으로 드나드는 동안의 크기 변화는 알리지 않는다. 다 들어가고 나온 뒤에 한 번 알린다.
+        void report_placement(native_surface& surface)
+        {
+            if (host_ == nullptr || surface.window == nil || surface.window.miniaturized)
+                return;
+            window_placement placement { content_placement(surface.window) };
+            if (surface.main())
+            {
+                if (window_delegate_ == nullptr || fullscreen_transition_)
+                    return;
+                const bool fullscreen { (surface.window.styleMask & NSWindowStyleMaskFullScreen) != 0 };
+                // 확대해 들어가는 동안(애니메이션)의 중간 크기는 보통 자리가 아니다. 확대가 다 선 뒤에 풀린다.
+                if (placement.maximized)
+                    zooming_in_ = false;
+                if (fullscreen == false && placement.maximized == false && zooming_in_ == false)
+                    normal_placement_ = placement;
+                else if (normal_placement_.has_value())
+                {
+                    const bool maximized { fullscreen ? zoomed_before_fullscreen_ : placement.maximized };
+                    placement = *normal_placement_;
+                    placement.maximized = maximized;
+                }
+                placement.fullscreen = fullscreen;
+                if (surface.reported_placement == placement)
+                    return;
+                surface.reported_placement = placement;
+                if (app_message message { window_delegate_->make_window_placement_message(placement) }; message.empty() == false)
+                    host_->post_app_message(std::move(message));
+                return;
+            }
+            if (surface.want.placement == nullptr || surface.reported_placement == placement)
                 return;
             surface.reported_placement = placement;
             if (app_message message { surface.want.placement(placement) }; message.empty() == false)
                 host_->post_app_message(std::move(message));
         }
 
+        // 앱이 낸 주 창 배치 요청을 옮긴다 (`ui_frame::window_placement_request`). revision이 바뀐 때만이다.
+        //  - 너무 작은 크기는 최소 크기로 올리고, 어느 화면에도 걸치지 않는 자리는 주 화면 가운데로 옮긴다.
+        //  - 전체 화면 값은 `ui_frame::fullscreen`이 없을 때만 따른다 (그쪽이 앞선다).
+        void apply_placement_request(const ui_frame& frame)
+        {
+            if (frame.window_placement_revision == applied_placement_revision_ || frame.window_placement_request.has_value() == false || main_.window == nil)
+                return;
+            applied_placement_revision_ = frame.window_placement_revision;
+            const window_placement& want { *frame.window_placement_request };
+            if (want.valid() == false)
+                return;
+            NSWindow* const window { main_.window };
+            const bool fullscreen { (window.styleMask & NSWindowStyleMaskFullScreen) != 0 };
+            const CGFloat scale { primary_scale() };
+            const NSSize minimum { window.contentMinSize };
+            const NSSize size { std::max<CGFloat>(want.width / scale, minimum.width), std::max<CGFloat>(want.height / scale, minimum.height) };
+            const NSPoint top_left { from_screen_pixels(want.x, want.y) };
+            NSRect frame_rect { [window frameRectForContentRect:NSMakeRect(top_left.x, top_left.y - size.height, size.width, size.height)] };
+            bool on_screen { false };
+            for (NSScreen* const screen in [NSScreen screens])
+                on_screen = on_screen || NSIntersectsRect(screen.visibleFrame, frame_rect);
+            if (on_screen == false)
+                if (NSScreen* const screen { [NSScreen screens].firstObject }; screen != nil)
+                {
+                    const NSRect visible { screen.visibleFrame };
+                    frame_rect.origin = NSMakePoint(NSMidX(visible) - frame_rect.size.width / 2, NSMidY(visible) - frame_rect.size.height / 2);
+                }
+            // 전체 화면 안에서는 돌아갈 자리만 바꾼다. 나오면 그 자리로 간다.
+            if (fullscreen)
+            {
+                normal_placement_ = content_placement_of(frame_rect, window);
+                zoomed_before_fullscreen_ = want.maximized;
+            }
+            else
+            {
+                if (window.zoomed)
+                    [window zoom:nil];
+                [window setFrame:frame_rect display:YES];
+                normal_placement_ = content_placement(window);
+                if (want.maximized)
+                    [window zoom:nil];
+            }
+            if (frame.fullscreen.has_value() == false && want.fullscreen != fullscreen)
+                set_fullscreen(want.fullscreen);
+            report_placement(main_);
+        }
+
+        [[nodiscard]] static window_placement content_placement_of(const NSRect frame_rect, NSWindow* const window)
+        {
+            const NSRect content { [window contentRectForFrameRect:frame_rect] };
+            const screen_point top_left { to_screen_pixels(NSMakePoint(NSMinX(content), NSMaxY(content))) };
+            const CGFloat scale { primary_scale() };
+            return { top_left.x, top_left.y, static_cast<int>(std::lround(content.size.width * scale)), static_cast<int>(std::lround(content.size.height * scale)) };
+        }
+
+        // 주 창의 전체 화면을 바라는 상태로 옮긴다. 드나드는 중이거나 최소화·숨김이면 미루고, 끝난 뒤 다시 대조한다.
+        void set_fullscreen(const bool enter)
+        {
+            NSWindow* const window { main_.window };
+            if (window == nil || fullscreen_transition_ || window.miniaturized || window.visible == NO || config_.smoke_test)
+                return;
+            const bool fullscreen { (window.styleMask & NSWindowStyleMaskFullScreen) != 0 };
+            if (fullscreen != enter)
+                [window toggleFullScreen:nil];
+        }
+
+        // 앱이 frame에 실은 전체 화면 상태와 대조한다 (`ui_frame::fullscreen`).
+        void reconcile_fullscreen()
+        {
+            if (host_ == nullptr)
+                return;
+            const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+            if (frame != nullptr && frame->fullscreen.has_value())
+                set_fullscreen(*frame->fullscreen);
+        }
+
+    public:
+        // 전체 화면으로 드나든다. 드는 순간 확대 여부를 갈무리하고, 다 끝나면 배치를 한 번 알리고 frame과 다시 대조한다.
+        void on_fullscreen_transition(native_surface& surface, const bool entering, const bool finished)
+        {
+            if (surface.main() == false)
+                return;
+            if (finished == false)
+            {
+                if (entering)
+                    zoomed_before_fullscreen_ = surface.window.zoomed;
+                fullscreen_transition_ = true;
+                return;
+            }
+            fullscreen_transition_ = false;
+            report_placement(surface);
+            reconcile_fullscreen();
+            pump();
+        }
+
+        // 창이 확대(zoom)되려 한다. 보통 상태에서 들어가면 지금 자리를 돌아갈 자리로 쥐고, 다 설 때까지 붙든다.
+        //  - 확대가 서지 않는 경우(이미 화면을 채운 창)에 붙든 채 남지 않게 잠시 뒤 푼다.
+        void on_will_zoom(native_surface& surface)
+        {
+            if (surface.main() == false || surface.window.zoomed || fullscreen_transition_)
+                return;
+            normal_placement_ = content_placement(surface.window);
+            zooming_in_ = true;
+            const std::shared_ptr<wake_state> state { wake_ };
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1'000'000'000), dispatch_get_main_queue(), ^{
+              if (state->target != nullptr)
+                  state->target->zoom_settled();
+            });
+        }
+
+        void zoom_settled()
+        {
+            zooming_in_ = false;
+            report_placement(main_);
+        }
+
+        // 최소화에서 되살아났다. 그동안 미룬 전체 화면 대조를 한다.
+        void on_deminiaturized(native_surface& surface)
+        {
+            report_placement(surface);
+            if (surface.main())
+                reconcile_fullscreen();
+            pump();
+        }
+
+    private:
         [[nodiscard]] bool window_visible(const native_surface& surface) const
         {
             // smoke test는 창을 보이지 않은 채 한 frame을 그린다.
@@ -1666,6 +1828,12 @@ namespace luil::macos {
             reconcile_windows(frame.get());
             update_overlays(frame.get());
             apply_main_visibility(frame != nullptr && frame->main_hidden);
+            if (frame != nullptr)
+            {
+                apply_placement_request(*frame);
+                if (frame->fullscreen.has_value())
+                    set_fullscreen(*frame->fullscreen);
+            }
             mark_all_dirty();
         }
 
@@ -2331,6 +2499,12 @@ namespace luil::macos {
         native_surface* key_surface_ { nullptr };
         bool key_handled_ { false };
         bool warned_docked_ { false };
+        // 주 창 배치다. 마지막으로 옮긴 요청의 revision, 마지막 보통 상태의 사각형, 전체 화면에 들기 전의 확대 여부다.
+        std::uint64_t applied_placement_revision_ { 0 };
+        std::optional<window_placement> normal_placement_ {};
+        bool zoomed_before_fullscreen_ { false };
+        bool fullscreen_transition_ { false };
+        bool zooming_in_ { false };
         bool warned_window_webviews_ { false };
         bool main_hidden_ { false };
         bool stopped_ { false };
@@ -2751,6 +2925,64 @@ namespace {
     static_cast<void>(notification);
     if (self.owner != nullptr && self.surface != nullptr)
         self.owner->on_moved(*self.surface);
+}
+
+- (void)windowWillEnterFullScreen:(NSNotification*)notification
+{
+    static_cast<void>(notification);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_fullscreen_transition(*self.surface, true, false);
+}
+
+- (void)windowDidEnterFullScreen:(NSNotification*)notification
+{
+    static_cast<void>(notification);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_fullscreen_transition(*self.surface, true, true);
+}
+
+- (void)windowWillExitFullScreen:(NSNotification*)notification
+{
+    static_cast<void>(notification);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_fullscreen_transition(*self.surface, false, false);
+}
+
+- (void)windowDidExitFullScreen:(NSNotification*)notification
+{
+    static_cast<void>(notification);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_fullscreen_transition(*self.surface, false, true);
+}
+
+- (void)windowDidFailToEnterFullScreen:(NSWindow*)window
+{
+    static_cast<void>(window);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_fullscreen_transition(*self.surface, true, true);
+}
+
+- (void)windowDidFailToExitFullScreen:(NSWindow*)window
+{
+    static_cast<void>(window);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_fullscreen_transition(*self.surface, false, true);
+}
+
+- (BOOL)windowShouldZoom:(NSWindow*)window toFrame:(NSRect)frame
+{
+    static_cast<void>(window);
+    static_cast<void>(frame);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_will_zoom(*self.surface);
+    return YES;
+}
+
+- (void)windowDidDeminiaturize:(NSNotification*)notification
+{
+    static_cast<void>(notification);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_deminiaturized(*self.surface);
 }
 
 - (void)windowDidBecomeKey:(NSNotification*)notification
