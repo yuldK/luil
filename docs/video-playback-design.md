@@ -46,6 +46,31 @@ MSVC Release x64 데모에서 한글 SRT와 재생·중지 버튼을 영상 위�
 
 최종 실행 파일 SHA-256은 `5EEA19EBBFC3966E9141543EBD79BB5D763092A5D5C597C7AB808FA4B50BC4AC`, 10분 입력 파일은 `1FBFCB973B3B900A7A6FF13AEA0150FD323AD42D6AA3E90BEA1DADC26CAD796E`다.
 
+## macOS
+
+같은 공개 헤더(`luil::win32` 이름 공간의 `media_player`·`video_frame_player`)를 macOS에서 AVFoundation으로 세운다. 앱 코드와 예제의 화면·driver는 고치지 않는다. 몸은 [`media_player_macos.mm`](../src/macos/media_player_macos.mm)·[`video_frame_player_macos.mm`](../src/macos/video_frame_player_macos.mm)이고, 상태 짝·시각 변환·장 크기·URL 판별은 AppKit을 모르는 [`media_rules`](../src/macos/media_rules.h)다.
+
+| 경계 | Windows | macOS |
+| --- | --- | --- |
+| 장 재생기 | Media Engine + D3D11 readback | AVPlayer + AVPlayerItemVideoOutput(BGRA). 소리·시계는 AVPlayer가 낸다 |
+| 장 재생기의 thread | 만든 MTA 논리 thread | 만든 thread 하나(앱의 논리 thread). KVO를 쓰지 않고 `update`가 읽는다 |
+| `ready` | `HAVE_CURRENT_DATA` | `readyToPlay` 뒤 처음 장을 0으로 한 번 탐색해 받는다. 영상 track이 없거나 500 ms 안에 장이 없으면 장 없이 `ready`다 |
+| 장 시각 | `OnVideoStreamTick` | 출력이 답한 표시 시각(`CMTime`)을 100 ns로 옮긴다 |
+| `statistics` | 버린 장·그린 장 | 접근 기록의 버린 장(로컬 파일은 대개 빈 값). 그린 장은 늘 빈 값 |
+| `parent_window` | HWND | `NSWindow*` (`on_native_window_created`의 값) |
+| 네이티브 표면 | `WS_CHILD` 창, `HWND_TOP` | 내용 view 맨 위의 AVPlayerLayer view. 눌림을 받지 않아 아래 Skia view의 overlay가 받는다 |
+| `set_video_bounds` | 물리 픽셀 | 물리 픽셀 ÷ `backingScaleFactor`의 점, 왼쪽 위 원점. 뒤에 선 형제(웹뷰)보다 다시 위로 선다 |
+| `deliver` | MF worker | 재생기의 직렬 dispatch queue |
+| `repaint` | `UpdateVideo` | 할 일 없음 (layer가 스스로 그린다) |
+
+`media_player`의 사건은 MFPlay와 같은 차례다. 항목의 `status`가 readyToPlay → `ready`, `timeControlStatus`가 실제로 playing → `playing`, `pause` → `paused`, `rewind` → `stopped`, 끝 알림 → `ended`, 항목·재생 실패 → `failed`(`native_error`는 `NSError`의 code)다. 탐색·볼륨은 사건을 내지 않는다. 늦게 온 KVO는 지금 값으로 다시 보고, 이전 원본의 알림은 원본 번호로 버린다. `ended`에서 `play`하면 처음부터 다시 간다. `open`은 두 글자 이상의 scheme이 붙은 원본을 URL로, 나머지를 파일 경로로 연다.
+
+host는 Windows와 같은 세 훅을 메인 thread에서 부른다 (`on_native_window_created`·`on_native_frame`·`on_native_window_destroying`). 앱은 [선택 노드의 연결 예](selected-nodes.md#windows-미디어-연결)를 그대로 쓴다.
+
+전용 데모는 앱 번들 `luil_video.app`이다. 견본은 `Contents/Resources/video`에 있고, `--frame-log`(QPC 기록)는 받지 않는다. macOS 27.2에서 견본의 MP4(H.264/AAC)·AVI(MJPEG/PCM)는 장과 소리를 냈다. MPEG-TS는 열리고 시계가 가지만 AVPlayerItemVideoOutput이 장을 주지 않아 데모가 포스터를 보인다. 최소 판(11)에서 AVI·TS가 열리는지는 보지 않았다.
+
+검증은 `luil_macos_platform_tests`의 [`macos_media_tests.mm`](../tests/macos_media_tests.mm)다. AVAssetWriter로 그 자리에서 만든 단색 H.264 영상(24 fps)으로 장 시각의 증가·정지 뒤 첫 장·1,920픽셀 상한, 사건 차례·두 번 열기·실패의 `native_error`, 표면의 자리·가림·제거를 본다. 예제 견본은 숨은 test `[.samples]`가 연다. 데모는 `luil_macos_video_smoke`가 첫 frame을 그린다.
+
 ## 실행 가능한 Windows 프로토타입 · 2026-11-19
 
 `luil_video` 예제를 MSVC Release x64로 빌드하고 Windows 11 26H2(26300.9974)에서 실행했다. 프로토타입은 아래 세 샘플과 UTF-8 한글 SRT를 실행 파일 옆 `video` 폴더에 복사한다. 샘플은 같은 움직이는 도형, 프레임 번호, 짧은 기준음을 담은 자체 제작 256×144·12fps·약 8초 클립이다. MJPEG·PCM AVI를 Windows에서 H.264·AAC MP4로 변환하고 같은 압축 스트림을 MPEG-TS로 재포장했다. 샘플 제작과 재생 모두 FFmpeg를 사용하지 않았다. [예제 소스](../examples/video/main.cpp) · [샘플 파일](../examples/video/assets)
