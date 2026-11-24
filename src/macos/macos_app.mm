@@ -20,6 +20,7 @@
 #include "macos/file_dialog_macos.h"
 #include "macos/frame_capture.h"
 #include "macos/input_script.h"
+#include "macos/macos_clipboard.h"
 #include "macos/macos_input.h"
 #include "macos/macos_text.h"
 #include "macos/metal_skia_renderer.h"
@@ -285,6 +286,8 @@ namespace luil::macos {
             wake_->target = nullptr;
             if (timer_ != nil)
                 [timer_ invalidate];
+            if (clipboard_timer_ != nil)
+                [clipboard_timer_ invalidate];
             for (std::unique_ptr<native_surface>& surface : secondary_)
                 destroy_window(*surface);
             secondary_.clear();
@@ -474,7 +477,29 @@ namespace luil::macos {
         void on_active(const bool active)
         {
             post_lifecycle(active ? app_lifecycle::foreground : app_lifecycle::background);
+            watch_clipboard(active);
             pump();
+        }
+
+        // 앞에 있는 동안 클립보드 번호를 본다 (`check_clipboard`).
+        void watch_clipboard(const bool active)
+        {
+            if (clipboard_timer_ != nil)
+            {
+                [clipboard_timer_ invalidate];
+                clipboard_timer_ = nil;
+            }
+            if (active == false || stopped_)
+                return;
+            check_clipboard();
+            const std::shared_ptr<wake_state> state { wake_ };
+            clipboard_timer_ = [NSTimer timerWithTimeInterval:0.5
+                                                      repeats:YES
+                                                        block:^(NSTimer*) {
+                                                          if (state->target != nullptr)
+                                                              state->target->check_clipboard();
+                                                        }];
+            [[NSRunLoop mainRunLoop] addTimer:clipboard_timer_ forMode:NSRunLoopCommonModes];
         }
 
         void on_occlusion_changed(native_surface& surface)
@@ -980,6 +1005,9 @@ namespace luil::macos {
                 .form_factor = ui_form_factor::desktop,
                 .window_caption = false,
                 .rounded_popup_corners = true,
+                .capabilities = {
+                    .clipboard_image_copy = true,
+                },
             });
             set_font_fallback(&font_resolver_);
             window_delegate_ = dynamic_cast<win32::window_delegate*>(environment_.delegate);
@@ -2047,54 +2075,54 @@ namespace luil::macos {
                 execute_clipboard(*read);
         }
 
-        // 클립보드 요청이다. 글은 일반 붙여넣기 판(NSPasteboard)의 문자열이다. 붙여넣기는 그 칸의 insert 편집으로 보낸다.
+        // 클립보드 요청이다 (macos/macos_clipboard.h). 텍스트 칸의 붙여넣기는 그 칸의 insert 편집으로 보낸다.
+        //  - 넣은 뒤의 번호를 기억한다. 번호가 그대로면 클립보드의 임자가 이 앱이다 (`clipboard_change::owned`).
         void execute_clipboard(const clipboard_request& request)
         {
-            NSPasteboard* const board { [NSPasteboard generalPasteboard] };
-            if (std::holds_alternative<clipboard_files_copy_request>(request))
+            if (const auto* const files { std::get_if<clipboard_files_copy_request>(&request) }; files != nullptr)
+            {
+                if (write_clipboard_files(*files))
+                    note_clipboard_written();
                 return;
+            }
             if (const auto* const read { std::get_if<clipboard_files_paste_request>(&request) }; read != nullptr)
             {
-                if (environment_.delegate == nullptr)
+                if (environment_.delegate == nullptr || host_ == nullptr)
                     return;
-                file_clipboard_content content {};
-                content.supported = false;
-                content.tag = read->tag;
-                if (app_message message { environment_.delegate->make_file_clipboard_message(content) }; message.empty() == false)
+                if (app_message message { environment_.delegate->make_file_clipboard_message(read_clipboard_files(read->tag)) }; message.empty() == false)
                     host_->post_app_message(std::move(message));
                 return;
             }
             if (const auto* const read { std::get_if<clipboard_data_paste_request>(&request) }; read != nullptr)
             {
-                if (environment_.delegate == nullptr)
+                if (environment_.delegate == nullptr || host_ == nullptr)
                     return;
-                clipboard_data data {};
-                data.text = from_ns_string([board stringForType:NSPasteboardTypeString]);
-                data.tag = read->tag;
-                if (app_message message { environment_.delegate->make_clipboard_data_message(data) }; message.empty() == false)
+                if (app_message message { environment_.delegate->make_clipboard_data_message(read_clipboard_data(read->tag)) }; message.empty() == false)
                     host_->post_app_message(std::move(message));
                 return;
             }
             if (const auto* const copy { std::get_if<clipboard_copy_request>(&request) }; copy != nullptr)
             {
+                NSPasteboard* const board { [NSPasteboard generalPasteboard] };
                 [board clearContents];
                 if (NSString* const text { make_ns_string(copy->text) }; text != nil)
                     [board setString:text forType:NSPasteboardTypeString];
+                note_clipboard_written();
                 return;
             }
             if (const auto* const data { std::get_if<clipboard_data_copy_request>(&request) }; data != nullptr)
             {
-                [board clearContents];
-                if (NSString* const text { make_ns_string(data->text) }; text != nil)
-                    [board setString:text forType:NSPasteboardTypeString];
-                if (NSString* const html { make_ns_string(data->html) }; html != nil && html.length > 0)
-                    [board setString:html forType:NSPasteboardTypeHTML];
+                std::u8string error {};
+                if (write_clipboard_data(*data, error))
+                    note_clipboard_written();
+                else if (error.empty() == false)
+                    log_error(error);
                 return;
             }
             const auto* const paste { std::get_if<clipboard_paste_request>(&request) };
             if (paste == nullptr || environment_.policy == nullptr)
                 return;
-            std::u8string text { from_ns_string([board stringForType:NSPasteboardTypeString]) };
+            std::u8string text { from_ns_string([[NSPasteboard generalPasteboard] stringForType:NSPasteboardTypeString]) };
             if (text.empty())
                 return;
             // 한 줄 칸에는 줄 바꿈을 넣지 않는다 (Win32 붙여넣기와 같다).
@@ -2106,6 +2134,31 @@ namespace luil::macos {
             edit.text = std::move(text);
             dispatch(environment_.policy->make_text_edit_action(edit));
         }
+
+        void note_clipboard_written()
+        {
+            owned_clipboard_sequence_ = clipboard_sequence();
+            check_clipboard();
+        }
+
+    public:
+        // 클립보드가 바뀌었으면 앱에 알린다 (`clipboard_change`). macOS에는 바뀜 알림이 없어 번호(`changeCount`)를 견준다.
+        //  - 이 앱이 넣은 뒤, 앱이 앞으로 올 때, 앞에 있는 동안 반 초마다 본다. 뒤에 있는 동안은 다른 앱만 넣을 수 있고, 앞으로
+        //    오면 바로 본다.
+        void check_clipboard()
+        {
+            if (host_ == nullptr || environment_.delegate == nullptr || stopped_)
+                return;
+            const std::uint32_t sequence { clipboard_sequence() };
+            if (reported_clipboard_sequence_ == sequence)
+                return;
+            reported_clipboard_sequence_ = sequence;
+            const clipboard_change change { owned_clipboard_sequence_ == sequence, sequence, clipboard_has_files(), clipboard_has_image() };
+            if (app_message message { environment_.delegate->make_clipboard_changed_message(change) }; message.empty() == false)
+                host_->post_app_message(std::move(message));
+        }
+
+    private:
 
         // frame의 웹뷰마다 자리표의 자리를 웹뷰에 앉히고, 아래층이 비울 구멍을 낸다 (Win32 `apply_webviews`와 같은 규칙).
         //  - 가림은 자리표의 가운데와 안쪽 네 모서리 hit test다. popup은 같은 view에 겹쳐 그리므로 자리와 겹치는 popup도 가림이다.
@@ -2262,6 +2315,10 @@ namespace luil::macos {
         file_dialog_gate file_dialog_gate_ {};
         // 지금 들어와 있는 OS 끌기의 내용이다 (들어올 때 한 번 읽는다).
         drag_payload drag_payload_ {};
+        // 이 앱이 마지막으로 넣은 클립보드 번호와 마지막으로 알린 번호다.
+        std::optional<std::uint32_t> owned_clipboard_sequence_ {};
+        std::optional<std::uint32_t> reported_clipboard_sequence_ {};
+        NSTimer* clipboard_timer_ { nil };
         // 앱 delegate가 Windows의 창 delegate도 구현했으면 그것이다. 플랫폼 중립 밖의 훅(파일 놓기의 물러섬 등)을 그리로 부른다.
         win32::window_delegate* window_delegate_ { nullptr };
         focus_request_tracker focus_tracker_ {};

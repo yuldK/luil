@@ -59,9 +59,14 @@ namespace demo {
         }
 
         // 데모의 파일은 이 폴더 아래에 있는 것으로 친다 (실제로 만들지 않는다).
+        //  - 클립보드는 절대 경로만 받으므로 플랫폼의 절대 경로 꼴로 짓는다.
         [[nodiscard]] std::u8string path_of(const std::u8string& label)
         {
+#ifdef _WIN32
             return u8"C:\\luil-demo\\" + label;
+#else
+            return u8"/tmp/luil-demo/" + label;
+#endif
         }
 
         [[nodiscard]] std::u8string count_text(const std::size_t count)
