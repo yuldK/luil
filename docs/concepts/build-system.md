@@ -153,6 +153,7 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 화면 남기기 | `capture_request`·`record_request`를 그리기와 같은 상태로 raster에 다시 태워 무손실 WebP로 남긴다 |
 | 작업 표시줄·트레이·전역 단축키 | 진행률·오버레이는 Dock 타일, 점프 목록은 Dock 메뉴(누르면 그 인자로 새로 띄운다), 트레이는 메뉴 막대 상태 항목, 전역 단축키는 Carbon `RegisterEventHotKey`(조합의 Ctrl이 Command)다 |
 | 햅틱 | `NSHapticFeedbackManager`(Force Touch 트랙패드) |
+| 접근성 | 창마다 VoiceOver 다리 하나가 tree와 popup의 접근 요소를 `NSAccessibilityElement`로 세운다. 누름·초점은 입력으로, 값·펼침은 액션으로 돌아온다 ([접근성](../accessibility-design.md)) |
 | 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
 | HTTP·WebSocket | `http_client`는 NSURLSession 위에 서고 몸 풀기와 배달은 client의 thread가 한다 (다른 플랫폼과 같다). WebSocket은 NSURLSessionWebSocketTask다. gzip·deflate는 시스템이 늘 풀고, 상태 줄의 이유 글과 헤더의 차례는 오지 않으며, 로컬 닫기는 상대의 답을 기다리지 않는다 ([`macos_http_client.mm`](../../src/net/macos/macos_http_client.mm), [`websocket_transport.mm`](../../src/net/macos/websocket_transport.mm)) |
 | 비밀 저장소 | 로그인 keychain의 일반 암호 항목이다. `service`가 서비스, `name`이 계정 이름이다. NUL을 품은 이름은 거절한다 ([비밀 저장소](../secret-store-design.md#macos)) |
