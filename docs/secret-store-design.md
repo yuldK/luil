@@ -53,6 +53,17 @@ Android Keystore의 AES-256-GCM 키로 값을 암호화해 앱 내부 저장소�
 - 앱을 지우면 키와 파일이 함께 사라진다. 기기 백업에 파일이 실려 가도 키가 없어 다른 기기에서는 풀리지 않는다. 그때는 `failed`가 아니라 항목을 지우고 `not_found`로 답한다. 앱은 다시 로그인하라고 하면 된다.
 - 판 번호가 모르는 값이거나 파일이 짧으면 `failed`다.
 
+## macOS
+
+로그인 keychain의 일반 암호 항목이다(`SecItemAdd`·`SecItemUpdate`·`SecItemCopyMatching`·`SecItemDelete`, `kSecClassGenericPassword`).
+
+- `service`가 `kSecAttrService`, `name`이 `kSecAttrAccount`다. 바꾸지 않고 넣으므로 사용자가 Keychain Access에서 그 이름으로 보고 지울 수 있다. 대소문자와 슬래시는 그대로 구분된다.
+- 두 이름 모두 비어 있지 않은 유효한 UTF-8이어야 하고 NUL을 품으면 안 된다. Keychain은 속성을 NUL에서 잘라 `name\0a`와 `name\0b`가 한 항목이 된다. 남의 값을 조용히 덮지 않게 쓰기 전에 `failed`로 거절한다. Windows와 다른 한 곳이다.
+- 같은 짝에 다시 쓰면 `SecItemUpdate`로 값만 바꾼다. 지우고 새로 만들지 않아 항목의 접근 목록이 그대로다.
+- 파일 기반 keychain이다. 데이터 보호 keychain(`kSecUseDataProtectionKeychain`)은 keychain-access-groups 서명 권한이 있어야 해서, 서명하지 않은 개발 빌드와 test 실행 파일에서 실패한다.
+- 항목은 기본 접근 목록으로 만든다. 만든 프로그램이 믿는 앱으로 들어가 그 프로그램은 묻는 창 없이 읽고 고치고 지운다. 다시 빌드해 서명(ad-hoc 포함)이 바뀐 실행 파일이 옛 항목을 읽으면 OS가 허락을 묻는다. 접근 목록을 라이브러리가 넓히지 않는다.
+- `migrate_legacy_win32_secret`은 `unsupported`다. 옮길 옛 항목이 없다.
+
 ## 자동 완성 힌트는 미룬다
 
 요청에는 텍스트 칸의 자동 완성 힌트(아이디·암호)와 Android 암호 관리자의 자동 완성이 함께 있었다. 이번에는 넣지 않는다.
@@ -65,4 +76,5 @@ Android Keystore의 AES-256-GCM 키로 값을 암호화해 앱 내부 저장소�
 
 - `tests/secret_store_tests.cpp`(Windows): 시험 계정용 키로 읽기·쓰기·덮어쓰기·삭제, 이름의 충돌 방지와 옛 키의 명시적 복사를 검증한다. 테스트가 쓴 자격 증명은 그 자리에서 지운다.
 - `tests/android_jni_order_tests.cpp`(Android): 가짜 JNI와 `/dev/full`을 사용해 닫기 중 쓰기가 실패했을 때 기존 파일이 보존되고 임시 파일이 정리되는지 검증한다. 모바일 데모의 "기기" 페이지("한 바퀴 돌려 보기")에서 실제 Keystore로 쓰기·읽기·덮어쓰기·지우기·없는 항목을 확인한다.
+- `tests/secret_store_tests.cpp`(macOS, `luil_macos_platform_tests`): 같은 파일이 실제 keychain으로 읽기·쓰기·덮어쓰기·삭제·상한·빈 값, 슬래시와 대소문자의 구분, NUL 이름과 잘못된 UTF-8의 거절, 이전의 `unsupported`를 본다. 묻는 창 없이 돈다.
 - 데모 "입력과 다이얼로그" 페이지의 "비밀 저장소 확인" 단추가 같은 차례를 Windows에서 돌려 결과를 옆 줄에 적는다.

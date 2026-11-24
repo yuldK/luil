@@ -456,6 +456,20 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "${LUIL_SOURCE_DIRECTORY}/macos/macos_input.cpp"
             macos_input_tests.cpp)
     catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
+    # 플랫폼 서비스를 실제 OS로 본다. Keychain에 쓰고 지우는 비밀 저장소다.
+    #  - 플랫폼 층(luil)을 링크하므로 core test와 따로 선다 (Windows의 luil_tests 자리다).
+    add_executable(luil_macos_platform_tests
+        secret_store_tests.cpp)
+    target_include_directories(luil_macos_platform_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}"
+            "${LUIL_TEST_DIRECTORY}")
+    target_link_libraries(luil_macos_platform_tests
+        PRIVATE
+            luil::luil
+            luil_options
+            Catch2::Catch2WithMain)
+    catch_discover_tests(luil_macos_platform_tests PROPERTIES TIMEOUT 120)
     # AppKit host가 창을 보이지 않은 채 첫 frame을 그리고 끝나는지 본다 (예제를 켠 구성에서만).
     if(TARGET luil_hello)
         add_test(NAME luil_macos_hello_smoke COMMAND "$<TARGET_FILE:luil_hello>" --smoke-test)
@@ -475,7 +489,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
         set_tests_properties(luil_macos_demo_smoke_gpu PROPERTIES PASS_REGULAR_EXPRESSION "renderer metal")
         set_tests_properties(luil_macos_demo_smoke_gpu_required PROPERTIES WILL_FAIL TRUE)
     endif()
-    luil_set_ide_folder("Tests" luil_core_tests)
+    luil_set_ide_folder("Tests" luil_core_tests luil_macos_platform_tests)
     if(LUIL_ENABLE_TEXT_SHAPING)
         catch_discover_tests(luil_text_shaping_tests PROPERTIES TIMEOUT 120)
     endif()

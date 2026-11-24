@@ -121,7 +121,7 @@ ctest --preset macos-arm64-debug
 build/macos-arm64/Debug/luil_demo
 ```
 
-test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`). 키 변환(`src/macos/macos_input.cpp`)은 AppKit을 모르는 순수 층이라 core test에 들어가고, 예제의 `--smoke-test`가 창을 보이지 않은 채 첫 frame을 그려 host를 확인한다.
+test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`). 키 변환(`src/macos/macos_input.cpp`)은 AppKit을 모르는 순수 층이라 core test에 들어가고, 예제의 `--smoke-test`가 창을 보이지 않은 채 첫 frame을 그려 host를 확인한다. 플랫폼 서비스는 `luil`을 링크한 `luil_macos_platform_tests`가 실제 OS로 본다 (Windows의 `luil_tests` 자리다).
 
 ### 앱 host
 
@@ -141,8 +141,9 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 웹뷰 | WKWebView. Skia view의 형제 NSView로 위층·아래층에 선다 ([웹뷰 합성](../webview-composition-design.md#macos-wkwebview)) |
 | 클립보드 | 일반 붙여넣기 판의 글과 HTML |
 | 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
+| 비밀 저장소 | 로그인 keychain의 일반 암호 항목이다. `service`가 서비스, `name`이 계정 이름이다. NUL을 품은 이름은 거절한다 ([비밀 저장소](../secret-store-design.md#macos)) |
 
-아직 없는 것은 "지원 안 함"으로 답한다: 도킹 표면(무시), 보조 창의 웹뷰(무시), 파일 대화 상자, 비밀 저장소(Keychain), OS 알림, 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
+아직 없는 것은 "지원 안 함"으로 답한다: 도킹 표면(무시), 보조 창의 웹뷰(무시), 파일 대화 상자, OS 알림, 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
 
 개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
 

@@ -29,12 +29,13 @@ namespace luil {
         std::u8string error {};
     };
 
-    // 값 하나의 상한이다 (바이트). Windows 자격 증명의 상한에 두 플랫폼을 맞춘다.
+    // 값 하나의 상한이다 (바이트). Windows 자격 증명의 상한에 모든 플랫폼을 맞춘다.
     inline constexpr std::size_t secret_store_maximum_bytes { 2560 };
 
     // 항목은 `service`(앱·기능의 묶음)와 `name`(계정·서버 같은 항목 이름)의 짝이다. 둘 다 비어 있으면 안 된다.
     //  - Windows: 자격 증명 관리자의 일반 자격 증명이다. 비어 있지 않은 UTF-8 이름 쌍을 바이트로 구분한다.
     //  - Android: Keystore의 AES-GCM 키(`service`마다 하나)로 암호화한 앱 내부 파일이다.
+    //  - macOS: 로그인 keychain의 일반 암호 항목(서비스 `service`, 계정 `name`)이다. NUL을 품은 이름은 `failed`다 (keychain이 NUL에서 자른다).
     //  - 동기 호출이다. UI thread에서 부르지 않는다 (Android Keystore는 수십 ms까지 걸린다).
 
     // 같은 짝에 다시 쓰면 덮는다. 상한을 넘으면 `failed`다.
