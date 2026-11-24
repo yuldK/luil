@@ -4,7 +4,10 @@
 #include "luil/app/app_host.h"
 #include "luil/app/platform_services.h"
 #include "luil/app/renderer_policy.h"
+#include "luil/ui/ui_cursor.h"
 #include "luil/ui/ui_interaction.h"
+
+#include <functional>
 
 #include <string>
 #include <vector>
@@ -33,6 +36,10 @@ namespace luil::macos {
         // 놓인 자리의 drop 대상 element가 받고(`ui_action_context::native_drop_data`는 끌기의 `NSPasteboard*`다), 없으면
         // delegate가 `win32::window_delegate`를 구현했을 때 그 `on_file_dropped`가 본다 (os-dragdrop-design.md).
         bool accept_file_drop { false };
+        // `ui_cursor`를 실제 커서로 옮긴다. 돌려주는 값은 `NSCursor*`다 (ARC가 쥐지 않은 맨 포인터, 앱이 살려 둔다).
+        // 비어 있거나 nullptr를 돌려주면 라이브러리의 기본 매핑(시스템 커서)이다. 앱이 정의한 모양(`application_cursor`)을
+        // 여기서 준다 (Windows `window_config::resolve_cursor`의 자리). 시스템 모양은 `system_cursor`로 얻는다.
+        std::function<void*(ui_cursor)> resolve_cursor {};
         // 터치 몸짓의 시작 설정이다. 트랙패드는 마우스로 오므로 길게 누르기와 끌어 스크롤하기는 붙지 않는다.
         touch_gesture_config touch {};
     };
@@ -74,6 +81,9 @@ namespace luil::macos {
     //    (또는 `ui_command::application_exit`이면) `app_host::shutdown`이 종료 신호를 돌린 뒤 창이 사라지고 이 함수가 돌아온다.
     // 반환값은 0이면 정상 종료, 아니면 시작에 실패한 것이다.
     int run_application(const application_config& config, const application_environment& environment);
+
+    // 기본 매핑의 시스템 커서다 (`NSCursor*`, 맨 포인터). 앱 정의 모양을 시스템 모양으로 보일 때 `resolve_cursor`에서 쓴다.
+    [[nodiscard]] void* system_cursor(ui_cursor cursor) noexcept;
 
     // 명령 줄 인자를 UTF-8 목록으로 옮긴다. Windows의 `win32::command_line_arguments`와 같이 첫 항목이 실행 파일(`argv[0]`)이다.
     [[nodiscard]] std::vector<std::u8string> command_line_arguments(int argc, const char* const* argv);

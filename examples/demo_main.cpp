@@ -1768,6 +1768,10 @@ int main(const int argc, const char* const* const argv)
     config.smoke_test = options.smoke_test;
     config.touch = options.touch;
     config.accept_file_drop = true;
+    // 앱이 정의한 모양만 앱이 해석하고 나머지는 라이브러리 기본 매핑에 맡긴다 (Windows와 같다).
+    config.resolve_cursor = [](const luil::ui_cursor cursor) -> void* {
+        return cursor == demo::cursor_reorder ? luil::macos::system_cursor(luil::ui_cursor::resize_vertical) : nullptr;
+    };
     luil::macos::application_environment environment {};
     environment.driver = &driver;
     environment.policy = &policy;

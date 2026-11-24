@@ -156,6 +156,9 @@ namespace luil::macos {
                 return [NSCursor resizeUpDownCursor];
             case ui_cursor::not_allowed:
                 return [NSCursor operationNotAllowedCursor];
+            // macOS에는 공개된 기다림 커서가 없다 (시스템이 바쁜 앱에 회전 커서를 스스로 보인다).
+            case ui_cursor::wait:
+                return [NSCursor arrowCursor];
             default:
                 return [NSCursor arrowCursor];
             }
@@ -1957,7 +1960,10 @@ namespace luil::macos {
                 return;
             }
             surface.cursor_hidden = false;
-            [cursor_for(cursor) set];
+            NSCursor* resolved { nil };
+            if (config_.resolve_cursor != nullptr)
+                resolved = (__bridge NSCursor*)config_.resolve_cursor(cursor);
+            [(resolved != nil ? resolved : cursor_for(cursor)) set];
         }
 
         void process_file_dialog()
@@ -3058,6 +3064,11 @@ namespace luil::macos {
             application app { config, environment };
             return app.run();
         }
+    }
+
+    void* system_cursor(const ui_cursor cursor) noexcept
+    {
+        return (__bridge void*)cursor_for(cursor);
     }
 
     std::vector<std::u8string> command_line_arguments(const int argc, const char* const* const argv)

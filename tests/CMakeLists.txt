@@ -513,12 +513,14 @@ if(LUIL_PLATFORM STREQUAL "macos")
     #  - 플랫폼 층(luil)을 링크하므로 core test와 따로 선다 (Windows의 luil_tests 자리다).
     add_executable(luil_macos_platform_tests
         file_watcher_tests.cpp
+        macos_drop_data_tests.mm
         macos_single_instance_tests.cpp
         secret_store_tests.cpp)
     target_include_directories(luil_macos_platform_tests
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}"
             "${LUIL_TEST_DIRECTORY}")
+    target_compile_options(luil_macos_platform_tests PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
     target_link_libraries(luil_macos_platform_tests
         PRIVATE
             luil::luil

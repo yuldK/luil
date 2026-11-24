@@ -998,6 +998,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/metal_skia_renderer.h
         macos/metal_skia_renderer.mm
         macos/desktop_compat.cpp
+        "${public_headers}/win32/drop_data.h"
+        macos/drop_data_macos.mm
         macos/input_script.h
         macos/input_script.mm
         "${public_headers}/app/webview.h"

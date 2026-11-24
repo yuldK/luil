@@ -1323,7 +1323,8 @@ namespace demo {
             drop.files = payload.files;
             for (const luil::win32::dropped_virtual_file& file : luil::win32::drop_virtual_files(context.native_drop_data))
                 drop.virtual_files.push_back(file.name);
-            if (payload.has_format(u8"UniformResourceLocatorW"))
+            // 주소 형식의 이름은 플랫폼마다 다르다 (Windows `UniformResourceLocatorW`, macOS `public.url`). 도우미는 둘 다 읽는다.
+            if (payload.has_format(u8"UniformResourceLocatorW") || payload.has_format(u8"public.url"))
                 drop.url = luil::win32::drop_data_text(context.native_drop_data, u8"UniformResourceLocatorW").value_or(std::u8string {});
             return { luil::make_app_action(std::move(drop)) };
         };

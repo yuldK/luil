@@ -1,4 +1,3 @@
-#include "luil/win32/drop_data.h"
 #include "luil/win32/win32_window.h"
 
 #include <cstdint>
@@ -7,8 +6,7 @@
 
 // 공개 헤더가 모든 플랫폼에 선언하는 데스크톱 도우미의 macOS 몸이다. Windows 앱 코드가 고치지 않고 링크되게 한다.
 //  - 창 자리 읽기와 배치 범위 검사는 값만 다루는 함수라 Windows와 같은 규칙이다 (win32_window.cpp).
-//  - OS 끌기의 데이터 객체(`IDataObject`)는 macOS에 없다. 표면이 그것을 넘기지 않으므로(`native_drop_data`가 비었다)
-//    읽기는 늘 빈 답이다.
+//  - OS 끌기의 원시 데이터를 읽는 도우미(drop_data.h)는 끌기의 붙여넣기 판을 읽는다 (macos/drop_data_macos.mm).
 namespace luil::win32 {
     namespace {
         // 십진 정수 하나다. 부호와 숫자만 받고 남는 글자가 있으면 실패다. 백만을 넘는 값은 오타로 본다.
@@ -52,20 +50,5 @@ namespace luil::win32 {
         const long long right { static_cast<long long>(placement.x) + placement.width };
         const long long bottom { static_cast<long long>(placement.y) + placement.height };
         return right >= lowest && right <= highest && bottom >= lowest && bottom <= highest;
-    }
-
-    std::vector<dropped_virtual_file> drop_virtual_files(void*)
-    {
-        return {};
-    }
-
-    std::optional<std::vector<std::byte>> drop_data_bytes(void*, std::u8string_view, int, std::size_t)
-    {
-        return std::nullopt;
-    }
-
-    std::optional<std::u8string> drop_data_text(void*, std::u8string_view, std::size_t)
-    {
-        return std::nullopt;
     }
 }
