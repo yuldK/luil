@@ -26,6 +26,7 @@
 #include "macos/macos_text.h"
 #include "macos/metal_skia_renderer.h"
 #include "macos/notification_center.h"
+#include "macos/surface_capture.h"
 #include "macos/webview_host.h"
 
 #include "include/core/SkFont.h"
@@ -247,6 +248,8 @@ namespace luil::macos {
         std::optional<window_placement> reported_placement {};
         bool pointer_over_webview { false };
         bool cursor_hidden { false };
+        // 이 표면의 녹화다 (`record_request`).
+        frame_recorder recorder {};
         // 닫힘 요청을 낸 frame이다. 같은 frame에 거듭 온 요청은 삼킨다.
         std::shared_ptr<const ui_frame> close_requested_frame {};
 
@@ -796,6 +799,17 @@ namespace luil::macos {
         }
 
         // 창 내용의 합성을 PNG로 적는다 (개발용, 입력 대본의 `snapshot`). 주 창만이다. 아래층 웹뷰 → Skia frame → 위층 웹뷰의 차례다.
+        void script_capture(const std::u8string& path, const std::u8string& surface)
+        {
+            dispatch(capture_request { path, surface });
+        }
+
+        // 빈 경로는 멈춤이다.
+        void script_record(const std::u8string& path, const std::u8string& surface)
+        {
+            dispatch(record_request { path.empty() ? record_command::stop : record_command::start, path, surface });
+        }
+
         void snapshot(NSString* const path)
         {
             if (webviews_ == nullptr || path == nil)
@@ -1078,6 +1092,7 @@ namespace luil::macos {
             host_config.wake.ui_command = [signal] { static_cast<void>(signal()); };
             host_config.wake.app_ui_command = [signal] { static_cast<void>(signal()); };
             host_config.wake.clipboard = [signal] { static_cast<void>(signal()); };
+            host_config.wake.capture = [signal] { static_cast<void>(signal()); };
             host_config.interaction.double_click_time = std::chrono::milliseconds { static_cast<int>(std::lround([NSEvent doubleClickInterval] * 1000.0)) };
             host_config.interaction.touch = config_.touch;
             // 묻는 권한은 OS 알림 하나다 (UserNotifications의 허락). 답은 메인 thread에서 앱 메시지로 낸다.
@@ -1636,6 +1651,50 @@ namespace luil::macos {
                     environment_.delegate->execute_app_ui_command(*host_, command);
             for (const clipboard_request& request : host_->take_clipboard_requests())
                 execute_clipboard(request);
+            for (capture_command& request : host_->take_capture_requests())
+                std::visit([this](auto&& value) { dispatch(input_action { std::move(value) }); }, std::move(request));
+        }
+
+        // 표면 표식으로 찍을 창을 찾는다. 빈 표식은 주 창이다. popup은 그것이 사는 창을 찍는다 (같은 view에 겹쳐 그린다).
+        [[nodiscard]] native_surface* surface_for_capture(const std::u8string& id)
+        {
+            if (native_surface* const surface { find_surface(id) }; surface != nullptr)
+                return surface;
+            const native_surface* owner { nullptr };
+            if (find_overlay(id, &owner) != nullptr)
+                return const_cast<native_surface*>(owner);
+            return nullptr;
+        }
+
+        // 찍기·녹화는 실패해도 창을 끝내지 않고 알리기만 한다 (Win32와 같다).
+        void execute_capture(const capture_request& request)
+        {
+            native_surface* const target { surface_for_capture(request.surface) };
+            if (target == nullptr || host_ == nullptr)
+            {
+                log_error(u8"The capture target surface is gone.");
+                return;
+            }
+            prepared_frame prepared {};
+            prepare(*target, prepared, false);
+            if (std::u8string error {}; write_capture(prepared.state, request.path, error) == false)
+                log_error(error);
+        }
+
+        void execute_record(const record_request& request)
+        {
+            native_surface* const target { surface_for_capture(request.surface) };
+            if (target == nullptr)
+            {
+                log_error(u8"The recording target surface is gone.");
+                return;
+            }
+            std::u8string error {};
+            const bool done { request.command == record_command::start ? target->recorder.start(request.path, error) : target->recorder.stop(error) };
+            if (done == false)
+                log_error(error);
+            // 녹화는 그리는 장을 모은다. 시작하면 바로 한 장을 그린다.
+            target->dirty = true;
         }
 
         // 창 명령은 주 창의 것이다 (Win32와 같다). 닫기는 주 창의 닫힘 훅을 거친다.
@@ -2292,6 +2351,10 @@ namespace luil::macos {
                 execute_clipboard(std::move(*files));
             else if (const auto* const read { std::get_if<clipboard_files_paste_request>(&action) }; read != nullptr)
                 execute_clipboard(*read);
+            else if (const auto* const shot { std::get_if<capture_request>(&action) }; shot != nullptr)
+                execute_capture(*shot);
+            else if (const auto* const record { std::get_if<record_request>(&action) }; record != nullptr)
+                execute_record(*record);
         }
 
         // 클립보드 요청이다 (macos/macos_clipboard.h). 텍스트 칸의 붙여넣기는 그 칸의 insert 편집으로 보낸다.
@@ -2437,27 +2500,38 @@ namespace luil::macos {
             return false;
         }
 
-        [[nodiscard]] bool render(native_surface& surface)
+        // 한 표면을 그릴 상태다. `state`가 가리키는 tree·popup 층·글꼴을 함께 쥔다.
+        struct prepared_frame
         {
             frame_state state {};
+            std::shared_ptr<const ui_frame> frame {};
+            std::shared_ptr<const ui_tree> tree {};
+            std::vector<overlay_layer> layers {};
+            sk_sp<SkTypeface> code {};
+        };
+
+        // 그리기와 남기기가 같은 상태를 짓는다. 웹뷰의 자리 맞춤과 구멍은 화면 그리기에서만 한다 (`with_webviews`).
+        void prepare(native_surface& surface, prepared_frame& prepared, const bool with_webviews)
+        {
+            frame_state& state { prepared.state };
             state.width = surface.width;
             state.height = surface.height;
             state.dpi_scale = surface.scale;
             state.reduce_motion = system_.reduce_motion;
 
-            const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+            prepared.frame = host_->acquire_frame();
+            const ui_frame* const frame { prepared.frame.get() };
             const interaction_snapshot interaction { host_->acquire_interaction() };
             state.interaction = interaction_for_surface(interaction, surface.id);
             // 보조 창은 frame의 그 창 tree를, 주 창은 host가 준 tree를 그린다.
-            const std::shared_ptr<const ui_tree> tree { surface.main() ? host_->acquire_ui_tree() : surface.want.tree };
-            state.tree = tree.get();
-            std::vector<overlay_layer> layers {};
-            layers.reserve(surface.overlays.size());
+            prepared.tree = surface.main() ? host_->acquire_ui_tree() : surface.want.tree;
+            state.tree = prepared.tree.get();
+            prepared.layers.reserve(surface.overlays.size());
             for (const overlay_entry& entry : surface.overlays)
-                layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id), entry.scroll_y });
-            state.overlays = layers;
-            if (surface.main())
-                state.holes = apply_webviews(tree.get(), interaction);
+                prepared.layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id), entry.scroll_y });
+            state.overlays = prepared.layers;
+            if (surface.main() && with_webviews)
+                state.holes = apply_webviews(prepared.tree.get(), interaction);
             const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
             state.theme = resolve_color_theme(appearance.theme, system_.high_contrast, system_.prefers_light);
             state.high_contrast = system_.contrast_colors;
@@ -2468,15 +2542,27 @@ namespace luil::macos {
 
             const font_settings fonts { frame != nullptr ? frame->fonts : font_settings {} };
             set_configured_fonts(fonts.ui_family, fonts.code_family);
-            const sk_sp<SkTypeface> code { configured_code_typeface() };
-            state.code_typeface = code.get();
+            prepared.code = configured_code_typeface();
+            state.code_typeface = prepared.code.get();
             state.fonts = &font_resolver_;
+        }
+
+        [[nodiscard]] bool render(native_surface& surface)
+        {
+            prepared_frame prepared {};
+            prepare(surface, prepared, true);
+            const frame_state& state { prepared.state };
+            const std::shared_ptr<const ui_tree>& tree { prepared.tree };
+            const std::vector<overlay_layer>& layers { prepared.layers };
 
             std::u8string error {};
             const bool drawn { surface.renderer->render(state, error) };
             if (drawn == false || error.empty() == false)
                 log_error(error);
             report_renderer(surface);
+            // 녹화 중이면 같은 상태를 한 장 더 태워 모은다.
+            if (drawn && surface.recorder.recording())
+                surface.recorder.collect(state);
             // GPU를 요구한 모드는 물러서지 않는다. 그릴 길이 없으므로 끝낸다 (Android와 같다).
             if (drawn == false && renderer_mode_requires_gpu(config_.renderer) && quitting_ == false)
                 quit();
@@ -2818,6 +2904,19 @@ namespace {
 {
     if (self.owner != nullptr)
         self.owner->snapshot(path);
+}
+
+// 개발용 입력 대본의 `capture`·`record`다. 앱 액션과 같은 길(`dispatch`)로 낸다.
+- (void)luilCapture:(NSString*)path
+{
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->script_capture(luil::macos::from_ns_string(path), self.surface->id);
+}
+
+- (void)luilRecord:(NSString*)path
+{
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->script_record(luil::macos::from_ns_string(path), self.surface->id);
 }
 
 - (NSView*)luilViewForSurface:(NSString*)surface

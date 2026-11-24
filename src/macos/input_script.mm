@@ -282,6 +282,17 @@ namespace {
             else if ([view respondsToSelector:@selector(luilSnapshot:)])
                 [view performSelector:@selector(luilSnapshot:) withObject:path];
         }
+        else if (command == "capture" || command == "record")
+        {
+            // capture <경로> — 지금 창을 WebP로 남긴다. record <경로> — 녹화를 시작한다. record만 쓰면 멈춘다.
+            std::string file {};
+            words >> file;
+            NSString* const path { [NSString stringWithUTF8String:file.c_str()] };
+            if (command == "capture" && [view respondsToSelector:@selector(luilCapture:)])
+                [view performSelector:@selector(luilCapture:) withObject:path];
+            else if (command == "record" && [view respondsToSelector:@selector(luilRecord:)])
+                [view performSelector:@selector(luilRecord:) withObject:path];
+        }
         else if (command == "window")
         {
             std::string id {};
