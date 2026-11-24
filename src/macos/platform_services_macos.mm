@@ -24,7 +24,7 @@ extern char** environ;
 // 플랫폼 도구의 macOS 쪽이다 (platform-services-design.md).
 //  - 파일 바꾸기·잠금·우선순위는 Android와 같은 POSIX 호출이다.
 //  - 주소 열기와 Finder에서 보이기는 NSWorkspace, 언어와 주의 첫날은 NSLocale·NSCalendar다.
-//  - 단일 인스턴스는 아직 없다. 같은 앱을 두 번 띄우면 둘 다 첫째다 (Android와 같은 답).
+//  - 단일 인스턴스와 인자 넘기기는 single_instance_macos.mm이다.
 namespace luil {
     namespace {
         [[nodiscard]] platform_result success() noexcept
@@ -82,46 +82,6 @@ namespace luil {
             return result;
         }
         return success();
-    }
-
-    struct single_instance::state
-    {
-        std::u8string name {};
-        platform_result status {};
-    };
-
-    single_instance::single_instance(const std::u8string_view name)
-        : state_ { std::make_unique<state>() }
-    {
-        state_->name = name;
-        state_->status = unsupported(u8"Single instance arguments are not implemented on macOS yet; every instance is the primary one.");
-    }
-
-    single_instance::single_instance(single_instance&&) noexcept = default;
-    single_instance& single_instance::operator=(single_instance&&) noexcept = default;
-    single_instance::~single_instance() = default;
-
-    bool single_instance::primary() const noexcept
-    {
-        return state_ != nullptr;
-    }
-
-    const platform_result& single_instance::status() const noexcept
-    {
-        static const platform_result moved { platform_status::failed, u8"The instance guard was moved from.", std::nullopt };
-        return state_ != nullptr ? state_->status : moved;
-    }
-
-    std::u8string_view single_instance::name() const noexcept
-    {
-        return state_ != nullptr ? std::u8string_view { state_->name } : std::u8string_view {};
-    }
-
-    platform_result single_instance::send_to_primary(const std::span<const std::u8string> arguments, const instance_send_options& options) const
-    {
-        static_cast<void>(arguments);
-        static_cast<void>(options);
-        return unsupported(u8"Single instance arguments are not implemented on macOS yet.");
     }
 
     struct file_lock::state

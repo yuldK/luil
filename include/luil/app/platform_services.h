@@ -62,6 +62,8 @@ namespace luil {
     // 같은 이름의 인스턴스 가운데 첫째인가. 객체가 사는 동안 쥐고 없어질 때 놓는다.
     //  - Windows: 이름 있는 뮤텍스 `Local\luil-instance:<name>`(같은 사용자 세션 안에서 하나).
     //  - Android: OS가 앱마다 프로세스를 하나로 묶는다. `primary()`는 참, `status()`는 `unsupported`다.
+    //  - macOS: 사용자 임시 폴더의 잠금 파일 `luil-instance-<이름의 해시>.lock`에 건 `flock`(같은 사용자 안에서 하나).
+    //    인자는 그 옆의 Unix 소켓으로 가고, 첫째의 host가 받는 자리를 연다 (src/macos/single_instance_receiver.h).
     class single_instance
     {
     public:

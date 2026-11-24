@@ -143,8 +143,9 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
 | 비밀 저장소 | 로그인 keychain의 일반 암호 항목이다. `service`가 서비스, `name`이 계정 이름이다. NUL을 품은 이름은 거절한다 ([비밀 저장소](../secret-store-design.md#macos)) |
 | 파일 감시 | 감시마다 FSEvents stream 하나(파일 단위 이벤트)다. 쌓이는 표지는 지금 있는지·파일 번호·본 이름으로 가른다 ([파일 감시](../file-watch-design.md#macos)) |
+| 단일 인스턴스 | 사용자 임시 폴더의 잠금 파일(`flock`)이 첫째를 가린다. 둘째는 그 옆의 Unix 소켓으로 인자와 작업 폴더를 보낸다. 첫째는 배경 thread가 받아 메인 thread의 받는 함수에 건넨다. host는 `macos::set_instance_receiver`로 단다 ([인자 넘기기](../single-instance-args-design.md#macos)) |
 
-아직 없는 것은 "지원 안 함"으로 답한다: 도킹 표면(무시), 보조 창의 웹뷰(무시), 파일 대화 상자, OS 알림, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
+아직 없는 것은 "지원 안 함"으로 답한다: 도킹 표면(무시), 보조 창의 웹뷰(무시), 파일 대화 상자, OS 알림, HTTP·WebSocket 전송, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
 
 개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
 

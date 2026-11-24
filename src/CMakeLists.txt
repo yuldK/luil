@@ -964,6 +964,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
     # 창 하나·popup overlay·입력과 입력기·Metal과 CPU 렌더러·웹뷰(WKWebView), CoreText 글꼴과 내장 codicon, 플랫폼 도구다.
     #  - 비밀 저장소는 Keychain의 일반 암호 항목이다 (macos/secret_store_macos.mm).
     #  - 파일 감시는 감시마다 FSEvents stream 하나다 (macos/file_watcher_macos.mm).
+    #  - 단일 인스턴스는 사용자 임시 폴더의 flock, 인자 넘기기는 그 옆의 Unix 소켓이다 (macos/single_instance_macos.mm).
     #  - OS 알림·HTTP 전송은 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
@@ -988,6 +989,10 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/webview_host.mm
         "${public_headers}/app/platform_services.h"
         macos/platform_services_macos.mm
+        macos/instance_message.cpp
+        macos/instance_message.h
+        macos/single_instance_macos.mm
+        macos/single_instance_receiver.h
         luil/url_scheme.cpp
         "${public_headers}/app/secret_store.h"
         macos/secret_store_macos.mm

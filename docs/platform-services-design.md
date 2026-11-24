@@ -35,6 +35,7 @@
 
 - `single_instance { u8"my-app" }.primary()`가 첫 인스턴스인지 답한다. 두 번째 인스턴스는 대개 첫 인스턴스에 창을 앞으로 세우라고 알리고 끝낸다. 그 알리는 길은 `send_to_primary`가 낸다. 처음에는 앱마다 달라 넣지 않았으나 이 판단은 뒤집었다(G7, 2026-11-02). 인자와 작업 폴더를 보내고, 첫째는 `window_delegate::on_instance_arguments`로 받으며, 앞으로 세우는 권한도 둘째가 넘긴다. 이름은 `name()`이 돌려준다. 형식과 규칙은 [둘째 인스턴스의 인자 넘기기](single-instance-args-design.md)다.
 - 뮤텍스는 `Local\` 이름 공간이다. 같은 사용자 세션 안에서만 하나다. 빠른 사용자 전환으로 다른 세션에서 띄운 것은 따로다.
+- macOS는 사용자 임시 폴더의 잠금 파일에 건 `flock`이고, 인자는 그 옆의 Unix 소켓으로 간다. 받는 자리는 macOS host가 연다([macOS](single-instance-args-design.md#macos)).
 - `file_lock`은 파일 하나를 배타적으로 잠근다. 파일이 없으면 만든다. 이미 잠겨 있으면 기다리지 않고 `locked()`가 거짓이다. 같은 프로세스의 두 객체도 서로 막는다.
 
 ## 파일 관리자·외부 프로그램

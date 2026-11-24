@@ -455,11 +455,18 @@ if(LUIL_PLATFORM STREQUAL "macos")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/macos/macos_input.cpp"
             macos_input_tests.cpp)
+    # 둘째 인스턴스가 보내는 글의 운반 형식도 OS 호출이 없는 순수 변환이라 core test에 넣는다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/macos/instance_message.cpp"
+            macos_instance_message_tests.cpp)
     catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
-    # 플랫폼 서비스를 실제 OS로 본다. Keychain에 쓰고 지우는 비밀 저장소, 임시 폴더를 보는 FSEvents 파일 감시다.
+    # 플랫폼 서비스를 실제 OS로 본다. Keychain에 쓰고 지우는 비밀 저장소, 임시 폴더를 보는 FSEvents 파일 감시,
+    # 잠금과 Unix 소켓의 단일 인스턴스다 (둘째 프로세스는 이 실행 파일을 숨은 test 하나로 다시 띄운다).
     #  - 플랫폼 층(luil)을 링크하므로 core test와 따로 선다 (Windows의 luil_tests 자리다).
     add_executable(luil_macos_platform_tests
         file_watcher_tests.cpp
+        macos_single_instance_tests.cpp
         secret_store_tests.cpp)
     target_include_directories(luil_macos_platform_tests
         PRIVATE
