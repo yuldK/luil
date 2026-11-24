@@ -248,6 +248,10 @@ namespace luil::macos {
         std::optional<window_placement> reported_placement {};
         bool pointer_over_webview { false };
         bool cursor_hidden { false };
+        // 배경 효과 view(창 내용 맨 아래)와 마지막으로 알린 상태다. 효과가 섰으면 바탕을 `backdrop_background`로 칠한다.
+        NSVisualEffectView* effect { nil };
+        bool backdrop_applied { false };
+        std::optional<std::pair<window_backdrop, int>> reported_backdrop {};
         // 이 표면의 녹화다 (`record_request`).
         frame_recorder recorder {};
         // 닫힘 요청을 낸 frame이다. 같은 frame에 거듭 온 요청은 삼킨다.
@@ -529,6 +533,8 @@ namespace luil::macos {
             refresh_appearance();
             post_appearance();
             post_metrics(main_);
+            if (host_ != nullptr)
+                apply_backdrops(host_->acquire_frame().get());
             mark_all_dirty();
             pump();
         }
@@ -1052,6 +1058,7 @@ namespace luil::macos {
                 .window_caption = false,
                 .rounded_popup_corners = true,
                 .capabilities = {
+                    .haptics = true,
                     .notifications = notification_center_available(),
                     .clipboard_image_copy = true,
                 },
@@ -1095,6 +1102,15 @@ namespace luil::macos {
             host_config.wake.capture = [signal] { static_cast<void>(signal()); };
             host_config.interaction.double_click_time = std::chrono::milliseconds { static_cast<int>(std::lround([NSEvent doubleClickInterval] * 1000.0)) };
             host_config.interaction.touch = config_.touch;
+            // 햅틱은 Force Touch 트랙패드의 되울림이다. 장치가 없거나 꺼졌으면 조용하다. 아무 thread에서 오므로 메인으로 넘긴다.
+            host_config.haptic = [](const haptic_feedback feedback) {
+                dispatch_async(dispatch_get_main_queue(), ^{
+                  const NSHapticFeedbackPattern pattern { feedback == haptic_feedback::tick ? NSHapticFeedbackPatternAlignment
+                          : feedback == haptic_feedback::confirm || feedback == haptic_feedback::reject ? NSHapticFeedbackPatternLevelChange
+                                                                                                         : NSHapticFeedbackPatternGeneric };
+                  [[NSHapticFeedbackManager defaultPerformer] performFeedbackPattern:pattern performanceTime:NSHapticFeedbackPerformanceTimeNow];
+                });
+            };
             // 묻는 권한은 OS 알림 하나다 (UserNotifications의 허락). 답은 메인 thread에서 앱 메시지로 낸다.
             host_config.permission = [](const app_permission permission) {
                 return permission == app_permission::notifications ? notification_permission() : permission_state::not_required;
@@ -1133,6 +1149,9 @@ namespace luil::macos {
                 state->target->notification_events_.push(std::move(event));
                 state->target->deliver_notification_events();
             });
+            // 주 창의 네이티브 표면을 앱에 건넨다 (`NSWindow*`). on_started 앞에 한 번이다.
+            if (window_delegate_ != nullptr)
+                window_delegate_->on_native_window_created(*host_, (__bridge void*)main_.window);
             if (environment_.delegate != nullptr)
                 environment_.delegate->on_started(*host_);
             return true;
@@ -1149,6 +1168,17 @@ namespace luil::macos {
                 timer_ = nil;
             }
             set_notification_receiver(nullptr);
+            if (window_delegate_ != nullptr)
+            {
+                try
+                {
+                    window_delegate_->on_native_window_destroying(*host_);
+                }
+                catch (...)
+                {
+                    log_error(u8"The native window delegate threw an exception.");
+                }
+            }
             // 웹뷰 사건이 끝나는 host로 가지 않게 먼저 거둔다.
             if (webviews_ != nullptr)
                 webviews_->shutdown();
@@ -1938,6 +1968,19 @@ namespace luil::macos {
             reconcile_windows(frame.get());
             update_overlays(frame.get());
             apply_main_visibility(frame != nullptr && frame->main_hidden);
+            apply_backdrops(frame.get());
+            report_displays(frame.get(), false);
+            if (frame != nullptr && window_delegate_ != nullptr)
+            {
+                try
+                {
+                    window_delegate_->on_native_frame(*host_, *frame);
+                }
+                catch (...)
+                {
+                    log_error(u8"The native frame delegate threw an exception.");
+                }
+            }
             if (frame != nullptr)
             {
                 apply_placement_request(*frame);
@@ -1947,6 +1990,110 @@ namespace luil::macos {
             mark_all_dirty();
         }
 
+        // 창마다 배경 효과를 세우거나 거둔다 (docs/backdrop-design.md의 macOS 갈래).
+        //  - 효과는 창 내용 맨 아래의 `NSVisualEffectView`(창 뒤를 섞는다)다. mica는 창 바탕 재질, mica_alt는 창 아래 바탕 재질,
+        //    acrylic은 떠 있는 판(HUD) 재질이다. Skia view는 그 위에 `backdrop_background`의 알파만큼 비치게 칠한다.
+        //  - 투명도 줄이기와 대비 늘리기가 켜져 있으면 세우지 않고 그 까닭을 알린다.
+        //  - popup은 같은 view에 겹쳐 그리므로 효과가 없다 (`ui_popup::backdrop`은 받기만 한다).
+        void apply_backdrops(const ui_frame* const frame)
+        {
+            if (frame == nullptr)
+                return;
+            apply_backdrop(main_, frame->backdrop);
+            for (std::unique_ptr<native_surface>& surface : secondary_)
+                apply_backdrop(*surface, surface->want.backdrop);
+        }
+
+        void apply_backdrop(native_surface& surface, const window_backdrop requested)
+        {
+            if (surface.window == nil)
+                return;
+            win32::backdrop_status status { win32::backdrop_status::off };
+            if (requested != window_backdrop::none)
+                status = system_.transparency == false ? win32::backdrop_status::transparency_disabled
+                    : system_.high_contrast            ? win32::backdrop_status::high_contrast
+                                                       : win32::backdrop_status::applied;
+            const bool applied { status == win32::backdrop_status::applied };
+            if (applied)
+            {
+                if (surface.effect == nil)
+                {
+                    surface.effect = [[NSVisualEffectView alloc] initWithFrame:surface.container.bounds];
+                    surface.effect.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+                    surface.effect.blendingMode = NSVisualEffectBlendingModeBehindWindow;
+                    surface.effect.state = NSVisualEffectStateFollowsWindowActiveState;
+                    [surface.container addSubview:surface.effect positioned:NSWindowBelow relativeTo:nil];
+                }
+                surface.effect.material = requested == window_backdrop::acrylic ? NSVisualEffectMaterialHUDWindow
+                    : requested == window_backdrop::mica_alt                    ? NSVisualEffectMaterialUnderWindowBackground
+                                                                                : NSVisualEffectMaterialWindowBackground;
+                surface.container.layer.backgroundColor = [NSColor clearColor].CGColor;
+            }
+            else if (surface.effect != nil)
+            {
+                [surface.effect removeFromSuperview];
+                surface.effect = nil;
+                surface.container.layer.backgroundColor = [NSColor windowBackgroundColor].CGColor;
+            }
+            if (surface.backdrop_applied != applied)
+            {
+                surface.backdrop_applied = applied;
+                surface.dirty = true;
+            }
+            // 상태가 바뀔 때 한 번 알린다. 보조 창은 효과를 고른 적이 없으면 알리지 않는다.
+            const std::pair<window_backdrop, int> key { requested, static_cast<int>(status) };
+            if (surface.reported_backdrop == key || window_delegate_ == nullptr || host_ == nullptr)
+                return;
+            if (surface.main() == false && surface.reported_backdrop.has_value() == false && requested == window_backdrop::none)
+                return;
+            surface.reported_backdrop = key;
+            if (app_message message { window_delegate_->make_backdrop_message(win32::backdrop_report { requested, status, surface.id }) }; message.empty() == false)
+                host_->post_app_message(std::move(message));
+        }
+
+        // 모니터 목록을 앱에 알린다 (`ui_frame::displays`). 처음 실린 frame에서 한 번, 그 뒤로는 화면 구성이 바뀔 때마다다.
+        //  - id는 CoreGraphics 화면 번호다. 사각형은 이 파일 첫머리의 화면 좌표 약속을 따르고, 작업 영역은 메뉴 막대와 Dock을 뺀 곳이다.
+        void report_displays(const ui_frame* const frame, const bool changed)
+        {
+            if (frame == nullptr || frame->displays == nullptr || host_ == nullptr || (displays_reported_ && changed == false))
+                return;
+            displays_reported_ = true;
+            std::vector<display_info> displays {};
+            const auto rect_of = [](const NSRect rect) {
+                const screen_point top_left { to_screen_pixels(NSMakePoint(NSMinX(rect), NSMaxY(rect))) };
+                const screen_point bottom_right { to_screen_pixels(NSMakePoint(NSMaxX(rect), NSMinY(rect))) };
+                return screen_rect { top_left.x, top_left.y, bottom_right.x, bottom_right.y };
+            };
+            NSArray<NSScreen*>* const screens { [NSScreen screens] };
+            for (NSUInteger index { 0 }; index < screens.count; ++index)
+            {
+                NSScreen* const screen { screens[index] };
+                NSNumber* const number { screen.deviceDescription[@"NSScreenNumber"] };
+                display_info display {};
+                display.id = from_ns_string([NSString stringWithFormat:@"display-%u", number != nil ? number.unsignedIntValue : static_cast<unsigned>(index)]);
+                display.bounds = rect_of(screen.frame);
+                display.work_area = rect_of(screen.visibleFrame);
+                display.scale = static_cast<float>(screen.backingScaleFactor);
+                display.primary = index == 0;
+                displays.push_back(std::move(display));
+            }
+            if (app_message message { frame->displays(displays) }; message.empty() == false)
+                host_->post_app_message(std::move(message));
+        }
+
+    public:
+        // 화면이 붙거나 떨어졌거나, 해상도·배율·작업 영역이 바뀌었다.
+        void on_screens_changed()
+        {
+            if (host_ == nullptr)
+                return;
+            const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
+            report_displays(frame.get(), true);
+            report_placement(main_);
+            pump();
+        }
+
+    private:
         // frame의 보조 창 목록에 맞춘다. 새 id는 세우고, 빠진 id는 거두고, 있는 id는 tree와 훅을 바꿔 든다.
         //  - 소유 여부(`independent`)는 만들 때만 본다 (app_host.h의 약속).
         void reconcile_windows(const ui_frame* const frame)
@@ -2538,6 +2685,7 @@ namespace luil::macos {
             state.accent_id = appearance.accent_id;
             state.style = frame != nullptr ? frame->style.get() : nullptr;
             state.inspector = frame != nullptr && surface.main() ? &frame->inspector : nullptr;
+            state.backdrop = surface.backdrop_applied;
             set_single_line_break(frame_style(state).text.line_break);
 
             const font_settings fonts { frame != nullptr ? frame->fonts : font_settings {} };
@@ -2642,6 +2790,7 @@ namespace luil::macos {
         std::optional<window_placement> normal_placement_ {};
         bool zoomed_before_fullscreen_ { false };
         bool fullscreen_transition_ { false };
+        bool displays_reported_ { false };
         bool zooming_in_ { false };
         bool warned_window_webviews_ { false };
         bool main_hidden_ { false };
@@ -3161,6 +3310,7 @@ namespace {
     NSNotificationCenter* const workspace { [[NSWorkspace sharedWorkspace] notificationCenter] };
     [workspace addObserver:self selector:@selector(systemSettingsChanged:) name:NSWorkspaceAccessibilityDisplayOptionsDidChangeNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(systemSettingsChanged:) name:NSSystemColorsDidChangeNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(screensChanged:) name:NSApplicationDidChangeScreenParametersNotification object:nil];
 }
 
 - (void)applicationWillTerminate:(NSNotification*)notification
@@ -3193,6 +3343,13 @@ namespace {
     static_cast<void>(context);
     if (self.owner != nullptr)
         self.owner->on_appearance_changed();
+}
+
+- (void)screensChanged:(NSNotification*)notification
+{
+    static_cast<void>(notification);
+    if (self.owner != nullptr)
+        self.owner->on_screens_changed();
 }
 
 - (void)systemSettingsChanged:(NSNotification*)notification
