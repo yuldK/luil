@@ -451,7 +451,7 @@ namespace demo {
                 item.enabled = command.id != u8"reopen" || closed_.empty() == false;
                 menu.items.push_back(std::move(item));
             }
-            menu.items.front().shortcut_text = u8"Ctrl+W";
+            menu.items.front().shortcut_text = luil::shortcut_label(luil::key_chord { luil::key_code::key_w, true });
             menu.select = [](const std::u8string& command) { return luil::make_app_action(tab_menu_command_intent { command }); };
 
             luil::menu_popup_config popup {};

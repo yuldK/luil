@@ -75,5 +75,6 @@ namespace luil {
     // OS가 먼저 가져가 아예 오지 않는다.
     [[nodiscard]] bool system_reserved_chord(const key_chord& chord) noexcept;
     // 키 이벤트의 단축키다 (잡은 키를 저장할 때).
+    //  - 조합의 `control`은 주 단축키 수정자다 (`key_pressed_event::primary_shortcut_down`). macOS의 Command+S는 Ctrl+S로 잡힌다.
     [[nodiscard]] key_chord chord_of(const key_pressed_event& event) noexcept;
 }

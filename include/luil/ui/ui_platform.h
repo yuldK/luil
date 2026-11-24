@@ -60,6 +60,9 @@ namespace luil {
         //    세션이 그렇다 — 원격 세션은 DWM 효과가 꺼져 둥근 창의 그림자·테두리가 그려지지 않아 경계가 사라진다.
         //  - 원격 연결이 붙고 떨어지면 host가 실행 중에 고쳐 적는다. 앱은 frame을 지을 때 읽는다 (`popup_corner_radius`).
         bool rounded_popup_corners { false };
+        // 주 단축키가 Command인 플랫폼이다 (macOS). 단축키 글(`shortcut_label`)을 그 OS의 꼴(⌥⇧⌘ 기호, 수정자 뒤에 키)로 쓴다.
+        //  - 조합의 값은 그대로다 (`key_chord::control`이 Command다). `parse_shortcut`은 두 꼴을 모두 읽어 저장한 값은 어느 플랫폼에서나 읽힌다.
+        bool command_key_shortcuts { false };
         ui_platform_capabilities capabilities {};
 
         [[nodiscard]] bool operator==(const ui_platform&) const noexcept = default;

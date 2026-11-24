@@ -1,5 +1,7 @@
 #include "luil/ui/commands.h"
 
+#include "luil/ui/ui_platform.h"
+
 #include <algorithm>
 #include <array>
 #include <cstddef>
@@ -7,10 +9,20 @@
 
 namespace luil {
     namespace {
+        // 조합의 `control`은 주 단축키 수정자다 (Windows·Android는 Ctrl, macOS는 Command — `primary_shortcut_down`).
+        //  - 주 단축키를 맡지 않은 물리 수정자가 섞이면 다른 조합이다: 주 역할이 아닌 Ctrl(macOS의 Control)과,
+        //    주 역할을 Ctrl이 맡는데 함께 눌린 Meta(Windows 키, macOS의 Command)다.
+        [[nodiscard]] bool extra_modifier_down(const key_pressed_event& event) noexcept
+        {
+            const bool primary { event.primary_shortcut_down() };
+            const bool primary_on_meta { primary && event.control == false };
+            return (event.control && primary == false) || (event.meta && primary_on_meta == false);
+        }
+
         bool matches(const key_chord& chord, const key_pressed_event& event) noexcept
         {
-            return chord.key != key_code::none && chord.key == event.key && chord.control == event.control
-                && chord.shift == event.shift && chord.alt == event.alt && event.meta == false;
+            return chord.key != key_code::none && chord.key == event.key && chord.control == event.primary_shortcut_down()
+                && chord.shift == event.shift && chord.alt == event.alt && extra_modifier_down(event) == false;
         }
 
         struct key_name
@@ -177,6 +189,17 @@ namespace luil {
         if (key.empty())
             return {};
         std::u8string result {};
+        // macOS는 기호를 ⌥⇧⌘ 차례로 붙이고 사이에 '+'를 두지 않는다 (메뉴 막대의 꼴).
+        if (current_ui_platform().command_key_shortcuts)
+        {
+            if (chord.alt)
+                result += u8"⌥";
+            if (chord.shift)
+                result += u8"⇧";
+            if (chord.control)
+                result += u8"⌘";
+            return result + key;
+        }
         if (chord.control)
             result += u8"Ctrl+";
         if (chord.shift)
@@ -195,11 +218,19 @@ namespace luil {
             text.remove_suffix(1);
 
         key_chord chord {};
-        const std::array<std::pair<std::u8string_view, bool*>, 4> modifiers {
+        // macOS 꼴(⌘·⌥·⇧ 기호와 Cmd·Option 이름)도 읽는다. Command는 주 단축키라 `control`이다.
+        const std::array<std::pair<std::u8string_view, bool*>, 11> modifiers {
             std::pair<std::u8string_view, bool*> { u8"Ctrl+", &chord.control },
             std::pair<std::u8string_view, bool*> { u8"Control+", &chord.control },
+            std::pair<std::u8string_view, bool*> { u8"Cmd+", &chord.control },
+            std::pair<std::u8string_view, bool*> { u8"Command+", &chord.control },
+            std::pair<std::u8string_view, bool*> { u8"\u2318", &chord.control },
             std::pair<std::u8string_view, bool*> { u8"Shift+", &chord.shift },
+            std::pair<std::u8string_view, bool*> { u8"\u21E7", &chord.shift },
             std::pair<std::u8string_view, bool*> { u8"Alt+", &chord.alt },
+            std::pair<std::u8string_view, bool*> { u8"Option+", &chord.alt },
+            std::pair<std::u8string_view, bool*> { u8"Opt+", &chord.alt },
+            std::pair<std::u8string_view, bool*> { u8"\u2325", &chord.alt },
         };
         // 수정자는 "이름+" 꼴로 앞에서 벗긴다. 남은 것이 키다 — "Num+"·"Ctrl+-"처럼 키 이름에 '+'·'-'가 들어 있어
         // '+'로 쪼개면 "Ctrl++"와 "Num+"를 가를 수 없다.
@@ -252,7 +283,7 @@ namespace luil {
 
     key_chord chord_of(const key_pressed_event& event) noexcept
     {
-        return key_chord { event.key, event.control, event.shift, event.alt };
+        return key_chord { event.key, event.primary_shortcut_down(), event.shift, event.alt };
     }
 
     menu_item_config menu_item_from(const app_command& command)

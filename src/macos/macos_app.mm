@@ -1057,6 +1057,7 @@ namespace luil::macos {
                 .form_factor = ui_form_factor::desktop,
                 .window_caption = false,
                 .rounded_popup_corners = true,
+                .command_key_shortcuts = true,
                 .capabilities = {
                     .haptics = true,
                     .notifications = notification_center_available(),

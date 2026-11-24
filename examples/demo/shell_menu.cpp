@@ -1,5 +1,7 @@
 #include "demo/shell_menu.h"
 
+#include "luil/ui/commands.h"
+
 #include "demo/common.h"
 
 #include "luil/app/menu_popup.h"
@@ -68,6 +70,12 @@ namespace demo {
             return key;
         }
 
+        // 주 단축키 수정자 조합의 글이다. Windows는 "Ctrl+S", macOS는 "⌘S"다 (`luil::shortcut_label`).
+        [[nodiscard]] std::u8string primary(const luil::key_code key)
+        {
+            return luil::shortcut_label(luil::key_chord { key, true });
+        }
+
         [[nodiscard]] luil::menu_item_config command(const std::u8string_view key, const char32_t access_key, std::u8string shortcut = {})
         {
             return { .key = std::u8string { key }, .label = std::u8string { label_of(key) }, .shortcut_text = std::move(shortcut), .access_key = access_key };
@@ -76,20 +84,20 @@ namespace demo {
         [[nodiscard]] std::vector<luil::menu_item_config> items_of(const std::u8string_view menu, const bool sidebar_visible, const luil::theme_preference theme, const std::u8string_view page_transition)
         {
             if (menu == u8"file")
-                return { command(u8"file.new", U'n', u8"Ctrl+N"), command(u8"file.open", U'o', u8"Ctrl+O"), command(u8"file.save", U's', u8"Ctrl+S") };
+                return { command(u8"file.new", U'n', primary(luil::key_code::key_n)), command(u8"file.open", U'o', primary(luil::key_code::key_o)), command(u8"file.save", U's', primary(luil::key_code::key_s)) };
             if (menu == u8"edit")
             {
-                std::vector<luil::menu_item_config> items { command(u8"edit.undo", U'u', u8"Ctrl+Z"), command(u8"edit.redo", U'r', u8"Ctrl+Y") };
-                luil::menu_item_config cut { command(u8"edit.cut", U't', u8"Ctrl+X") };
+                std::vector<luil::menu_item_config> items { command(u8"edit.undo", U'u', primary(luil::key_code::key_z)), command(u8"edit.redo", U'r', primary(luil::key_code::key_y)) };
+                luil::menu_item_config cut { command(u8"edit.cut", U't', primary(luil::key_code::key_x)) };
                 cut.separator_above = true;
                 items.push_back(std::move(cut));
-                items.push_back(command(u8"edit.copy", U'c', u8"Ctrl+C"));
-                items.push_back(command(u8"edit.paste", U'p', u8"Ctrl+V"));
+                items.push_back(command(u8"edit.copy", U'c', primary(luil::key_code::key_c)));
+                items.push_back(command(u8"edit.paste", U'p', primary(luil::key_code::key_v)));
                 return items;
             }
             if (menu != u8"view")
                 return {};
-            luil::menu_item_config sidebar { command(shell_menu_sidebar, U's', u8"Ctrl+B") };
+            luil::menu_item_config sidebar { command(shell_menu_sidebar, U's', primary(luil::key_code::key_b)) };
             sidebar.kind = luil::menu_item_kind::check;
             sidebar.checked = sidebar_visible;
             const auto radio = [theme](const std::u8string_view key, const char32_t access_key, const luil::theme_preference value) {
