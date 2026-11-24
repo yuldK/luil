@@ -132,3 +132,55 @@ TEST_CASE("AppKit function key characters are not text", "[macos][input]")
     CHECK(luil::macos::function_key_character(U'a') == false);
     CHECK(luil::macos::function_key_character(U'한') == false);
 }
+
+TEST_CASE("macOS hotkeys map key names back to Carbon virtual keys", "[macos][input][hotkey]")
+{
+    CHECK(luil::macos::carbon_key_of(luil::key_code::key_a) == vk_a);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::key_z) == vk_z);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::key_5) == vk_5);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::numpad_5) == vk_keypad_5);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::f5) == vk_f5);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::escape) == vk_escape);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::backspace) == vk_delete);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::delete_forward) == vk_forward_delete);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::arrow_up) == vk_up);
+    // Enter는 키패드 Enter가 아니라 본 자판의 Return이다.
+    CHECK(luil::macos::carbon_key_of(luil::key_code::enter) == vk_return);
+    // 플랫폼 대역의 Win32 F13(0x7C)·F20(0x83)은 Carbon 자리가 있고 F21(0x84)은 없다.
+    CHECK(luil::macos::carbon_key_of(luil::platform_key_code(0x7C)) == std::uint16_t { 0x69 });
+    CHECK(luil::macos::carbon_key_of(luil::platform_key_code(0x83)) == std::uint16_t { 0x5A });
+    CHECK(luil::macos::carbon_key_of(luil::platform_key_code(0x84)).has_value() == false);
+    // 키가 아니거나 글자에서 짓는 키, 휴대폰 키는 걸 수 없다.
+    CHECK(luil::macos::carbon_key_of(luil::key_code::none).has_value() == false);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::zoom_in).has_value() == false);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::volume_up).has_value() == false);
+    CHECK(luil::macos::carbon_key_of(luil::key_code::alt_tap).has_value() == false);
+}
+
+TEST_CASE("macOS hotkey key names round trip through the key table", "[macos][input][hotkey]")
+{
+    // 이름 표가 내는 모든 키가 같은 자리로 돌아온다. 키패드 Enter만 Return으로 모인다.
+    for (std::uint16_t code = 0; code < 0x80; ++code)
+    {
+        const luil::key_code name { luil::macos::named_key(key(code)) };
+        if (name == luil::key_code::none)
+            continue;
+        const std::optional<std::uint16_t> back { luil::macos::carbon_key_of(name) };
+        REQUIRE(back.has_value());
+        CHECK(luil::macos::named_key(key(*back)) == name);
+        if (code != 0x4C)
+            CHECK(*back == code);
+    }
+}
+
+TEST_CASE("macOS hotkeys map Ctrl to Command and Alt to Option", "[macos][input][hotkey]")
+{
+    constexpr std::uint32_t command { 0x100 };
+    constexpr std::uint32_t shift { 0x200 };
+    constexpr std::uint32_t option { 0x800 };
+    CHECK(luil::macos::carbon_hotkey_modifiers_of(luil::key_chord { .key = luil::key_code::key_k }) == 0);
+    CHECK(luil::macos::carbon_hotkey_modifiers_of(luil::key_chord { .key = luil::key_code::key_k, .control = true }) == command);
+    CHECK(luil::macos::carbon_hotkey_modifiers_of(luil::key_chord { .key = luil::key_code::key_k, .alt = true }) == option);
+    CHECK(luil::macos::carbon_hotkey_modifiers_of(luil::key_chord { .key = luil::key_code::f8, .control = true, .shift = true, .alt = true })
+        == (command | shift | option));
+}

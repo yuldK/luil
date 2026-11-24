@@ -962,6 +962,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
 
     # macos: AppKit 위의 앱 host다.
     # 창 하나·popup overlay·입력과 입력기·Metal과 CPU 렌더러·웹뷰(WKWebView), CoreText 글꼴과 내장 codicon, 플랫폼 도구다.
+    #  - 전역 단축키는 Carbon `RegisterEventHotKey`로 건다 (macos/hotkey_macos.mm). 어떤 호출을 할지는 core의 host/hotkey_sync가 고른다.
     #  - 비밀 저장소·OS 알림·파일 감시·HTTP 전송은 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
@@ -980,6 +981,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/file_dialog_macos.mm
         macos/frame_capture.h
         macos/frame_capture.mm
+        macos/hotkey_macos.h
+        macos/hotkey_macos.mm
         macos/metal_skia_renderer.h
         macos/metal_skia_renderer.mm
         macos/desktop_compat.cpp
@@ -1018,6 +1021,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "-framework WebKit"
             "-framework Metal"
             "-framework UniformTypeIdentifiers"
+            "-framework Carbon"
         PRIVATE
             luil_options)
 endif()
