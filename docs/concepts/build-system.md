@@ -130,22 +130,23 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 경계 | macOS |
 | --- | --- |
 | 실행 루프와 깨우기 | `NSApplication`의 run loop. 다른 thread의 깨우기는 `CFRunLoopPerformBlock`(공통 모드)이라 창 크기를 끄는 동안에도 돈다 |
-| 창과 표면 | 창 하나. 제목 막대는 시스템의 것이라 `ui_platform::window_caption`이 거짓이고 `caption_element`는 자리를 차지하지 않는다 |
+| 창과 표면 | 주 창과 보조 창(`ui_frame::windows`). 소유된 보조 창은 주 창 위에 뜨는 `NSPanel`, 독립 창은 보통 창이다. 창마다 렌더러·popup·입력 router를 따로 갖는다. 제목 막대는 시스템의 것이라 `ui_platform::window_caption`이 거짓이고 `caption_element`는 자리를 차지하지 않는다 |
+| 화면 좌표 | 주 화면 왼쪽 위 원점, 아래로 는다. 단위는 점 × 주 화면 배율이다 (`screen_point`, `window_placement`, `window_screen_anchor`) |
 | 렌더러 | Metal(Ganesh)이 먼저다. view layer의 자식 `CAMetalLayer`에 그리고, 만들거나 그리다 실패하면 CPU(Skia raster → CGImage layer 내용)로 물러선다. 한 번 물러서면 다시 쓰지 않는다. `gpu`·`direct3d`는 Metal을 요구한다. 보이지 않는 창(최소화·완전히 가림)에는 그리지 않는다 |
 | 배율 | 창이 놓인 화면의 `backingScaleFactor`(레티나 2) |
 | 글꼴 | `SkFontMgr_New_CoreText`, 기본 UI 서체는 시스템 서체(`.AppleSystemUIFont`). codicon은 라이브러리에 싣는다 |
 | 입력 | 마우스·트랙패드·키보드. Command가 주 단축키, Option이 낱말 이동이고 Command+화살표는 줄·글의 처음과 끝이다. Control+클릭은 오른쪽 클릭이다 |
 | 텍스트 입력 | `NSTextInputClient`. 조합 글은 `post_composition`으로 보이고 확정은 insert 편집이다 (한글 입력기) |
-| popup | 창 위에 겹쳐 그린다 (Android와 같은 overlay) |
+| popup | 앵커 사슬이 끝나는 창 위에 겹쳐 그린다 (Android와 같은 overlay) |
 | 웹뷰 | WKWebView. Skia view의 형제 NSView로 위층·아래층에 선다 ([웹뷰 합성](../webview-composition-design.md#macos-wkwebview)) |
 | 클립보드 | 일반 붙여넣기 판의 글과 HTML |
 | 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
 
-아직 없는 것은 "지원 안 함"으로 답한다: 보조 창·도킹 표면(무시, 그 창의 웹뷰도 서지 않는다), 파일 대화 상자, 비밀 저장소(Keychain), OS 알림, 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
+아직 없는 것은 "지원 안 함"으로 답한다: 도킹 표면(무시), 보조 창의 웹뷰(무시), 파일 대화 상자, 비밀 저장소(Keychain), OS 알림, 파일 감시, HTTP·WebSocket 전송, 단일 인스턴스 인자 전달, OS 파일 끌기. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
 
 개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
 
 | 변수 | 뜻 |
 | --- | --- |
 | `LUIL_MACOS_FRAME_CAPTURE=<png>` | 그린 frame마다 그 파일을 덮어쓴다 |
-| `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다. `snapshot`은 웹뷰까지 합성한 창 내용을 PNG로 적는다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |
+| `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다. `snapshot`은 웹뷰까지 합성한 창 내용을, 창 id를 주면 그 보조 창을 PNG로 적고 `window <id>`는 다음 명령을 그 창에 보낸다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |

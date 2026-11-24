@@ -14,6 +14,8 @@ namespace {
         std::size_t next { 0 };
         NSWindow* __weak window { nil };
         NSView* __weak view { nil };
+        // 주 창의 view다. 다른 창의 view를 묻는 창구다.
+        NSView* __weak main_view { nil };
     };
 
     [[nodiscard]] NSPoint window_point(NSView* const view, const double x, const double y)
@@ -119,6 +121,12 @@ namespace {
 
     void run_line(script_state& state, const std::string& line, double& delay)
     {
+        // 겨누던 창이 사라졌으면(보조 창을 닫았다) 주 창으로 돌아온다.
+        if (state.view == nil || state.window == nil)
+        {
+            state.view = state.main_view;
+            state.window = state.main_view.window;
+        }
         NSWindow* const window { state.window };
         NSView* const view { state.view };
         if (window == nil || view == nil)
@@ -229,11 +237,27 @@ namespace {
         }
         else if (command == "snapshot")
         {
-            std::string rest {};
-            std::getline(words, rest);
-            NSString* const path { [[NSString stringWithUTF8String:rest.c_str()] stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]] };
-            if ([view respondsToSelector:@selector(luilSnapshot:)])
+            std::string file {};
+            std::string surface {};
+            words >> file >> surface;
+            NSString* const path { [NSString stringWithUTF8String:file.c_str()] };
+            if (surface.empty() == false && [view respondsToSelector:@selector(luilSnapshot:surface:)])
+                [view performSelector:@selector(luilSnapshot:surface:) withObject:path withObject:[NSString stringWithUTF8String:surface.c_str()]];
+            else if ([view respondsToSelector:@selector(luilSnapshot:)])
                 [view performSelector:@selector(luilSnapshot:) withObject:path];
+        }
+        else if (command == "window")
+        {
+            std::string id {};
+            words >> id;
+            NSView* target { state.main_view };
+            if (id != "main" && [state.main_view respondsToSelector:@selector(luilViewForSurface:)])
+                target = [state.main_view performSelector:@selector(luilViewForSurface:) withObject:[NSString stringWithUTF8String:id.c_str()]];
+            if (target != nil)
+            {
+                state.view = target;
+                state.window = target.window;
+            }
         }
         else if (command == "quit")
             [window performClose:nil];
@@ -267,5 +291,6 @@ void luil_run_input_script(NSWindow* const window, NSView* const view)
             state->lines.push_back(line);
     state->window = window;
     state->view = view;
+    state->main_view = view;
     schedule(state, 0.5);
 }

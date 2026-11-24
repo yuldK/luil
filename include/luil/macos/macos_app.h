@@ -46,13 +46,18 @@ namespace luil::macos {
     //
     // 부른 thread는 프로세스의 메인 thread여야 하고, 그것이 luil의 UI thread다 (AppKit은 메인 thread에서만 불린다).
     // input과 logic thread는 `app_host`가 세운다 (docs/concepts/threading-model.md).
-    //  - 창은 하나다. 제목 막대와 창 단추는 시스템의 것이라 `caption_element`는 자리를 차지하지 않는다
-    //    (`ui_platform::window_caption`이 거짓이다). 앱 메뉴(종료)는 host가 세운다.
+    //  - 제목 막대와 창 단추는 시스템의 것이라 `caption_element`는 자리를 차지하지 않는다
+    //    (`ui_platform::window_caption`이 거짓이다). 창 제목은 `caption.title`이다. 앱 메뉴(종료)는 host가 세운다.
     //  - 크기와 배율은 창 내용 영역의 것을 `app_delegate::make_metrics_message`로 알린다. 배율은 창이 놓인 화면의
     //    `backingScaleFactor`다. 다른 배율의 화면으로 옮기면 다시 알린다.
-    //  - frame의 popup은 창 위에 겹쳐 그린다 (popup-overlay-design.md). 보조 창(`ui_frame::windows`)은 무시한다.
+    //  - 보조 창(`ui_frame::windows`)을 창으로 세운다. 소유된 창은 주 창 위에 뜨는 판(`NSPanel`)이고 앱이 뒤로 가면 함께 숨는다.
+    //    `independent`는 보통 창이다. 닫기 단추는 `ui_window::close`를, 크기·배율은 `metrics`를, 자리는 `placement`를 낸다.
+    //    `main_hidden`은 주 창과 소유된 창을 숨긴다.
+    //  - 화면 좌표(`screen_point`, `window_placement`, `window_screen_anchor`)는 주 화면 왼쪽 위가 원점이고 아래로 늘며,
+    //    점에 주 화면의 배율을 곱한 픽셀이다.
+    //  - frame의 popup은 앵커 사슬이 끝나는 창 위에 겹쳐 그린다 (popup-overlay-design.md).
     //  - frame의 웹뷰(`ui_frame::webviews`)는 WKWebView로 자리표 자리에 선다 (webview-composition-design.md의 macOS 갈래).
-    //    주 창의 것만 선다.
+    //    주 창의 것만 선다. 보조 창의 웹뷰는 아직 서지 않는다.
     //  - 마우스·트랙패드·키보드 입력을 옮긴다. Command가 주 단축키, Option이 낱말 이동이다. 텍스트 칸에 초점이
     //    서면 입력기(한글 조합 등)가 붙는다. 클립보드는 일반 붙여넣기 판(NSPasteboard)의 글이다.
     //  - 시스템의 밝은·어두운 모양과 강조색, 움직임 줄이기 설정을 따른다.
