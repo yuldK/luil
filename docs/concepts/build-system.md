@@ -126,7 +126,7 @@ open build/macos-arm64/Debug/luil_demo.app
 - `open`으로 띄우면 Launch Services가 번들로 세운다. 터미널에 로그를 보려면 안의 실행 파일을 바로 띄운다: `build/macos-arm64/Debug/luil_demo.app/Contents/MacOS/luil_demo`. smoke test(`$<TARGET_FILE:...>`)도 이 실행 파일을 부른다.
 - demo의 견본 그림은 `Contents/Resources/assets`에 둔다. `Contents/MacOS`에 코드가 아닌 파일이 있으면 codesign이 번들 서명을 거절해서다. demo의 `executable_directory()`가 번들 안에서는 그 자원 폴더를 답한다 (Windows는 그대로 실행 파일 옆이다).
 
-test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`). 키 변환(`src/macos/macos_input.cpp`)은 AppKit을 모르는 순수 층이라 core test에 들어가고, 예제의 `--smoke-test`가 창을 보이지 않은 채 첫 frame을 그려 host를 확인한다.
+test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`). 키 변환(`src/macos/macos_input.cpp`)은 AppKit을 모르는 순수 층이라 core test에 들어가고, 예제의 `--smoke-test`가 창을 보이지 않은 채 첫 frame을 그려 host를 확인한다. 플랫폼 서비스는 `luil`을 링크한 `luil_macos_platform_tests`가 실제 OS로 본다 (Windows의 `luil_tests` 자리다).
 
 ### 앱 host
 
@@ -148,8 +148,9 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 클립보드 | 일반 붙여넣기 판의 글과 HTML |
 | 시스템 외양 | 밝은·어두운 모양, 강조색, 대비·움직임·투명도 줄이기를 따른다 |
 | HTTP·WebSocket | `http_client`는 NSURLSession 위에 서고 몸 풀기와 배달은 client의 thread가 한다 (다른 플랫폼과 같다). WebSocket은 NSURLSessionWebSocketTask다. gzip·deflate는 시스템이 늘 풀고, 상태 줄의 이유 글과 헤더의 차례는 오지 않으며, 로컬 닫기는 상대의 답을 기다리지 않는다 ([`macos_http_client.mm`](../../src/net/macos/macos_http_client.mm), [`websocket_transport.mm`](../../src/net/macos/websocket_transport.mm)) |
-
-아직 없는 것은 "지원 안 함"으로 답한다: 비밀 저장소(Keychain), 파일 감시, 단일 인스턴스 인자 전달. 데스크톱 demo는 이 자리를 페이지마다 실패 글로 보인다.
+| 비밀 저장소 | 로그인 keychain의 일반 암호 항목이다. `service`가 서비스, `name`이 계정 이름이다. NUL을 품은 이름은 거절한다 ([비밀 저장소](../secret-store-design.md#macos)) |
+| 파일 감시 | 감시마다 FSEvents stream 하나(파일 단위 이벤트)다. 쌓이는 표지는 지금 있는지·파일 번호·본 이름으로 가른다 ([파일 감시](../file-watch-design.md#macos)) |
+| 단일 인스턴스 | 사용자 임시 폴더의 잠금 파일(`flock`)이 첫째를 가린다. 둘째는 그 옆의 Unix 소켓으로 인자와 작업 폴더를 보낸다. 첫째는 배경 thread가 받아 메인 thread의 받는 함수에 건넨다. host는 `macos::set_instance_receiver`로 단다 ([인자 넘기기](../single-instance-args-design.md#macos)) |
 
 개발용 환경 변수 둘이 있다. 화면 기록·손쉬운 사용 권한 없이 host를 확인하는 길이다.
 

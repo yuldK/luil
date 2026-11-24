@@ -221,6 +221,22 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 - 공유 저장소는 FUSE를 거쳐 다른 앱이 만든 변경이 오지 않을 수 있다고 알려져 있다. 실기기 확인 전 가정이라 보장하지 않는다.
 - JNI helper는 필요 없다. errno 글은 아래 비공개 helper의 `android::make_errno_error`를 쓴다.
 
+### macOS
+
+- 감시마다 FSEvents stream 하나다(`kFSEventStreamCreateFlagFileEvents | NoDefer | WatchRoot | UseCFTypes | UseExtendedData`, 지연 10 ms). 첫 이벤트는 곧바로 오고 이어지는 것만 10 ms씩 모인다. 묶음의 `settle`이 진짜 디바운스다. 소스는 [file_watcher_macos.mm](../src/macos/file_watcher_macos.mm)다.
+- stream은 감시자의 직렬 dispatch queue에 건다. 콜백은 이벤트마다 그 경로를 `lstat`으로 보아 지금 있는지와 파일 번호(inode)를 실어 감시 thread에 넘긴다. 감시 thread는 조건 변수를 가장 가까운 묶음 시각까지 기다린다. 묶음 짓기와 `deliver`는 그 thread가 한다. `add`는 그 thread가 `FSEventStreamStart`를 마친 뒤 돌아온다.
+- FSEvents는 늘 그 아래 전부를 본다. `folder`·`file`은 바로 아래 이름만 남긴다. 뿌리 자신의 이벤트는 버린다. 경로는 FSEvents가 주는 정식 경로(`/var` → `/private/var`)이므로 뿌리도 `F_GETPATH`로 같은 꼴로 바꿔 견준다.
+- **표지가 쌓인다.** 같은 경로의 표지는 그 이름이 사는 동안 쌓여 온다(실측: 만든 파일을 고쳐도 `ItemCreated`, 이름을 바꿔 온 파일을 고쳐도 `ItemRenamed`가 붙는다). 그래서 표지만으로 종류를 정하지 않는다.
+  - 내용·이름 표지(`ItemCreated`·`ItemRemoved`·`ItemRenamed`·`ItemModified`)가 하나도 없는 이벤트는 버린다. 속성만 바뀐 것을 받지 않는 다른 플랫폼과 같다. 새 파일의 첫 이벤트가 `XattrMod`만 들고 `ItemCreated`보다 먼저 올 때가 있어(실측, 여러 test가 함께 돌 때) 그것을 고침으로 내지 않는 자리이기도 하다.
+  - 지금 없는 이름: `ItemRenamed`가 있으면 이름 바꿈의 옛 이름(`moved_from`, cookie는 파일 번호), 없으면 removed다.
+  - 지금 있는 이름: 바로 앞이 같은 파일 번호의 옛 이름이면 새 이름(`moved_to`)이다. FSEvents는 옛 이름·새 이름을 이어 준다. 아니면 이 감시가 이미 본 이름은 modified(지우고 다시 만들었거나 덮어쓴 이름 바꿈도 순 변화는 고침이다), 처음 보는 이름은 `ItemCreated`나 `ItemRenamed`가 있으면 created, 없으면 modified다.
+  - 본 이름은 감시마다 65536개까지 쥔다. 넘으면 잊고, 잊은 이름의 다음 고침은 created로 올 수 있다. 감시를 걸기 직전에 만든 파일도 표지가 남아 첫 고침이 created로 올 수 있다. 둘 다 "다시 읽어라"라 앱의 일은 같다.
+  - 아주 짧게 생겼다 사라진 이름은 한 이벤트(`Created | Removed`)로 와 removed로 낸다. 감시 전부터 있던 파일의 지움을 놓치지 않으려고 이쪽을 고른다. 앱이 본 적 없는 이름의 removed가 올 수 있다.
+- 이벤트는 fseventsd를 거쳐 와 바쁠 때 수백 ms 늦는다. `remove`는 끝 묶음을 짓기 전에 `FSEventStreamFlushSync`로 그때까지의 이벤트를 받아 처리한다. 끝 묶음에 `remove` 앞의 변경이 실린다.
+- 뿌리가 지워지거나 옮겨지면(`RootChanged`, 뿌리 볼륨의 `Unmount`) `lost`다. `MustScanSubDirs`·`UserDropped`·`KernelDropped`는 그 감시의 rescan이다.
+- `stop`은 thread를 join한 뒤 stream을 queue에서 멈추고(`Stop`·`Invalidate`·`Release`) queue가 그 일을 마치기를 `stop_budget` 안에서 기다린다. 콜백이 닿는 몫은 stream의 `info`가 함께 쥐어, 넘겨도 늦은 콜백이 부서진 감시자를 만지지 않는다.
+- 한계: 넘침을 일으킬 test 손잡이가 없다. fseventsd가 사용자 공간에서 쌓아 test 크기의 폭주로는 넘치지 않는다. 네트워크 볼륨은 다른 기계의 변경이 오지 않는다.
+
 ### 비공개 helper
 
 이 노드가 두 번째 사용자가 되는 helper 둘을 감시자와 같은 커밋에서 꺼낸다. 오류 글의 `win32::make_last_error`([win32_error.h](../src/win32/win32_error.h))와 JNI의 `jni_local_frame`·`jni_failed`([java_vm.h](../src/android/java_vm.h))는 이미 한 곳에 있다. 감시자는 JNI를 쓰지 않아 앞의 것만 쓴다.
@@ -252,6 +268,7 @@ G4~G7은 이 노드와 닿지 않는다. 오류 글은 `platform_result`처럼 �
 - `tests/file_watch_batch_tests.cpp`(core, `luil_core_tests`라 Android 기기에서도 돈다): 합치기 표의 각 줄, 짝 없는 옛 이름·새 이름, 이어진 이름 바꿈, `settle` 경계와 `max_delay` 상한, 생겼다 사라진 뒤 다음 변경이 `settle`을 기다리는지, 생겼다 사라지기만 하는 변경이 칸을 남기지 않는지, `max_changes`를 넘으면 비우고 rescan, 거절된 묶음이 다음 묶음에 합쳐지는지, 다시 낸 묶음의 `retried`와 쥔 것이 사라진 뒤의 묶음, `file` 감시에서 옆 이름이 남아도 그 이름이 사라지면 거짓인지와 옛 이름으로 남으면 참인지, 폴더 감시의 `retried`가 묶음 전체를 보는지, 끝 묶음이 하나뿐인지, 경로 구분자.
 - `tests/file_watcher_tests.cpp`(실제 폴더, [platform_services_tests.cpp](../tests/platform_services_tests.cpp)의 `scratch_folder` 관용구): 생성·수정·삭제·이름 바꿈, `subtree`의 하위 폴더 파일과 새로 만든 폴더 안의 파일, `file` 감시가 임시 파일 저장을 한 항목으로 받는지, `replace_file_atomically`로 쓴 파일, 감시 폴더 삭제의 `lost`, `remove`의 끝 묶음, 두 감시자 동시, 변경 없을 때와 폭주 중의 `stop`이 예산 안에 끝나는지, `stop` 뒤 `deliver`가 없는지, `deliver`가 거짓을 답한 뒤 다시 오는지.
   - Windows는 `luil_tests`다. 작은 버퍼를 test 손잡이로 주어 넘침을 일으켜 rescan을 본다.
+  - macOS는 `luil_macos_platform_tests`다. `replace_file_atomically`도 본다. 넘침 test는 손잡이가 없어 빠지고, 대신 쌓인 표지 아래에서 만듦·이름 바꿈 뒤의 고침과 지우고 다시 만듦이 modified로 오는지 본다.
   - Android는 `file_watcher_android.cpp`가 JVM이 필요 없어 `android_input.cpp`처럼 `luil_core_tests`에 소스를 넣어 기기 셸(`cmake/android/adb_run.cmake`)에서 돈다. 넘침은 감시 thread를 `deliver` 안에 묶어 둔 채 `max_queued_events`보다 많은 이벤트가 나도록 파일을 만들어 본다. `replace_file_atomically`는 `luil` 쪽이라 그 경우만 Windows에서 본다.
 - 데스크톱 데모: `examples/demo/files_page.cpp`에 임시 폴더 하나를 감시하는 구역을 둔다. "파일 만들기"·"고치기"·"지우기"·"이름 바꾸기" 단추와 마지막 묶음을 그린 label(`변경: created a.txt` 같은 글, rescan·끝 표시 포함)이 있어 UIA로 되읽는다.
   - 감시자는 `files_page`가 쥔다. `deliver`는 `post_app_message_ticketed`로 보내야 하므로 host가 필요하다. `demo_main.cpp`의 `bind_host`가 `files_.bind_host(host)`로 host 포인터를 원자적 손잡이로 넘긴다.

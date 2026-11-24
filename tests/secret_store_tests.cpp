@@ -2,21 +2,31 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#if defined(_WIN32)
 #include <windows.h>
 
 #include <wincred.h>
+#else
+#include <unistd.h>
+#endif
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <vector>
 
-// 비밀 저장소의 Windows 쪽을 실제 자격 증명 관리자로 본다 (secret-store-design.md).
+// 비밀 저장소를 실제 OS 저장소로 본다 (secret-store-design.md). Windows는 자격 증명 관리자, macOS는 Keychain이다.
 // test가 쓴 항목은 그 자리에서 지운다. 프로세스 id와 시각을 써 과거 test의 항목과도 겹치지 않게 한다.
 
 namespace {
     [[nodiscard]] std::u8string test_service()
     {
+#if defined(_WIN32)
         const std::string id { std::to_string(GetCurrentProcessId()) + "-" + std::to_string(GetTickCount64()) };
+#else
+        const auto now { std::chrono::steady_clock::now().time_since_epoch() };
+        const std::string id { std::to_string(::getpid()) + "-" + std::to_string(std::chrono::duration_cast<std::chrono::nanoseconds>(now).count()) };
+#endif
         std::u8string service { u8"luil-tests-" };
         service.append(id.begin(), id.end());
         return service;
@@ -38,6 +48,7 @@ namespace {
         }
     };
 
+#if defined(_WIN32)
     struct scoped_legacy_key
     {
         std::wstring target {};
@@ -47,6 +58,7 @@ namespace {
             static_cast<void>(CredDeleteW(target.c_str(), CRED_TYPE_GENERIC, 0));
         }
     };
+#endif
 
     void check_distinct(const scoped_key& first, const scoped_key& second)
     {
@@ -124,12 +136,27 @@ TEST_CASE("A secret over the limit or without a name is refused", "[secret]")
     REQUIRE(luil::erase_secret(service, u8"").status == luil::secret_store_status::failed);
 }
 
+#if defined(_WIN32)
 TEST_CASE("Windows secret keys distinguish slashes, letter case and embedded zero bytes", "[secret]")
+#else
+TEST_CASE("Secret keys distinguish slashes and letter case and refuse embedded zero bytes", "[secret]")
+#endif
 {
     const std::u8string service { test_service() };
     check_distinct({ service, u8"a/b" }, { service + u8"/a", u8"b" });
     check_distinct({ service + u8"A", u8"name" }, { service + u8"a", u8"name" });
     check_distinct({ service, u8"Name" }, { service, u8"name" });
+#if defined(__APPLE__)
+    // Keychain은 속성을 NUL에서 자른다. 남의 항목을 덮지 않게 쓰기 전에 거절한다.
+    const std::u8string_view with_zero { u8"name\0tail", 9 };
+    const auto refused { luil::store_secret(service, with_zero, bytes_of(u8"x")) };
+    REQUIRE(refused.status == luil::secret_store_status::failed);
+    REQUIRE(refused.error.find(u8"NUL") != std::u8string::npos);
+    std::vector<std::uint8_t> read { 1u };
+    REQUIRE(luil::load_secret(with_zero, u8"name", read).status == luil::secret_store_status::failed);
+    REQUIRE(read.empty());
+    REQUIRE(luil::erase_secret(service, with_zero).status == luil::secret_store_status::failed);
+#else
     check_distinct({ service, u8"name" }, { service, std::u8string_view { u8"name\0tail", 9 } });
 
     std::u8string first_service { service };
@@ -137,8 +164,10 @@ TEST_CASE("Windows secret keys distinguish slashes, letter case and embedded zer
     std::u8string second_service { service };
     second_service.append(u8"\0two", 4);
     check_distinct({ first_service, u8"name" }, { second_service, u8"name" });
+#endif
 }
 
+#if defined(_WIN32)
 TEST_CASE("Windows rejects malformed UTF-8 and oversized secret keys", "[secret]")
 {
     using luil::secret_store_status;
@@ -147,6 +176,12 @@ TEST_CASE("Windows rejects malformed UTF-8 and oversized secret keys", "[secret]
     const auto result { luil::store_secret(service, oversized, {}) };
     REQUIRE(result.status == secret_store_status::failed);
     REQUIRE(result.error.find(u8"too long") != std::u8string::npos);
+#else
+TEST_CASE("Malformed UTF-8 secret keys are refused", "[secret]")
+{
+    using luil::secret_store_status;
+    const std::u8string service { test_service() };
+#endif
 
     constexpr char8_t invalid_byte { 0xffu };
     const std::u8string_view malformed { &invalid_byte, 1 };
@@ -156,6 +191,7 @@ TEST_CASE("Windows rejects malformed UTF-8 and oversized secret keys", "[secret]
     REQUIRE(luil::erase_secret(malformed, service).status == secret_store_status::failed);
 }
 
+#if defined(_WIN32)
 TEST_CASE("Windows copies legacy credentials only on request and keeps both versions safe", "[secret]")
 {
     using luil::secret_store_status;
@@ -198,3 +234,13 @@ TEST_CASE("Windows copies legacy credentials only on request and keeps both vers
     REQUIRE(luil::load_secret(owned.service, owned.name, read).status == secret_store_status::ok);
     REQUIRE(read == old_value);
 }
+#else
+TEST_CASE("There is nothing to migrate outside Windows", "[secret]")
+{
+    const std::u8string service { test_service() };
+    REQUIRE(luil::migrate_legacy_win32_secret(service, u8"server").status == luil::secret_store_status::unsupported);
+    std::vector<std::uint8_t> read { 1u };
+    REQUIRE(luil::load_secret(service, u8"server", read).status == luil::secret_store_status::not_found);
+    REQUIRE(read.empty());
+}
+#endif

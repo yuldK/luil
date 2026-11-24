@@ -179,6 +179,20 @@ if (instance.primary() == false)
 
 시작할 때의 Intent(`Activity.getIntent()`)는 JNI로 읽을 수 있다. 이 문서의 길이 아니라 os_notify의 콜드 스타트 몫이다.
 
+### macOS
+
+뮤텍스와 창 속성 대신 잠금 파일과 Unix 소켓이다. 상태 값과 입력 규칙은 Win32와 같다. 소스는 [single_instance_macos.mm](../src/macos/single_instance_macos.mm), 운반 형식은 [instance_message.h](../src/macos/instance_message.h), 받는 자리는 [single_instance_receiver.h](../src/macos/single_instance_receiver.h)다.
+
+- **첫째 여부.** 사용자 임시 폴더(`confstr(_CS_DARWIN_USER_TEMP_DIR)`, 환경 변수가 아니다)의 `luil-instance-<이름의 SHA-256 앞 12바이트 16진>.lock`에 `flock(LOCK_EX | LOCK_NB)`을 건다. 잡으면 첫째다. 같은 사용자의 프로세스끼리만 보이고, 같은 프로세스의 두 객체도 서로 막아 한 프로세스에 첫째와 둘째를 세울 수 있다. 이름은 바이트로 해시해 대소문자만 다른 이름도 다르다(Windows 창 속성과 다른 점). 빈 이름·잘못된 UTF-8은 서지 못한 객체(`failed`)다.
+- 끝나는 첫째는 잠금을 쥔 채로 잠금 파일을 지운다. 그 사이 옛 파일을 연 쪽은 잠근 뒤 경로의 파일 번호가 다른 것을 보고 다시 연다. 둘이 다른 파일을 잠가 둘 다 첫째가 되지 않는다. 프로세스가 죽으면 OS가 잠금을 놓고 남은 파일은 다음 첫째가 다시 쓴다.
+- **표식.** 첫째의 host가 `macos::set_instance_receiver(instance, 받는 함수)`를 부르면 같은 이름의 `.sock`(권한 0600)을 열고 배경 thread가 받기 시작한다. Windows의 `SetPropW` 자리다. 부르기 전에는 소켓이 없어 둘째는 시한까지 찾다가 `not_found`다. `clear_instance_receiver`나 `single_instance`가 없어지면 소켓을 지운다. 잠금을 쥔 첫째만 소켓을 열므로 남은 소켓 파일(죽은 첫째의 것)은 지우고 연다.
+- **보내기.** 입력 검사와 `not_found`의 차례가 Win32와 같다(이름 241 UTF-16 코드 단위 상한도 같다. 한 이름이 두 플랫폼에서 같은 답을 받게 한다). 작업 폴더는 `getcwd`다. 시한 안에서 50 ms마다 소켓에 잇는다. 없거나(`ENOENT`) 죽은 첫째의 것(`ECONNREFUSED`)이면 다시 찾는다. 이은 뒤 다 쓰고 답 한 바이트를 같은 시한까지 기다린다. 시한이 지나면 `failed`이고 첫째는 나중에 받을 수 있다. 답 없이 끊기면 받는 자리가 닫힌 것이라 다시 찾는다.
+- **앞으로 세우기.** `activate`면 둘째가 macOS 14부터 첫째의 프로세스(`LOCAL_PEERPID`)에 앞 창 자리를 넘긴다(`NSApp`의 `yieldActivationToApplication:`, 둘째에 `NSApplication`이 있을 때). 표지는 받는 함수의 둘째 인자로 가고 세우는 것은 host의 몫이다.
+- **받기.** 배경 thread가 받은 연결마다 보낸 사용자(`getpeereid`)가 같은지 보고, 머리와 몸을 2초 안에 읽어 모양을 본다. 모양이 틀리면 거절을 답한다. 맞으면 그 인자를 dispatch main queue에 넘겨 **메인 thread**에서 받는 함수를 부르고 그 답을 보낸 쪽에 돌려준다. 빈 함수와 던진 예외는 거절이다. 배경 thread는 메인 thread를 기다리지 않으므로 메인 thread가 막혀도 받는 자리를 닫는 일은 막히지 않는다.
+- **운반 형식.** 머리 8바이트(`L` `I` `N` 판, 몸의 바이트 수 little endian)와 몸이다. 몸은 Win32와 같은 모양을 UTF-8로 싣는다: 표지 1바이트(bit 0은 앞으로 세우기), 작업 폴더 NUL, 인자 NUL…. 몸은 256 KiB, 항목은 4096개 이하다. 답은 한 바이트(1 받음, 0 거절)다.
+- **신뢰.** 소켓은 그 사용자만 열 수 있는 임시 폴더에 있고 받는 쪽이 사용자를 한 번 더 본다. 같은 사용자의 어느 프로세스든 보낼 수 있는 것은 Win32와 같다. 앱은 이 인자를 명령 줄과 같이 믿을 수 없는 입력으로 다룬다.
+- 앱 번들을 Finder에서 다시 열면 LaunchServices가 둘째 프로세스를 띄우지 않고 떠 있는 앱에 문서 열기를 보낸다. 이 길은 명령 줄이나 `open -n`으로 띄운 둘째의 몫이다. 문서 열기 이벤트를 받는 것은 범위 밖이다.
+
 ## 다른 노드와의 약속
 
 - **platform-services-design.md 개정.** 구현 커밋이 같은 묶음에서 이 문서의 판단으로 고친다. 15줄 표의 단일 인스턴스 행에 인자 보내기를 더하고, 36줄 "알리는 길(IPC)은 앱마다 달라 넣지 않았다"를 이 문서로 잇는 말로 바꾸고, 104줄에 Android의 `send_to_primary`가 `unsupported`임을 적고, 검증 절(108~121줄)의 단일 인스턴스 test와 데모 설명을 새 test로 맞춘다.
@@ -196,6 +210,8 @@ if (instance.primary() == false)
 - `tests/win32_window_tests.cpp`(추가, `placement_driver` 틀. 주 창을 숨기는 `main_hidden` 칸을 driver에 더했다): `window_environment::instance`를 단 창에서 delegate의 `on_started`가 thread를 띄워 둘째 객체로 보낸다. 콜백이 창을 만든 thread에서 불리는지, 인자·작업 폴더가 같은지, true는 `ok`이고 false와 던진 예외는 `failed`인지, `instance`가 비면 표식이 없어 `not_found`인지, 창이 닫힌 뒤 `not_found`인지 본다. 숨은 주 창은 콜백 뒤에도 보이지 않는다.
 - `tests/window_messages_tests.cpp`(추가): 없는 창에 `allow_instance_message`가 던지지 않는다.
 - 데모 `examples/demo`: `--send-to-first`를 단 둘째는 이 플래그를 뺀 나머지 인자를 첫째에 보내고 끝낸다(종료 코드 `ok` 0, `not_found` 3, `failed` 4). `parse_arguments`가 모르는 인자를 거절하므로 이 분기가 그 앞에 선다. 플래그가 없으면 지금처럼 둘째도 뜬다. 첫째의 "창" 페이지(`windows_page.cpp`)에 label `둘째 인스턴스 인자: 없음`이 서고, 받으면 `둘째 인스턴스 인자: 2개 [a.txt] [b c] · 작업 폴더 <경로>`로 바뀌어 UIA로 되읽힌다. `demo_delegate`가 `on_instance_arguments`에서 게시한 intent를 페이지가 받는다. `tests/windows_page_tests.cpp`가 intent를 직접 주어 label을 본다. UIA 확인은 첫째와 둘째를 같은 격리 데스크톱에서 띄운다. 창은 데스크톱 단위다.
+- `tests/macos_instance_message_tests.cpp`(macOS, `luil_core_tests`): 위 Win32 운반 형식 test와 같은 경우를 UTF-8 형식으로 본다. 머리의 표식·판·몸 크기, 이름의 241 코드 단위 경계를 더한다.
+- `tests/macos_single_instance_tests.cpp`(macOS, `luil_macos_platform_tests`): 한 프로세스의 첫째·둘째 객체로 `name()`과 옮긴 객체, 잠금을 놓은 뒤의 첫째, 첫째의 `not_found`, 받는 자리 전의 짧은 시한 `not_found`, 받는 함수가 메인 thread에서 목록·작업 폴더·표지를 그대로 받는지, 거짓·예외·빈 함수의 `failed`, 메인 run loop가 돌지 않을 때의 시한 `failed`와 나중의 도착, 닫은 받는 자리의 `not_found`와 다시 열기, 다른 이름, 입력 위반, 241 코드 단위 경계, 서지 못한 객체를 본다. 이 실행 파일을 숨은 test 하나로 다른 작업 폴더에서 다시 띄워 다른 프로세스에서 보낸 것도 본다.
 - 모바일 데모는 더하지 않는다. 읽을 값이 `unsupported` 하나이고 `device_page.cpp`는 os_notify가 크게 고친다. Android는 `platform_services_android.cpp`가 JNI를 부르는 파일이라 core test에 넣지 못해, 기존 확인 프로그램 방식([platform-services-design.md](platform-services-design.md) 117줄)으로 실기기에서 `unsupported`를 본다.
 - 사람 확인: 탐색기에서 연결된 파일을 여는 것이 떠 있는 창을 앞으로 세우는지(최소화 중 포함), 작업 표시줄 단추가 깜빡이기만 하지 않는지, 관리자 권한 첫째에서 결정 6의 두 갈래, 첫째가 대화 상자나 크기 조절 루프 안에 있을 때, 첫째가 닫히는 중에, 다른 세션에서 띄운 것이 서로 보이지 않는지. 창 속성의 다른 프로세스 읽기와 `SendMessageTimeoutW` 시한 뒤의 도착, 권한의 지속 시간이 알려진 대로인지 실측한다.
 

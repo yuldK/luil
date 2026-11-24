@@ -461,6 +461,11 @@ if(LUIL_PLATFORM STREQUAL "macos")
             macos_notification_tests.cpp
             dock_plan_tests.cpp
             macos_tray_tests.cpp)
+    # 둘째 인스턴스가 보내는 글의 운반 형식도 OS 호출이 없는 순수 변환이라 core test에 넣는다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/macos/instance_message.cpp"
+            macos_instance_message_tests.cpp)
     catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
     # HTTP client·charset 변환·WebSocket 전송은 NSURLSession·CoreFoundation 위에 서고 실제 되돌이 서버와 주고받는다.
     # Android의 luil_net_tests와 같은 묶음이다. 라이브러리(luil)는 AppKit host를 끌어오므로 링크하지 않고 net 소스를
@@ -503,6 +508,23 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "-framework Foundation"
             "-framework CoreFoundation")
     catch_discover_tests(luil_net_tests PROPERTIES TIMEOUT 120)
+    # 플랫폼 서비스를 실제 OS로 본다. Keychain에 쓰고 지우는 비밀 저장소, 임시 폴더를 보는 FSEvents 파일 감시,
+    # 잠금과 Unix 소켓의 단일 인스턴스다 (둘째 프로세스는 이 실행 파일을 숨은 test 하나로 다시 띄운다).
+    #  - 플랫폼 층(luil)을 링크하므로 core test와 따로 선다 (Windows의 luil_tests 자리다).
+    add_executable(luil_macos_platform_tests
+        file_watcher_tests.cpp
+        macos_single_instance_tests.cpp
+        secret_store_tests.cpp)
+    target_include_directories(luil_macos_platform_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}"
+            "${LUIL_TEST_DIRECTORY}")
+    target_link_libraries(luil_macos_platform_tests
+        PRIVATE
+            luil::luil
+            luil_options
+            Catch2::Catch2WithMain)
+    catch_discover_tests(luil_macos_platform_tests PROPERTIES TIMEOUT 120)
     # AppKit host가 창을 보이지 않은 채 첫 frame을 그리고 끝나는지 본다 (예제를 켠 구성에서만).
     if(TARGET luil_hello)
         add_test(NAME luil_macos_hello_smoke COMMAND "$<TARGET_FILE:luil_hello>" --smoke-test)
@@ -522,7 +544,7 @@ if(LUIL_PLATFORM STREQUAL "macos")
         set_tests_properties(luil_macos_demo_smoke_gpu PROPERTIES PASS_REGULAR_EXPRESSION "renderer metal")
         set_tests_properties(luil_macos_demo_smoke_gpu_required PROPERTIES WILL_FAIL TRUE)
     endif()
-    luil_set_ide_folder("Tests" luil_core_tests luil_net_tests)
+    luil_set_ide_folder("Tests" luil_core_tests luil_net_tests luil_macos_platform_tests)
     if(LUIL_ENABLE_TEXT_SHAPING)
         catch_discover_tests(luil_text_shaping_tests PROPERTIES TIMEOUT 120)
     endif()

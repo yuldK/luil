@@ -965,7 +965,9 @@ if(LUIL_PLATFORM STREQUAL "macos")
     # OS 알림은 UserNotifications이고 앱 번들에서만 선다 (macos/notification_macos.mm).
     #  - 전역 단축키는 Carbon `RegisterEventHotKey`로 건다 (macos/hotkey_macos.mm). 어떤 호출을 할지는 core의 host/hotkey_sync가 고른다.
     #  - Dock 타일·메뉴(macos/dock_macos.mm)는 작업 표시줄 요청의 macOS 갈래다. 무엇을 낼지는 core의 host/taskbar_sync가 고른다.
-    #  - 비밀 저장소·파일 감시는 아직 "지원 안 함"으로 답한다 (macos/macos_unsupported.cpp).
+    #  - 비밀 저장소는 Keychain의 일반 암호 항목이다 (macos/secret_store_macos.mm).
+    #  - 파일 감시는 감시마다 FSEvents stream 하나다 (macos/file_watcher_macos.mm).
+    #  - 단일 인스턴스는 사용자 임시 폴더의 flock, 인자 넘기기는 그 옆의 Unix 소켓이다 (macos/single_instance_macos.mm).
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
         "${public_headers}/macos/macos_app.h"
@@ -1003,14 +1005,19 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/webview_host.mm
         "${public_headers}/app/platform_services.h"
         macos/platform_services_macos.mm
+        macos/instance_message.cpp
+        macos/instance_message.h
+        macos/single_instance_macos.mm
+        macos/single_instance_receiver.h
         luil/url_scheme.cpp
         "${public_headers}/app/secret_store.h"
+        macos/secret_store_macos.mm
+        macos/file_watcher_macos.mm
         "${public_headers}/app/notification.h"
         macos/notification_center.h
         macos/notification_macos.mm
         macos/notification_rules.cpp
         macos/notification_rules.h
-        macos/macos_unsupported.cpp
         "${luil_codicon_source}")
     # net: HTTP 값과 NSURLSession 위에 선 `http_client`, NSURLSessionWebSocketTask 위의 WebSocket 전송이다.
     # charset은 utf-16을 손으로, 나머지는 CoreFoundation의 표로 옮긴다.
@@ -1045,6 +1052,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
             "-framework UniformTypeIdentifiers"
             "-framework UserNotifications"
             "-framework Carbon"
+            "-framework Security"
+            "-framework CoreServices"
         PRIVATE
             luil_options)
 endif()

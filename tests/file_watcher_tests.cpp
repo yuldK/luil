@@ -1,7 +1,9 @@
 #include "luil/app/file_watcher.h"
 
-#if defined(_WIN32)
+#if defined(_WIN32) || defined(__APPLE__)
 #include "luil/app/platform_services.h"
+#endif
+#if defined(_WIN32)
 #include "win32/file_watcher_win32.h"
 #endif
 
@@ -30,8 +32,8 @@
 #include <vector>
 
 // 파일 감시를 실제 폴더와 OS 알림으로 본다 (file-watch-design.md의 "확인").
-// Windows는 luil_tests에서, Android는 luil_core_tests에 감시자 소스를 묶어 기기 셸에서 돈다. 한 파일이 두 플랫폼을 맡으므로
-// OS 헤더는 폴더 이름과 test 손잡이에만 쓴다.
+// Windows는 luil_tests에서, Android는 luil_core_tests에 감시자 소스를 묶어 기기 셸에서, macOS는 luil_macos_platform_tests에서 돈다.
+// 한 파일이 세 플랫폼을 맡으므로 OS 헤더는 폴더 이름과 test 손잡이에만 쓴다.
 
 namespace {
     using namespace std::chrono_literals;
@@ -379,7 +381,8 @@ TEST_CASE("A file watch receives a temporary-file save as one change", "[file_wa
     REQUIRE(again.front().kind != file_change_kind::removed);
 }
 
-#if defined(_WIN32)
+// `replace_file_atomically`는 플랫폼 층(luil)의 것이라 그것을 링크하는 Windows와 macOS에서만 본다.
+#if defined(_WIN32) || defined(__APPLE__)
 TEST_CASE("A file watch receives a replace_file_atomically save as one change", "[file_watch][platform]")
 {
     const scratch_folder folder {};
@@ -396,6 +399,40 @@ TEST_CASE("A file watch receives a replace_file_atomically save as one change", 
     REQUIRE(seen.size() == 1);
     REQUIRE(seen.front().path == u8"설정.json");
     REQUIRE(seen.front().kind != file_change_kind::removed);
+}
+#endif
+
+#if defined(__APPLE__)
+// FSEvents는 같은 경로의 표지를 쌓는다. 만든 뒤의 고침에도 `ItemCreated`가, 이름을 바꿔 온 뒤의 고침에도 `ItemRenamed`가 남는다.
+// 감시자가 본 이름으로 가려 고침을 고침으로 내는지 본다.
+TEST_CASE("Changes after a create or a rename come as modified despite the flags FSEvents keeps", "[file_watch][platform]")
+{
+    const scratch_folder folder {};
+    recorder sink {};
+    const auto watcher { make_watcher(test_config(sink)) };
+    static_cast<void>(add(*watcher, folder.text(), luil::file_watch_scope::folder));
+
+    write_file(folder.file(u8"a.txt"), "one");
+    REQUIRE(sink.wait_change(change(file_change_kind::created, u8"a.txt")));
+    sink.clear();
+    write_file(folder.file(u8"a.txt"), "two");
+    REQUIRE(sink.wait_change(change(file_change_kind::modified, u8"a.txt")));
+    sink.clear();
+    std::filesystem::rename(folder.file(u8"a.txt"), folder.file(u8"b.txt"));
+    REQUIRE(sink.wait_change(change(file_change_kind::renamed, u8"b.txt", u8"a.txt")));
+    sink.clear();
+    write_file(folder.file(u8"b.txt"), "three");
+    REQUIRE(sink.wait_change(change(file_change_kind::modified, u8"b.txt")));
+    sink.clear();
+
+    // 지우고 같은 이름으로 다시 만들면 고침이다 (합치기 표의 removed + created).
+    std::filesystem::remove(folder.file(u8"b.txt"));
+    write_file(folder.file(u8"b.txt"), "four");
+    REQUIRE(sink.wait([](const std::vector<file_change_batch>& batches) { return batches.empty() == false; }));
+    std::this_thread::sleep_for(200ms);
+    const std::vector<file_change> seen { sink.changes() };
+    REQUIRE(seen.size() == 1);
+    REQUIRE(seen.front() == change(file_change_kind::modified, u8"b.txt"));
 }
 #endif
 
@@ -546,6 +583,9 @@ TEST_CASE("Stop ends within the budget when idle and during a burst", "[file_wat
     REQUIRE(took < 1500ms);
 }
 
+// FSEvents는 이벤트를 버리게 할 손잡이가 없다. fseventsd가 사용자 공간에서 쌓아 두어 test 크기의 폭주로는 넘치지 않는다.
+//  - macOS의 넘침(`MustScanSubDirs`·`UserDropped`·`KernelDropped`)은 rescan으로 옮기는 줄만 있고 사람이 확인한다.
+#if defined(_WIN32) || defined(__ANDROID__)
 TEST_CASE("An OS overflow becomes a rescan", "[file_watch][platform]")
 {
     const scratch_folder folder {};
@@ -600,3 +640,4 @@ TEST_CASE("An OS overflow becomes a rescan", "[file_watch][platform]")
     REQUIRE(sink.wait(rescan, 10s));
     watcher->stop();
 }
+#endif
