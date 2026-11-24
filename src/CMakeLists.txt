@@ -978,6 +978,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/macos_clipboard.mm
         macos/surface_capture.h
         macos/surface_capture.cpp
+        macos/tray_icon_macos.h
+        macos/tray_icon_macos.mm
         macos/macos_text.h
         macos/cpu_skia_renderer.h
         macos/cpu_skia_renderer.mm
