@@ -970,6 +970,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
     #  - 단일 인스턴스는 사용자 임시 폴더의 flock, 인자 넘기기는 그 옆의 Unix 소켓이다 (macos/single_instance_macos.mm).
     #  - 동영상은 AVFoundation이다. 네이티브 표면은 AVPlayerLayer(macos/media_player_macos.mm), 장 복사는
     #    AVPlayerItemVideoOutput(macos/video_frame_player_macos.mm)이고, 공개 헤더는 Windows와 같은 win32/ 헤더다.
+    #  - VoiceOver의 창구는 표면마다 NSAccessibilityElement 다리 하나다 (macos/accessibility_macos.mm). 역할 표·값·알림 대조는
+    #    AppKit을 모르는 macos/accessibility_mapping.cpp가 하고 core test로 돈다.
     set(luil_macos_files)
     luil_add_source_filter(luil_macos_files "macos"
         "${public_headers}/macos/macos_app.h"
@@ -1028,6 +1030,10 @@ if(LUIL_PLATFORM STREQUAL "macos")
         macos/media_rules.h
         macos/media_player_macos.mm
         macos/video_frame_player_macos.mm
+        macos/accessibility_macos.h
+        macos/accessibility_macos.mm
+        macos/accessibility_mapping.cpp
+        macos/accessibility_mapping.h
         "${luil_codicon_source}")
     # net: HTTP 값과 NSURLSession 위에 선 `http_client`, NSURLSessionWebSocketTask 위의 WebSocket 전송이다.
     # charset은 utf-16을 손으로, 나머지는 CoreFoundation의 표로 옮긴다.
