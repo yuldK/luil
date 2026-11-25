@@ -4,6 +4,8 @@
 #  - 시뮬레이터 빌드는 ad-hoc 서명이다. 기기 빌드는 서명 신원(`LUIL_IOS_CODE_SIGN_IDENTITY`, 예: "Apple Development: …")과
 #    그 번들 id들을 덮는 provisioning profile(`LUIL_IOS_PROVISIONING_PROFILE`, .mobileprovision 경로)을 주면 서명한다. 주지 않으면
 #    서명하지 않은 번들이라 기기에 설치되지 않는다.
+#  - 예제 하나의 번들 id를 통째로 정하려면 `LUIL_IOS_BUNDLE_IDENTIFIER_<대상>`(예: `LUIL_IOS_BUNDLE_IDENTIFIER_luil_mobile_demo`)을 준다.
+#    무료 계정의 profile은 앱 id 하나에만 맞으므로, 그 profile로 서명할 예제를 그 id에 맞추고 그 대상만 빌드한다.
 #  - 데스크톱 demo(창·트레이·전역 단축키를 보이는 것)는 세우지 않는다. 모바일 demo가 iPhone·iPad의 화면이다.
 set(luil_examples_directory "${CMAKE_CURRENT_LIST_DIR}")
 
@@ -29,7 +31,12 @@ function(luil_add_ios_bundle target)
     if(arguments_UNPARSED_ARGUMENTS OR NOT arguments_SUFFIX OR NOT arguments_NAME)
         message(FATAL_ERROR "luil_add_ios_bundle needs SUFFIX and NAME only.")
     endif()
-    set(luil_bundle_identifier "${LUIL_IOS_BUNDLE_PREFIX}.${arguments_SUFFIX}")
+    # `LUIL_IOS_BUNDLE_IDENTIFIER_<대상>`을 주면 그 값이 번들 id다. 무료 계정의 profile은 앱 id 하나에만 맞아 그 값에 맞춘다.
+    if(LUIL_IOS_BUNDLE_IDENTIFIER_${target})
+        set(luil_bundle_identifier "${LUIL_IOS_BUNDLE_IDENTIFIER_${target}}")
+    else()
+        set(luil_bundle_identifier "${LUIL_IOS_BUNDLE_PREFIX}.${arguments_SUFFIX}")
+    endif()
     set(luil_bundle_name "${arguments_NAME}")
     set(luil_bundle_executable "${target}")
     set(plist "${CMAKE_CURRENT_BINARY_DIR}/${target}-Info.plist")
