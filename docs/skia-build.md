@@ -201,6 +201,18 @@ Apple의 링커는 아카이브를 순서와 무관하게 풀므로 Android의 �
 - FreeType은 FTL로 고른다. 앱 문서에 FreeType을 밝힌다 (8.5).
 - Vulkan 메모리 할당기는 소비자가 넘긴다 (8.5). 만드는 함수 `skgpu::VulkanMemoryAllocators::Make`가 Skia 내부 헤더에만 있어, luil은 같은 서명을 비공개 헤더 [`vulkan_memory_allocator.h`](../src/android/vulkan_memory_allocator.h)에 선언해 쓴다. 내부 API이므로 Skia milestone을 올릴 때마다 두 구성의 `libskia.a`에 그 기호가 있는지 다시 확인한다 (M157 r1의 Debug·Release에서 확인했다).
 
+## iOS 패키지와 링크 계약
+
+`ios-arm64`(기기)와 `ios-arm64-simulator`(Apple Silicon 시뮬레이터)는 mac-arm64와 모양·아카이브 목록·시스템 framework가 같은 정적 아카이브다. 둘 다 thin arm64이고 섞이지 않는다 — 기기용을 시뮬레이터 구성에 넣으면 링커가 "building for 'iOS-simulator', but linking in object file ... built for 'iOS'"로 멈춘다. 텍스트의 ICU는 시스템 `libicucore`를 실행 시점에 연다.
+
+| 검사 | ios-arm64 · ios-arm64-simulator |
+| --- | --- |
+| 필수 인자 | Metal, CoreText(`skia_use_fonthost_mac`), 코덱 (png는 rust) |
+| 컴파일러 (`toolchain.json`의 `compiler`) | `clang` |
+| 배포 하한 | `toolchain.json`의 `ios_deployment_target`(15.0)이 구성의 `CMAKE_OSX_DEPLOYMENT_TARGET` 이하 |
+| SDK | `toolchain.json`의 `ios_simulator`가 대상 이름(`-simulator`)과 맞아야 한다 |
+| 시스템 framework | CoreFoundation, CoreGraphics, CoreText, Foundation, Metal (UIKit은 Skia가 쓰지 않는다) |
+
 ## 직접 빌드한 Skia 사용
 
 다음 캐시 변수를 configure 시점에 지정한다.

@@ -126,6 +126,15 @@ cmake --build --preset macos-arm64-debug
 ctest --preset macos-arm64-debug
 ```
 
+iPhone·iPad(iOS 15 이상, 기기와 Apple Silicon 시뮬레이터)도 세운다. UIKit host 위에서 hello와 모바일 demo가
+뜬다 ([빌드 체계](docs/concepts/build-system.md#ios)).
+
+```sh
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target ios-arm64-simulator -Configuration Debug,Release"
+cmake --preset ios-arm64-simulator
+cmake --build --preset ios-arm64-simulator-debug
+```
+
 ## 문서
 
 - [문서 안내](docs/README.md): 기능별 사용법과 설계 문서

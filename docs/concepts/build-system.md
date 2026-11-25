@@ -167,3 +167,57 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | --- | --- |
 | `LUIL_MACOS_FRAME_CAPTURE=<png>` | 그린 frame마다 그 파일을 덮어쓴다 |
 | `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다. `snapshot`은 웹뷰까지 합성한 창 내용을, 창 id를 주면 그 창을 PNG로 적고 `window <id>`는 다음 명령을 그 창에 보낸다. `drop`은 파일 끌어 놓기, `sheet`는 파일 패널, `capture`·`record`는 화면 남기기를 밟는다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |
+
+## iOS
+
+iPhone·iPad다. 플랫폼을 모르는 층(`luil_core`), UIKit 위의 앱 host(`luil`), 예제 둘(`luil_hello`, `luil_mobile_demo`)을 세운다. test는 이 기계에서 돌지 않는다 — 순수 층(HID 키 변환 `src/ios/ios_input.cpp`)은 macOS core test가 돌린다.
+
+| 항목 | 값 |
+| --- | --- |
+| 플랫폼 | `CMAKE_SYSTEM_NAME=iOS`. `LUIL_IOS_ARCHITECTURE`는 arm64 하나다 (기기와 Apple Silicon 시뮬레이터). x86_64 시뮬레이터는 패키지가 없다. 최소 판 `LUIL_MINIMUM_IOS_VERSION`은 패키지의 배포 하한과 같은 15.0이다 |
+| SDK | `CMAKE_OSX_SYSROOT`가 iphoneos(기기)나 iphonesimulator(시뮬레이터)다. 어느 쪽인지가 Skia 패키지를 고른다 (`LUIL_IOS_SIMULATOR`) |
+| 생성기 | preset은 Ninja Multi-Config |
+| 컴파일러 | Xcode의 clang. 앱 host는 Objective-C++(`OBJCXX`, ARC)다. 경고 규율·`AssertMacros.h` 정의는 macOS와 같다 |
+| Skia | 대상 이름 `ios-arm64`·`ios-arm64-simulator`, 자리 `third_party/skia-prep-ios-arm64[-simulator]` ([Skia 빌드 준비](../skia-build.md#ios-패키지와-링크-계약)) |
+
+[`platform/ios.cmake`](../../cmake/platform/ios.cmake)가 SDK·아키텍처·`CMAKE_OSX_DEPLOYMENT_TARGET`을 검사한다.
+
+```sh
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target ios-arm64-simulator -Configuration Debug,Release"
+cmake --preset ios-arm64-simulator
+cmake --build --preset ios-arm64-simulator-debug
+xcrun simctl install booted build/ios-arm64-simulator/Debug/luil_mobile_demo.app
+xcrun simctl launch --console booted io.github.yuldk.luil.mobile-demo
+```
+
+기기는 `ios-arm64` preset이다. 예제 번들은 [`examples/ios.cmake`](../../examples/ios.cmake)가 [`examples/ios/Info.plist.in`](../../examples/ios/Info.plist.in)을 대상마다 채워 세운다 (장면 목록, 빈 시작 화면, 간접 입력, iPhone·iPad). 번들 id는 `LUIL_IOS_BUNDLE_PREFIX`(기본 `io.github.yuldk.luil`) 뒤에 `hello`·`mobile-demo`다.
+
+- 시뮬레이터 번들은 ad-hoc 서명이다 ([`ios/sign_bundle.cmake`](../../cmake/ios/sign_bundle.cmake)).
+- 기기 번들은 `LUIL_IOS_CODE_SIGN_IDENTITY`(개발자 신원)와 `LUIL_IOS_PROVISIONING_PROFILE`(.mobileprovision)을 주면 profile을 넣고 그 권한으로 서명한다. 주지 않으면 서명하지 않아 기기에 설치되지 않는다. 번들 id가 profile의 앱 id에 맞아야 한다.
+- 렌더러 경로는 실행 인자로 재현한다: `--renderer=cpu`, `--simulate-gpu-failure`, `--simulate-gpu-loss-after-frames=N` (`apply_debug_arguments`).
+
+### 앱 host
+
+진입점은 [`luil::ios::run_application`](../../include/luil/ios/ios_app.h)이다. `UIApplicationMain`을 불러 돌아오지 않으므로 driver·delegate는 프로세스와 함께 사는 객체여야 한다. 메인 thread가 luil의 UI thread이고, 앱 delegate는 플랫폼 중립 부분(`app_delegate`)만 불린다.
+
+| 경계 | iOS |
+| --- | --- |
+| 실행 루프와 깨우기 | 메인 run loop. 다른 thread의 깨우기는 `CFRunLoopPerformBlock`(공통 모드)이다 (macOS와 같다) |
+| 장면과 표면 | 장면(UIWindowScene) 하나, 창 하나다. 보조 창·도킹 표면은 무시한다. 창 caption이 없고 폼 팩터는 mobile이다 |
+| 안전 영역 | 상태 표시줄·노치·홈 표시줄·소프트 키보드를 뺀 자리를 `make_metrics_message`로 알리고 그 원점에서 그린다. 밖의 거리는 `window_metrics::outside`다 (Android와 같다). 떠 있는 iPad 키보드는 내용을 밀지 않는다 |
+| 수명 주기 | 장면이 앞에 서고 뒤로 갈 때 `make_lifecycle_message`다. 뒤에 있는 동안은 그리지 않는다. 앱은 스스로 끝나지 않는다 — 끝내기·창 닫기 명령은 무시하고, 시스템이 끝낼 때(`applicationWillTerminate:`) 종료 신호를 돌린다 |
+| 렌더러 | Metal(Ganesh) 다음 CPU다. 렌더러 파일은 macOS 것을 그대로 쓴다 (view layer의 자식 `CAMetalLayer`, CPU는 CGImage layer 내용) |
+| 배율·글자 크기 | `traitCollection.displayScale`(2·3). 글자 크기 설정(Dynamic Type)은 본문 글꼴의 확대 표로 옮긴다 (`set_system_font_sizes`) |
+| 입력 | 손가락·Apple Pencil(압력·기울기, 한 frame 사이 표본까지)·트랙패드와 마우스(누름·hover·두 손가락 스크롤)·하드웨어 키보드. 키 이름과 단축키는 macOS 변환이다 (HID 자리 → Carbon 가상 키). 앱이 받은 키의 자동 반복은 host가 한다 |
+| 텍스트 입력 | view가 `UITextInput`이다. 문서와 IME의 연결은 Android의 그림자 문서(`ime_session`)를 그대로 쓴다 (UTF-16 index). 글을 입력하는 중의 글자 키·Backspace·Return은 글 입력 체계(한글 등 조합)에, 나머지는 앱의 키다. 텍스트 칸에 초점이 없으면 빈 입력 view로 소프트 키보드를 띄우지 않는다 |
+| popup·편집 메뉴 | 표면 위에 겹쳐 그린다. 텍스트 칸을 길게 누르면 Android와 같은 편집 메뉴다 |
+| 웹뷰 | WKWebView. Skia view의 형제 UIView로 위층·아래층에 선다 |
+| 클립보드 | UIPasteboard의 글·HTML·그림. 파일 목록 클립보드는 없다. 바뀜 알림은 내용을 읽지 않는 질문으로 짓는다 (붙여넣음 알림이 뜨지 않게) |
+| 파일 대화 상자 | 문서 선택기. 열기는 임시 폴더의 복사본, 폴더는 원본(보안 범위를 열어 둔다), 저장은 폴더를 골라 그 안의 기본 이름이다 |
+| 기기 요청 | 화면 방향(view controller의 방향 묶음), 몰입 모드(상태 표시줄·홈 표시줄 숨김), 노치 밑 그리기를 옮긴다. 볼륨 키는 받을 길이 없다 |
+| 햅틱 | `UIFeedbackGenerator` |
+| 접근성 | VoiceOver 다리가 tree와 popup의 요소를 `UIAccessibilityElement`로 세운다. 역할 표·값·알림 대조는 macOS와 같은 `accessibility_mapping` 층이다 |
+| 시스템 외양 | 밝은·어두운 모양, 대비·움직임·투명도 줄이기. 사용자가 고르는 강조색은 없다 |
+| OS 알림·HTTP·비밀 저장소·동영상 장 복사 | macOS와 같은 파일이다 (UserNotifications, NSURLSession, Keychain, AVPlayerItemVideoOutput) |
+| 파일 감시 | FSEvents가 없어 kqueue(`EVFILT_VNODE`)다. 폴더마다 이름 → 파일 번호 표를 두고 견줘 바뀜·이름 바꿈을 가른다 ([`file_watcher_ios.cpp`](../../src/ios/file_watcher_ios.cpp)) |
+| 단일 인스턴스 | 늘 첫째다 (Android와 같다) |
