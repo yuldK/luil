@@ -190,9 +190,10 @@ iOS에는 이 권한을 미리 묻거나 상태를 읽는 API가 없다. 그래�
   서비스를 찾으면 시스템이 거절한다. 멀티캐스트 권한은 필요 없다.
 - **로컬 네트워크 권한을 거절했을 때.** 모두 `cannot_connect`다 (`native_error`는 `-EHOSTUNREACH`).
   - 찾기: mDNSResponder가 `kDNSServiceErr_PolicyDenied`로 답하면 창을 기다리지 않고 "Local network access was denied (DNS-SD
-    browse)."로 답한다. 사용자가 권한 창에 답하기 전에는 답이 오지 않아 창 끝에 빈 목록으로 끝날 수 있다.
+    browse)."로 답한다. 권한 창이 떠 있는 동안 시작한 찾기는 거절을 받지 못하고 창 끝에 빈 목록(성공)으로 끝난다 — 그다음
+    찾기부터 거절이 온다. 앱이 빈 목록을 "없음"으로만 보이면 사용자가 권한을 거절한 줄 모를 수 있다.
   - `.local` 이름: 같은 거절이면 연결하지 않고 "Local network access was denied (DNS-SD lookup)."로 답한다.
-  - IP 주소: 시스템이 TCP 연결을 막아 libsmb2가 연결 실패를 돌려준다.
+  - IP 주소: 시스템이 TCP 연결을 막아 libsmb2가 연결 실패("No route to host", `EHOSTUNREACH`)를 돌려준다.
 - **끊긴 연결에서 앱이 죽지 않는다.** Apple 플랫폼은 상대가 끊은 TCP 소켓에 쓰면 SIGPIPE를 보내고, 기본 처리가 프로세스를
   끝낸다 (Android는 런타임이 이미 무시한다). libsmb2는 소켓을 제 안에서 만들고 `writev`로 쓰며 `MSG_NOSIGNAL`을 줄 자리가 없다.
   그래서 client가 libsmb2에 소켓을 맡기기 전마다(`smb2_service_fd` 앞) 그 소켓에 `SO_NOSIGPIPE`를 건다
@@ -226,7 +227,9 @@ iOS는 `ios-arm64-simulator` 구성(`LUIL_BUILD_TESTS`·`LUIL_ENABLE_SMB`를 켬
 돈다 (`xcrun simctl spawn`, 기기는 `LUIL_IOS_TEST_SIMULATOR`, 기본 `booted`). 직접 mDNS test 대신 시스템 DNS-SD로 찾고, SIGPIPE 막기
 test가 함께 든다. 프로세스의 SIGPIPE를 기본 처리로 둔 채 돌아, 끊긴 연결에 쓰는 자리가 있으면 실행 파일이 끝나 드러난다.
 사람 손으로는 시뮬레이터의 모바일 demo에서 실제 NAS 찾기, `.local` 이름으로 붙어 로그온 거절, 시험 서버의 목록·파일 읽기,
-쉬던 연결이 있는 채 서버를 SIGKILL로 끈 뒤의 요청(앱이 살아 `cannot_connect`)을 보았다.
+쉬던 연결이 있는 채 서버를 SIGKILL로 끈 뒤의 요청(앱이 살아 `cannot_connect`)을 보았다. 기기(iPad mini, 무료 개발자 계정
+서명, 멀티캐스트 권한 없음)에서는 첫 찾기의 로컬 네트워크 권한 창, 거절한 뒤의 찾기·`.local`·IP 연결이 모두 바로
+`cannot_connect`로 돌아옴, 허용한 뒤의 찾기와 실제 NAS의 공유 목록·폴더 열거·파일 읽기(다시 쓴 연결)를 보았다.
 
 **시험 서버.** [`smb_test_server.cpp`](../tests/smb_test_server.cpp)는 libsmb2의 서버 쪽 위에 메모리 안의 공유 하나를 두는
 따로 된 실행 파일이다. test가 fork·exec로 띄우고 SIGKILL로 거둔다. libsmb2의 서버 고리는 프로세스의 모든 libsmb2 문맥을
