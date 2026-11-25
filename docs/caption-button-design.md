@@ -73,6 +73,10 @@ Custom caption의 비클라이언트 hit test는 다음 우선순위를 사용�
 
 `window_style_for()`는 `minimize`가 꺼지면 `WS_MINIMIZEBOX`를, `maximize`가 꺼지면 `WS_MAXIMIZEBOX`를 제거한다. 크기 조절과 시스템 메뉴에 필요한 스타일은 유지한다.
 
+## macOS
+
+제목 막대가 시스템의 것인 창에서는 `caption_element`가 자리를 차지하지 않는다. 대신 그 설정의 앱 단추를 제목 막대 오른쪽 끝의 부속 view에 같은 글리프·tooltip·켬 상태로 세운다. 테두리 없는 창(`macos::application_config::borderless`)에서는 앱이 caption을 그리고, host가 이 문서의 판정 규칙(창 단추 → 앱 단추의 client 자리 → 끌기 띠)을 같은 `caption_layout`으로 적용한다. tree에 caption이 없으면 끌 자리가 없는 것만 다르다 ([macOS 창 정책](macos-window-design.md#3-직접-그린-caption의-끌기)).
+
 ## 제목 표시줄 안의 client 자리
 
 앱 단추는 창 버튼 바로 옆에만 선다. 브라우저·편집기형 제목 표시줄은 가운데에 검색 칸·명령 단추·뒤로/앞으로 단추를 둔다. 그 자리를 누르게 하려면 끌기 띠 위에 선 element가 "여기는 client"라고 말할 수 있어야 한다.

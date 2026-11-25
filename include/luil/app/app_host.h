@@ -566,6 +566,11 @@ namespace luil {
         //  - 최소화된 동안에는 전환을 미루고 창이 되살아난 뒤에 대조한다.
         //  - 하지 못하는 플랫폼(Android)은 받고 무시한다.
         std::optional<bool> fullscreen {};
+        // 주 창이 다른 앱의 창 위에 늘 뜨는가다 (Windows의 topmost). 빈 값이면 시작 설정을 그대로 둔다.
+        //  - 바뀐 frame에서 옮긴다. 앱 상태 하나로 싣는다 (`topmost = state_.pinned;`).
+        //  - macOS는 `NSFloatingWindowLevel`이다. 시작 값은 `macos::application_config::topmost`다.
+        //  - Win32·Android는 아직 읽지 않는다.
+        std::optional<bool> topmost {};
     };
 
     // 플랫폼이 쥐여 준 배경 작업 시간 하나다 (iOS `beginBackgroundTaskWithName:expirationHandler:`). 쥐고 있는 동안은 앱이 뒤로

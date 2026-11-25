@@ -34,8 +34,13 @@
 #include "macos/surface_capture.h"
 #include "macos/tray_icon_macos.h"
 #include "macos/webview_host.h"
+#include "macos/window_rules.h"
+#include "luil/text/fonts.h"
+#include "luil/ui/caption_element.h"
 
+#include "include/core/SkCanvas.h"
 #include "include/core/SkFont.h"
+#include "include/core/SkSurface.h"
 #include "include/core/SkTypeface.h"
 
 #import <AppKit/AppKit.h>
@@ -48,9 +53,11 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
+#include <tuple>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -66,8 +73,23 @@ namespace luil::macos {
 @property(nonatomic, assign) luil::macos::native_surface* surface;
 @end
 
-// 도킹 표면의 판이다. 테두리가 없어도 활성화를 청하면(`focus_request::activate`) 키보드를 받는다.
+// 도킹 표면과 테두리 없는 소유 보조 창의 판이다. 테두리가 없어도 활성화를 청하면(`focus_request::activate`) 키보드를 받는다.
 @interface LuilDockPanel : NSPanel
+@end
+
+// 주 창과 독립 창이다. 테두리 없는 창(`application_config::borderless`, 앱이 스스로 바꾼 `styleMask`)도 키·주 창이 된다.
+@interface LuilWindow : NSWindow
+@end
+
+// popup 하나의 판이다 (`ui_frame::popups`). 키 창·주 창이 되지 않고 눌러도 앱을 활성화하지 않는다 (Win32 `WS_EX_NOACTIVATE`).
+@interface LuilPopupPanel : NSPanel
+@end
+
+// 시스템 제목 막대에 세운 caption 앱 단추의 누름을 C++ 앱으로 넘긴다 (`caption_config::app_buttons`).
+@interface LuilTitlebarTarget : NSObject
+@property(nonatomic, assign) luil::macos::application* owner;
+@property(nonatomic, assign) luil::macos::native_surface* surface;
+- (void)press:(NSButton*)sender;
 @end
 
 // 창 내용의 그릇이다. Skia view와 웹뷰가 형제로 선다. 자식의 자리를 왼쪽 위 원점(물리 픽셀을 배율로 나눈 점)으로 적도록 뒤집는다.
@@ -210,33 +232,33 @@ namespace luil::macos {
         }
     }
 
-    // 창 위에 겹쳐 그리는 popup 하나다 (Android host와 같은 모양이다).
-    struct overlay_entry
+    // popup 판 하나의 상태다 (`ui_frame::popups`). 자리는 앵커 기준이고, 판이 선 화면 자리는 host가 정한다.
+    struct popup_state
     {
-        std::u8string id {};
-        std::shared_ptr<const ui_tree> tree {};
-        // 표면 좌표다 (물리 픽셀).
-        pixel_rect bounds {};
-        bool border { true };
-        std::function<input_action(popup_dismiss_reason)> dismiss {};
-        bool requested { false };
         std::u8string anchor {};
-        int anchor_x { 0 };
-        int anchor_y { 0 };
+        // 앵커 표면 내용 기준의 자리와 크기다 (논리 픽셀 = 점).
+        float x { 0.0f };
+        float y { 0.0f };
+        float width { 0.0f };
+        float height { 0.0f };
+        // 내용이 판보다 길면 흘린 양과 그 끝이다 (물리 픽셀).
         float scroll_y { 0.0f };
         float max_scroll_y { 0.0f };
+        popup_shape shape {};
+        bool transparent { false };
+        window_backdrop backdrop { window_backdrop::none };
+        std::function<input_action(popup_dismiss_reason)> dismiss {};
+        bool requested { false };
         std::function<app_message(const rect_f&)> placed {};
         std::optional<rect_f> reported_bounds {};
-
-        [[nodiscard]] float content_origin_y() const noexcept
-        {
-            return static_cast<float>(bounds.y) - scroll_y;
-        }
+        // 둥근 판의 테두리에 마지막으로 칠한 색이다.
+        std::optional<ui_color> border_color {};
     };
 
-    // 창 하나다. 주 창(`id`가 빈 것)과 보조 창(`ui_window::id`)이 같은 모양이다.
-    //  - 자기 view·렌더러·크기·배율, 그 창에 겹쳐 그리는 popup과 그 입력 router, 다시 그릴 표식과 다음 그림 예고를 갖는다.
-    //  - 보조 창은 frame이 실은 `ui_window`의 사본(`want`)과 그 tree를 갖는다. 주 창의 tree는 host가 준다.
+    // 창 하나다. 주 창(`id`가 빈 것)과 보조 창(`ui_window::id`), 도킹 표면, popup 판이 같은 모양이다.
+    //  - 자기 view·렌더러·크기·배율, 입력 router, 다시 그릴 표식과 다음 그림 예고를 갖는다.
+    //  - 보조 창은 frame이 실은 `ui_window`의 사본(`want`)과 그 tree를 갖는다. 주 창의 tree는 host가 준다. popup 판은 `want.tree`에
+    //    그 tree를 든다.
     struct native_surface
     {
         std::u8string id {};
@@ -250,8 +272,24 @@ namespace luil::macos {
         int width { 1 };
         int height { 1 };
         float scale { 1.0f };
-        std::vector<overlay_entry> overlays {};
+        // popup 판이면 그 상태다. 판의 입력 router는 판 하나를 흘리는 자리로만 쓴다.
+        std::optional<popup_state> popup {};
         overlay_input_router router {};
+        // 앱이 caption을 그리는 창이다 (`application_config::borderless`). caption 띠의 누름은 host가 먼저 본다.
+        bool custom_caption { false };
+        // caption 끌기 중이다. 끌기를 시작한 창 사각형과 그때의 포인터다 (화면 픽셀).
+        bool dragging { false };
+        screen_rect drag_start {};
+        screen_point drag_pressed {};
+        // 눌린 caption 창 단추다. 같은 단추 위에서 떼면 실행한다 (Win32 `caption_click_executes`).
+        caption_hit pressed_caption { caption_hit::client };
+        // 제목 막대가 없는 창의 확대다. 시스템 확대(`isZoomed`)는 제목 막대가 없는 창에서 거짓 참을 내므로 host가 직접 든다.
+        bool zoomed { false };
+        std::optional<NSRect> restore_frame {};
+        // 시스템 제목 막대에 세운 caption 앱 단추다 (`caption_config::app_buttons`). 마지막으로 세운 단추들의 모양을 견준다.
+        NSTitlebarAccessoryViewController* titlebar { nil };
+        LuilTitlebarTarget* titlebar_target { nil };
+        std::vector<std::tuple<std::u8string, char32_t, std::u8string, bool>> titlebar_buttons {};
         bool dirty { true };
         std::optional<std::chrono::steady_clock::time_point> update_deadline {};
         float reported_width { -1.0f };
@@ -261,6 +299,8 @@ namespace luil::macos {
         std::optional<window_placement> reported_placement {};
         bool pointer_over_webview { false };
         bool cursor_hidden { false };
+        // 비치는 창의 그림자를 다시 잴 때다 (크기·모양이 바뀌었다).
+        bool shadow_stale { true };
         // 배경 효과 view(창 내용 맨 아래)와 마지막으로 알린 상태다. 효과가 섰으면 바탕을 `backdrop_background`로 칠한다.
         NSVisualEffectView* effect { nil };
         bool backdrop_applied { false };
@@ -319,6 +359,9 @@ namespace luil::macos {
                 [timer_ invalidate];
             if (clipboard_timer_ != nil)
                 [clipboard_timer_ invalidate];
+            for (auto popup { popups_.rbegin() }; popup != popups_.rend(); ++popup)
+                destroy_popup(**popup);
+            popups_.clear();
             for (std::unique_ptr<native_surface>& surface : secondary_)
                 destroy_window(*surface);
             secondary_.clear();
@@ -338,7 +381,7 @@ namespace luil::macos {
                 return std::nullopt;
             const interaction_snapshot interaction { host_->acquire_interaction() };
             // 초점이 선 곳이 이 앱이 그리는 표면(창이나 그 위의 popup)이어야 한다.
-            if (interaction.focused_surface.empty() == false && find_surface(interaction.focused_surface) == nullptr && find_overlay(interaction.focused_surface) == nullptr)
+            if (interaction.focused_surface.empty() == false && find_surface(interaction.focused_surface) == nullptr && find_popup(interaction.focused_surface) == nullptr)
                 return std::nullopt;
             return environment_.policy->text_target_of(interaction.focused_input.kind);
         }
@@ -400,8 +443,13 @@ namespace luil::macos {
             }
             [main_.window makeKeyAndOrderFront:nil];
             [NSApp activateIgnoringOtherApps:YES];
+            // 저장해 둔 전체 화면은 창이 보인 뒤에야 들어갈 수 있다.
+            if (initial_fullscreen_)
+                set_fullscreen(true);
             pump();
-            // 처음 선 자리를 알린다. 앱이 저장해 둘 첫 배치다.
+            // 처음 자리를 정하는 동안(가운데 놓기, 저장 배치, 앱이 `on_native_window_created`에서 고친 창)의 이동은 알리지 않았다.
+            // 창이 보인 지금의 실제 자리를 한 번 알린다. 앱이 저장해 둘 첫 배치다.
+            placement_ready_ = true;
             report_placement(main_);
             luil_run_input_script(main_.window, main_.view);
             [NSApp run];
@@ -552,10 +600,15 @@ namespace luil::macos {
             pump();
         }
 
+        // 창 하나가 움직였다. 어느 창이든 popup 밖의 상호작용이라 닫힘 계기는 전부에게 가고, 남는 popup은 앵커를 따라 다시 선다
+        // (판은 앵커 창의 자식 창이라 함께 움직였다. 옮긴 자리를 화면 안으로 다시 다듬는다).
+        //  - caption 끌기 안에서는 배치를 알리지 않는다. 끝에 한 번 알린다 (Windows와 같다).
         void on_moved(native_surface& surface)
         {
             static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_moved));
-            report_placement(surface);
+            place_popups();
+            if (surface.dragging == false)
+                report_placement(surface);
             pump();
         }
 
@@ -581,6 +634,11 @@ namespace luil::macos {
 
         void mouse_moved(native_surface& surface, NSEvent* const event)
         {
+            if (surface.dragging)
+            {
+                drag_window(surface, event);
+                return;
+            }
             const NSPoint point { surface_point(surface, event) };
             // 웹뷰 위다. 웹뷰가 포인터를 받으므로 tree의 hover를 거두고 커서는 웹뷰에 맡긴다.
             if (surface.webviews != nullptr && surface.webviews->covers(static_cast<float>(point.x), static_cast<float>(point.y)))
@@ -609,6 +667,8 @@ namespace luil::macos {
         void mouse_button(native_surface& surface, NSEvent* const event, const pointer_button button, const bool pressed)
         {
             const NSPoint point { surface_point(surface, event) };
+            if (button == pointer_button::left && caption_mouse(surface, event, point, pressed))
+                return;
             if (pressed)
             {
                 pointer_pressed_event value {};
@@ -637,6 +697,208 @@ namespace luil::macos {
         {
             post_events(surface, { raw_input_event { pointer_left_event { {}, pointer_device::mouse } } });
             [[NSCursor arrowCursor] set];
+        }
+
+        // --- 앱이 그리는 caption (`application_config::borderless`, Win32 비클라이언트 판정의 자리) ---
+
+        // caption 띠의 왼쪽 단추 누름·뗌을 tree보다 먼저 본다. host가 맡았으면 참이고, 그 누름과 뗌은 tree에 가지 않는다.
+        //  - 창 단추는 누른 단추 위에서 떼면 그 창의 최소화·확대·닫기다 (Win32 `caption_click_executes`).
+        //  - 끌기 자리는 창 끌기다. 두 번 누르면 시스템 설정(제목 막대를 두 번 클릭할 때)의 동작이다.
+        //  - 띠를 누르는 것도 popup 밖 누름이다 (Win32 `WM_NCLBUTTONDOWN`).
+        //  - 포인터 이동은 그대로 tree에 가므로 창 단추의 hover와 tooltip은 tree가 그린다.
+        bool caption_mouse(native_surface& surface, NSEvent* const event, const NSPoint point, const bool pressed)
+        {
+            if (surface.custom_caption == false || host_ == nullptr || surface.window == nil)
+                return false;
+            if (pressed == false)
+            {
+                if (surface.dragging)
+                {
+                    surface.dragging = false;
+                    report_placement(surface);
+                    pump();
+                    return true;
+                }
+                if (surface.pressed_caption == caption_hit::client)
+                    return false;
+                const caption_hit pressed_hit { std::exchange(surface.pressed_caption, caption_hit::client) };
+                if (caption_hit_at(surface, point) == pressed_hit)
+                    execute_caption_button(surface, pressed_hit);
+                pump();
+                return true;
+            }
+            const caption_hit hit { caption_hit_at(surface, point) };
+            if (hit == caption_hit::client)
+                return false;
+            static_cast<void>(dismiss_popups(popup_dismiss_reason::pointer_press_outside));
+            commit_composition();
+            if (hit != caption_hit::drag)
+            {
+                surface.pressed_caption = hit;
+                pump();
+                return true;
+            }
+            if ([event clickCount] >= 2)
+            {
+                switch (title_double_click_action())
+                {
+                case title_double_click::zoom:
+                    toggle_zoom(surface);
+                    break;
+                case title_double_click::minimize:
+                    [surface.window miniaturize:nil];
+                    break;
+                case title_double_click::none:
+                    break;
+                }
+                pump();
+                return true;
+            }
+            surface.dragging = true;
+            surface.drag_start = window_bounds(surface.window.frame);
+            surface.drag_pressed = event_screen_pixels(event);
+            return true;
+        }
+
+        // caption 끌기 한 걸음이다. 주 창이면 앱이 갈 자리를 고친다 (`win32::window_delegate::on_window_moving`).
+        void drag_window(native_surface& surface, NSEvent* const event)
+        {
+            const screen_point pointer { event_screen_pixels(event) };
+            // 확대된 창을 끌어 옮기기 시작하면 돌아갈 크기로 돌아와 포인터 밑에 선다. 잡은 자리의 가로 비율을 지킨다 (Windows와 같다).
+            //  - 누르기만 하고 움직이지 않은 것(두 번 누르기의 첫 누름)은 끌기가 아니다. 시스템 끌기 문턱만큼 움직인 뒤에 돌린다.
+            if (surface.zoomed && surface.restore_frame.has_value() && has_title_bar(surface.window) == false)
+            {
+                const CGFloat threshold { 3.0 * primary_scale() };
+                if (std::abs(pointer.x - surface.drag_pressed.x) < threshold && std::abs(pointer.y - surface.drag_pressed.y) < threshold)
+                    return;
+                const screen_rect zoomed { surface.drag_start };
+                const NSRect restore { *surface.restore_frame };
+                const double ratio { zoomed.width() > 0 ? static_cast<double>(surface.drag_pressed.x - zoomed.left) / zoomed.width() : 0.5 };
+                const CGFloat scale { primary_scale() };
+                const NSPoint top_left { from_screen_pixels(surface.drag_pressed.x - static_cast<int>(std::lround(ratio * restore.size.width * scale)), zoomed.top) };
+                surface.zoomed = false;
+                [surface.window setFrame:NSMakeRect(top_left.x, top_left.y - restore.size.height, restore.size.width, restore.size.height) display:YES];
+                surface.drag_start = window_bounds(surface.window.frame);
+            }
+            screen_rect bounds { dragged_window_bounds(surface.drag_start, surface.drag_pressed, pointer) };
+            if (surface.main() && window_delegate_ != nullptr && host_ != nullptr)
+            {
+                screen_rect adjusted { bounds };
+                try
+                {
+                    window_delegate_->on_window_moving(*host_, adjusted);
+                }
+                catch (...)
+                {
+                    log_error(u8"The window moving delegate threw an exception.");
+                }
+                bounds = moving_bounds_kept_size(bounds, adjusted);
+            }
+            const NSPoint top_left { from_screen_pixels(bounds.left, bounds.top) };
+            [surface.window setFrameOrigin:NSMakePoint(top_left.x, top_left.y - surface.window.frame.size.height)];
+        }
+
+        [[nodiscard]] caption_hit caption_hit_at(const native_surface& surface, const NSPoint point) const
+        {
+            return custom_caption_hit(surface_tree(surface), static_cast<float>(point.x), static_cast<float>(point.y), surface.width, surface.scale);
+        }
+
+        void execute_caption_button(native_surface& surface, const caption_hit hit)
+        {
+            switch (hit)
+            {
+            case caption_hit::minimize:
+                [surface.window miniaturize:nil];
+                break;
+            case caption_hit::maximize:
+                toggle_zoom(surface);
+                break;
+            case caption_hit::close:
+                request_window_close(surface);
+                break;
+            default:
+                break;
+            }
+        }
+
+        // 사용자 기본값의 "제목 막대를 두 번 클릭할 때"다. 옛 설정(`AppleMiniaturizeOnDoubleClick`)만 있는 계정은 그것을 따른다.
+        [[nodiscard]] static title_double_click title_double_click_action()
+        {
+            NSUserDefaults* const defaults { [NSUserDefaults standardUserDefaults] };
+            if (NSString* const action { [defaults stringForKey:@"AppleActionOnDoubleClick"] }; action != nil)
+                return parse_title_double_click(from_ns_string(action));
+            return [defaults boolForKey:@"AppleMiniaturizeOnDoubleClick"] ? title_double_click::minimize : title_double_click::zoom;
+        }
+
+        // 포인터 사건이 난 화면 자리다 (화면 픽셀). 끌기가 창을 옮기는 동안에도 창 좌표가 아니라 화면에서 읽는다.
+        [[nodiscard]] static screen_point event_screen_pixels(NSEvent* const event)
+        {
+            if (CGEventRef const value { event.CGEvent }; value != nullptr)
+            {
+                // CoreGraphics의 전역 좌표는 주 화면 왼쪽 위 원점의 점이다 (이 파일의 화면 좌표 약속과 원점이 같다).
+                const CGPoint location { CGEventGetLocation(value) };
+                const CGFloat scale { primary_scale() };
+                return { static_cast<int>(std::lround(location.x * scale)), static_cast<int>(std::lround(location.y * scale)) };
+            }
+            return to_screen_pixels([NSEvent mouseLocation]);
+        }
+
+        // 창 바깥 사각형이다 (화면 픽셀).
+        [[nodiscard]] static screen_rect window_bounds(const NSRect frame)
+        {
+            const screen_point top_left { to_screen_pixels(NSMakePoint(NSMinX(frame), NSMaxY(frame))) };
+            const screen_point bottom_right { to_screen_pixels(NSMakePoint(NSMaxX(frame), NSMinY(frame))) };
+            return { top_left.x, top_left.y, bottom_right.x, bottom_right.y };
+        }
+
+        [[nodiscard]] static bool has_title_bar(NSWindow* const window)
+        {
+            return window != nil && (window.styleMask & NSWindowStyleMaskTitled) != 0;
+        }
+
+        // 창이 확대돼 있는가다. 제목 막대가 없는 창은 host가 든 값이다 — `isZoomed`는 제목 막대가 없는 창(앱이 `styleMask`를 바꾼 창,
+        // 높이가 작은 창 포함)에서 참을 돌려준다.
+        [[nodiscard]] static bool is_zoomed(const native_surface& surface)
+        {
+            if (surface.window == nil)
+                return false;
+            return has_title_bar(surface.window) ? surface.window.zoomed == YES : surface.zoomed;
+        }
+
+        void toggle_zoom(native_surface& surface)
+        {
+            set_zoomed(surface, is_zoomed(surface) == false);
+        }
+
+        // 창을 확대하거나 돌린다. 제목 막대가 있으면 시스템 확대(`zoom:`)이고, 없으면 그 화면의 보이는 영역을 채우고 돌아갈 자리를 든다.
+        void set_zoomed(native_surface& surface, const bool zoom)
+        {
+            NSWindow* const window { surface.window };
+            if (window == nil || is_zoomed(surface) == zoom)
+                return;
+            if (has_title_bar(window))
+            {
+                [window zoom:nil];
+                return;
+            }
+            if (zoom)
+            {
+                if (surface.main())
+                    normal_placement_ = placement_of(surface);
+                surface.restore_frame = window.frame;
+                NSScreen* const screen { window.screen != nil ? window.screen : screen_for(window.frame) };
+                surface.zoomed = true;
+                if (screen != nil)
+                    [window setFrame:screen.visibleFrame display:YES];
+            }
+            else
+            {
+                surface.zoomed = false;
+                if (surface.restore_frame.has_value())
+                    [window setFrame:*surface.restore_frame display:YES];
+            }
+            surface.dirty = true;
+            report_placement(surface);
         }
 
         void scroll_wheel(native_surface& surface, NSEvent* const event)
@@ -861,7 +1123,7 @@ namespace luil::macos {
         // 창 내용의 합성을 PNG로 적는다 (개발용, 입력 대본의 `snapshot`). 아래층 웹뷰 → Skia frame → 위층 웹뷰의 차례다.
         void snapshot_composite(native_surface& surface, NSString* const path)
         {
-            if (surface.webviews == nullptr || path == nil)
+            if (path == nil)
                 return;
             // 바탕은 Skia가 그린 frame이다. Metal은 GPU에서 되읽어야 하므로 한 frame을 되읽기로 다시 그린다.
             if (surface.renderer != nullptr && host_ != nullptr)
@@ -876,7 +1138,7 @@ namespace luil::macos {
             const int width { surface.width };
             const int height { surface.height };
             NSString* const target { [path copy] };
-            surface.webviews->snapshot([frame, width, height, target](std::vector<webview_host::snapshot_layer> layers) {
+            const auto compose = [frame, width, height, target](std::vector<webview_host::snapshot_layer> layers) {
                 CGColorSpaceRef const space { CGColorSpaceCreateWithName(kCGColorSpaceSRGB) };
                 CGContextRef const context { CGBitmapContextCreate(nullptr, static_cast<std::size_t>(width), static_cast<std::size_t>(height), 8, 0, space,
                     static_cast<CGBitmapInfo>(kCGImageAlphaPremultipliedFirst) | static_cast<CGBitmapInfo>(kCGBitmapByteOrder32Little)) };
@@ -907,20 +1169,30 @@ namespace luil::macos {
                     if (layer.image != nullptr)
                         CGImageRelease(static_cast<CGImageRef>(layer.image));
                 CGImageRelease(frame);
-            });
+            };
+            // 웹뷰가 없는 표면(popup 판)은 Skia frame만이다.
+            if (surface.webviews != nullptr)
+                surface.webviews->snapshot(compose);
+            else
+                compose({});
         }
 
         // 창 id의 Skia view다 (개발용, 입력 대본의 `window <id>`). 없으면 nil이다.
         [[nodiscard]] NSView* view_of(const std::u8string& id)
         {
-            native_surface* const surface { find_surface(id) };
+            native_surface* surface { find_surface(id) };
+            if (surface == nullptr)
+                surface = find_popup(id);
             return surface != nullptr ? surface->view : nil;
         }
 
-        // 보조 창 하나의 Skia frame을 PNG로 적는다 (개발용, 입력 대본의 `snapshot <png> <창 id>`).
+        // 보조 창이나 popup 판 하나의 Skia frame을 PNG로 적는다 (개발용, 입력 대본의 `snapshot <png> <창 id>`).
         void snapshot_surface(const std::u8string& id, NSString* const path)
         {
-            if (native_surface* const surface { find_surface(id) }; surface != nullptr)
+            native_surface* surface { find_surface(id) };
+            if (surface == nullptr)
+                surface = find_popup(id);
+            if (surface != nullptr)
                 snapshot_composite(*surface, path);
         }
 
@@ -947,7 +1219,7 @@ namespace luil::macos {
         // --- OS 끌어 놓기 (os-dragdrop-design.md의 macOS 갈래) ---
         //  - 끄는 동안의 들어옴·움직임·떠남은 표시(수락 대상 강조)만 세운다. 답(받음·안 받음)과 놓기의 실행은 그 창의 tree에
         //    직접 묻는다 (Win32와 같다).
-        //  - popup 위는 받지 않는다 (Win32의 popup은 drop을 등록하지 않는다).
+        //  - popup 판은 끌기를 받지 않는다 (Win32의 popup은 drop을 등록하지 않는다).
 
         // 끌기가 창에 들어왔다. 받을 수 있는 자리면 참이다.
         bool drag_entered(native_surface& surface, const NSPoint point, std::vector<std::u8string> files, std::vector<std::u8string> formats)
@@ -989,9 +1261,8 @@ namespace luil::macos {
             drag_payload payload { drag_payload_ };
             const float x { static_cast<float>(point.x) };
             const float y { static_cast<float>(point.y) };
-            const bool over_popup { overlay_at(surface, x, y) };
             const std::shared_ptr<const ui_tree> held { surface.main() && host_ != nullptr ? host_->acquire_ui_tree() : nullptr };
-            const ui_tree* const tree { over_popup ? nullptr : surface.main() ? held.get() : surface.want.tree.get() };
+            const ui_tree* const tree { surface.main() ? held.get() : surface.want.tree.get() };
             const drop_hit_result hit { tree != nullptr ? tree->drop_hit_test(x, y, payload) : drop_hit_result {} };
             const ui_element* const over { hit.target };
             if (over != nullptr && over->drop()->on_drop)
@@ -1010,8 +1281,8 @@ namespace luil::macos {
                 return true;
             }
             drag_left(surface);
-            // popup이나 불투명 표면(modal·메뉴·토스트)이 가렸거나, 파일 없는 끌기면 아무도 받지 않았다.
-            if (over_popup || hit.blocked || payload.files.empty())
+            // 불투명 표면(modal·메뉴·토스트)이 가렸거나, 파일 없는 끌기면 아무도 받지 않았다. popup 판은 끌기를 받지 않는다.
+            if (hit.blocked || payload.files.empty())
                 return false;
             // 수락 element가 없으면 창 전체의 물러섬이다 (`win32::window_delegate::on_file_dropped`, 경로 순서대로).
             if (host_ != nullptr && window_delegate_ != nullptr)
@@ -1107,10 +1378,10 @@ namespace luil::macos {
                 return false;
             }
             refresh_user_ui_language();
-            // 데스크톱이다. 창의 제목 막대는 시스템의 것이라 앱이 caption을 그리지 않는다.
+            // 데스크톱이다. 창의 제목 막대는 시스템의 것이라 앱이 caption을 그리지 않는다. 테두리 없는 창이면 앱이 그린다.
             set_ui_platform({
                 .form_factor = ui_form_factor::desktop,
-                .window_caption = false,
+                .window_caption = config_.borderless,
                 .rounded_popup_corners = true,
                 .command_key_shortcuts = true,
                 .capabilities = {
@@ -1126,14 +1397,14 @@ namespace luil::macos {
             window_delegate_ = dynamic_cast<win32::window_delegate*>(environment_.delegate);
 
             [NSApplication sharedApplication];
-            [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
+            [NSApp setActivationPolicy:activation_policy_for(config_.activation)];
             application_delegate_ = [LuilApplicationDelegate new];
             application_delegate_.owner = this;
             [NSApp setDelegate:application_delegate_];
             install_menu();
             main_.id.clear();
             create_window(main_, NSMakeSize(config_.initial_width, config_.initial_height), NSMakeSize(config_.minimum_width, config_.minimum_height), make_ns_string(config_.title), false);
-            [main_.window center];
+            place_main_window();
             refresh_appearance();
 
             wake_->target = this;
@@ -1281,10 +1552,14 @@ namespace luil::macos {
         // 창 하나와 그 view를 세운다 (자리는 부르는 쪽이 정한다).
         //  - 주 창과 독립 창은 보통 창이다. 소유된 보조 창은 떠 있는 판(`NSPanel`)이라 주 창 위에 서고, 앱이 뒤로 가면 함께 숨는다.
         //  - 도킹 표면은 테두리 없이 활성화되지 않는 판이다. 언제나 위에 뜨고 모든 데스크톱 공간에 함께 선다.
+        //  - `borderless`면 주 창·보조 창에 제목 막대가 없고 앱이 caption을 그린다. 가장자리 크기 조절과 최소화는 남는다.
         void create_window(native_surface& surface, const NSSize content, const NSSize minimum, NSString* const title, const bool panel)
         {
             const NSRect frame { NSMakeRect(0, 0, content.width, content.height) };
-            NSWindowStyleMask style { NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable };
+            const bool borderless { config_.borderless && surface.docked == false };
+            surface.custom_caption = borderless;
+            NSWindowStyleMask style { borderless ? NSWindowStyleMaskBorderless | NSWindowStyleMaskResizable
+                                                 : NSWindowStyleMaskTitled | NSWindowStyleMaskClosable | NSWindowStyleMaskResizable };
             if (panel == false)
                 style |= NSWindowStyleMaskMiniaturizable;
             if (surface.docked)
@@ -1303,14 +1578,18 @@ namespace luil::macos {
             }
             else if (panel)
             {
-                NSPanel* const window { [[NSPanel alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO] };
+                // 테두리 없는 판은 키 창이 되게 한다 (기본 `NSPanel`은 제목 막대가 없으면 키 창이 되지 않는다).
+                NSPanel* const window { borderless ? [[LuilDockPanel alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO]
+                                                   : [[NSPanel alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO] };
                 window.floatingPanel = YES;
+                // 주 창이 늘 위에 뜨면 소유된 판은 그 위의 층이다.
+                window.level = owned_panel_level();
                 window.becomesKeyOnlyIfNeeded = NO;
                 window.hidesOnDeactivate = YES;
                 surface.window = window;
             }
             else
-                surface.window = [[NSWindow alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO];
+                surface.window = [[LuilWindow alloc] initWithContentRect:frame styleMask:style backing:NSBackingStoreBuffered defer:NO];
             NSWindow* const window { surface.window };
             window.releasedWhenClosed = NO;
             window.title = title ?: @"luil";
@@ -1321,12 +1600,25 @@ namespace luil::macos {
             surface.delegate.owner = this;
             surface.delegate.surface = &surface;
             window.delegate = surface.delegate;
+            install_content(surface, frame);
+            if (surface.main())
+                apply_main_look(surface);
+            // OS 끌어 놓기다. 파일 경로와, 파일 없이 형식만 실린 끌기(주소·글·그림)를 받는다.
+            if (config_.accept_file_drop)
+                [surface.view registerForDraggedTypes:@[ NSPasteboardTypeFileURL, NSPasteboardTypeURL, NSPasteboardTypeString, NSPasteboardTypePNG, NSPasteboardTypeTIFF ]];
+            read_surface_size(surface);
+        }
 
-            // 창 내용은 그릇 view 하나이고, 그 안에 Skia view와 웹뷰들이 형제로 선다 (macos/webview_host.h).
-            //  - Skia view는 불투명하지 않다. 아래층 웹뷰의 구멍(알파 0)으로 그 아래가 보인다.
+        // 창 내용을 세운다: 그릇 view 하나와 그 안의 Skia view, 포인터 추적, 접근성 다리다 (창과 popup 판이 같다).
+        //  - 그릇 안에 Skia view와 웹뷰들이 형제로 선다 (macos/webview_host.h). Skia view는 불투명하지 않다. 아래층 웹뷰의 구멍(알파 0)으로
+        //    그 아래가 보인다.
+        //  - 포인터 이동·들어옴·나감은 `inactive_hover`면 앱이 앞에 있지 않아도 온다 (Windows처럼 보이는 창이면 hover를 받는다).
+        void install_content(native_surface& surface, const NSRect frame)
+        {
+            NSWindow* const window { surface.window };
             surface.container = [[LuilContainerView alloc] initWithFrame:frame];
             surface.container.wantsLayer = YES;
-            surface.container.layer.backgroundColor = [NSColor windowBackgroundColor].CGColor;
+            surface.container.layer.backgroundColor = content_background(surface);
             surface.view = [[LuilView alloc] initWithFrame:surface.container.bounds];
             surface.view.owner = this;
             surface.view.surface = &surface;
@@ -1337,16 +1629,261 @@ namespace luil::macos {
             [surface.container addSubview:surface.view];
             window.contentView = surface.container;
             [window makeFirstResponder:surface.view];
+            const NSTrackingAreaOptions active { config_.inactive_hover ? NSTrackingActiveAlways : NSTrackingActiveInActiveApp };
             NSTrackingArea* const tracking { [[NSTrackingArea alloc] initWithRect:NSZeroRect
-                                                                          options:NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | NSTrackingActiveInActiveApp | NSTrackingInVisibleRect
+                                                                          options:NSTrackingMouseMoved | NSTrackingMouseEnteredAndExited | active | NSTrackingInVisibleRect
                                                                             owner:surface.view
                                                                          userInfo:nil] };
             [surface.view addTrackingArea:tracking];
             create_accessibility(surface);
-            // OS 끌어 놓기다. 파일 경로와, 파일 없이 형식만 실린 끌기(주소·글·그림)를 받는다.
-            if (config_.accept_file_drop)
-                [surface.view registerForDraggedTypes:@[ NSPasteboardTypeFileURL, NSPasteboardTypeURL, NSPasteboardTypeString, NSPasteboardTypePNG, NSPasteboardTypeTIFF ]];
-            read_surface_size(surface);
+        }
+
+        // 주 창의 모양과 층이다: 비치는 바탕·둥근 모서리, 늘 위, 모든 공간.
+        void apply_main_look(native_surface& surface)
+        {
+            NSWindow* const window { surface.window };
+            if (main_translucent())
+            {
+                window.opaque = NO;
+                window.backgroundColor = [NSColor clearColor];
+                window.hasShadow = YES;
+                if (config_.corner_radius > 0.0f)
+                {
+                    surface.container.layer.cornerRadius = config_.corner_radius;
+                    surface.container.layer.masksToBounds = YES;
+                    if (@available(macOS 11.0, *))
+                        surface.container.layer.cornerCurve = kCACornerCurveContinuous;
+                }
+                // 알파 0인 자리의 누름도 이 창이 받는다 (Windows의 알파 1 올림과 같은 뜻). 정하지 않으면 시스템이 그 누름을 뒤 창으로 보낸다.
+                if (config_.presentation == win32::window_presentation::layered && config_.layered_click_through == false)
+                    window.ignoresMouseEvents = NO;
+            }
+            applied_topmost_ = config_.topmost;
+            window.level = config_.topmost ? NSFloatingWindowLevel : NSNormalWindowLevel;
+            if (config_.all_spaces)
+                window.collectionBehavior = window.collectionBehavior | NSWindowCollectionBehaviorCanJoinAllSpaces | NSWindowCollectionBehaviorFullScreenAuxiliary;
+        }
+
+        // 소유된 보조 창의 층이다. 주 창보다 늘 위다.
+        [[nodiscard]] NSWindowLevel owned_panel_level() const noexcept
+        {
+            return applied_topmost_.value_or(config_.topmost) ? NSFloatingWindowLevel + 1 : NSFloatingWindowLevel;
+        }
+
+        // 앱이 frame에 실은 주 창의 층을 옮긴다 (`ui_frame::topmost`). 빈 값이면 그대로다.
+        void apply_topmost(const ui_frame* const frame)
+        {
+            if (frame == nullptr || frame->topmost.has_value() == false || frame->topmost == applied_topmost_ || main_.window == nil)
+                return;
+            applied_topmost_ = frame->topmost;
+            main_.window.level = *frame->topmost ? NSFloatingWindowLevel : NSNormalWindowLevel;
+            for (std::unique_ptr<native_surface>& surface : secondary_)
+                if (surface->docked == false && surface->want.independent == false)
+                    surface->window.level = owned_panel_level();
+        }
+
+        [[nodiscard]] static NSApplicationActivationPolicy activation_policy_for(const activation_policy policy)
+        {
+            switch (policy)
+            {
+            case activation_policy::regular:
+                return NSApplicationActivationPolicyRegular;
+            case activation_policy::accessory:
+                return NSApplicationActivationPolicyAccessory;
+            case activation_policy::automatic:
+                break;
+            }
+            id const element { [[NSBundle mainBundle] objectForInfoDictionaryKey:@"LSUIElement"] };
+            const bool agent { [element respondsToSelector:@selector(boolValue)] && [element boolValue] };
+            return agent ? NSApplicationActivationPolicyAccessory : NSApplicationActivationPolicyRegular;
+        }
+
+        // 주 창의 처음 자리다. 저장 배치(`initial_placement`) → 왼쪽 위 자리(`initial_position`) → 주 화면 가운데의 차례다.
+        //  - 저장 배치는 Windows와 같은 규칙으로 거른다 (`accepted_initial_placement`). 확대·전체 화면이었으면 그 상태로 선다.
+        void place_main_window()
+        {
+            NSWindow* const window { main_.window };
+            const CGFloat scale { primary_scale() };
+            if (config_.initial_placement.has_value())
+            {
+                const std::vector<display_info> displays { current_displays() };
+                const int minimum_width { static_cast<int>(std::lround(config_.minimum_width * scale)) };
+                const int minimum_height { static_cast<int>(std::lround(config_.minimum_height * scale)) };
+                if (const std::optional<window_placement> placement { accepted_initial_placement(*config_.initial_placement, minimum_width, minimum_height, displays) };
+                    placement.has_value())
+                {
+                    const NSSize size { placement->width / scale, placement->height / scale };
+                    const NSPoint top_left { from_screen_pixels(placement->x, placement->y) };
+                    [window setFrame:[window frameRectForContentRect:NSMakeRect(top_left.x, top_left.y - size.height, size.width, size.height)] display:NO];
+                    normal_placement_ = content_placement_of(window.frame, window);
+                    if (placement->maximized)
+                        set_zoomed(main_, true);
+                    initial_fullscreen_ = placement->fullscreen;
+                    zoomed_before_fullscreen_ = placement->maximized;
+                    return;
+                }
+            }
+            if (config_.initial_position.has_value())
+            {
+                NSRect frame { window.frame };
+                const NSPoint top_left { from_screen_pixels(config_.initial_position->x, config_.initial_position->y) };
+                frame.origin = NSMakePoint(top_left.x, top_left.y - frame.size.height);
+                // 화면 밖으로 나가지 않게 그 화면의 보이는 자리 안으로 민다 (보조 창의 처음 자리와 같은 규칙).
+                if (NSScreen* const screen { screen_for(frame) }; screen != nil)
+                {
+                    const NSRect visible { screen.visibleFrame };
+                    frame.origin.x = std::clamp(frame.origin.x, NSMinX(visible), std::max(NSMinX(visible), NSMaxX(visible) - frame.size.width));
+                    frame.origin.y = std::clamp(frame.origin.y, NSMinY(visible), std::max(NSMinY(visible), NSMaxY(visible) - frame.size.height));
+                }
+                [window setFrame:frame display:NO];
+                return;
+            }
+            [window center];
+        }
+
+        // --- 시스템 제목 막대의 caption 앱 단추 (`caption_config::app_buttons`) ---
+        //  - 제목 막대가 있는 창이면 tree의 `caption_element`는 자리를 차지하지 않는다. 그 설정의 앱 단추를 제목 막대 오른쪽 끝의 부속 view
+        //    (`NSTitlebarAccessoryViewController`)에 같은 글리프·tooltip·접근성 이름·켬 상태로 세운다. 누르면 그 단추의 액션을 낸다.
+        //  - 게시된 tree를 frame마다 읽는다. 단추를 더하거나 빼거나 끄는 것이 다음 frame부터 그대로 선다 (Win32의 판정과 같다).
+
+        void update_titlebars()
+        {
+            update_titlebar(main_);
+            for (std::unique_ptr<native_surface>& surface : secondary_)
+                if (surface->docked == false)
+                    update_titlebar(*surface);
+        }
+
+        void update_titlebar(native_surface& surface)
+        {
+            NSWindow* const window { surface.window };
+            if (window == nil || surface.custom_caption || has_title_bar(window) == false)
+                return;
+            const ui_tree* const tree { surface_tree(surface) };
+            const auto* const caption { tree != nullptr ? dynamic_cast<const caption_element*>(tree->find(ui_element_id { ui_element_kind::caption })) : nullptr };
+            std::vector<std::tuple<std::u8string, char32_t, std::u8string, bool>> wanted {};
+            if (caption != nullptr)
+                for (const caption_app_button& button : caption->config().app_buttons)
+                    if (button.action != nullptr)
+                        wanted.emplace_back(button.key, button.glyph, button.tooltip, button.enabled);
+            if (wanted == surface.titlebar_buttons)
+                return;
+            surface.titlebar_buttons = wanted;
+            if (surface.titlebar != nil)
+            {
+                if (const NSUInteger index { [window.titlebarAccessoryViewControllers indexOfObject:surface.titlebar] }; index != NSNotFound)
+                    [window removeTitlebarAccessoryViewControllerAtIndex:static_cast<NSInteger>(index)];
+                surface.titlebar = nil;
+            }
+            if (wanted.empty())
+                return;
+            if (surface.titlebar_target == nil)
+            {
+                surface.titlebar_target = [LuilTitlebarTarget new];
+                surface.titlebar_target.owner = this;
+                surface.titlebar_target.surface = &surface;
+            }
+            const CGFloat icon { caption != nullptr ? static_cast<CGFloat>(caption->config().metrics.button_icon_size) : 14.0 };
+            const CGFloat button_width { 28.0 };
+            const CGFloat button_height { 22.0 };
+            NSView* const row { [[NSView alloc] initWithFrame:NSMakeRect(0, 0, button_width * static_cast<CGFloat>(wanted.size()) + 6.0, button_height)] };
+            CGFloat x { 0.0 };
+            for (const auto& [key, glyph, tooltip, enabled] : wanted)
+            {
+                NSButton* const button { [NSButton buttonWithImage:glyph_image(glyph, icon) target:surface.titlebar_target action:@selector(press:)] };
+                button.frame = NSMakeRect(x, 0, button_width, button_height);
+                button.bordered = NO;
+                button.imagePosition = NSImageOnly;
+                button.identifier = make_ns_string(key);
+                button.toolTip = make_ns_string(tooltip);
+                // 보조 기술이 읽는 요소는 단추의 셀이다. 글리프뿐인 단추라 이름은 tooltip이다 (`caption_app_button::tooltip`).
+                button.accessibilityLabel = make_ns_string(tooltip);
+                button.cell.accessibilityLabel = make_ns_string(tooltip);
+                button.enabled = enabled ? YES : NO;
+                [row addSubview:button];
+                x += button_width;
+            }
+            NSTitlebarAccessoryViewController* const controller { [NSTitlebarAccessoryViewController new] };
+            controller.view = row;
+            controller.layoutAttribute = NSLayoutAttributeRight;
+            [window addTitlebarAccessoryViewController:controller];
+            surface.titlebar = controller;
+        }
+
+    public:
+        // 제목 막대의 앱 단추를 눌렀다. 지금 게시된 tree의 같은 key 단추의 액션을 낸다 (그 단추를 tree에서 누른 것과 같다).
+        void titlebar_pressed(native_surface& surface, const std::u8string& key)
+        {
+            const ui_tree* const tree { surface_tree(surface) };
+            const auto* const caption { tree != nullptr ? dynamic_cast<const caption_element*>(tree->find(ui_element_id { ui_element_kind::caption })) : nullptr };
+            if (caption == nullptr)
+                return;
+            for (const caption_app_button& button : caption->config().app_buttons)
+            {
+                if (button.key != key || button.action == nullptr || button.enabled == false)
+                    continue;
+                try
+                {
+                    for (input_action& action : button.action(ui_action_context { ui_element_id { ui_element_kind::caption_app_button, key } }))
+                        dispatch(std::move(action));
+                }
+                catch (...)
+                {
+                    log_error(u8"A caption app button action threw an exception.");
+                }
+                break;
+            }
+            pump();
+        }
+
+    private:
+        // codicon 글리프 하나의 그림이다. 제목 막대 단추가 시스템 색으로 칠하도록 틀 그림(template)이다. 글리프마다 한 번 짓는다.
+        [[nodiscard]] NSImage* glyph_image(const char32_t glyph, const CGFloat size)
+        {
+            const std::pair<char32_t, int> key { glyph, static_cast<int>(std::lround(size)) };
+            if (const auto found { glyph_images_.find(key) }; found != glyph_images_.end())
+                return found->second;
+            if (codicon_ == nullptr)
+                codicon_ = load_codicon_typeface();
+            // 레티나 화면에서도 또렷하게 두 배로 그린다.
+            const int pixels { std::max(1, static_cast<int>(std::ceil(size * 2.0))) };
+            sk_sp<SkSurface> raster { SkSurfaces::Raster(SkImageInfo::MakeN32Premul(pixels, pixels)) };
+            NSImage* image { [[NSImage alloc] initWithSize:NSMakeSize(size, size)] };
+            if (raster != nullptr && codicon_ != nullptr)
+            {
+                SkCanvas* const canvas { raster->getCanvas() };
+                canvas->clear(SK_ColorTRANSPARENT);
+                const SkFont font { codicon_, static_cast<SkScalar>(pixels) };
+                const std::uint32_t text { static_cast<std::uint32_t>(glyph) };
+                SkRect bounds {};
+                font.measureText(&text, sizeof(text), SkTextEncoding::kUTF32, &bounds);
+                SkPaint paint {};
+                paint.setColor(SK_ColorBLACK);
+                paint.setAntiAlias(true);
+                canvas->drawSimpleText(&text, sizeof(text), SkTextEncoding::kUTF32, (pixels - bounds.width()) / 2.0f - bounds.left(),
+                    (pixels - bounds.height()) / 2.0f - bounds.top(), font, paint);
+                SkPixmap pixmap {};
+                if (raster->peekPixels(&pixmap))
+                {
+                    CGColorSpaceRef const space { CGColorSpaceCreateWithName(kCGColorSpaceSRGB) };
+                    CGContextRef const context { CGBitmapContextCreate(pixmap.writable_addr(), static_cast<std::size_t>(pixels), static_cast<std::size_t>(pixels), 8, pixmap.rowBytes(),
+                        space, static_cast<CGBitmapInfo>(kCGImageAlphaPremultipliedFirst) | static_cast<CGBitmapInfo>(kCGBitmapByteOrder32Little)) };
+                    CGColorSpaceRelease(space);
+                    if (context != nullptr)
+                    {
+                        if (CGImageRef const picture { CGBitmapContextCreateImage(context) }; picture != nullptr)
+                        {
+                            image = [[NSImage alloc] initWithCGImage:picture size:NSMakeSize(size, size)];
+                            CGImageRelease(picture);
+                        }
+                        CGContextRelease(context);
+                    }
+                }
+            }
+            // `template`는 C++의 낱말이라 속성 대신 설정 메서드를 부른다.
+            [image setTemplate:YES];
+            glyph_images_.emplace(key, image);
+            return image;
         }
 
         void create_renderer(native_surface& surface)
@@ -1407,7 +1944,7 @@ namespace luil::macos {
             if (surface.width != previous_width || surface.height != previous_height)
             {
                 static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_resized));
-                place_overlays(surface);
+                place_popups();
             }
             if (surface.renderer != nullptr)
             {
@@ -1457,13 +1994,12 @@ namespace luil::macos {
 
         // 창 내용의 지금 자리다. x·y는 창 내용의 왼쪽 위, 크기는 내용의 픽셀이다. 둘 다 이 파일 첫머리의 화면 좌표 약속(주 화면
         // 배율)을 따른다.
-        [[nodiscard]] static window_placement content_placement(NSWindow* const window)
+        //  - 확대 여부는 `is_zoomed`다. 제목 막대가 없는 창은 앱이 확대한 때만 참이다 (`isZoomed`는 그런 창에서 거짓 참을 낸다).
+        [[nodiscard]] static window_placement placement_of(const native_surface& surface)
         {
-            const NSRect content { [window contentRectForFrameRect:window.frame] };
-            const screen_point top_left { to_screen_pixels(NSMakePoint(NSMinX(content), NSMaxY(content))) };
-            const CGFloat scale { primary_scale() };
-            return { top_left.x, top_left.y, static_cast<int>(std::lround(content.size.width * scale)), static_cast<int>(std::lround(content.size.height * scale)),
-                window.zoomed == YES, false };
+            window_placement placement { content_placement_of(surface.window.frame, surface.window) };
+            placement.maximized = is_zoomed(surface);
+            return placement;
         }
 
         // 창의 자리를 앱에 알린다. 같은 값이면 다시 알리지 않는다.
@@ -1473,12 +2009,13 @@ namespace luil::macos {
         //  - 전체 화면으로 드나드는 동안의 크기 변화는 알리지 않는다. 다 들어가고 나온 뒤에 한 번 알린다.
         void report_placement(native_surface& surface)
         {
-            if (host_ == nullptr || surface.window == nil || surface.window.miniaturized)
+            if (host_ == nullptr || surface.window == nil || surface.window.miniaturized || surface.popup.has_value())
                 return;
-            window_placement placement { content_placement(surface.window) };
+            window_placement placement { placement_of(surface) };
             if (surface.main())
             {
-                if (window_delegate_ == nullptr || fullscreen_transition_)
+                // 처음 자리를 정하는 동안은 알리지 않는다. 창이 보인 뒤 실제 자리를 한 번 알린다 (`run`).
+                if (window_delegate_ == nullptr || fullscreen_transition_ || placement_ready_ == false)
                     return;
                 const bool fullscreen { (surface.window.styleMask & NSWindowStyleMaskFullScreen) != 0 };
                 // 확대해 들어가는 동안(애니메이션)의 중간 크기는 보통 자리가 아니다. 확대가 다 선 뒤에 풀린다.
@@ -1542,12 +2079,11 @@ namespace luil::macos {
             }
             else
             {
-                if (window.zoomed)
-                    [window zoom:nil];
+                set_zoomed(main_, false);
                 [window setFrame:frame_rect display:YES];
-                normal_placement_ = content_placement(window);
+                normal_placement_ = content_placement_of(window.frame, window);
                 if (want.maximized)
-                    [window zoom:nil];
+                    set_zoomed(main_, true);
             }
             if (frame.fullscreen.has_value() == false && want.fullscreen != fullscreen)
                 set_fullscreen(want.fullscreen);
@@ -1592,7 +2128,7 @@ namespace luil::macos {
             if (finished == false)
             {
                 if (entering)
-                    zoomed_before_fullscreen_ = surface.window.zoomed;
+                    zoomed_before_fullscreen_ = is_zoomed(surface);
                 fullscreen_transition_ = true;
                 return;
             }
@@ -1608,7 +2144,7 @@ namespace luil::macos {
         {
             if (surface.main() == false || surface.window.zoomed || fullscreen_transition_)
                 return;
-            normal_placement_ = content_placement(surface.window);
+            normal_placement_ = content_placement_of(surface.window.frame, surface.window);
             zooming_in_ = true;
             const std::shared_ptr<wake_state> state { wake_ };
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1'000'000'000), dispatch_get_main_queue(), ^{
@@ -1685,6 +2221,8 @@ namespace luil::macos {
             main_.dirty = true;
             for (std::unique_ptr<native_surface>& surface : secondary_)
                 surface->dirty = true;
+            for (std::unique_ptr<native_surface>& popup : popups_)
+                popup->dirty = true;
         }
 
         // 그릴 것과 다음에 깰 시각을 정리한다. 이벤트·깨우기·시계가 모두 여기로 온다.
@@ -1721,6 +2259,8 @@ namespace luil::macos {
             paint(main_);
             for (std::unique_ptr<native_surface>& surface : secondary_)
                 paint(*surface);
+            for (std::unique_ptr<native_surface>& popup : popups_)
+                paint(*popup);
             arm_timer();
         }
 
@@ -1734,6 +2274,8 @@ namespace luil::macos {
             };
             for (const std::unique_ptr<native_surface>& surface : secondary_)
                 earlier(surface->update_deadline);
+            for (const std::unique_ptr<native_surface>& popup : popups_)
+                earlier(popup->update_deadline);
             earlier(focus_tracker_.deadline());
             if (wake == timer_deadline_)
                 return;
@@ -1771,15 +2313,12 @@ namespace luil::macos {
                 std::visit([this](auto&& value) { dispatch(input_action { std::move(value) }); }, std::move(request));
         }
 
-        // 표면 표식으로 찍을 창을 찾는다. 빈 표식은 주 창이다. popup은 그것이 사는 창을 찍는다 (같은 view에 겹쳐 그린다).
+        // 표면 표식으로 찍을 창을 찾는다. 빈 표식은 주 창이다. popup은 그 판을 찍는다 (Win32와 같다).
         [[nodiscard]] native_surface* surface_for_capture(const std::u8string& id)
         {
             if (native_surface* const surface { find_surface(id) }; surface != nullptr)
                 return surface;
-            const native_surface* owner { nullptr };
-            if (find_overlay(id, &owner) != nullptr)
-                return const_cast<native_surface*>(owner);
-            return nullptr;
+            return find_popup(id);
         }
 
         // 찍기·녹화는 실패해도 창을 끝내지 않고 알리기만 한다 (Win32와 같다).
@@ -1829,7 +2368,7 @@ namespace luil::macos {
                 [main_.window miniaturize:nil];
                 break;
             case ui_command::window_toggle_maximize:
-                [main_.window zoom:nil];
+                toggle_zoom(main_);
                 break;
             case ui_command::window_toggle_fullscreen:
                 [main_.window toggleFullScreen:nil];
@@ -1839,19 +2378,26 @@ namespace luil::macos {
             }
         }
 
-        // 이벤트를 그 창의 popup 자리로 옮겨 input thread에 보낸다 (Android host와 같은 길이다).
+        // 이벤트를 input thread에 보낸다. popup 판의 사건은 판의 router가 흘린 만큼 옮겨 popup id를 단다.
+        //  - popup 아닌 표면(주 창·보조 창·도킹 표면)의 누름과 휠은 popup 밖의 상호작용이다 (Win32 `input_dismisses_popups`).
+        //    닫자는 메시지를 내고 누름은 그대로 간다. 닫았으면 누름에 싣는다 (`pointer_pressed_event::closed_popup`).
         void post_events(native_surface& surface, std::vector<raw_input_event> events)
         {
             if (host_ == nullptr)
                 return;
             for (raw_input_event& event : events)
             {
+                bool closed_popup { false };
+                if (surface.popup.has_value() == false)
+                {
+                    if (std::holds_alternative<pointer_pressed_event>(event))
+                        closed_popup = dismiss_popups(popup_dismiss_reason::pointer_press_outside);
+                    else if (std::holds_alternative<mouse_wheel_event>(event))
+                        static_cast<void>(dismiss_popups(popup_dismiss_reason::wheel_scrolled));
+                }
                 routed_input routed { surface.router.route(std::move(event)) };
-                const bool closed_popup { routed.pressed_outside && dismiss_popups(popup_dismiss_reason::pointer_press_outside) };
-                if (routed.wheel_outside)
-                    static_cast<void>(dismiss_popups(popup_dismiss_reason::wheel_scrolled));
                 if (routed.scroll.has_value())
-                    scroll_overlay(surface, *routed.scroll);
+                    scroll_popup(surface, *routed.scroll);
                 for (raw_input_event& value : routed.events)
                 {
                     label_surface(value, surface.id);
@@ -1915,19 +2461,10 @@ namespace luil::macos {
             return surface.want.tree.get();
         }
 
-        [[nodiscard]] static bool overlay_at(const native_surface& surface, const float x, const float y)
-        {
-            return std::ranges::any_of(surface.overlays, [x, y](const overlay_entry& entry) {
-                return x >= entry.bounds.x && y >= entry.bounds.y && x < entry.bounds.x + entry.bounds.width && y < entry.bounds.y + entry.bounds.height;
-            });
-        }
-
         // 그 자리에 놓으면 누가 받는가다. 놓기와 같은 탐색이다 — 커서가 "받음"을 보인 자리에서 놓기가 사라지지 않는다.
         //  - 받는 element가 없어도 파일이 실렸으면 창 전체가 받는다 (물러섬).
         [[nodiscard]] bool drop_open(const native_surface& surface, const float x, const float y)
         {
-            if (overlay_at(surface, x, y))
-                return false;
             const std::shared_ptr<const ui_tree> held { surface.main() && host_ != nullptr ? host_->acquire_ui_tree() : nullptr };
             const ui_tree* const tree { surface.main() ? held.get() : surface.want.tree.get() };
             if (tree == nullptr)
@@ -1946,22 +2483,12 @@ namespace luil::macos {
             const float y { static_cast<float>(point.y) };
             const interaction_snapshot interaction { host_->acquire_interaction() };
             ui_cursor cursor { ui_cursor::inherit };
-            bool over_popup { false };
-            for (auto entry { surface.overlays.rbegin() }; entry != surface.overlays.rend(); ++entry)
-                if (x >= entry->bounds.x && y >= entry->bounds.y && x < entry->bounds.x + entry->bounds.width && y < entry->bounds.y + entry->bounds.height)
-                {
-                    over_popup = true;
-                    if (entry->tree != nullptr)
-                        cursor = entry->tree->cursor_at(x - static_cast<float>(entry->bounds.x), y - entry->content_origin_y(), interaction_for_surface(interaction, entry->id));
-                    break;
-                }
-            if (over_popup == false)
-            {
-                const std::shared_ptr<const ui_tree> main_tree { surface.main() ? host_->acquire_ui_tree() : nullptr };
-                const ui_tree* const tree { surface.main() ? main_tree.get() : surface.want.tree.get() };
-                if (tree != nullptr)
-                    cursor = tree->cursor_at(x, y, interaction_for_surface(interaction, surface.id));
-            }
+            // popup 판의 tree는 흘린 만큼 위로 올라가 있다.
+            const float scroll { surface.popup.has_value() ? surface.popup->scroll_y : 0.0f };
+            const std::shared_ptr<const ui_tree> main_tree { surface.main() ? host_->acquire_ui_tree() : nullptr };
+            const ui_tree* const tree { surface.main() ? main_tree.get() : surface.want.tree.get() };
+            if (tree != nullptr)
+                cursor = tree->cursor_at(x, y + scroll, interaction_for_surface(interaction, surface.id));
             if (cursor == ui_cursor::none)
             {
                 if (surface.cursor_hidden == false)
@@ -2025,8 +2552,8 @@ namespace luil::macos {
                     tree = frame != nullptr ? frame->tree.get() : nullptr;
                 else if (const native_surface* const surface { find_surface(request.surface) }; surface != nullptr)
                     tree = surface->want.tree.get();
-                else if (const overlay_entry* const overlay { find_overlay(request.surface) }; overlay != nullptr)
-                    tree = overlay->tree.get();
+                else if (const native_surface* const popup { find_popup(request.surface) }; popup != nullptr)
+                    tree = popup->want.tree.get();
                 return tree != nullptr && focus_target_ready(*tree, request.target);
             };
             const focus_request_tracker::step step { focus_tracker_.advance(published, time, ready) };
@@ -2049,9 +2576,9 @@ namespace luil::macos {
         void reconcile_frame()
         {
             const std::shared_ptr<const ui_frame> frame { host_->acquire_frame() };
-            if (frame == overlay_frame_ && frame != nullptr)
+            if (frame == reconciled_frame_ && frame != nullptr)
                 return;
-            overlay_frame_ = frame;
+            reconciled_frame_ = frame;
             const std::span<const ui_webview> webviews { frame != nullptr ? std::span<const ui_webview> { frame->webviews } : std::span<const ui_webview> {} };
             if (main_.webviews != nullptr)
                 main_.webviews->synchronize(webviews);
@@ -2060,8 +2587,10 @@ namespace luil::macos {
             for (std::unique_ptr<native_surface>& surface : secondary_)
                 if (surface->webviews != nullptr)
                     surface->webviews->synchronize(webviews);
-            update_overlays(frame.get());
             apply_main_visibility(frame != nullptr && frame->main_hidden);
+            apply_topmost(frame.get());
+            update_popups(frame.get());
+            update_titlebars();
             apply_backdrops(frame.get());
             report_displays(frame.get(), false);
             apply_shell(frame.get());
@@ -2120,11 +2649,12 @@ namespace luil::macos {
                 return;
             accessibility_update update {};
             update.surface = surface.id;
-            update.tree = tree;
-            for (const overlay_entry& entry : surface.overlays)
-                update.overlays.push_back(accessibility_overlay { entry.id, entry.tree,
-                    rect_f { static_cast<float>(entry.bounds.x), static_cast<float>(entry.bounds.y), static_cast<float>(entry.bounds.width), static_cast<float>(entry.bounds.height) },
-                    entry.scroll_y });
+            // popup 판은 판 하나를 덮는 겹 하나로 건넨다. 흘린 양을 다리가 함께 본다.
+            if (surface.popup.has_value())
+                update.overlays.push_back(accessibility_overlay { surface.id, tree,
+                    rect_f { 0.0f, 0.0f, static_cast<float>(surface.width), static_cast<float>(surface.height) }, surface.popup->scroll_y });
+            else
+                update.tree = tree;
             update.interaction = host_->acquire_interaction();
             update.scale = surface.scale;
             surface.accessibility->update(std::move(update));
@@ -2229,7 +2759,7 @@ namespace luil::macos {
         //  - 효과는 창 내용 맨 아래의 `NSVisualEffectView`(창 뒤를 섞는다)다. mica는 창 바탕 재질, mica_alt는 창 아래 바탕 재질,
         //    acrylic은 떠 있는 판(HUD) 재질이다. Skia view는 그 위에 `backdrop_background`의 알파만큼 비치게 칠한다.
         //  - 투명도 줄이기와 대비 늘리기가 켜져 있으면 세우지 않고 그 까닭을 알린다.
-        //  - popup은 같은 view에 겹쳐 그리므로 효과가 없다 (`ui_popup::backdrop`은 받기만 한다).
+        //  - popup 판은 활성화되지 않는 표면이라 acrylic만 선다 (Win32와 같다). 판의 상태는 알리지 않는다 (`ui_popup::backdrop`).
         void apply_backdrops(const ui_frame* const frame)
         {
             if (frame == nullptr)
@@ -2237,6 +2767,22 @@ namespace luil::macos {
             apply_backdrop(main_, frame->backdrop);
             for (std::unique_ptr<native_surface>& surface : secondary_)
                 apply_backdrop(*surface, surface->want.backdrop);
+            for (std::unique_ptr<native_surface>& popup : popups_)
+                apply_backdrop(*popup, popup->popup->transparent ? window_backdrop::none : popup->popup->backdrop);
+        }
+
+        // 창 내용 그릇의 바탕이다. 비치는 창(`layered`·둥근 주 창)과 popup 판은 비워 두고 Skia가 바탕을 칠한다.
+        [[nodiscard]] CGColorRef content_background(const native_surface& surface) const
+        {
+            if (surface.popup.has_value() || (surface.main() && main_translucent()))
+                return [NSColor clearColor].CGColor;
+            return [NSColor windowBackgroundColor].CGColor;
+        }
+
+        // 주 창이 불투명하지 않은가다. 투명 표시(`layered`)이거나 모서리를 둥글게 자른 창이다.
+        [[nodiscard]] bool main_translucent() const noexcept
+        {
+            return config_.presentation == win32::window_presentation::layered || config_.corner_radius > 0.0f;
         }
 
         void apply_backdrop(native_surface& surface, const window_backdrop requested)
@@ -2245,9 +2791,10 @@ namespace luil::macos {
                 return;
             win32::backdrop_status status { win32::backdrop_status::off };
             if (requested != window_backdrop::none)
-                status = system_.transparency == false ? win32::backdrop_status::transparency_disabled
-                    : system_.high_contrast            ? win32::backdrop_status::high_contrast
-                                                       : win32::backdrop_status::applied;
+                status = surface.popup.has_value() && requested != window_backdrop::acrylic ? win32::backdrop_status::unsupported_presentation
+                    : system_.transparency == false                                       ? win32::backdrop_status::transparency_disabled
+                    : system_.high_contrast                                               ? win32::backdrop_status::high_contrast
+                                                                                          : win32::backdrop_status::applied;
             const bool applied { status == win32::backdrop_status::applied };
             if (applied)
             {
@@ -2256,7 +2803,8 @@ namespace luil::macos {
                     surface.effect = [[NSVisualEffectView alloc] initWithFrame:surface.container.bounds];
                     surface.effect.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
                     surface.effect.blendingMode = NSVisualEffectBlendingModeBehindWindow;
-                    surface.effect.state = NSVisualEffectStateFollowsWindowActiveState;
+                    // popup 판은 키 창이 되지 않는다. 창 활성을 따르면 늘 꺼진 재질이다.
+                    surface.effect.state = surface.popup.has_value() ? NSVisualEffectStateActive : NSVisualEffectStateFollowsWindowActiveState;
                     [surface.container addSubview:surface.effect positioned:NSWindowBelow relativeTo:nil];
                 }
                 surface.effect.material = requested == window_backdrop::acrylic ? NSVisualEffectMaterialHUDWindow
@@ -2268,16 +2816,16 @@ namespace luil::macos {
             {
                 [surface.effect removeFromSuperview];
                 surface.effect = nil;
-                surface.container.layer.backgroundColor = [NSColor windowBackgroundColor].CGColor;
+                surface.container.layer.backgroundColor = content_background(surface);
             }
             if (surface.backdrop_applied != applied)
             {
                 surface.backdrop_applied = applied;
                 surface.dirty = true;
             }
-            // 상태가 바뀔 때 한 번 알린다. 보조 창은 효과를 고른 적이 없으면 알리지 않는다.
+            // 상태가 바뀔 때 한 번 알린다. 보조 창은 효과를 고른 적이 없으면 알리지 않는다. popup 판은 알리지 않는다.
             const std::pair<window_backdrop, int> key { requested, static_cast<int>(status) };
-            if (surface.reported_backdrop == key || window_delegate_ == nullptr || host_ == nullptr)
+            if (surface.popup.has_value() || surface.reported_backdrop == key || window_delegate_ == nullptr || host_ == nullptr)
                 return;
             if (surface.main() == false && surface.reported_backdrop.has_value() == false && requested == window_backdrop::none)
                 return;
@@ -2560,114 +3108,248 @@ namespace luil::macos {
                     [surface->window orderFront:nil];
         }
 
-        // popup이 겹쳐 그려질 창이다. 앵커 사슬(popup → popup → … → 창)의 끝이 주 창이면 빈 id, 보조 창이면 그 id다.
-        [[nodiscard]] native_surface* popup_surface(const ui_frame& frame, const ui_popup& popup)
+        // --- popup 판 (popup-overlay-design.md의 macOS 갈래) ---
+        //  - popup마다 테두리 없는 판(`LuilPopupPanel`) 하나다. 앵커 표면 창의 자식 창이라 그 위에 서고, 함께 움직이고 함께 숨는다.
+        //  - 자리는 앵커 표면 내용 기준 그대로 화면에 선다 (`place_popup_on_screen`, Win32 `popup_screen_bounds`와 같은 규칙). 창 밖으로
+        //    나가고, 그 화면의 작업 영역 안으로만 민다. 작업 영역보다 긴 판은 그 높이로 줄고 휠로 흘린다.
+        //  - 판은 앵커 표면의 배율을 쓴다. 판의 tree는 앱이 앵커의 배율로 배치했다 (Win32와 같다).
+        //  - 키 창이 되지 않고 눌러도 앱을 활성화하지 않는다. 키보드는 앵커 쪽 키 창이 받고 논리 초점이 popup으로 보낸다
+        //    (popup-ime-design.md와 같은 길이다).
+
+        // popup이 붙는 표면이다. 창(주 창·보조 창·도킹 표면)이거나 먼저 선 popup 판이다.
+        [[nodiscard]] native_surface* anchor_surface(const std::u8string& anchor)
         {
-            std::u8string anchor { popup.anchor };
-            for (std::size_t depth { 0 }; depth <= frame.popups.size(); ++depth)
-            {
-                if (anchor.empty())
-                    return &main_;
-                if (native_surface* const surface { find_surface(anchor) }; surface != nullptr)
-                    return surface;
-                const auto parent { std::ranges::find(frame.popups, anchor, &ui_popup::id) };
-                if (parent == frame.popups.end())
-                    return nullptr;
-                anchor = parent->anchor;
-            }
-            return nullptr;
+            if (native_surface* const surface { find_surface(anchor) }; surface != nullptr)
+                return surface;
+            return find_popup(anchor);
         }
 
-        // frame의 popup을 그 창 위의 layer로 세운다 (Android host와 같은 모양에 창이 여럿인 것이 다르다).
-        void update_overlays(const ui_frame* const frame)
+        [[nodiscard]] static popup_shape popup_shape_for(const ui_frame& frame, const ui_popup& popup) noexcept
         {
-            std::vector<overlay_entry> previous {};
-            const auto take = [&previous](native_surface& surface) {
-                for (overlay_entry& entry : surface.overlays)
-                    previous.push_back(std::move(entry));
-                surface.overlays.clear();
-            };
-            take(main_);
-            for (std::unique_ptr<native_surface>& surface : secondary_)
-                take(*surface);
+            const ui_style& style { frame.style != nullptr ? *frame.style : default_ui_style() };
+            if (popup.transparent)
+                return { .drop_shadow = false, .line = false };
+            return resolve_popup_shape(popup.corner.value_or(style.popup.corner), popup.border, true);
+        }
+
+        // frame의 popup 목록에 판을 맞춘다. 빠진 id와 앵커·투명이 바뀐 id는 거두고, 새 id는 세우고, 있는 id는 tree와 훅을 바꿔 든다.
+        //  - 앵커가 아직 없는 popup은 세우지 않는다 (`ui_popup::anchor`). 부모가 먼저인 차례로 세운다.
+        //  - 거둔 popup의 앵커가 사라졌으면 그 popup에 `anchor_closed`를 묻는다.
+        void update_popups(const ui_frame* const frame)
+        {
+            std::vector<const ui_popup*> wanted {};
             if (frame != nullptr)
             {
                 std::vector<popup_placement> logical {};
-                for (const auto& popup : frame->popups)
+                for (const ui_popup& popup : frame->popups)
                     logical.push_back({ popup.id, 0, 0, popup.tree != nullptr && popup.width > 0.0f ? 1 : 0, popup.height > 0.0f ? 1 : 0, popup.anchor });
                 std::vector<std::u8string> roots { u8"" };
                 for (const std::unique_ptr<native_surface>& surface : secondary_)
                     roots.push_back(surface->id);
-                for (const auto index : order_popup_placements(logical, roots))
-                {
-                    const ui_popup& popup { frame->popups[index] };
-                    native_surface* const surface { popup_surface(*frame, popup) };
-                    if (surface == nullptr)
-                        continue;
-                    const float scale { surface->scale };
-                    const int width { std::min(surface->width, static_cast<int>(std::lround(popup.width * scale))) };
-                    const int full_height { static_cast<int>(std::lround(popup.height * scale)) };
-                    const int height { std::min(surface->height, full_height) };
-                    const float maximum { static_cast<float>(full_height - height) };
-                    const auto old { std::ranges::find(previous, popup.id, &overlay_entry::id) };
-                    const float offset { old != previous.end() ? std::clamp(old->scroll_y, 0.0f, maximum) : 0.0f };
-                    const std::optional<rect_f> reported_bounds { popup.placed != nullptr && old != previous.end() && old->anchor == popup.anchor ? old->reported_bounds : std::nullopt };
-                    surface->overlays.push_back(overlay_entry {
-                        popup.id, popup.tree, { 0, 0, width, height }, popup.border, popup.dismiss, false, popup.anchor, static_cast<int>(std::lround(popup.x * scale)),
-                        static_cast<int>(std::lround(popup.y * scale)), offset, maximum, popup.placed, reported_bounds });
-                }
+                for (const std::size_t index : order_popup_placements(logical, roots))
+                    wanted.push_back(&frame->popups[index]);
             }
-            for (auto& old : previous)
-                if (old.anchor.empty() == false && find_overlay(old.anchor) == nullptr && find_surface(old.anchor) == nullptr)
-                    if (auto action { take_popup_dismiss_action(old.dismiss, old.requested, popup_dismiss_reason::anchor_closed) }; action.has_value())
-                        dispatch(std::move(*action));
-            place_overlays(main_);
-            for (std::unique_ptr<native_surface>& surface : secondary_)
-                place_overlays(*surface);
-        }
-
-        void place_overlays(native_surface& surface)
-        {
-            std::vector<overlay_area> areas {};
-            areas.reserve(surface.overlays.size());
-            const float scale { surface.scale };
-            for (overlay_entry& entry : surface.overlays)
+            const auto wanted_index = [&wanted](const std::u8string& id) {
+                const auto found { std::ranges::find_if(wanted, [&id](const ui_popup* const popup) { return popup->id == id; }) };
+                return static_cast<std::size_t>(found - wanted.begin());
+            };
+            std::vector<std::unique_ptr<native_surface>> removed {};
+            for (auto position { popups_.begin() }; position != popups_.end();)
             {
-                const auto parent_entry { std::ranges::find(surface.overlays, entry.anchor, &overlay_entry::id) };
-                const overlay_entry* const parent { entry.anchor.empty() || parent_entry == surface.overlays.end() ? nullptr : &*parent_entry };
-                const int origin_x { parent != nullptr ? parent->bounds.x : 0 };
-                const float origin_y { parent != nullptr ? parent->content_origin_y() : 0.0f };
-                int desired_x { origin_x + entry.anchor_x };
-                if (parent != nullptr && desired_x + entry.bounds.width > surface.width)
-                    desired_x = origin_x - entry.bounds.width;
-                const int x { std::clamp(desired_x, 0, std::max(0, surface.width - entry.bounds.width)) };
-                const int y { std::clamp(static_cast<int>(std::lround(origin_y + static_cast<float>(entry.anchor_y))), 0, std::max(0, surface.height - entry.bounds.height)) };
-                entry.bounds.x = x;
-                entry.bounds.y = y;
-                areas.push_back(overlay_area {
-                    entry.id, { static_cast<float>(x), static_cast<float>(y), static_cast<float>(entry.bounds.width), static_cast<float>(entry.bounds.height) }, entry.scroll_y,
-                    entry.max_scroll_y, entry.tree.get(), scale });
-                if (entry.placed != nullptr && host_ != nullptr)
+                const std::size_t index { wanted_index((*position)->id) };
+                const bool keep { index < wanted.size() && wanted[index]->anchor == (*position)->popup->anchor && wanted[index]->transparent == (*position)->popup->transparent };
+                if (keep)
                 {
-                    const rect_f bounds { (x - origin_x) / scale, (y - origin_y) / scale, entry.bounds.width / scale, entry.bounds.height / scale };
-                    if (entry.reported_bounds != bounds)
-                    {
-                        entry.reported_bounds = bounds;
-                        if (app_message message { entry.placed(bounds) }; message.empty() == false)
-                            host_->post_app_message(std::move(message));
-                    }
+                    ++position;
+                    continue;
                 }
+                removed.push_back(std::move(*position));
+                position = popups_.erase(position);
             }
-            surface.router.set_areas(std::move(areas));
+            for (const ui_popup* const want : wanted)
+            {
+                native_surface* const anchor { anchor_surface(want->anchor) };
+                if (anchor == nullptr || anchor->window == nil)
+                    continue;
+                native_surface* popup { find_popup(want->id) };
+                const bool created { popup == nullptr };
+                if (created)
+                {
+                    popups_.push_back(std::make_unique<native_surface>());
+                    popup = popups_.back().get();
+                    popup->id = want->id;
+                    popup->popup = popup_state {};
+                    popup->popup->anchor = want->anchor;
+                    popup->popup->transparent = want->transparent;
+                }
+                popup_state& state { *popup->popup };
+                state.x = want->x;
+                state.y = want->y;
+                state.width = want->width;
+                state.height = want->height;
+                state.shape = popup_shape_for(*frame, *want);
+                state.backdrop = want->backdrop;
+                // 새 frame이 popup을 계속 실었다는 것은 앱이 상태를 유지하기로 했다는 뜻이다. 닫힘 빗장을 푼다.
+                state.dismiss = want->dismiss;
+                state.requested = false;
+                if (want->placed == nullptr)
+                    state.reported_bounds.reset();
+                state.placed = want->placed;
+                popup->want.id = want->id;
+                popup->want.tree = want->tree;
+                popup->dirty = true;
+                if (created)
+                    create_popup(*popup, *anchor);
+            }
+            // 부모가 먼저인 차례로 둔다. 자리를 잡을 때 앵커 판의 자리가 먼저 서 있어야 한다.
+            std::ranges::stable_sort(popups_, {}, [&wanted_index](const std::unique_ptr<native_surface>& popup) { return wanted_index(popup->id); });
+            for (std::unique_ptr<native_surface>& gone : removed)
+            {
+                popup_state& state { *gone->popup };
+                if (state.anchor.empty() == false && anchor_surface(state.anchor) == nullptr)
+                    if (auto action { take_popup_dismiss_action(state.dismiss, state.requested, popup_dismiss_reason::anchor_closed) }; action.has_value())
+                        dispatch(std::move(*action));
+            }
+            // 자식 판부터 거둔다.
+            for (auto position { removed.rbegin() }; position != removed.rend(); ++position)
+                destroy_popup(**position);
+            place_popups();
         }
 
-        void scroll_overlay(native_surface& surface, const overlay_scroll& scroll)
+        void create_popup(native_surface& popup, const native_surface& anchor)
         {
-            const auto entry { std::ranges::find(surface.overlays, scroll.surface, &overlay_entry::id) };
-            if (entry == surface.overlays.end() || entry->scroll_y == scroll.offset)
+            LuilPopupPanel* const panel { [[LuilPopupPanel alloc] initWithContentRect:NSMakeRect(0, 0, 1, 1)
+                                                                            styleMask:NSWindowStyleMaskBorderless | NSWindowStyleMaskNonactivatingPanel
+                                                                              backing:NSBackingStoreBuffered
+                                                                                defer:NO] };
+            panel.releasedWhenClosed = NO;
+            panel.floatingPanel = NO;
+            panel.hidesOnDeactivate = NO;
+            panel.becomesKeyOnlyIfNeeded = YES;
+            panel.worksWhenModal = YES;
+            panel.opaque = NO;
+            panel.backgroundColor = [NSColor clearColor];
+            // 그림자는 판이 그린 모양(둥근 모서리)을 따른다. 투명 popup은 모양을 스스로 그리므로 그림자도 없다 (Win32와 같다).
+            panel.hasShadow = popup.popup->transparent == false;
+            panel.acceptsMouseMovedEvents = YES;
+            panel.collectionBehavior = NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle | NSWindowCollectionBehaviorFullScreenAuxiliary;
+            panel.title = make_ns_string(popup.id) ?: @"";
+            popup.window = panel;
+            popup.scale = anchor.scale;
+            install_content(popup, NSMakeRect(0, 0, 1, 1));
+            popup.router.set_touch_config(config_.touch);
+            create_renderer(popup);
+        }
+
+        void destroy_popup(native_surface& popup)
+        {
+            if (popup.window != nil && popup.window.parentWindow != nil)
+                [popup.window.parentWindow removeChildWindow:popup.window];
+            destroy_window(popup);
+        }
+
+        void place_popups()
+        {
+            for (std::unique_ptr<native_surface>& popup : popups_)
+                place_popup(*popup);
+        }
+
+        // popup 판 하나를 앵커 기준 자리에서 화면 자리로 옮겨 앉힌다. 앵커 창이 보이지 않으면 판도 숨긴다.
+        void place_popup(native_surface& popup)
+        {
+            popup_state& state { *popup.popup };
+            native_surface* const anchor { anchor_surface(state.anchor) };
+            if (anchor == nullptr || anchor->window == nil || popup.window == nil)
                 return;
-            entry->scroll_y = scroll.offset;
-            place_overlays(surface);
+            NSWindow* const panel { popup.window };
+            const CGFloat primary { primary_scale() };
+            // 앵커 내용의 왼쪽 위다 (화면 픽셀). 앵커가 흘려 보이는 판이면 그 안의 자리는 흘린 만큼 올라가 있다.
+            const NSRect content { [anchor->window contentRectForFrameRect:anchor->window.frame] };
+            screen_point origin { to_screen_pixels(NSMakePoint(NSMinX(content), NSMaxY(content))) };
+            const bool anchor_popup { anchor->popup.has_value() };
+            if (anchor_popup)
+                origin.y -= static_cast<int>(std::lround(anchor->popup->scroll_y / anchor->scale * primary));
+            const auto pixels = [primary](const float points) { return static_cast<int>(std::lround(points * primary)); };
+            const int width { std::max(1, pixels(state.width)) };
+            const int height { std::max(1, pixels(state.height)) };
+            const int offset_x { pixels(state.x) };
+            const int offset_y { pixels(state.y) };
+            const NSPoint desired { from_screen_pixels(origin.x + offset_x, origin.y + offset_y) };
+            NSScreen* const screen { screen_for(NSMakeRect(desired.x, desired.y - height / primary, width / primary, height / primary)) };
+            const screen_rect visible { window_bounds(screen != nil ? screen.visibleFrame : content) };
+            const popup_screen_frame placed { place_popup_on_screen(origin, offset_x, offset_y, width, height, { visible.left, visible.top, visible.right, visible.bottom }, anchor_popup) };
+            const NSPoint top_left { from_screen_pixels(placed.x, placed.y) };
+            const NSRect frame { NSMakeRect(top_left.x, top_left.y - placed.height / primary, placed.width / primary, placed.height / primary) };
+            if (NSEqualRects(panel.frame, frame) == NO)
+                [panel setFrame:frame display:NO];
+
+            // 판의 그림은 앵커의 배율로 그린다. 보이는 높이가 내용보다 짧으면 흘린다.
+            popup.scale = anchor->scale;
+            const int physical_width { std::max(1, static_cast<int>(std::lround(state.width * popup.scale))) };
+            const int physical_height { std::max(1, static_cast<int>(std::lround(placed.height / primary * popup.scale))) };
+            const float content_height { static_cast<float>(std::lround(state.height * popup.scale)) };
+            state.max_scroll_y = std::max(0.0f, content_height - static_cast<float>(physical_height));
+            state.scroll_y = std::clamp(state.scroll_y, 0.0f, state.max_scroll_y);
+            if (physical_width != popup.width || physical_height != popup.height)
+            {
+                popup.width = physical_width;
+                popup.height = physical_height;
+                popup.shadow_stale = true;
+                if (popup.renderer != nullptr)
+                {
+                    std::u8string error {};
+                    if (popup.renderer->resize(popup.width, popup.height, error) == false)
+                        log_error(error);
+                }
+            }
+            const CGFloat radius { state.shape.rounded() ? popup_corner_logical_radius(state.shape.corner) : 0.0 };
+            if (popup.container.layer.cornerRadius != radius)
+            {
+                popup.container.layer.cornerRadius = radius;
+                popup.container.layer.masksToBounds = radius > 0 ? YES : NO;
+                popup.shadow_stale = true;
+            }
+            popup.router.set_areas({ overlay_area { popup.id, { 0.0f, 0.0f, static_cast<float>(popup.width), static_cast<float>(popup.height) }, state.scroll_y,
+                state.max_scroll_y, popup.want.tree.get(), popup.scale } });
+
+            // 앵커 창의 자식 창으로 그 위에 선다. 앵커 창이 숨었으면 판도 숨긴다.
+            panel.level = anchor->window.level;
+            if (anchor->window.visible)
+            {
+                if (panel.parentWindow != anchor->window)
+                {
+                    if (panel.parentWindow != nil)
+                        [panel.parentWindow removeChildWindow:panel];
+                    [anchor->window addChildWindow:panel ordered:NSWindowAbove];
+                }
+                if (panel.visible == NO)
+                    [panel orderFront:nil];
+            }
+            else if (panel.visible)
+                [panel orderOut:nil];
+
+            // 작업 영역에 맞춘 최종 자리를 앵커 기준 논리 픽셀로 알린다 (`ui_popup::placed`).
+            if (state.placed != nullptr && host_ != nullptr)
+            {
+                const rect_f bounds { (placed.x - origin.x) / static_cast<float>(primary), (placed.y - origin.y) / static_cast<float>(primary),
+                    placed.width / static_cast<float>(primary), placed.height / static_cast<float>(primary) };
+                if (state.reported_bounds != bounds)
+                {
+                    state.reported_bounds = bounds;
+                    if (app_message message { state.placed(bounds) }; message.empty() == false)
+                        host_->post_app_message(std::move(message));
+                }
+            }
+            popup.dirty = true;
+        }
+
+        // 판의 router가 흘리자고 했다. 흘린 판에 붙은 자식 판도 따라 옮긴다.
+        void scroll_popup(native_surface& surface, const overlay_scroll& scroll)
+        {
+            if (surface.popup.has_value() == false || scroll.surface != surface.id || surface.popup->scroll_y == scroll.offset)
+                return;
+            surface.popup->scroll_y = scroll.offset;
+            place_popups();
             surface.dirty = true;
         }
 
@@ -2684,49 +3366,39 @@ namespace luil::macos {
             return const_cast<application*>(this)->find_surface(id);
         }
 
-        // popup 하나와 그것이 사는 창이다.
-        [[nodiscard]] const overlay_entry* find_overlay(const std::u8string& id, const native_surface** owner = nullptr) const
+        [[nodiscard]] native_surface* find_popup(const std::u8string& id)
         {
-            const auto search = [&id, owner](const native_surface& surface) -> const overlay_entry* {
-                const auto found { std::ranges::find_if(surface.overlays, [&id](const overlay_entry& entry) { return entry.id == id; }) };
-                if (found == surface.overlays.end())
-                    return nullptr;
-                if (owner != nullptr)
-                    *owner = &surface;
-                return &*found;
-            };
-            if (const overlay_entry* const entry { search(main_) }; entry != nullptr)
-                return entry;
-            for (const std::unique_ptr<native_surface>& surface : secondary_)
-                if (const overlay_entry* const entry { search(*surface) }; entry != nullptr)
-                    return entry;
-            return nullptr;
+            if (id.empty())
+                return nullptr;
+            const auto found { std::ranges::find_if(popups_, [&id](const std::unique_ptr<native_surface>& popup) { return popup->id == id; }) };
+            return found != popups_.end() ? found->get() : nullptr;
+        }
+
+        [[nodiscard]] const native_surface* find_popup(const std::u8string& id) const
+        {
+            return const_cast<application*>(this)->find_popup(id);
         }
 
         // 닫힘 계기 하나를 popup들에 묻는다. 하나라도 닫자는 메시지를 냈으면 참이다.
         //  - Esc는 맨 위의 자식 popup 하나만 닫는다 (Android·Win32와 같다).
         bool dismiss_popups(const popup_dismiss_reason reason)
         {
-            std::vector<overlay_entry*> all {};
-            for (overlay_entry& entry : main_.overlays)
-                all.push_back(&entry);
-            for (std::unique_ptr<native_surface>& surface : secondary_)
-                for (overlay_entry& entry : surface->overlays)
-                    all.push_back(&entry);
             if (reason == popup_dismiss_reason::escape_key)
-                for (auto position { all.rbegin() }; position != all.rend(); ++position)
-                    if ((*position)->anchor.empty() == false && find_surface((*position)->anchor) == nullptr)
+                for (auto position { popups_.rbegin() }; position != popups_.rend(); ++position)
+                {
+                    popup_state& state { *(*position)->popup };
+                    if (state.anchor.empty() || find_surface(state.anchor) != nullptr)
+                        continue;
+                    if (auto action { take_popup_dismiss_action(state.dismiss, state.requested, reason) }; action.has_value())
                     {
-                        if (auto action { take_popup_dismiss_action((*position)->dismiss, (*position)->requested, reason) }; action.has_value())
-                        {
-                            dispatch(std::move(*action));
-                            return true;
-                        }
-                        return false;
+                        dispatch(std::move(*action));
+                        return true;
                     }
+                    return false;
+                }
             bool dismissed { false };
-            for (overlay_entry* const entry : all)
-                if (std::optional<input_action> action { take_popup_dismiss_action(entry->dismiss, entry->requested, reason) }; action.has_value())
+            for (std::unique_ptr<native_surface>& popup : popups_)
+                if (std::optional<input_action> action { take_popup_dismiss_action(popup->popup->dismiss, popup->popup->requested, reason) }; action.has_value())
                 {
                     dispatch(std::move(*action));
                     dismissed = true;
@@ -2760,16 +3432,12 @@ namespace luil::macos {
                 location.tree = surface->want.tree;
                 location.surface = surface;
             }
-            else
+            else if (const native_surface* const popup { find_popup(interaction.focused_surface) }; popup != nullptr)
             {
-                const native_surface* owner { nullptr };
-                if (const overlay_entry* const overlay { find_overlay(interaction.focused_surface, &owner) }; overlay != nullptr)
-                {
-                    location.tree = overlay->tree;
-                    location.origin_x = static_cast<float>(overlay->bounds.x);
-                    location.origin_y = overlay->content_origin_y();
-                    location.surface = owner;
-                }
+                // popup 판의 tree는 흘린 만큼 위로 올라가 있다. 후보 창은 판의 view 좌표로 선다.
+                location.tree = popup->want.tree;
+                location.origin_y = -popup->popup->scroll_y;
+                location.surface = popup;
             }
             if (location.tree != nullptr)
                 location.element = location.tree->find(interaction.focused_input);
@@ -2903,15 +3571,15 @@ namespace luil::macos {
     private:
 
         // frame의 웹뷰마다 자리표의 자리를 웹뷰에 앉히고, 아래층이 비울 구멍을 낸다 (Win32 `apply_webviews`와 같은 규칙).
-        //  - 가림은 자리표의 가운데와 안쪽 네 모서리 hit test다. popup은 같은 view에 겹쳐 그리므로 자리와 겹치는 popup도 가림이다.
+        //  - 가림은 자리표의 가운데와 안쪽 네 모서리 hit test다.
         //  - 초점이 자리표에 **닿는 순간** 키보드 초점을 페이지로 넘긴다.
         [[nodiscard]] std::span<const pixel_rect> apply_webviews(native_surface& surface, const ui_tree* const tree, const interaction_snapshot& interaction)
         {
             surface.webview_holes.clear();
-            if (surface.webviews == nullptr || overlay_frame_ == nullptr)
+            if (surface.webviews == nullptr || reconciled_frame_ == nullptr)
                 return surface.webview_holes;
             const ui_element_id focused { interaction_for_surface(interaction, surface.id).focused };
-            for (const ui_webview& want : overlay_frame_->webviews)
+            for (const ui_webview& want : reconciled_frame_->webviews)
             {
                 if (want.anchor != surface.id || want.id.empty())
                     continue;
@@ -2920,7 +3588,7 @@ namespace luil::macos {
                 const std::optional<rect_f> visible { placeholder != nullptr ? tree->visible_bounds(*placeholder) : std::nullopt };
                 const float tree_scale { placeholder != nullptr ? placeholder->scale() : surface.scale };
                 const webview_layout layout {
-                    plan_webview_layout(visible, surface.width, surface.height, tree != nullptr && webview_occluded(surface, *tree, placeholder, visible), tree_scale, want.layer),
+                    plan_webview_layout(visible, surface.width, surface.height, tree != nullptr && webview_occluded(*tree, placeholder, visible), tree_scale, want.layer),
                 };
                 // 다른 배율로 배치된 tree(화면을 옮긴 직후)의 자리는 주지 않는다. 새 배율의 tree가 오면 크기와 배율을 함께 준다.
                 const bool arranged_for_surface { std::abs(tree_scale - surface.scale) < 0.001f };
@@ -2935,17 +3603,11 @@ namespace luil::macos {
             return surface.webview_holes;
         }
 
-        [[nodiscard]] static bool webview_occluded(const native_surface& surface, const ui_tree& tree, const ui_element* const placeholder, const std::optional<rect_f>& visible)
+        // popup은 따로 선 판이라 웹뷰를 가리지 않는다 (판이 웹뷰 창 위에 선다).
+        [[nodiscard]] static bool webview_occluded(const ui_tree& tree, const ui_element* const placeholder, const std::optional<rect_f>& visible)
         {
             if (placeholder == nullptr || visible.has_value() == false)
                 return true;
-            for (const overlay_entry& entry : surface.overlays)
-            {
-                const pixel_rect& area { entry.bounds };
-                if (static_cast<float>(area.x) < visible->x + visible->width && visible->x < static_cast<float>(area.x + area.width)
-                    && static_cast<float>(area.y) < visible->y + visible->height && visible->y < static_cast<float>(area.y + area.height))
-                    return true;
-            }
             const float inset { 1.0f };
             const std::array<std::pair<float, float>, 5> probes {
                 std::pair { visible->x + visible->width / 2.0f, visible->y + visible->height / 2.0f },
@@ -2966,7 +3628,6 @@ namespace luil::macos {
             frame_state state {};
             std::shared_ptr<const ui_frame> frame {};
             std::shared_ptr<const ui_tree> tree {};
-            std::vector<overlay_layer> layers {};
             sk_sp<SkTypeface> code {};
         };
 
@@ -2983,13 +3644,25 @@ namespace luil::macos {
             const ui_frame* const frame { prepared.frame.get() };
             const interaction_snapshot interaction { host_->acquire_interaction() };
             state.interaction = interaction_for_surface(interaction, surface.id);
-            // 보조 창은 frame의 그 창 tree를, 주 창은 host가 준 tree를 그린다.
+            // 보조 창·popup 판은 frame의 그 tree를, 주 창은 host가 준 tree를 그린다.
             prepared.tree = surface.main() ? host_->acquire_ui_tree() : surface.want.tree;
             state.tree = prepared.tree.get();
-            prepared.layers.reserve(surface.overlays.size());
-            for (const overlay_entry& entry : surface.overlays)
-                prepared.layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id), entry.scroll_y });
-            state.overlays = prepared.layers;
+            // 창 상태다. caption이 확대 글리프를 고른다 (Win32 `caption_surface::prepare_frame`).
+            state.maximized = is_zoomed(surface);
+            state.fullscreen = surface.window != nil && (surface.window.styleMask & NSWindowStyleMaskFullScreen) != 0;
+            if (state.fullscreen)
+                state.maximized = false;
+            // popup 판이다 (Win32 `popup_surface::prepare_frame`). 직각 판은 표면이 1px 선을 긋고, 흘린 만큼 tree를 올려 그린다.
+            if (surface.popup.has_value())
+            {
+                state.popup = true;
+                state.border = surface.popup->shape.line;
+                state.transparent = surface.popup->transparent;
+                state.origin_y = -static_cast<int>(std::lround(surface.popup->scroll_y));
+            }
+            // 투명 표시의 주 창은 바탕을 비운다. 그린 알파대로 뒤가 비친다.
+            else if (surface.main() && config_.presentation == win32::window_presentation::layered)
+                state.transparent = true;
             if (with_webviews)
                 state.holes = apply_webviews(surface, prepared.tree.get(), interaction);
             const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
@@ -3008,6 +3681,28 @@ namespace luil::macos {
             state.fonts = &font_resolver_;
         }
 
+        // 둥근 popup 판의 테두리다. 시스템이 긋는 테두리가 없어 판 그릇 layer의 1px 선을 팔레트의 `tooltip_border`로 긋는다
+        // (Win32의 DWM 테두리 색과 같은 값). 직각 판은 표면의 선이 경계라 긋지 않는다.
+        void apply_popup_border(native_surface& surface, const frame_state& state)
+        {
+            if (surface.popup.has_value() == false || surface.container == nil)
+                return;
+            popup_state& popup { *surface.popup };
+            const std::optional<ui_color> color { popup.shape.system_border ? std::optional<ui_color> { frame_palette(state).tooltip_border } : std::nullopt };
+            if (popup.border_color == color)
+                return;
+            popup.border_color = color;
+            CALayer* const layer { surface.container.layer };
+            if (color.has_value() == false)
+            {
+                layer.borderWidth = 0;
+                return;
+            }
+            const auto channel = [value = *color](const int shift) { return static_cast<CGFloat>((value >> shift) & 0xFFu) / 255.0; };
+            layer.borderColor = [NSColor colorWithSRGBRed:channel(16) green:channel(8) blue:channel(0) alpha:channel(24)].CGColor;
+            layer.borderWidth = 1.0 / std::max(1.0f, surface.scale);
+        }
+
         [[nodiscard]] bool render(native_surface& surface)
         {
             prepared_frame prepared {};
@@ -3015,7 +3710,7 @@ namespace luil::macos {
             update_accessibility(surface, prepared.tree);
             const frame_state& state { prepared.state };
             const std::shared_ptr<const ui_tree>& tree { prepared.tree };
-            const std::vector<overlay_layer>& layers { prepared.layers };
+            apply_popup_border(surface, state);
 
             std::u8string error {};
             const bool drawn { surface.renderer->render(state, error) };
@@ -3025,6 +3720,12 @@ namespace luil::macos {
             // 녹화 중이면 같은 상태를 한 장 더 태워 모은다.
             if (drawn && surface.recorder.recording())
                 surface.recorder.collect(state);
+            // 비치는 창의 그림자는 그린 알파의 모양이다. 크기나 모양이 바뀐 뒤 처음 그린 장으로 다시 잰다.
+            if (drawn && surface.shadow_stale && surface.window != nil && surface.window.opaque == NO)
+            {
+                surface.shadow_stale = false;
+                [surface.window invalidateShadow];
+            }
             // GPU를 요구한 모드는 물러서지 않는다. 그릴 길이 없으므로 끝낸다 (Android와 같다).
             if (drawn == false && renderer_mode_requires_gpu(config_.renderer) && quitting_ == false)
                 quit();
@@ -3034,11 +3735,6 @@ namespace luil::macos {
             const auto time { now() };
             const update_context update { .now = time, .reduce_motion = system_.reduce_motion };
             surface.update_deadline = tree != nullptr ? tree->next_update(update, state.interaction) : std::nullopt;
-            for (const overlay_layer& layer : layers)
-                if (layer.tree != nullptr)
-                    if (const auto next { layer.tree->next_update(update, layer.interaction) }; next.has_value())
-                        if (surface.update_deadline.has_value() == false || *next < *surface.update_deadline)
-                            surface.update_deadline = next;
             if (surface.update_deadline.has_value() && *surface.update_deadline <= time)
                 surface.update_deadline = time + continuous_repaint_interval;
             return drawn;
@@ -3072,10 +3768,12 @@ namespace luil::macos {
         native_surface main_ {};
         // 보조 창들이다. 주소가 변하지 않게 따로 잡는다 (view와 delegate가 그 주소를 쥔다).
         std::vector<std::unique_ptr<native_surface>> secondary_ {};
+        // popup 판들이다. 부모가 먼저인 차례다.
+        std::vector<std::unique_ptr<native_surface>> popups_ {};
         LuilApplicationDelegate* application_delegate_ { nil };
         NSTimer* timer_ { nil };
         std::optional<std::chrono::steady_clock::time_point> timer_deadline_ {};
-        std::shared_ptr<const ui_frame> overlay_frame_ {};
+        std::shared_ptr<const ui_frame> reconciled_frame_ {};
         file_dialog_gate file_dialog_gate_ {};
         // 지금 들어와 있는 OS 끌기의 내용이다 (들어올 때 한 번 읽는다).
         drag_payload drag_payload_ {};
@@ -3106,6 +3804,15 @@ namespace luil::macos {
         bool displays_reported_ { false };
         bool zooming_in_ { false };
         bool main_hidden_ { false };
+        // 주 창이 보여 처음 자리를 알렸는가다. 그 전의 이동·크기 변경(가운데 놓기, 저장 배치, 앱이 고친 창)은 알리지 않는다.
+        bool placement_ready_ { false };
+        // 저장 배치가 전체 화면이었다. 창이 보인 뒤에 들어간다.
+        bool initial_fullscreen_ { false };
+        // 제목 막대 단추의 글리프 그림과 그 서체다 (글리프·크기마다 한 번).
+        std::map<std::pair<char32_t, int>, NSImage*> glyph_images_ {};
+        sk_sp<SkTypeface> codicon_ {};
+        // 마지막으로 옮긴 주 창의 층이다 (`ui_frame::topmost`).
+        std::optional<bool> applied_topmost_ {};
         bool stopped_ { false };
         bool quitting_ { false };
         bool exiting_ { false };
@@ -3161,6 +3868,45 @@ namespace {
 - (BOOL)canBecomeKeyWindow
 {
     return YES;
+}
+
+@end
+
+@implementation LuilWindow
+
+// 제목 막대가 없는 창도 키보드를 받고 주 창이 된다. `NSWindow`의 기본은 제목 막대(또는 크기 조절 막대)가 있는 창만 참이다.
+- (BOOL)canBecomeKeyWindow
+{
+    return YES;
+}
+
+- (BOOL)canBecomeMainWindow
+{
+    return YES;
+}
+
+@end
+
+@implementation LuilPopupPanel
+
+- (BOOL)canBecomeKeyWindow
+{
+    return NO;
+}
+
+- (BOOL)canBecomeMainWindow
+{
+    return NO;
+}
+
+@end
+
+@implementation LuilTitlebarTarget
+
+- (void)press:(NSButton*)sender
+{
+    if (self.owner != nullptr && self.surface != nullptr && sender.identifier != nil)
+        self.owner->titlebar_pressed(*self.surface, luil::macos::from_ns_string(sender.identifier));
 }
 
 @end

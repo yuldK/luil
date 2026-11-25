@@ -75,6 +75,12 @@ namespace luil {
         // 캡션을 미리 arrange해 보는 우회가 필요 없다.
         [[nodiscard]] static float height_for(const caption_config& config) noexcept;
 
+        // 만든 설정이다. 창 caption을 플랫폼이 그리는 host(macOS 제목 막대)가 앱 단추를 그 막대에 옮겨 세울 때 읽는다.
+        [[nodiscard]] const caption_config& config() const noexcept
+        {
+            return config_;
+        }
+
     private:
         // 만들어진 버튼 중 가장 왼쪽 것이다 (제목이 침범하지 않을 한계).
         // 하나도 없으면 nullptr다.

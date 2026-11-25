@@ -1011,6 +1011,8 @@ if(LUIL_PLATFORM STREQUAL "macos")
         "${public_headers}/app/webview.h"
         macos/webview_host.h
         macos/webview_host.mm
+        macos/window_rules.cpp
+        macos/window_rules.h
         "${public_headers}/app/platform_services.h"
         macos/platform_services_macos.mm
         macos/instance_message.cpp

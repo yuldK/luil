@@ -98,7 +98,7 @@ core test 실행 파일은 플랫폼 계층을 링크하지 않는다. core가 �
 
 ## macOS
 
-플랫폼을 모르는 층(`luil_core`)과 그 test, AppKit 위의 앱 host(`luil`), 예제 둘(`luil_hello`, `luil_demo`)을 세운다. 설치는 아직 없다.
+플랫폼을 모르는 층(`luil_core`)과 그 test, AppKit 위의 앱 host(`luil`), 예제(`luil_hello`, `luil_demo`, `luil_video`, `luil_tool_window`)를 세운다. 설치는 아직 없다.
 
 | 항목 | 값 |
 | --- | --- |
@@ -121,12 +121,12 @@ ctest --preset macos-arm64-debug
 open build/macos-arm64/Debug/luil_demo.app
 ```
 
-예제는 앱 번들(`luil_hello.app`, `luil_demo.app`, `luil_video.app`)이다. OS 알림(UserNotifications)이 번들 식별자가 있고 서명된 앱에서만 서기 때문이다. [`examples/macos.cmake`](../../examples/macos.cmake)가 [`examples/macos/Info.plist.in`](../../examples/macos/Info.plist.in)을 대상마다 채우고(번들 식별자 `io.github.yuldk.luil.hello`·`io.github.yuldk.luil.demo`·`io.github.yuldk.luil.video`, 최소 판 11.0, `NSHighResolutionCapable`), 빌드 뒤 `codesign --force --sign -`로 ad-hoc 서명한다. 배포용 서명(Developer ID·공증)은 아니다.
+예제는 앱 번들(`luil_hello.app`, `luil_demo.app`, `luil_video.app`, `luil_tool_window.app`)이다. OS 알림(UserNotifications)이 번들 식별자가 있고 서명된 앱에서만 서기 때문이다. [`examples/macos.cmake`](../../examples/macos.cmake)가 [`examples/macos/Info.plist.in`](../../examples/macos/Info.plist.in)을 대상마다 채우고(번들 식별자 `io.github.yuldk.luil.hello`·`io.github.yuldk.luil.demo`·`io.github.yuldk.luil.video`·`io.github.yuldk.luil.tool`, 최소 판 11.0, `NSHighResolutionCapable`), 빌드 뒤 `codesign --force --sign -`로 ad-hoc 서명한다. 배포용 서명(Developer ID·공증)은 아니다.
 
 - `open`으로 띄우면 Launch Services가 번들로 세운다. 터미널에 로그를 보려면 안의 실행 파일을 바로 띄운다: `build/macos-arm64/Debug/luil_demo.app/Contents/MacOS/luil_demo`. smoke test(`$<TARGET_FILE:...>`)도 이 실행 파일을 부른다.
 - demo의 견본 그림은 `Contents/Resources/assets`에, 동영상 데모의 견본은 `Contents/Resources/video`에 둔다. `Contents/MacOS`에 코드가 아닌 파일이 있으면 codesign이 번들 서명을 거절해서다. demo의 `executable_directory()`가 번들 안에서는 그 자원 폴더를 답한다 (Windows는 그대로 실행 파일 옆이다).
 
-test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`). 키 변환(`src/macos/macos_input.cpp`)은 AppKit을 모르는 순수 층이라 core test에 들어가고, 예제의 `--smoke-test`가 창을 보이지 않은 채 첫 frame을 그려 host를 확인한다. 플랫폼 서비스는 `luil`을 링크한 `luil_macos_platform_tests`가 실제 OS로 본다 (Windows의 `luil_tests` 자리다).
+test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows 호스트에서만, 이 프리셋은 macOS 호스트에서만 보인다 (`condition`). 키 변환(`src/macos/macos_input.cpp`)은 AppKit을 모르는 순수 층이라 core test에 들어가고, 예제의 `--smoke-test`가 창을 보이지 않은 채 첫 frame을 그려 host를 확인한다. 플랫폼 서비스는 `luil`을 링크한 `luil_macos_platform_tests`가 실제 OS로 본다 (Windows의 `luil_tests` 자리다). 창 정책(창 밖 popup 판, 테두리 없는 창, caption 끌기, 처음 자리)은 표지 `window`가 붙은 test가 예제 `luil_tool_window`를 실제 창으로 띄워 입력 대본(`tests/macos/*.script`)으로 본다 ([macOS 창 정책](../macos-window-design.md#검증)). 창이 잠깐 앞에 서고 활성을 Finder에 넘기는 test도 있어, 로그인한 화면이 있는 기계에서 돈다. 빼려면 `ctest -LE window`다.
 
 ### 앱 host
 
@@ -135,16 +135,17 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 경계 | macOS |
 | --- | --- |
 | 실행 루프와 깨우기 | `NSApplication`의 run loop. 다른 thread의 깨우기는 `CFRunLoopPerformBlock`(공통 모드)이라 창 크기를 끄는 동안에도 돈다 |
-| 창과 표면 | 주 창과 보조 창(`ui_frame::windows`), 도킹 표면(`ui_frame::docked_surfaces`). 소유된 보조 창은 주 창 위에 뜨는 `NSPanel`, 독립 창은 보통 창, 도킹 표면은 테두리 없고 활성화되지 않는 판이다. 창마다 렌더러·popup·입력 router·웹뷰를 따로 갖는다. 제목 막대는 시스템의 것이라 `ui_platform::window_caption`이 거짓이고 `caption_element`는 자리를 차지하지 않는다 |
-| 배치·전체 화면 | 주 창 배치를 `window_delegate::make_window_placement_message`로 알리고(확대·전체 화면이면 돌아갈 자리), `window_placement_request`와 `ui_frame::fullscreen`을 따른다. 모니터 목록은 `ui_frame::displays`로 알린다 |
-| 배경 효과 | 창 내용 맨 아래의 `NSVisualEffectView`(창 뒤 섞기)다. mica는 창 바탕, mica_alt는 창 아래 바탕, acrylic은 HUD 재질이다. 투명도 줄이기·대비 늘리기면 세우지 않고 까닭을 알린다. popup에는 없다 |
+| 창과 표면 | 주 창과 보조 창(`ui_frame::windows`), 도킹 표면(`ui_frame::docked_surfaces`), popup 판(`ui_frame::popups`). 소유된 보조 창은 주 창 위에 뜨는 `NSPanel`, 독립 창은 보통 창, 도킹 표면은 테두리 없고 활성화되지 않는 판이다. 창마다 렌더러·입력 router·웹뷰를 따로 갖는다. 제목 막대는 시스템의 것이라 `ui_platform::window_caption`이 거짓이고 `caption_element`는 자리를 차지하지 않는다. 그 앱 단추는 제목 막대 부속 view에 선다. `application_config::borderless`면 제목 막대 없이 앱이 caption을 그리고 host가 Win32와 같은 규칙으로 끌기·창 단추를 판정한다 ([macOS 창 정책](../macos-window-design.md)) |
+| 창 모양 | 투명 바탕(`presentation = layered`, `layered_click_through`), 둥근 모서리(`corner_radius`), 늘 위(`topmost`, 실행 중에는 `ui_frame::topmost`), 모든 공간(`all_spaces`), 활성화 정책(`activation`, 기본은 번들의 `LSUIElement`). 주 창과 독립 창은 테두리가 없어도 키 창이 된다 |
+| 배치·전체 화면 | 처음 자리는 `initial_placement`(Windows와 같은 거르기) → `initial_position` → 가운데다. 주 창 배치를 `window_delegate::make_window_placement_message`로 알리고(확대·전체 화면이면 돌아갈 자리), 처음 자리는 창이 보인 뒤 한 번 알린다. 제목 막대가 없는 창의 확대는 host가 든다. caption 끌기는 끝에 한 번 알리고 걸음마다 `on_window_moving`으로 앱이 자리를 고친다. `window_placement_request`와 `ui_frame::fullscreen`을 따른다. 모니터 목록은 `ui_frame::displays`로 알린다 |
+| 배경 효과 | 창 내용 맨 아래의 `NSVisualEffectView`(창 뒤 섞기)다. mica는 창 바탕, mica_alt는 창 아래 바탕, acrylic은 HUD 재질이다. 투명도 줄이기·대비 늘리기면 세우지 않고 까닭을 알린다. popup 판은 acrylic만 선다 |
 | 화면 좌표 | 주 화면 왼쪽 위 원점, 아래로 는다. 단위는 점 × 주 화면 배율이다 (`screen_point`, `window_placement`, `window_screen_anchor`) |
 | 렌더러 | Metal(Ganesh)이 먼저다. view layer의 자식 `CAMetalLayer`에 그리고, 만들거나 그리다 실패하면 CPU(Skia raster → CGImage layer 내용)로 물러선다. 한 번 물러서면 다시 쓰지 않는다. `gpu`·`direct3d`는 Metal을 요구한다. 보이지 않는 창(최소화·완전히 가림)에는 그리지 않는다 |
 | 배율 | 창이 놓인 화면의 `backingScaleFactor`(레티나 2) |
 | 글꼴 | `SkFontMgr_New_CoreText`, 기본 UI 서체는 시스템 서체(`.AppleSystemUIFont`). codicon은 라이브러리에 싣는다 |
-| 입력 | 마우스·트랙패드·키보드. Command가 주 단축키(`key_chord::control`의 자리, 단축키 글은 ⌥⇧⌘ 꼴 — `ui_platform::command_key_shortcuts`), Option이 낱말 이동이고 Command+화살표는 줄·글의 처음과 끝이다. Control+클릭은 오른쪽 클릭이다. 앱 정의 커서는 `application_config::resolve_cursor`가 `NSCursor`로 옮긴다 |
+| 입력 | 마우스·트랙패드·키보드. Command가 주 단축키(`key_chord::control`의 자리, 단축키 글은 ⌥⇧⌘ 꼴 — `ui_platform::command_key_shortcuts`), Option이 낱말 이동이고 Command+화살표는 줄·글의 처음과 끝이다. Control+클릭은 오른쪽 클릭이다. 앱 정의 커서는 `application_config::resolve_cursor`가 `NSCursor`로 옮긴다. 포인터 이동·hover는 앱이 뒤에 있어도 보이는 창이면 온다(`inactive_hover`, `NSTrackingActiveAlways`) |
 | 텍스트 입력 | `NSTextInputClient`. 조합 글은 `post_composition`으로 보이고 확정은 insert 편집이다 (한글 입력기) |
-| popup | 앵커 사슬이 끝나는 창 위에 겹쳐 그린다 (Android와 같은 overlay) |
+| popup | popup마다 테두리 없는 비활성화 판(`NSPanel`)이다. 앵커 창의 자식 창으로 앵커 기준 자리에 그대로 서고 창 밖으로 나간다. 작업 영역 안으로만 민다. 앱을 활성화하거나 키 창을 빼앗지 않는다 ([macOS 창 정책](../macos-window-design.md#1-popup-판)) |
 | 웹뷰 | WKWebView. 그 창(주 창·보조 창·도킹 표면) Skia view의 형제 NSView로 위층·아래층에 선다 ([웹뷰 합성](../webview-composition-design.md#macos-wkwebview)) |
 | OS 알림 | UserNotifications(`UNUserNotificationCenter`). 앱 번들에서만 서고 맨 실행 파일은 `unsupported`다. 권한은 `app_permission::notifications`로 묻는다 ([OS 알림](../os-notification-design.md#macos)) |
 | 클립보드 | 일반 붙여넣기 판의 글·HTML·그림(PNG와 TIFF)·파일 URL. 잘라내기의 뜻은 이 라이브러리의 형식으로 싣고, 번호는 `changeCount`다. 바뀜은 앞에 있는 동안 번호를 견줘 알린다 |
@@ -166,7 +167,7 @@ test는 빌드한 기계에서 그대로 돈다. Windows 프리셋은 Windows �
 | 변수 | 뜻 |
 | --- | --- |
 | `LUIL_MACOS_FRAME_CAPTURE=<png>` | 그린 frame마다 그 파일을 덮어쓴다 |
-| `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다. `snapshot`은 웹뷰까지 합성한 창 내용을, 창 id를 주면 그 창을 PNG로 적고 `window <id>`는 다음 명령을 그 창에 보낸다. `drop`은 파일 끌어 놓기, `sheet`는 파일 패널, `capture`·`record`는 화면 남기기를 밟는다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |
+| `LUIL_MACOS_INPUT_SCRIPT=<file>` | 창이 뜬 뒤 대본의 클릭·키·입력기 조합을 앱 자신의 이벤트 큐에 넣는다. `snapshot`은 웹뷰까지 합성한 창 내용을, 창 id를 주면 그 창을 PNG로 적고 `window <id>`는 다음 명령을 그 창에 보낸다. `drop`은 파일 끌어 놓기, `sheet`는 파일 패널, `capture`·`record`는 화면 남기기를 밟는다. `frame`·`popups`·`titlebar`·`tracking`은 창의 상태를 적고, `deactivate`는 앱을 뒤로 보낸다 (명령은 [`input_script.h`](../../src/macos/input_script.h)) |
 
 ## iOS
 

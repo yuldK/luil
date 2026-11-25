@@ -495,14 +495,16 @@ endif()
 if(LUIL_PLATFORM STREQUAL "macos")
     # 빌드한 기계에서 그대로 돈다. 기기도 실행기도 없으므로 발견도 빌드 뒤에 바로 한다.
     #  - core만 링크하는 실행 파일 둘이다. AppKit host 자체는 예제의 smoke test(`--smoke-test`)가 띄워 본다.
-    # macOS 키 변환, OS 알림의 규칙, Dock 타일·메뉴의 계산, 상태 항목 누름 풀이는 AppKit을 모르는 순수 층이라 core test에 함께
-    # 넣는다 (Android 입력 변환과 같다).
+    # macOS 키 변환, OS 알림의 규칙, Dock 타일·메뉴의 계산, 상태 항목 누름 풀이, 창·popup의 값 규칙은 AppKit을 모르는 순수 층이라
+    # core test에 함께 넣는다 (Android 입력 변환과 같다).
     target_sources(luil_core_tests
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/macos/macos_input.cpp"
             "${LUIL_SOURCE_DIRECTORY}/macos/notification_rules.cpp"
             "${LUIL_SOURCE_DIRECTORY}/macos/dock_plan.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/macos/window_rules.cpp"
             macos_input_tests.cpp
+            macos_window_rules_tests.cpp
             macos_notification_tests.cpp
             dock_plan_tests.cpp
             macos_tray_tests.cpp)
@@ -608,6 +610,89 @@ if(LUIL_PLATFORM STREQUAL "macos")
         set_tests_properties(luil_macos_demo_smoke_gpu_fallback PROPERTIES PASS_REGULAR_EXPRESSION "renderer cpu \\(fallback\\)")
         set_tests_properties(luil_macos_demo_smoke_gpu PROPERTIES PASS_REGULAR_EXPRESSION "renderer metal")
         set_tests_properties(luil_macos_demo_smoke_gpu_required PROPERTIES WILL_FAIL TRUE)
+    endif()
+    # 도구 창 예제(테두리 없는 작은 주 창)다. smoke는 창 없이 첫 frame을 그린다.
+    #  - `window` 표지가 붙은 test는 창을 실제로 띄우고 입력 대본(LUIL_MACOS_INPUT_SCRIPT)을 돌린다. 대본이 앱 자신의 이벤트 큐에
+    #    사건을 넣고, run_window_script.cmake가 앱의 `luil tool:`·`luil script:` 줄을 차례대로 본다. 화면 기록·손쉬운 사용 권한은
+    #    필요 없다. 창이 잠깐 앞에 서고, popup test는 Finder에 활성을 넘긴다 — 로그인한 화면이 있는 기계에서 돈다.
+    if(TARGET luil_tool_window)
+        add_test(NAME luil_macos_tool_window_smoke COMMAND "$<TARGET_FILE:luil_tool_window>" --smoke-test)
+        set_tests_properties(luil_macos_tool_window_smoke PROPERTIES LABELS smoke TIMEOUT 60)
+        # 목록은 `%%`로 이어 건넨다 (명령 줄의 `;`는 인자를 가른다). 실행기가 다시 목록으로 푼다.
+        function(luil_add_window_script_test name script)
+            cmake_parse_arguments(PARSE_ARGV 2 test "" "" "ARGUMENTS;EXPECT;ONCE;ABSENT")
+            list(JOIN test_ARGUMENTS "%%" arguments)
+            list(JOIN test_EXPECT "%%" expect)
+            list(JOIN test_ONCE "%%" once)
+            list(JOIN test_ABSENT "%%" absent)
+            add_test(NAME "${name}"
+                COMMAND "${CMAKE_COMMAND}" "-DEXECUTABLE=$<TARGET_FILE:luil_tool_window>" "-DSCRIPT=${CMAKE_CURRENT_SOURCE_DIR}/macos/${script}"
+                    "-DARGUMENTS=${arguments}" "-DEXPECT=${expect}" "-DONCE=${once}" "-DABSENT=${absent}" -P "${CMAKE_CURRENT_SOURCE_DIR}/macos/run_window_script.cmake")
+            set_tests_properties("${name}" PROPERTIES LABELS window TIMEOUT 90 RUN_SERIAL TRUE)
+        endfunction()
+        # 활성과 키 창은 test가 정할 수 없다 (macOS 14부터 앞에 있지 않은 프로세스는 스스로 활성을 가져오지 못한다). popup 판이 키
+        # 창이 되지 않는 것(`key=0`)과 비활성 앱이 비활성인 채인 것만 본다.
+        # 1. popup은 창 밖의 판으로 서고, 키 창과 앱의 활성을 빼앗지 않는다. Esc·바깥 누름에 닫히고, 비활성 앱에서도 머무름 카드가 선다.
+        luil_add_window_script_test(luil_macos_window_popups tool_window_popups.script
+            EXPECT
+                "placed detail 328 36 220 140"
+                "popup detail [0-9 -]+ parent=[0-9 -]+ key=0"
+                "popups 1 key_window=[0-9a-z -]+ active=[01]"
+                "popups 0 "
+                "popup list [0-9 -]+ parent=[0-9 -]+ key=0"
+                "popups 0 "
+                "dwell 1"
+                "popup detail [0-9 -]+ parent=[0-9 -]+ key=0"
+                "popups 1 key_window=none active=0"
+                "frame [0-9 -]+ key=0 main=0 level=0 all_spaces=0 opaque=0 titled=0 visible=1 active=0")
+        # 2·4. 테두리 없고 비치는 주 창, 늘 위·모든 공간·accessory, 비활성 앱에서도 도는 포인터 추적이다. 끄면 앱이 활성일 때만이다.
+        luil_add_window_script_test(luil_macos_window_look tool_window_look.script
+            ARGUMENTS --topmost --all-spaces --accessory
+            EXPECT
+                "frame [0-9 -]+ key=[01] main=[01] level=3 all_spaces=1 opaque=0 titled=0 visible=1 active=[01] policy=accessory"
+                "tracking always=1 active_app=0")
+        luil_add_window_script_test(luil_macos_window_active_hover tool_window_look.script
+            ARGUMENTS --active-hover
+            EXPECT
+                "frame [0-9 -]+ key=[01] main=[01] level=0 all_spaces=0 opaque=0 titled=0 visible=1 active=[01] policy=regular"
+                "tracking always=0 active_app=1")
+        # 3·7. caption 끌기(끌기 중 자리 고치기, 끝에 한 번 알림), 두 번 누르기·확대 단추의 확대와 그 보고, 앱 단추다.
+        luil_add_window_script_test(luil_macos_window_caption tool_window_caption.script
+            ARGUMENTS --placement=400,500,640,400 --clamp-top=80
+            EXPECT
+                "placement 400 500 640 400 max=0"
+                "frame 400 500 640 400 "
+                "moving [0-9-]+ 80"
+                "placement 600 80 640 400 max=0"
+                "frame 600 80 640 400 "
+                "placement 600 80 640 400 max=1"
+                "placement 600 80 640 400 max=0"
+                "placement 600 80 640 400 max=1"
+                "placement 600 80 640 400 max=0"
+                "pinned 1"
+                "frame 600 80 640 400 key=[01] main=[01] level=3 ")
+        # 5·6. 저장 배치로 처음부터 그 자리·크기·확대 상태로 연다. 처음 자리는 창이 보인 뒤 한 번만 알리고, 화면 밖 배치는 거른다.
+        luil_add_window_script_test(luil_macos_window_placement tool_window_placement.script
+            ARGUMENTS --placement=200,300,700,500
+            EXPECT "luil tool: placement 200 300 700 500 max=0" "frame 200 300 700 500 "
+            ONCE "luil tool: placement ")
+        luil_add_window_script_test(luil_macos_window_placement_zoomed tool_window_placement.script
+            ARGUMENTS --placement=200,300,700,500,max
+            EXPECT "luil tool: placement 200 300 700 500 max=1"
+            ONCE "luil tool: placement ")
+        luil_add_window_script_test(luil_macos_window_placement_offscreen tool_window_placement.script
+            ARGUMENTS --placement=90000,300,700,500 --position=120,140
+            EXPECT "luil tool: placement 120 140 640 400 max=0" "frame 120 140 640 400 "
+            ONCE "luil tool: placement ")
+        # 8. 시스템 제목 막대가 있는 창은 caption 앱 단추를 제목 막대에 세운다. 누르면 tree의 그 단추와 같은 액션이다.
+        luil_add_window_script_test(luil_macos_window_titlebar tool_window_titled.script
+            ARGUMENTS --titled
+            EXPECT
+                "titlebar pin tooltip=\"Keep on top\" name=\"Keep on top\" enabled=1 image=1"
+                "pinned 1"
+                "titlebar pin tooltip=\"Unpin\" name=\"Unpin\" enabled=1 image=1"
+                "frame [0-9 -]+ key=[01] main=[01] level=3 all_spaces=0 opaque=1 titled=1"
+                "ax AXButton \"Unpin\"")
     endif()
     # 장 재생기 예제는 견본을 열고 첫 frame을 그린 뒤 끝난다.
     if(TARGET luil_video)

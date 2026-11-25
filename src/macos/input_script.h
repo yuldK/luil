@@ -19,13 +19,19 @@
 //   type <글>               — 글자마다 키를 누른다 (입력기를 거친다)
 //   marked <글>             — 입력기의 조합 글을 세운다 (`setMarkedText:`)
 //   commit <글>             — 입력기가 글을 확정한다 (`insertText:`)
-//   snapshot <png> [창 id]  — 창 내용(주 창은 웹뷰를 포함한 합성, 보조 창은 그 창의 frame)을 PNG로 적는다 (view가 `luilSnapshot:`에 답할 때)
+//   snapshot <png> [창 id]  — 창 내용(주 창은 웹뷰를 포함한 합성, 보조 창·popup 판은 그 frame)을 PNG로 적는다 (view가 `luilSnapshot:`에 답할 때)
 //   ax                      — 창의 접근성 계층(역할·이름·값)과 초점 요소를 stderr에 적는다
 //   capture <경로>          — 지금 창을 무손실 WebP로 남긴다 (`capture_request`)
 //   record [<경로>]         — 경로가 있으면 녹화를 시작하고, 없으면 멈춰 애니메이션 WebP로 적는다 (`record_request`)
-//   window <id>             — 다음 명령을 그 창(보조 창 id, `main`이면 주 창)에 보낸다
+//   window <id>             — 다음 명령을 그 창(보조 창·popup id, `main`이면 주 창)에 보낸다
 //   drop <x> <y> <경로>      — 파일 하나를 그 자리에 끌어 와 놓는다 (view의 끌어 놓기 길을 밟는다)
 //   sheet [cancel|name <이름>|folder <경로>] — 창에 붙은 sheet(파일 패널)를 다룬다. 키 명령은 sheet가 있으면 그리로 간다
-//   quit                    — 지금 창의 닫기 길을 밟는다 (`performClose:`)
+//   doubleclick <x> <y>     — 두 번 누른다 (caption의 두 번 누르기)
+//   frame                   — 지금 창의 자리(화면 픽셀, 바깥 사각형)·키 창·층·공간·불투명·제목 막대와 앱의 활성·활성화 정책을 적는다
+//   popups                  — 떠 있는 popup 판마다 화면 자리·부모 창·키 창 여부를 적는다
+//   titlebar [<key>]        — 제목 막대에 선 앱 단추를 적는다. key를 주면 그 단추를 누른다
+//   tracking                — 지금 view의 포인터 추적이 앱이 비활성일 때도 도는가를 적는다
+//   deactivate | activate   — 앱을 뒤로 보내거나(Finder에 활성을 넘긴다) 앞으로 세운다 (`activateIgnoringOtherApps:`)
+//   quit                    — 지금 창의 닫기 길을 밟는다 (`performClose:`, 닫기 단추가 없는 창은 delegate의 `windowShouldClose:`)
 void luil_run_input_script(NSWindow* window, NSView* view);
 #endif

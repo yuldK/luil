@@ -425,6 +425,19 @@ namespace luil::win32 {
             return {};
         }
 
+        // 사용자가 caption을 잡고 주 창을 끄는 동안, 창이 갈 자리를 앱이 고친다 (Win32 `WM_MOVING`의 자리).
+        // `bounds`는 이번 포인터 이동으로 창 바깥 사각형이 갈 자리다. 고쳐 두면 창이 그 자리로 간다. 크기는 바꾸지 않는다
+        // (너비·높이를 바꾸면 왼쪽 위만 쓴다).
+        //  - 화면 작업 영역 안으로 맞추기(`ui_frame::displays`의 `work_area`), 머릿줄의 자리를 기준으로 한 끌기 같은 데 쓴다.
+        //  - 끌기의 포인터 이동마다 UI thread에서 불린다. 곧 돌아와야 하고, 메시지를 게시하지 않는다 (배치는 끌기 끝에 한 번 알린다).
+        //  - macOS host가 테두리 없는 주 창(`macos::application_config::borderless`)의 caption 끌기에서 부른다. 좌표는 그 host의
+        //    화면 좌표 약속(주 화면 왼쪽 위 원점, 점 × 주 화면 배율)이다. Win32는 아직 부르지 않는다.
+        virtual void on_window_moving(app_host& host, screen_rect& bounds)
+        {
+            static_cast<void>(host);
+            static_cast<void>(bounds);
+        }
+
         // 주 창이나 보조 창의 배경 효과 상태가 바뀌었다 (앱이 고른 효과가 바뀌었거나, OS 설정·고대비가 바뀌었다).
         // 어느 표면인지는 `report.surface`다. 빈 메시지는 게시하지 않는다. 설정 화면이 "이 표시 방식에서는 mica를 쓸 수
         // 없다" 같은 까닭을 보일 때 쓴다.
