@@ -65,6 +65,8 @@ function(luil_add_ios_bundle target)
         target_link_options("${target}" PRIVATE "LINKER:-sectcreate,__TEXT,__entitlements,${entitlements}")
         set_property(TARGET "${target}" APPEND PROPERTY LINK_DEPENDS "${entitlements}")
     endif()
+    # SMB를 켠 구성은 luil이 libsmb2.framework를 링크한다. 앱 서명보다 먼저 번들에 넣고 같은 신원으로 서명한다.
+    luil_ios_embed_smb("${target}" CODE_SIGN_IDENTITY "${luil_ios_signing_identity}")
     luil_sign_ios_bundle("${target}")
 endfunction()
 
@@ -97,7 +99,8 @@ target_link_libraries(luil_hello PRIVATE luil::luil luil_options)
 luil_add_ios_bundle(luil_hello SUFFIX "hello" NAME "luil hello")
 
 # mobile demo — Android와 같은 페이지·delegate다. 견본 그림은 빌드가 바이트 배열로 실어 번들 자원이 없다.
-#  - SMB는 "지원 안 함"으로 답한다. 파일 감시는 앱 컨테이너의 `Library/Application Support` 아래를 본다.
+#  - SMB 페이지는 LUIL_ENABLE_SMB를 켠 구성에서 libsmb2 위의 client를 쓰고, 끈 구성에서는 "지원 안 함"을 보인다.
+#    파일 감시는 앱 컨테이너의 `Library/Application Support` 아래를 본다.
 include("${luil_examples_directory}/mobile_demo/mobile_demo.cmake")
 luil_mobile_demo_sources(luil_mobile_demo_files)
 add_executable(luil_mobile_demo

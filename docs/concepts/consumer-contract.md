@@ -48,8 +48,12 @@ luil 자체 소스와 문서는 [MIT 라이선스](../../LICENSE)를 따른다. 
 `LUIL_ENABLE_SMB`(Android·iOS 전용, 기본 끔)를 켠 앱은 libsmb2(LGPL-2.1)를 함께 배포한다. 그 조건은 앱이 지킨다.
 
 - `libsmb2.so`를 앱의 네이티브 라이브러리와 **따로** APK의 `jniLibs`에 싼다. luil의 Android 예제는 CMake가 `<빌드>/jniLibs/<예제>/<구성>/<abi>`에 함께 놓는다. 앱 라이브러리에 정적으로 섞지 않는 것이 LGPL-2.1의 "사용자가 라이브러리를 바꿔 끼울 수 있다"를 지키는 길이다.
-- iOS에서는 `libsmb2.framework`(target `luil_smb2`)를 앱 번들의 `Frameworks/`에 복사하고 앱보다 먼저 같은 신원으로 서명한다. 앱 실행 파일은 `@executable_path/Frameworks`를 rpath로 둔다. Info.plist에 `NSBonjourServices`(`_smb._tcp`)와 `NSLocalNetworkUsageDescription`을 싣는다. App Store 배포에서 바꿔 끼우기를 어떻게 지킬지는 앱이 따로 본다.
-- 앱의 고지(설정의 오픈 소스 라이선스 화면 등)에 LGPL-2.1 전문(`third_party/libsmb2/LICENCE-LGPL-2.1.txt`)과 쓴 판(`libsmb2-6.2`)·소스 위치(https://github.com/sahlberg/libsmb2)를 싣는다. luil의 고지 생성기는 Windows 실행 파일 리소스용이라 Android·iOS에서는 앱이 직접 싣는다.
+- iOS에서는 luil이 libsmb2를 앱 실행 파일에 섞지 않고 동적 프레임워크 `libsmb2.framework`(target `luil_smb2`, 설치 이름 `@rpath/libsmb2.framework/libsmb2`, Info.plist에 판 `6.2`·`MinimumOSVersion`·`CFBundleSupportedPlatforms`)로 링크한다. 켠 구성에서는 luil을 링크한 모든 앱 대상이 이 프레임워크를 번들에 실어야 한다 — 없으면 앱이 뜨자마자 dyld가 멈춘다.
+  - **CMake 함수.** `add_subdirectory`로 들인 앱은 앱 대상마다 `luil_ios_embed_smb(<대상> [CODE_SIGN_IDENTITY <신원>])`를 부른다 ([`cmake/ios/embed_smb.cmake`](../../cmake/ios/embed_smb.cmake)). 실행 파일의 rpath를 `@executable_path/Frameworks`로 두고(빌드 폴더의 절대 경로를 싣지 않는다), 빌드 뒤에 `<앱>.app/Frameworks/libsmb2.framework`로 복사해 그 자리에서 서명한다. 신원을 주지 않으면 ad-hoc(시뮬레이터용)이다. SMB를 끈 구성에서는 아무것도 하지 않는다. **앱을 서명하는 빌드 뒤 단계보다 먼저 부른다** — 같은 대상의 빌드 뒤 단계는 건 순서대로 돈다. luil의 iOS 예제가 이렇게 쓴다 ([`examples/ios.cmake`](../../examples/ios.cmake)).
+  - **손으로 할 때.** 자리는 `<앱>.app/Frameworks/libsmb2.framework`, rpath는 `@executable_path/Frameworks`, 서명은 안쪽부터다 — 프레임워크를 앱과 같은 신원으로 먼저 서명(`codesign --force --sign <신원> <앱>.app/Frameworks/libsmb2.framework`, 권한 파일 없이)하고 그다음 앱을 서명한다. Xcode generator를 쓰면 `XCODE_EMBED_FRAMEWORKS`(`CodeSignOnCopy`)로 같은 일을 맡겨도 된다. 보관·배포 때 Xcode가 프레임워크를 다시 서명하는 것은 상관없다.
+  - **바꿔 끼우기.** 사용자는 같은 설치 이름으로 지은 `libsmb2.framework`로 `Frameworks/`의 것을 갈고 번들을 다시 서명하면 된다. App Store로 배포할 때 이 조건을 어떻게 지킬지(예: 앱의 목적 파일을 요청자에게 내주기)는 앱이 따로 판단한다.
+  - **Info.plist.** `NSBonjourServices`에 `_smb._tcp`, `NSLocalNetworkUsageDescription`에 로컬 네트워크 권한 창의 글을 싣는다. 찾기와 `.local` 풀기는 시스템 DNS-SD라 멀티캐스트 권한(`com.apple.developer.networking.multicast`)은 필요 없다 ([SMB client의 iOS](../smb-client-design.md#ios)).
+- 앱의 고지(설정의 오픈 소스 라이선스 화면 등)에 LGPL-2.1 전문(`third_party/libsmb2/LICENCE-LGPL-2.1.txt`)과 쓴 판(`libsmb2-6.2`)·소스 위치(https://github.com/sahlberg/libsmb2)를 싣는다. luil의 고지 생성기는 Windows 실행 파일 리소스용이라 Android·iOS에서는 앱이 직접 싣는다. iOS 프레임워크 안에도 전문(`LICENCE-LGPL-2.1.txt`)을 함께 넣어 바꿔 끼울 파일과 그 조건이 한 묶음으로 다니게 했지만, 사용자가 보는 고지 화면은 앱의 몫이다.
 - luil은 libsmb2를 고치지 않고 쓴다. 고쳐 쓰려면 고친 소스도 LGPL로 공개해야 한다.
 - 같은 저장소의 libdcerpc 부분은 BSD-2 라이선스다.
 

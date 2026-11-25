@@ -1,6 +1,6 @@
 # SMB client
 
-`luil::net::smb_client`는 Android 앱이 같은 네트워크의 NAS나 Windows 공유를 SMB로 읽게 하는 client다. 공개 API는
+`luil::net::smb_client`는 Android·iOS 앱이 같은 네트워크의 NAS나 Windows 공유를 SMB로 읽게 하는 client다. 공개 API는
 [`include/luil/net/smb_client.h`](../include/luil/net/smb_client.h)에 있다.
 
 ## 어디서 서나
@@ -14,7 +14,8 @@
 | Windows, macOS | nullptr, "지원 안 함" | 운영체제의 SMB를 쓴다 |
 
 Android의 문서 선택기(SAF)는 결과를 받으려면 Java가 있어야 해서 두지 않았다. 사용자가 고른 폴더 대신 앱이 서버와
-공유를 알고 SMB로 붙는 길이 이것이다. Windows에서는 쓸 일이 없어 libsmb2를 싣지 않는다. 의존과 고지는
+공유를 알고 SMB로 붙는 길이 이것이다. iOS도 같은 공개 API와 동작(시간 상한·취소·연결 다시 쓰기·오류 갈래)이고, 다른 것은
+[iOS](#ios)에 모았다. Windows·macOS에서는 쓸 일이 없어 libsmb2를 싣지 않는다. 의존과 고지는
 [빌드 체계](concepts/build-system.md)와 [소비자 계약](concepts/consumer-contract.md#smb)에 있다.
 
 ## 계약
@@ -114,12 +115,7 @@ Android의 문서 선택기(SAF)는 결과를 받으려면 Java가 있어야 해
 - **권한.** 매니페스트에 `INTERNET`이 있어야 한다. Android 17부터는 같은 네트워크로 가는 연결에 로컬 네트워크 권한이 있어야
   하므로, 찾기 전에도 `app_host::request_permission(app_permission::local_network)`로 받는다. mDNS 멀티캐스트가 그 권한으로
   풀리는지는 Android 17 기기가 없어 확인하지 못했다.
-- **iOS.** 앱이 멀티캐스트를 직접 보내려면 Apple이 승인하는 멀티캐스트 권한(`com.apple.developer.networking.multicast`)이 있어야
-  한다. 그래서 iOS는 위의 직접 질의(`mdns_query.cpp`)를 짓지 않고, 찾기와 `.local` 이름 풀기를 시스템 DNS-SD(`dns_sd.h`,
-  [`net/ios/dns_sd_query.cpp`](../src/net/ios/dns_sd_query.cpp))에 맡긴다. 찾기는 `_smb._tcp`를 훑고 인스턴스마다 호스트·포트와 주소를
-  묻는다. 앱의 Info.plist에 `NSBonjourServices`(`_smb._tcp`)와 `NSLocalNetworkUsageDescription`이 있어야 하고, 첫 찾기나 첫 연결에서
-  시스템이 로컬 네트워크 권한을 묻는다(거절하면 찾기가 실패한다). libsmb2의 TCP 쓰기가 끊긴 연결에서 앱을 끝내지 않도록 client가
-  만들어질 때 프로세스의 SIGPIPE를 무시한다.
+- **iOS.** 위의 직접 질의를 짓지 않고 시스템 DNS-SD에 맡긴다 ([iOS](#ios)). 창·결과·답의 계약은 같다.
 - **Windows.** client가 없으므로 "지원 안 함"이다.
 - **안 되는 서버.** DNS-SD로 SMB를 알리지 않는 서버(오래된 NAS, NetBIOS만 하는 서버)와 legacy unicast에 답하지 않는 응답자는
   찾지 못한다. NetBIOS 이름 질의는 넣지 않았다.
@@ -129,7 +125,8 @@ Android의 문서 선택기(SAF)는 결과를 받으려면 Java가 있어야 해
 Android의 이름 풀기는 `.local` 이름을 풀지 않고, libsmb2는 이름을 `getaddrinfo`로 푸는데 그것은 끊을 수 없게 막힌다. 그래서
 서버가 `.local`로 끝나면 연결하기 전에 client가 A·AAAA를 같은 길(한 번 질의)로 묻는다. IPv4 주소가 오면 바로, 아니면 1.5초
 (요청의 시간 상한이 더 짧으면 그것)까지 기다려 받은 주소로 붙는다. 풀지 못하면 이름 그대로 libsmb2에 맡긴다 (운영체제가 풀
-수도 있다). 주소는 새로 열 때만 푼다 — 쉬던 연결이 있으면 풀지 않고 다시 쓴다. 연결의 열쇠는 적은 이름이라, 주소가 바뀌어도
+수도 있다). iOS는 시스템 DNS-SD에 묻고 5초까지 기다리며, 풀지 못하면 `getaddrinfo`로 물러서지 않고 `cannot_connect`로 답한다
+([iOS](#ios)). 주소는 새로 열 때만 푼다 — 쉬던 연결이 있으면 풀지 않고 다시 쓴다. 연결의 열쇠는 적은 이름이라, 주소가 바뀌어도
 쉬던 연결의 다시 쓰기는 이름으로 잇는다.
 
 ## 오류
@@ -141,7 +138,7 @@ Android의 이름 풀기는 `.local` 이름을 풀지 않고, libsmb2는 이름�
 | `logon_failure` | 틀린 암호, 로그온 실패, 계정 제한·만료·잠김 |
 | `access_denied` | 접근 거부, `EACCES`·`EPERM` |
 | `not_found` | 없는 공유(`BAD_NETWORK_NAME`), 없는 파일·경로, `ENOENT` |
-| `cannot_connect` | 연결 거절·닿지 않음·끊김, 그리고 연결·로그온 단계의 갈래 없는 실패 (이름을 풀지 못함 등) |
+| `cannot_connect` | 연결 거절·닿지 않음·끊김, 그리고 연결·로그온 단계의 갈래 없는 실패 (이름을 풀지 못함 등). iOS에서 로컬 네트워크 권한을 거절한 찾기·`.local` 풀기·연결도 여기다 |
 | `failed` | 그 밖. `message`에 libsmb2의 글이 그대로 있다 |
 
 `message`는 libsmb2의 `smb2_get_error` 그대로라, 사람이 아니라 개발자가 읽는 글이다. 서버가 없는 개발 환경에서 사용자가
@@ -172,6 +169,37 @@ Android 17부터 targetSdk 37 이상인 앱은 같은 네트워크의 주소로 
 `app_host::request_permission(app_permission::local_network)`로 묻는다 ([기기 요청](device-request-design.md#권한)).
 그 아래 판은 `INTERNET`만 있으면 된다. 두 권한 모두 앱의 매니페스트에 선언한다.
 
+iOS에는 이 권한을 미리 묻거나 상태를 읽는 API가 없다. 그래서 iOS host의 `app_host::permission(app_permission::local_network)`은
+늘 `permission_state::not_required`이고 `request_permission`은 거짓(물을 것이 없다)이다. 시스템은 앱이 처음 같은 네트워크에
+닿을 때(첫 찾기나 첫 연결) Info.plist의 `NSLocalNetworkUsageDescription`으로 스스로 묻는다. 거절했을 때의 답은 [iOS](#ios)에 있다.
+
+## iOS
+
+같은 client(`smb_client_libsmb2.cpp`)가 서고, iOS에서 달라지는 것만 여기 적는다.
+
+- **libsmb2는 동적 프레임워크다.** `libsmb2.framework`를 앱 번들의 `Frameworks/`에 싣고 서명한다. 그 방법과 고지는
+  [소비자 계약](concepts/consumer-contract.md#smb)에 있다.
+- **찾기와 `.local` 풀기는 시스템 DNS-SD다.** iOS는 앱이 멀티캐스트 패킷을 직접 보내는 것을 Apple이 승인하는 멀티캐스트
+  권한(`com.apple.developer.networking.multicast`)이 있을 때만 허락한다. 일반 개발자 계정으로 서명한 앱도 쓸 수 있도록, 직접
+  질의(`mdns_query.cpp`)를 짓지 않고 mDNSResponder에 묻는다 (`dns_sd.h`, [`net/ios/dns_sd_query.cpp`](../src/net/ios/dns_sd_query.cpp)).
+  찾기는 `_smb._tcp`를 창 끝까지 훑고(`DNSServiceBrowse`), 인스턴스마다 호스트·포트(`DNSServiceResolve`)와 주소
+  (`DNSServiceGetAddrInfo`)를 묻는다. 같은 서버가 인터페이스마다 오면 첫 것만 쓴다. `.local` 풀기는 `DNSServiceGetAddrInfo` 하나로
+  IPv4가 오면 바로, 아니면 5초(요청의 시간 상한이 더 짧으면 그것)까지 기다린다 — 막 켠 기기·시뮬레이터의 첫 질의는 1초를 넘기도
+  한다. 풀지 못하면 `getaddrinfo`로 물러서지 않는다. 같은 시스템 서비스에 묻는 데다 끊을 수 없게 수십 초 막히기 때문이다.
+- **앱의 Info.plist.** `NSBonjourServices`에 `_smb._tcp`를, `NSLocalNetworkUsageDescription`에 권한 창의 글을 싣는다. 목록에 없는
+  서비스를 찾으면 시스템이 거절한다. 멀티캐스트 권한은 필요 없다.
+- **로컬 네트워크 권한을 거절했을 때.** 모두 `cannot_connect`다 (`native_error`는 `-EHOSTUNREACH`).
+  - 찾기: mDNSResponder가 `kDNSServiceErr_PolicyDenied`로 답하면 창을 기다리지 않고 "Local network access was denied (DNS-SD
+    browse)."로 답한다. 사용자가 권한 창에 답하기 전에는 답이 오지 않아 창 끝에 빈 목록으로 끝날 수 있다.
+  - `.local` 이름: 같은 거절이면 연결하지 않고 "Local network access was denied (DNS-SD lookup)."로 답한다.
+  - IP 주소: 시스템이 TCP 연결을 막아 libsmb2가 연결 실패를 돌려준다.
+- **끊긴 연결에서 앱이 죽지 않는다.** Apple 플랫폼은 상대가 끊은 TCP 소켓에 쓰면 SIGPIPE를 보내고, 기본 처리가 프로세스를
+  끝낸다 (Android는 런타임이 이미 무시한다). libsmb2는 소켓을 제 안에서 만들고 `writev`로 쓰며 `MSG_NOSIGNAL`을 줄 자리가 없다.
+  그래서 client가 libsmb2에 소켓을 맡기기 전마다(`smb2_service_fd` 앞) 그 소켓에 `SO_NOSIGPIPE`를 건다
+  ([`net/socket_no_sigpipe.h`](../src/net/socket_no_sigpipe.h)). libsmb2가 쓰는 곳은 그 처리 안뿐이고 그 소켓은 모두 `smb2_get_fds`의
+  목록에 있다. 쓰기는 `EPIPE`로 실패해 연결 실패로 돌아온다 — 쉬던 연결이면 한 번 새 연결로 다시 하고, 서버가 꺼졌으면
+  `cannot_connect`다. **프로세스의 신호 처리는 바꾸지 않는다.**
+
 ## 검증
 
 | 대상 | 확인 |
@@ -183,7 +211,8 @@ Android 17부터 targetSdk 37 이상인 앱은 같은 네트워크의 주소로 
 | DNS 메시지 | 질의 짓기, PTR·SRV·TXT·A·AAAA 읽기, 앞쪽만 가리키는 압축 이름, 잘린 패킷·고리 포인터·예약 라벨·틀린 주소 길이·패킷 밖 데이터·255바이트 넘는 이름의 거절, 모르는 레코드 건너뛰기, 인스턴스·서비스·주소로 서버 짓기와 빠진 질문, 링크 로컬 주소의 범위, 이름 견주기 (core test, [`dns_message_tests.cpp`](../tests/dns_message_tests.cpp)) |
 | 서버 글 | 호스트·포트 가르기와 잇기(IPv6 괄호), `.local` 판정, 찾은 서버의 `server()`, `send`가 찾기 갈래를 거절함 (core test) |
 | mDNS 소켓 | 루프백 응답자의 유니캐스트 답 모으기와 서버 짓기, 답 없는 질의의 시간 상한, 멈춤, 질의 패킷·깨진 패킷 버리기, 이 기기의 멀티캐스트 인터페이스 (기기 test, [`mdns_query_tests.cpp`](../tests/mdns_query_tests.cpp)) |
-| 찾기 | 창 밖의 값 거절, 창 끝의 한 번 답, 취소 (기기 test, 실제 네트워크로 질의를 보낸다) |
+| 찾기 | 창 밖의 값 거절, 창 끝의 한 번 답, 취소 (기기 test, 실제 네트워크로 질의를 보낸다. iOS는 시스템 DNS-SD) |
+| SIGPIPE 막기 | 상대가 닫은 소켓에 `writev`로 쓰면 신호 없이 `EPIPE`, 음수 소켓의 거절 (core test, [`socket_no_sigpipe_tests.cpp`](../tests/socket_no_sigpipe_tests.cpp)) |
 | client | 거절한 요청은 표가 없음, 닫힌 포트는 `cannot_connect`이고 오류 글에 암호가 없음, 답하지 않는 서버의 시간 상한, 기다리는 요청의 취소와 `max_in_flight` 거절, 정지 뒤 배달 없음과 상한 안의 정지, 겹친 요청 200개의 문맥 만들고 거두기 (기기 test, [`smb_client_tests.cpp`](../tests/smb_client_tests.cpp)) |
 | 시험 서버와의 왕복 | srvsvc가 없는 서버의 공유 목록이 값으로 실패하고 서버를 그대로 쓸 수 있음, 열거와 구간 읽기, 틀린 암호의 `logon_failure`, 같은 계정의 다시 쓰기와 다른 도메인의 새 연결, 쉬는 시간 만료, 쉬는 시간 0, 서버당 상한 1의 기다림, 요청 중에 끊긴 연결의 한 번 재시도(`reopened`), 쉬는 동안 끊긴 연결의 교체, 로그온 실패의 재시도 없음, 취소한 요청의 연결 버림, `close_idle`, 쉬는 연결이 있는 정지 (기기 test) |
 | 실제 서버 | mobile demo의 SMB 페이지로 사람이 NAS에 붙어 열거·읽기·틀린 암호·없는 공유, 다시 쓰기의 시간 차, 공유 목록, 찾기와 `.local` 이름을 확인한다 ([Android 이식 계획](android-port-plan.md)) |
@@ -192,6 +221,12 @@ Android 17부터 targetSdk 37 이상인 앱은 같은 네트워크의 주소로 
 기기 test는 `LUIL_ENABLE_SMB`를 켠 구성에서 `luil_smb_tests`로 돈다. 셸에서 도는 실행 파일이라 JVM이 필요 없고,
 [`adb_run.cmake`](../cmake/android/adb_run.cmake)가 실행 파일 옆의 `libsmb2.so`와 시험 서버를 함께 올린다
 (`LIBRARIES`).
+
+iOS는 `ios-arm64-simulator` 구성(`LUIL_BUILD_TESTS`·`LUIL_ENABLE_SMB`를 켬)에서 같은 `luil_smb_tests`가 시뮬레이터 안에서
+돈다 (`xcrun simctl spawn`, 기기는 `LUIL_IOS_TEST_SIMULATOR`, 기본 `booted`). 직접 mDNS test 대신 시스템 DNS-SD로 찾고, SIGPIPE 막기
+test가 함께 든다. 프로세스의 SIGPIPE를 기본 처리로 둔 채 돌아, 끊긴 연결에 쓰는 자리가 있으면 실행 파일이 끝나 드러난다.
+사람 손으로는 시뮬레이터의 모바일 demo에서 실제 NAS 찾기, `.local` 이름으로 붙어 로그온 거절, 시험 서버의 목록·파일 읽기,
+쉬던 연결이 있는 채 서버를 SIGKILL로 끈 뒤의 요청(앱이 살아 `cannot_connect`)을 보았다.
 
 **시험 서버.** [`smb_test_server.cpp`](../tests/smb_test_server.cpp)는 libsmb2의 서버 쪽 위에 메모리 안의 공유 하나를 두는
 따로 된 실행 파일이다. test가 fork·exec로 띄우고 SIGKILL로 거둔다. libsmb2의 서버 고리는 프로세스의 모든 libsmb2 문맥을

@@ -75,19 +75,30 @@ function(luil_find_libsmb2)
     # 파일 이름은 upstream과 같은 libsmb2.so다. 고지와 사용자가 바꿔 끼울 파일이 같은 이름을 가리킨다.
     set_target_properties(luil_smb2 PROPERTIES OUTPUT_NAME smb2 C_STANDARD 99 C_EXTENSIONS ON)
     # iOS 앱은 번들 밖의 라이브러리를 열지 못하고, 번들에 싣는 동적 코드는 프레임워크여야 한다. `libsmb2.framework`로 세우고
-    # 앱이 번들의 Frameworks/에 복사해 서명한다. 설치 이름이 `@rpath/…`라 앱은 `@executable_path/Frameworks`를 rpath로 둔다.
-    #  - Info.plist는 최소 iOS 판(`CMAKE_OSX_DEPLOYMENT_TARGET`)을 적는 틀이다 (cmake/ios/Framework-Info.plist.in). CMake 기본 틀에는 그 칸이 없다.
+    # 앱이 번들의 Frameworks/에 복사해 서명한다 (cmake/ios/embed_smb.cmake의 `luil_ios_embed_smb`). 설치 이름이 `@rpath/…`라
+    # 앱은 `@executable_path/Frameworks`를 rpath로 둔다.
+    #  - Info.plist는 최소 iOS 판(`CMAKE_OSX_DEPLOYMENT_TARGET`)과 지원 플랫폼을 적는 틀이다 (cmake/ios/Framework-Info.plist.in).
+    #    CMake 기본 틀에는 그 칸이 없다. 판은 submodule의 태그(libsmb2-6.2)다.
+    #  - LGPL-2.1 전문을 프레임워크 안에 함께 둔다. 바꿔 끼울 파일과 그 조건이 한 묶음으로 다닌다.
     if(LUIL_PLATFORM STREQUAL "ios")
+        if(LUIL_IOS_SIMULATOR)
+            set(LUIL_IOS_FRAMEWORK_PLATFORM "iPhoneSimulator" CACHE INTERNAL "CFBundleSupportedPlatforms of the iOS frameworks luil builds.")
+        else()
+            set(LUIL_IOS_FRAMEWORK_PLATFORM "iPhoneOS" CACHE INTERNAL "CFBundleSupportedPlatforms of the iOS frameworks luil builds.")
+        endif()
         set_target_properties(luil_smb2 PROPERTIES
             FRAMEWORK TRUE
             OUTPUT_NAME libsmb2
             MACOSX_FRAMEWORK_IDENTIFIER "io.github.yuldk.luil.libsmb2"
             MACOSX_FRAMEWORK_BUNDLE_NAME "libsmb2"
-            MACOSX_FRAMEWORK_BUNDLE_VERSION "1"
-            MACOSX_FRAMEWORK_SHORT_VERSION_STRING "1"
+            MACOSX_FRAMEWORK_BUNDLE_VERSION "6.2"
+            MACOSX_FRAMEWORK_SHORT_VERSION_STRING "6.2"
             MACOSX_FRAMEWORK_INFO_PLIST "${LUIL_CMAKE_DIRECTORY}/ios/Framework-Info.plist.in"
             INSTALL_NAME_DIR "@rpath"
             BUILD_WITH_INSTALL_NAME_DIR ON)
+        add_custom_command(TARGET luil_smb2 POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E copy_if_different "${root}/LICENCE-LGPL-2.1.txt" "$<TARGET_BUNDLE_DIR:luil_smb2>/LICENCE-LGPL-2.1.txt"
+            VERBATIM)
     endif()
     target_include_directories(luil_smb2
         PRIVATE

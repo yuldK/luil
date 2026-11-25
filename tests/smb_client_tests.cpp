@@ -1,13 +1,19 @@
 #include "luil/net/smb_client.h"
 
+#ifndef __APPLE__
 #include "net/mdns_query.h"
+#endif
 
 #include <catch2/catch_test_macros.hpp>
 
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #include <signal.h>
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#else
 #include <sys/prctl.h>
+#endif
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
@@ -28,6 +34,9 @@ extern char** environ;
 
 // libsmb2 위의 SMB client를 기기에서 돌린다. 서버 없이 볼 수 있는 것과, 시험 서버(`smb_test_server.cpp`)와의
 // 왕복을 본다. 실제 NAS와의 왕복은 사람 손으로 확인한다 (docs/smb-client-design.md).
+//  - Android 기기의 셸과 iOS 시뮬레이터(`xcrun simctl spawn`)에서 돈다. iOS의 찾기는 직접 mDNS가 아니라 시스템 DNS-SD다.
+//  - Apple 플랫폼은 프로세스의 SIGPIPE를 기본 처리(끝내기)로 둔 채 돈다. 끊긴 연결에 쓰는 자리가 있으면 test 실행 파일이
+//    끝나 드러난다 (client는 소켓마다 SIGPIPE를 막는다).
 namespace {
     using namespace std::chrono_literals;
     using luil::net::smb_client;
@@ -135,6 +144,20 @@ namespace {
         return std::u8string { reinterpret_cast<const char8_t*>(text.data()), text.size() };
     }
 
+    // 이 실행 파일의 경로다.
+    [[nodiscard]] std::string executable_path()
+    {
+#ifdef __APPLE__
+        char self[1024] {};
+        std::uint32_t size { sizeof(self) };
+        return ::_NSGetExecutablePath(self, &size) == 0 ? std::string { self } : std::string {};
+#else
+        char self[512] {};
+        const ssize_t length { ::readlink("/proc/self/exe", self, sizeof(self) - 1) };
+        return length > 0 ? std::string { self, static_cast<std::size_t>(length) } : std::string {};
+#endif
+    }
+
     // 실행 파일 옆의 시험 서버를 따로 된 프로세스로 띄운다. thread가 여럿인 프로세스라 자식은 fork 바로 뒤에 exec만
     // 한다 (`posix_spawn`은 API 28부터라 test의 최소 판에 없다). 포트는 비어 있는 것을 하나 골라 두고, 다시 띄워도
     // 같은 포트를 쓴다. 거둘 때 SIGKILL로 끝낸다.
@@ -158,9 +181,7 @@ namespace {
         // 들을 준비가 될 때까지 기다린다. 못 띄웠으면 거짓이다.
         bool start()
         {
-            char self[512] {};
-            const ssize_t length { ::readlink("/proc/self/exe", self, sizeof(self) - 1) };
-            std::string program { length > 0 ? std::string { self, static_cast<std::size_t>(length) } : std::string {} };
+            std::string program { executable_path() };
             program = program.substr(0, program.rfind('/') + 1) + "luil_smb_test_server";
             static_cast<void>(::chmod(program.c_str(), 0755));
             std::string port { std::to_string(port_) };
@@ -168,8 +189,11 @@ namespace {
             process_ = ::fork();
             if (process_ == 0)
             {
-                // test 프로세스가 거두지 못하고 죽어도(중단, 파이프 끊김) 서버가 남지 않게 함께 끝낸다.
+#ifndef __APPLE__
+                // test 프로세스가 거두지 못하고 죽어도(중단, 파이프 끊김) 서버가 남지 않게 함께 끝낸다. Apple 플랫폼에는 이 길이
+                // 없다 — 거두지 못하면 서버가 남으니 손으로 끝낸다.
                 ::prctl(PR_SET_PDEATHSIG, SIGKILL);
+#endif
                 ::execve(program.c_str(), arguments, environ);
                 ::_exit(127);
             }
@@ -514,9 +538,14 @@ TEST_CASE("Discovery answers once at the end of its window", "[net][smb][android
     const auto elapsed { std::chrono::steady_clock::now() - started };
     CHECK(elapsed >= 550ms);
     CHECK(elapsed < 3s);
+#ifdef __APPLE__
+    // 시스템 DNS-SD는 네트워크가 없어도 빈 목록으로 끝난다.
+    CHECK(found.ok());
+#else
     // 와이파이가 꺼져 내보낼 곳이 없으면 그 사실이 오류로 온다. 그 밖에는 성공이다.
     if (luil::net::mdns_destinations().empty() == false)
         CHECK(found.ok());
+#endif
 }
 
 TEST_CASE("A cancelled discovery answers at once as cancelled", "[net][smb][android][mdns]")
@@ -534,7 +563,7 @@ TEST_CASE("A cancelled discovery answers at once as cancelled", "[net][smb][andr
     CHECK(std::chrono::steady_clock::now() - cancelled_at < 1s);
 }
 
-TEST_CASE("The Android SMB build is supported and refuses a bad request before the wire", "[net][smb][android]")
+TEST_CASE("The libsmb2 SMB build is supported and refuses a bad request before the wire", "[net][smb][android]")
 {
     REQUIRE(smb_client::supported());
     collector sink {};

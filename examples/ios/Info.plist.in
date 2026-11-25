@@ -5,7 +5,9 @@
      - 간접 입력(UIApplicationSupportsIndirectInputEvents)을 켜야 iPad의 트랙패드·마우스 누름이 터치가 아닌 마우스로 온다.
      - 시작 화면은 빈 UILaunchScreen이다. 없으면 iOS가 옛 화면 크기(호환 모드)로 앱을 띄운다.
      - 로컬 네트워크 설명(NSLocalNetworkUsageDescription)은 앱이 처음 같은 네트워크의 기기(NAS의 SMB 등)에 붙을 때 시스템이
-       묻는 창의 글이다. 없으면 iOS의 일반 문구로 묻는다. -->
+       묻는 창의 글이다. 없으면 iOS의 일반 문구로 묻는다.
+     - NSBonjourServices는 앱이 DNS-SD로 찾는 서비스 목록이다. 모바일 demo의 SMB 페이지가 `_smb._tcp`를 찾는다. 목록에 없는
+       서비스를 찾으면 iOS가 거절한다 (kDNSServiceErr_PolicyDenied). -->
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
@@ -38,6 +40,10 @@
     <array>
         <integer>1</integer>
         <integer>2</integer>
+    </array>
+    <key>NSBonjourServices</key>
+    <array>
+        <string>_smb._tcp</string>
     </array>
     <key>NSLocalNetworkUsageDescription</key>
     <string>같은 네트워크의 NAS 같은 기기에 연결합니다.</string>

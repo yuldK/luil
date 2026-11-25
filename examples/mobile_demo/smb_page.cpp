@@ -469,19 +469,19 @@ namespace mobile_demo {
 
     page_content smb_page::build(const float width, const float scale)
     {
-        static_cast<void>(scale);
         const float field_width { std::min(width - 2.0f * page_padding, 420.0f) };
         page_column column { u8"smb" };
         column.heading(u8"smb-heading", u8"SMB 공유");
         if (transport_.send == nullptr)
         {
             column.note(u8"smb-none", u8"이 구성에는 SMB가 없다.");
-            column.note(u8"smb-none-why", u8"Android에서 LUIL_ENABLE_SMB를 켜고 세운다.");
+            column.note(u8"smb-none-why", u8"Android·iOS에서 LUIL_ENABLE_SMB를 켜고 세운다.");
             return column.finish();
         }
         column.note(u8"smb-help-1", u8"주소는 \"서버/공유\"다. 서버만 적으면 공유 목록이다.");
         column.note(u8"smb-help-find", u8"NAS는 찾기로 고르거나 IP·.local 이름으로 적는다.");
-        column.note(u8"smb-help-2", u8"Android 17은 기기 페이지에서 권한부터 받는다.");
+        // 로컬 네트워크 권한: Android 17은 앱이 먼저 묻고, iOS는 첫 찾기·연결에서 시스템이 묻는다 (거절하면 "연결하지 못함").
+        column.wrapped_note(u8"smb-help-2", u8"Android 17은 기기 페이지에서 권한부터 받는다. iOS는 첫 찾기·연결에서 시스템이 묻는다.", width, scale);
         column.gap(8.0f);
 
         const auto input

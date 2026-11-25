@@ -159,15 +159,17 @@ target_sources(luil_core_tests PRIVATE
 target_sources(luil_core_tests PRIVATE
     "${LUIL_SOURCE_DIRECTORY}/net/websocket_client.cpp"
     websocket_client_tests.cpp)
-# SMB client의 순수 규칙, 연결 장부, DNS 메시지(서버 찾기), "지원 안 함" client다. libsmb2 없이 어느 플랫폼에서나 돈다.
+# SMB client의 순수 규칙, 연결 장부, DNS 메시지(서버 찾기), "지원 안 함" client, 끊긴 소켓의 SIGPIPE 막기다. libsmb2 없이 어느 플랫폼에서나 돈다.
 target_sources(luil_core_tests PRIVATE
     "${LUIL_SOURCE_DIRECTORY}/net/dns_message.cpp"
     "${LUIL_SOURCE_DIRECTORY}/net/smb_client_unsupported.cpp"
     "${LUIL_SOURCE_DIRECTORY}/net/smb_pool.cpp"
     "${LUIL_SOURCE_DIRECTORY}/net/smb_rules.cpp"
+    "${LUIL_SOURCE_DIRECTORY}/net/socket_no_sigpipe.cpp"
     dns_message_tests.cpp
     smb_pool_tests.cpp
-    smb_rules_tests.cpp)
+    smb_rules_tests.cpp
+    socket_no_sigpipe_tests.cpp)
 # 모바일 demo의 적응형 시트, 비동기 SMB 목록 상태, 확대 보기 페이지의 회전 표시, 잉크 페이지와 검사기 페이지의 상태 줄, 파일 감시 묶음의 표시,
 # 서버·감시자 없이 검증한다. 첫 화면의 페이지 목록 칸이 내는 접근 이름과 실행도 같은 목록에 오른다.
 # 기본 페이지는 앱 빌드가 만드는 견본 바이트 기호 여섯을 부르므로 빈 바이트 대역을 함께 넣는다 (mobile_demo_assets_stub.cpp).
@@ -444,6 +446,49 @@ if(LUIL_PLATFORM STREQUAL "android")
         luil_set_ide_folder("Tests" luil_smb_tests luil_smb_test_server)
     endif()
     # 나머지 test는 Win32 계층이나 Windows 도구(rc, pwsh, MSVC ASan)를 쓴다.
+    return()
+endif()
+
+if(LUIL_PLATFORM STREQUAL "ios")
+    # iOS는 SMB client의 libsmb2 갈래를 시뮬레이터에서 돌린다 (LUIL_ENABLE_SMB를 켠 ios-arm64-simulator 구성).
+    #  - 실행은 `xcrun simctl spawn <기기>`다. 기기는 LUIL_IOS_TEST_SIMULATOR(기본 `booted`, 켜 둔 시뮬레이터 하나)다.
+    #    시뮬레이터의 프로세스는 Mac의 파일과 루프백을 그대로 쓴다. 시험 서버도 같은 길(fork·exec)로 뜬다.
+    #  - 실행 파일은 빌드 폴더의 libsmb2.framework를 rpath로 찾는다 (앱 번들이 아니다).
+    #  - 기기 구성(ios-arm64)과 SMB를 끈 구성은 test를 세우지 않는다. core test는 다른 플랫폼에서 돈다.
+    if(LUIL_IOS_SIMULATOR AND TARGET luil_smb2)
+        set(LUIL_IOS_TEST_SIMULATOR "booted" CACHE STRING "Simulator (name, UDID or booted) that runs the iOS SMB tests through xcrun simctl spawn.")
+        add_executable(luil_smb_test_server smb_test_server.cpp)
+        target_link_libraries(luil_smb_test_server
+            PRIVATE
+                luil_smb2
+                luil_options)
+        # iOS의 찾기와 `.local` 풀기는 시스템 DNS-SD다. 직접 mDNS(mdns_query.cpp)와 그 test는 세우지 않는다.
+        add_executable(luil_smb_tests
+            "${LUIL_SOURCE_DIRECTORY}/net/dns_message.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/ios/dns_sd_query.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/smb_client_libsmb2.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/smb_pool.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/smb_rules.cpp"
+            "${LUIL_SOURCE_DIRECTORY}/net/socket_no_sigpipe.cpp"
+            smb_client_tests.cpp
+            socket_no_sigpipe_tests.cpp)
+        target_include_directories(luil_smb_tests
+            PRIVATE
+                "${LUIL_SOURCE_DIRECTORY}"
+                "${LUIL_INCLUDE_DIRECTORY}")
+        target_link_libraries(luil_smb_tests
+            PRIVATE
+                luil_smb2
+                luil_options
+                Catch2::Catch2WithMain)
+        add_dependencies(luil_smb_tests luil_smb_test_server)
+        # 앱 번들이 아닌 명령 줄 실행 파일이다 (iOS 도구 사슬의 기본은 번들이다). 시험 서버는 test 옆에 놓인다.
+        set_target_properties(luil_smb_tests luil_smb_test_server PROPERTIES MACOSX_BUNDLE OFF)
+        set_target_properties(luil_smb_tests PROPERTIES
+            CROSSCOMPILING_EMULATOR "xcrun;simctl;spawn;${LUIL_IOS_TEST_SIMULATOR}")
+        catch_discover_tests(luil_smb_tests DISCOVERY_MODE PRE_TEST PROPERTIES TIMEOUT 120)
+        luil_set_ide_folder("Tests" luil_smb_tests luil_smb_test_server)
+    endif()
     return()
 endif()
 

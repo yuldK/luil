@@ -690,7 +690,9 @@ luil_add_source_filter(luil_net_files "net"
     net/smb_pool.cpp
     net/smb_pool.h
     net/smb_rules.cpp
-    net/smb_rules.h)
+    net/smb_rules.h
+    net/socket_no_sigpipe.cpp
+    net/socket_no_sigpipe.h)
 list(APPEND luil_files ${luil_net_files})
 # Windows는 운영체제의 SMB가 있어 `smb_client::create`가 "지원 안 함"으로 답한다.
 luil_add_source_filter(luil_files "net"

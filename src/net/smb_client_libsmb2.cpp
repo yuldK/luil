@@ -8,6 +8,7 @@
 #endif
 #include "net/smb_pool.h"
 #include "net/smb_rules.h"
+#include "net/socket_no_sigpipe.h"
 
 // libsmb2.h는 smb2.h의 정의(GUID 크기, lease 키)를 먼저 요구한다. 정렬이 순서를 바꾸지 않게 묶음을 나눈다.
 #include <smb2/smb2.h>
@@ -25,7 +26,6 @@
 #include <atomic>
 #include <cerrno>
 #include <condition_variable>
-#include <csignal>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -52,7 +52,13 @@ namespace luil::net {
         // 다시 쓰지 않는 연결을 닫기 전에 공유를 놓아 보는 상한이다.
         constexpr std::chrono::milliseconds polite_disconnect { 500 };
         // `.local` 이름을 같은 네트워크에 물어 기다리는 상한이다 (요청의 시간 상한이 더 짧으면 그것).
+        //  - Apple 플랫폼은 시스템 DNS-SD에 묻는다. 막 켠 기기·시뮬레이터의 첫 질의는 1초를 넘기도 해서 더 기다린다. 못 풀면
+        //    `getaddrinfo`로 물러서지 않는다 — 같은 시스템 서비스에 묻고, 끊을 수 없게 수십 초 막힌다.
+#ifdef __APPLE__
+        constexpr std::chrono::milliseconds local_name_budget { 5000 };
+#else
         constexpr std::chrono::milliseconds local_name_budget { 1500 };
+#endif
         // 찾기 창의 상한과 하한이다.
         constexpr std::chrono::milliseconds min_discovery_window { 100 };
         constexpr std::chrono::milliseconds max_discovery_window { 60000 };
@@ -166,6 +172,8 @@ namespace luil::net {
             const t_socket socket { smb2_get_fd(context) };
             if (socket < 0)
                 return false;
+            // 아래 `smb2_service_fd`가 소켓에 쓸 수 있다.
+            static_cast<void>(suppress_sigpipe(socket));
             pollfd probe { socket, POLLIN, 0 };
             const int ready { poll(&probe, 1, 0) };
             if (ready <= 0)
@@ -296,8 +304,13 @@ namespace luil::net {
                 count = std::min(count, max_connecting_fds);
                 pollfd polls[max_connecting_fds] {};
                 const short events { static_cast<short>(smb2_which_events(context)) };
+                // libsmb2가 소켓에 쓰는 곳은 `smb2_service`·`smb2_service_fd` 안뿐이고, 그 소켓은 모두 이 목록에 있다. 맡기기 전에
+                // 끊긴 연결에 쓰는 SIGPIPE를 막는다 (net/socket_no_sigpipe.h). 연결 시도마다 새 소켓이라 매번 건다.
                 for (std::size_t index { 0 }; index < count; ++index)
+                {
+                    static_cast<void>(suppress_sigpipe(sockets[index]));
                     polls[index] = pollfd { sockets[index], events, 0 };
+                }
 
                 int wait { poll_slice_ms };
                 if (deadline.has_value())
@@ -623,8 +636,11 @@ namespace luil::net {
         }
 
         // `.local` 이름을 같은 네트워크에 물어 주소로 바꾼다. libsmb2는 이름을 `getaddrinfo`로 푸는데, 그것은 끊을 수 없게
-        // 막히고 Android는 `.local`을 풀지 않는다. 풀지 못하면 서버 글을 그대로 돌려준다 (운영체제에 맡긴다).
-        [[nodiscard]] static std::u8string resolve_local(const std::u8string& server, const job& work, const std::optional<std::chrono::steady_clock::time_point> deadline)
+        // 막히고 Android는 `.local`을 풀지 않는다. Android에서 풀지 못하면 서버 글을 그대로 돌려준다 (운영체제에 맡긴다).
+        //  - Apple 플랫폼에서 풀지 못하면 `failure`를 적는다 (권한 거절·못 풂은 `cannot_connect`, 취소·정지·시간 상한은 그 종류).
+        //    부른 쪽은 연결하지 않고 그것을 돌려준다.
+        [[nodiscard]] static std::u8string resolve_local(
+            const std::u8string& server, const job& work, const std::optional<std::chrono::steady_clock::time_point> deadline, smb_error& failure)
         {
             const smb_server_parts parts { split_smb_server(server) };
             if (is_mdns_host(parts.host) == false)
@@ -635,10 +651,21 @@ namespace luil::net {
                 auto until { std::chrono::steady_clock::now() + local_name_budget };
                 if (deadline.has_value() && *deadline < until)
                     until = *deadline;
-                const std::string address { resolve_local_address(to_c(parts.host), until, [&work] { return work.abort.load() != smb_error_kind::none; }) };
-                return address.empty() ? server : join_smb_server(to_u8(address), parts.port);
+                const local_address found { resolve_local_address(to_c(parts.host), until, [&work] { return work.abort.load() != smb_error_kind::none; }) };
+                if (found.address.empty() == false)
+                    return join_smb_server(to_u8(found.address), parts.port);
+                if (const smb_error_kind abort { work.abort.load() }; abort != smb_error_kind::none)
+                    failure = smb_error { abort, abort == smb_error_kind::cancelled ? u8"The request was cancelled." : u8"The client stopped.", 0 };
+                else if (found.outcome == dns_sd_outcome::ok && deadline.has_value() && std::chrono::steady_clock::now() >= *deadline)
+                    failure = smb_error { smb_error_kind::timed_out, u8"The request exceeded its timeout.", 0 };
+                else if (found.outcome == dns_sd_outcome::ok)
+                    failure = smb_error { smb_error_kind::cannot_connect, u8"Could not resolve " + parts.host + u8" through DNS-SD.", -EHOSTUNREACH };
+                else
+                    failure = smb_error { smb_error_kind::cannot_connect, to_u8(found.error), -EHOSTUNREACH };
+                return server;
             }
 #else
+            static_cast<void>(failure);
             const dns_name name { make_dns_name(to_c(parts.host)) };
             const std::array<dns_question, 2> questions { dns_question { name, dns_type_a }, dns_question { name, dns_type_aaaa } };
             const std::vector<std::uint8_t> query { make_dns_query(next_query_id.fetch_add(1), questions) };
@@ -677,9 +704,12 @@ namespace luil::net {
             {
                 std::string failure {};
                 std::vector<smb_server_found> found {};
-                if (browse_smb_servers(started + work.window, [&work] { return work.abort.load() != smb_error_kind::none; }, found, failure) == false)
+                // 거절은 연결하지 못한 것과 같은 종류다 (`smb_error_kind::cannot_connect`의 "로컬 네트워크 권한 없음").
+                if (const dns_sd_outcome outcome { browse_smb_servers(started + work.window, [&work] { return work.abort.load() != smb_error_kind::none; }, found, failure) };
+                    outcome != dns_sd_outcome::ok)
                 {
-                    response.error = smb_error { smb_error_kind::failed, to_u8(failure), 0 };
+                    response.error = outcome == dns_sd_outcome::denied ? smb_error { smb_error_kind::cannot_connect, to_u8(failure), -EHOSTUNREACH }
+                                                                        : smb_error { smb_error_kind::failed, to_u8(failure), 0 };
                     return;
                 }
                 if (const smb_error_kind abort { work.abort.load() }; abort != smb_error_kind::none)
@@ -756,8 +786,13 @@ namespace luil::net {
                 {
                     if (resolved == false)
                     {
-                        target.server = resolve_local(request.location.server, work, deadline);
+                        target.server = resolve_local(request.location.server, work, deadline, response.error);
                         resolved = true;
+                        if (response.error.kind != smb_error_kind::none)
+                        {
+                            give_back(shared, *lease, nullptr, false, work, call);
+                            return;
+                        }
                     }
                     context = open(target, share, work, deadline, call, response.error);
                     response.connection = reopened ? smb_connection_use::reopened : smb_connection_use::opened;
@@ -863,13 +898,6 @@ namespace luil::net {
             error = u8"idle_timeout must not be negative.";
             return nullptr;
         }
-#ifdef __APPLE__
-        // libsmb2는 TCP 소켓에 `writev`로 쓴다. Apple 플랫폼은 끊긴 연결에 쓰면 프로세스에 SIGPIPE를 보내고, 기본 처리가 앱을
-        // 끝낸다 (Android는 런타임이 이미 무시한다). 소켓마다 `SO_NOSIGPIPE`를 걸 자리가 libsmb2 안이라 프로세스에서 한 번 무시한다.
-        //  - 쓰기는 `EPIPE`로 실패하고 libsmb2가 연결 오류로 돌려준다.
-        static std::once_flag ignore_sigpipe {};
-        std::call_once(ignore_sigpipe, [] { static_cast<void>(std::signal(SIGPIPE, SIG_IGN)); });
-#endif
         auto implementation { std::make_unique<engine>() };
         implementation->shared->pool = smb_connection_pool { smb_pool_config { config.idle_timeout, config.max_connections_per_server } };
         implementation->shared->config = std::move(config);

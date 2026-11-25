@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!-- iOS 앱 번들에 싣는 동적 프레임워크(libsmb2.framework)의 Info.plist다. CMake가 MACOSX_FRAMEWORK_* 속성으로 채운다.
-     CMake 기본 틀과 같고 최소 iOS 판(MinimumOSVersion)과 지원 플랫폼을 더했다. 앱 심사와 설치 검사가 이 칸을 본다. -->
+     CMake 기본 틀과 같고 최소 iOS 판(MinimumOSVersion)과 지원 플랫폼(CFBundleSupportedPlatforms, 기기·시뮬레이터)을 더했다.
+     앱 심사와 설치 검사가 이 칸을 본다. -->
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
@@ -22,5 +23,9 @@
     <string>${MACOSX_FRAMEWORK_SHORT_VERSION_STRING}</string>
     <key>MinimumOSVersion</key>
     <string>${CMAKE_OSX_DEPLOYMENT_TARGET}</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>${LUIL_IOS_FRAMEWORK_PLATFORM}</string>
+    </array>
 </dict>
 </plist>
