@@ -45,10 +45,11 @@ luil 자체 소스와 문서는 [MIT 라이선스](../../LICENSE)를 따른다. 
 
 ## SMB
 
-`LUIL_ENABLE_SMB`(Android 전용, 기본 끔)를 켠 앱은 libsmb2(LGPL-2.1)를 함께 배포한다. 그 조건은 앱이 지킨다.
+`LUIL_ENABLE_SMB`(Android·iOS 전용, 기본 끔)를 켠 앱은 libsmb2(LGPL-2.1)를 함께 배포한다. 그 조건은 앱이 지킨다.
 
 - `libsmb2.so`를 앱의 네이티브 라이브러리와 **따로** APK의 `jniLibs`에 싼다. luil의 Android 예제는 CMake가 `<빌드>/jniLibs/<예제>/<구성>/<abi>`에 함께 놓는다. 앱 라이브러리에 정적으로 섞지 않는 것이 LGPL-2.1의 "사용자가 라이브러리를 바꿔 끼울 수 있다"를 지키는 길이다.
-- 앱의 고지(설정의 오픈 소스 라이선스 화면 등)에 LGPL-2.1 전문(`third_party/libsmb2/LICENCE-LGPL-2.1.txt`)과 쓴 판(`libsmb2-6.2`)·소스 위치(https://github.com/sahlberg/libsmb2)를 싣는다. luil의 고지 생성기는 Windows 실행 파일 리소스용이라 Android에서는 앱이 직접 싣는다.
+- iOS에서는 `libsmb2.framework`(target `luil_smb2`)를 앱 번들의 `Frameworks/`에 복사하고 앱보다 먼저 같은 신원으로 서명한다. 앱 실행 파일은 `@executable_path/Frameworks`를 rpath로 둔다. Info.plist에 `NSBonjourServices`(`_smb._tcp`)와 `NSLocalNetworkUsageDescription`을 싣는다. App Store 배포에서 바꿔 끼우기를 어떻게 지킬지는 앱이 따로 본다.
+- 앱의 고지(설정의 오픈 소스 라이선스 화면 등)에 LGPL-2.1 전문(`third_party/libsmb2/LICENCE-LGPL-2.1.txt`)과 쓴 판(`libsmb2-6.2`)·소스 위치(https://github.com/sahlberg/libsmb2)를 싣는다. luil의 고지 생성기는 Windows 실행 파일 리소스용이라 Android·iOS에서는 앱이 직접 싣는다.
 - luil은 libsmb2를 고치지 않고 쓴다. 고쳐 쓰려면 고친 소스도 LGPL로 공개해야 한다.
 - 같은 저장소의 libdcerpc 부분은 BSD-2 라이선스다.
 

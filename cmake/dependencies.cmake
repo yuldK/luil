@@ -37,7 +37,7 @@ function(luil_find_dependencies)
         luil_find_game_activity()
     endif()
 
-    # SMB client를 켠 Android 구성만 libsmb2를 세운다 (LGPL-2.1, 공유 라이브러리).
+    # SMB client를 켠 Android·iOS 구성만 libsmb2를 세운다 (LGPL-2.1, 공유 라이브러리·동적 프레임워크).
     if(LUIL_ENABLE_SMB)
         luil_find_libsmb2()
     endif()

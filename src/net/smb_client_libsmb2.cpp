@@ -1,7 +1,11 @@
 #include "luil/net/smb_client.h"
 
 #include "net/dns_message.h"
+#ifdef __APPLE__
+#include "net/ios/dns_sd_query.h"
+#else
 #include "net/mdns_query.h"
+#endif
 #include "net/smb_pool.h"
 #include "net/smb_rules.h"
 
@@ -21,6 +25,7 @@
 #include <atomic>
 #include <cerrno>
 #include <condition_variable>
+#include <csignal>
 #include <deque>
 #include <map>
 #include <mutex>
@@ -52,8 +57,10 @@ namespace luil::net {
         constexpr std::chrono::milliseconds min_discovery_window { 100 };
         constexpr std::chrono::milliseconds max_discovery_window { 60000 };
 
+#ifndef __APPLE__
         // mDNS 질의의 번호다. 한 번 질의의 응답은 질의 번호를 되돌려 주지만, 답은 번호와 상관없이 모은다.
         std::atomic<std::uint16_t> next_query_id { 1 };
+#endif
 
         // libsmb2 호출 하나의 결과를 받는 자리다.
         struct call_state
@@ -622,6 +629,16 @@ namespace luil::net {
             const smb_server_parts parts { split_smb_server(server) };
             if (is_mdns_host(parts.host) == false)
                 return server;
+#ifdef __APPLE__
+            // iOS는 앱의 직접 멀티캐스트를 막는다. 시스템 DNS-SD에 묻는다 (net/ios/dns_sd_query.h).
+            {
+                auto until { std::chrono::steady_clock::now() + local_name_budget };
+                if (deadline.has_value() && *deadline < until)
+                    until = *deadline;
+                const std::string address { resolve_local_address(to_c(parts.host), until, [&work] { return work.abort.load() != smb_error_kind::none; }) };
+                return address.empty() ? server : join_smb_server(to_u8(address), parts.port);
+            }
+#else
             const dns_name name { make_dns_name(to_c(parts.host)) };
             const std::array<dns_question, 2> questions { dns_question { name, dns_type_a }, dns_question { name, dns_type_aaaa } };
             const std::vector<std::uint8_t> query { make_dns_query(next_query_id.fetch_add(1), questions) };
@@ -646,6 +663,7 @@ namespace luil::net {
                         return join_smb_server(to_u8(address), parts.port);
                 }
             return server;
+#endif
         }
 
         // 같은 네트워크의 SMB 서버를 찾는다. 첫 걸음(창의 2/3)은 서비스의 인스턴스를 묻고 — 응답자는 SRV와 주소를 추가 칸에
@@ -654,6 +672,25 @@ namespace luil::net {
         static void find_servers(const job& work, smb_response& response)
         {
             const auto started { std::chrono::steady_clock::now() };
+#ifdef __APPLE__
+            // iOS는 앱의 직접 멀티캐스트를 막는다. 시스템 DNS-SD로 창 끝까지 찾는다 (net/ios/dns_sd_query.h).
+            {
+                std::string failure {};
+                std::vector<smb_server_found> found {};
+                if (browse_smb_servers(started + work.window, [&work] { return work.abort.load() != smb_error_kind::none; }, found, failure) == false)
+                {
+                    response.error = smb_error { smb_error_kind::failed, to_u8(failure), 0 };
+                    return;
+                }
+                if (const smb_error_kind abort { work.abort.load() }; abort != smb_error_kind::none)
+                {
+                    response.error = smb_error { abort, abort == smb_error_kind::cancelled ? u8"The request was cancelled." : u8"The client stopped.", 0 };
+                    return;
+                }
+                response.servers = std::move(found);
+                return;
+            }
+#else
             const std::vector<mdns_destination> destinations { mdns_destinations() };
             const auto stop = [&work](const std::vector<dns_record>&) { return work.abort.load() != smb_error_kind::none; };
             std::vector<dns_record> records {};
@@ -675,6 +712,7 @@ namespace luil::net {
                 return;
             }
             response.servers = collect_smb_servers(records);
+#endif
         }
 
         // 요청 하나를 처음부터 끝까지 몬다.
@@ -825,6 +863,13 @@ namespace luil::net {
             error = u8"idle_timeout must not be negative.";
             return nullptr;
         }
+#ifdef __APPLE__
+        // libsmb2는 TCP 소켓에 `writev`로 쓴다. Apple 플랫폼은 끊긴 연결에 쓰면 프로세스에 SIGPIPE를 보내고, 기본 처리가 앱을
+        // 끝낸다 (Android는 런타임이 이미 무시한다). 소켓마다 `SO_NOSIGPIPE`를 걸 자리가 libsmb2 안이라 프로세스에서 한 번 무시한다.
+        //  - 쓰기는 `EPIPE`로 실패하고 libsmb2가 연결 오류로 돌려준다.
+        static std::once_flag ignore_sigpipe {};
+        std::call_once(ignore_sigpipe, [] { static_cast<void>(std::signal(SIGPIPE, SIG_IGN)); });
+#endif
         auto implementation { std::make_unique<engine>() };
         implementation->shared->pool = smb_connection_pool { smb_pool_config { config.idle_timeout, config.max_connections_per_server } };
         implementation->shared->config = std::move(config);

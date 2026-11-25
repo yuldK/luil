@@ -9,7 +9,9 @@
 | --- | --- | --- |
 | Android, `LUIL_ENABLE_SMB=ON` | client를 만든다 | libsmb2 (`libsmb2.so`, LGPL-2.1) |
 | Android, 기본(끔) | nullptr, "지원 안 함" | 없음 |
-| Windows | nullptr, "지원 안 함" | 운영체제의 SMB를 쓴다 |
+| iOS, `LUIL_ENABLE_SMB=ON` | client를 만든다 | libsmb2 (`libsmb2.framework`, LGPL-2.1) |
+| iOS, 기본(끔) | nullptr, "지원 안 함" | 없음 |
+| Windows, macOS | nullptr, "지원 안 함" | 운영체제의 SMB를 쓴다 |
 
 Android의 문서 선택기(SAF)는 결과를 받으려면 Java가 있어야 해서 두지 않았다. 사용자가 고른 폴더 대신 앱이 서버와
 공유를 알고 SMB로 붙는 길이 이것이다. Windows에서는 쓸 일이 없어 libsmb2를 싣지 않는다. 의존과 고지는
@@ -112,6 +114,12 @@ Android의 문서 선택기(SAF)는 결과를 받으려면 Java가 있어야 해
 - **권한.** 매니페스트에 `INTERNET`이 있어야 한다. Android 17부터는 같은 네트워크로 가는 연결에 로컬 네트워크 권한이 있어야
   하므로, 찾기 전에도 `app_host::request_permission(app_permission::local_network)`로 받는다. mDNS 멀티캐스트가 그 권한으로
   풀리는지는 Android 17 기기가 없어 확인하지 못했다.
+- **iOS.** 앱이 멀티캐스트를 직접 보내려면 Apple이 승인하는 멀티캐스트 권한(`com.apple.developer.networking.multicast`)이 있어야
+  한다. 그래서 iOS는 위의 직접 질의(`mdns_query.cpp`)를 짓지 않고, 찾기와 `.local` 이름 풀기를 시스템 DNS-SD(`dns_sd.h`,
+  [`net/ios/dns_sd_query.cpp`](../src/net/ios/dns_sd_query.cpp))에 맡긴다. 찾기는 `_smb._tcp`를 훑고 인스턴스마다 호스트·포트와 주소를
+  묻는다. 앱의 Info.plist에 `NSBonjourServices`(`_smb._tcp`)와 `NSLocalNetworkUsageDescription`이 있어야 하고, 첫 찾기나 첫 연결에서
+  시스템이 로컬 네트워크 권한을 묻는다(거절하면 찾기가 실패한다). libsmb2의 TCP 쓰기가 끊긴 연결에서 앱을 끝내지 않도록 client가
+  만들어질 때 프로세스의 SIGPIPE를 무시한다.
 - **Windows.** client가 없으므로 "지원 안 함"이다.
 - **안 되는 서버.** DNS-SD로 SMB를 알리지 않는 서버(오래된 NAS, NetBIOS만 하는 서버)와 legacy unicast에 답하지 않는 응답자는
   찾지 못한다. NetBIOS 이름 질의는 넣지 않았다.

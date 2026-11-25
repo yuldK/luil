@@ -1,6 +1,6 @@
 include_guard(GLOBAL)
 
-# libsmb2(LGPL-2.1)는 `smb_client`의 SMB 전송이다. Android에서 LUIL_ENABLE_SMB를 켠 구성에만 세운다
+# libsmb2(LGPL-2.1)는 `smb_client`의 SMB 전송이다. Android·iOS에서 LUIL_ENABLE_SMB를 켠 구성에만 세운다
 # (docs/smb-client-design.md).
 #  - upstream의 CMakeLists는 들이지 않는다. 디렉터리 전체에 정의·include 경로를 걸고 `BUILD_SHARED_LIBS`
 #    옵션을 캐시에 세워 luil의 target까지 번진다. 같은 소스 목록과 config.h를 여기서 세운다.
@@ -74,6 +74,21 @@ function(luil_find_libsmb2)
     add_library(luil::smb2 ALIAS luil_smb2)
     # 파일 이름은 upstream과 같은 libsmb2.so다. 고지와 사용자가 바꿔 끼울 파일이 같은 이름을 가리킨다.
     set_target_properties(luil_smb2 PROPERTIES OUTPUT_NAME smb2 C_STANDARD 99 C_EXTENSIONS ON)
+    # iOS 앱은 번들 밖의 라이브러리를 열지 못하고, 번들에 싣는 동적 코드는 프레임워크여야 한다. `libsmb2.framework`로 세우고
+    # 앱이 번들의 Frameworks/에 복사해 서명한다. 설치 이름이 `@rpath/…`라 앱은 `@executable_path/Frameworks`를 rpath로 둔다.
+    #  - Info.plist는 최소 iOS 판(`CMAKE_OSX_DEPLOYMENT_TARGET`)을 적는 틀이다 (cmake/ios/Framework-Info.plist.in). CMake 기본 틀에는 그 칸이 없다.
+    if(LUIL_PLATFORM STREQUAL "ios")
+        set_target_properties(luil_smb2 PROPERTIES
+            FRAMEWORK TRUE
+            OUTPUT_NAME libsmb2
+            MACOSX_FRAMEWORK_IDENTIFIER "io.github.yuldk.luil.libsmb2"
+            MACOSX_FRAMEWORK_BUNDLE_NAME "libsmb2"
+            MACOSX_FRAMEWORK_BUNDLE_VERSION "1"
+            MACOSX_FRAMEWORK_SHORT_VERSION_STRING "1"
+            MACOSX_FRAMEWORK_INFO_PLIST "${LUIL_CMAKE_DIRECTORY}/ios/Framework-Info.plist.in"
+            INSTALL_NAME_DIR "@rpath"
+            BUILD_WITH_INSTALL_NAME_DIR ON)
+    endif()
     target_include_directories(luil_smb2
         PRIVATE
             "${generated}"

@@ -1153,13 +1153,20 @@ if(LUIL_PLATFORM STREQUAL "ios")
         macos/video_frame_player_macos.mm
         macos/accessibility_mapping.cpp
         macos/accessibility_mapping.h)
-    # net: macOS와 같은 NSURLSession 위의 `http_client`와 WebSocket 전송이다. SMB는 "지원 안 함"으로 답한다.
+    # net: macOS와 같은 NSURLSession 위의 `http_client`와 WebSocket 전송이다.
+    #  - SMB client는 LUIL_ENABLE_SMB를 켠 구성이 libsmb2(따로 싼 libsmb2.framework) 위에 세우고, 끈 구성은 "지원 안 함"으로 답한다.
     list(APPEND luil_ios_files ${luil_net_files})
     luil_add_source_filter(luil_ios_files "net"
         net/macos/macos_http_client.mm
         net/macos/macos_text_transcode.cpp
-        net/macos/websocket_transport.mm
-        net/smb_client_unsupported.cpp)
+        net/macos/websocket_transport.mm)
+    if(LUIL_ENABLE_SMB)
+        # 같은 네트워크의 서버 찾기와 `.local` 이름 풀기는 직접 mDNS(net/mdns_query.cpp)가 아니라 시스템 DNS-SD로 한다.
+        # iOS는 앱의 직접 멀티캐스트를 막는다.
+        luil_add_source_filter(luil_ios_files "net" net/smb_client_libsmb2.cpp net/ios/dns_sd_query.cpp net/ios/dns_sd_query.h)
+    else()
+        luil_add_source_filter(luil_ios_files "net" net/smb_client_unsupported.cpp)
+    endif()
     add_library(luil STATIC ${luil_ios_files})
     add_library(luil::luil ALIAS luil)
     target_include_directories(luil
@@ -1191,6 +1198,9 @@ if(LUIL_PLATFORM STREQUAL "ios")
             "-framework CoreVideo"
         PRIVATE
             luil_options)
+    if(LUIL_ENABLE_SMB)
+        target_link_libraries(luil PRIVATE luil_smb2)
+    endif()
 endif()
 
 # CommonMark 파서는 원본 C로 컴파일해 core 정적 라이브러리에 담는다.
