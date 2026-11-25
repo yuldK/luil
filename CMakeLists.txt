@@ -513,8 +513,10 @@ elseif(LUIL_PLATFORM STREQUAL "ios")
     # Apple 헤더의 매크로를 막는 선택은 macOS와 같다 (luil_apply_macos_options).
     include("${LUIL_CMAKE_DIRECTORY}/platform/macos.cmake")
     include("${LUIL_CMAKE_DIRECTORY}/platform/ios.cmake")
-    # 앱 번들에 libsmb2.framework를 싣는 `luil_ios_embed_smb`다 (LUIL_ENABLE_SMB를 켠 구성의 앱이 부른다).
+    # 앱이 부르는 번들 함수다. libsmb2.framework를 싣는 `luil_ios_embed_smb`(LUIL_ENABLE_SMB를 켠 구성)와 서명·권한을 싣는
+    # `luil_ios_sign_bundle`이다 (docs/concepts/consumer-contract.md의 "iOS 앱 번들").
     include("${LUIL_CMAKE_DIRECTORY}/ios/embed_smb.cmake")
+    include("${LUIL_CMAKE_DIRECTORY}/ios/sign.cmake")
 
     luil_validate_ios_platform(
         ARCHITECTURE "${LUIL_IOS_ARCHITECTURE}"

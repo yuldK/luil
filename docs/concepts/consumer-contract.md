@@ -57,6 +57,30 @@ luil 자체 소스와 문서는 [MIT 라이선스](../../LICENSE)를 따른다. 
 - luil은 libsmb2를 고치지 않고 쓴다. 고쳐 쓰려면 고친 소스도 LGPL로 공개해야 한다.
 - 같은 저장소의 libdcerpc 부분은 BSD-2 라이선스다.
 
+## iOS 앱 번들
+
+`add_subdirectory`로 luil을 들인 iOS 앱은 앱 대상(`MACOSX_BUNDLE` 실행 파일)마다 [`cmake/ios/`](../../cmake/ios/)의 두 함수를 부른다. luil의 iOS 예제가 같은 함수를 같은 순서로 쓴다 ([`examples/ios.cmake`](../../examples/ios.cmake)).
+
+```cmake
+add_executable(my_app MACOSX_BUNDLE ...)
+set_target_properties(my_app PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/ios/Info.plist")
+target_link_libraries(my_app PRIVATE luil::luil)
+# 1. 번들 안을 채우는 빌드 뒤 단계 (앱의 자원 복사, 다른 프레임워크 싣기)를 먼저 건다.
+luil_ios_embed_smb(my_app CODE_SIGN_IDENTITY "${MY_SIGNING_IDENTITY}")   # SMB를 끈 구성에서는 아무 일도 없다
+# 2. 서명은 마지막이다.
+luil_ios_sign_bundle(my_app
+    BUNDLE_IDENTIFIER "com.example.my-app"
+    CODE_SIGN_IDENTITY "${MY_SIGNING_IDENTITY}"
+    PROVISIONING_PROFILE "${MY_PROVISIONING_PROFILE}")
+```
+
+- **`luil_ios_sign_bundle(<대상> [BUNDLE_IDENTIFIER <id>] [CODE_SIGN_IDENTITY <신원>] [PROVISIONING_PROFILE <경로>])`** ([`cmake/ios/sign.cmake`](../../cmake/ios/sign.cmake)). SDK에 따라 하는 일이 다르므로 두 구성에 같은 호출을 둔다.
+  - 시뮬레이터(iphonesimulator): 실행 파일의 `__TEXT,__entitlements` 구역에 앱 id와 Keychain 묶음(`LUILSIMULATOR.<번들 id>`)을 싣고 빌드 뒤에 ad-hoc 서명한다. 이 권한이 없으면 비밀 저장소가 `errSecMissingEntitlement`(-34018)로 거절된다. 서명에 실으면 시뮬레이터가 앱을 띄우지 않으므로 구역에 싣는다. 번들 id는 `BUNDLE_IDENTIFIER`, 없으면 대상의 `MACOSX_BUNDLE_GUI_IDENTIFIER`이고 Info.plist의 `CFBundleIdentifier`와 같아야 한다. 신원·profile은 쓰지 않는다.
+  - 기기(iphoneos): 신원과 provisioning profile을 주면 빌드 뒤에 profile을 `embedded.mobileprovision`으로 넣고 그 권한으로 서명한다. 번들 id가 profile의 앱 id(와일드카드 포함)에 들지 않으면 그 빌드 단계가 원인과 함께 멈춘다. 신원이 없으면 서명하지 않고 configure에서 알리기만 한다 (기기에 설치되지 않는다). 없는 profile 경로는 configure에서 멈춘다.
+  - 한 대상에 한 번만 부른다 (두 번째는 configure에서 멈춘다).
+- **순서.** 같은 대상의 빌드 뒤 단계는 건 순서대로 돌고, 서명은 그때까지 번들에 들어온 파일을 봉인한다. 그래서 `luil_ios_embed_smb`와 앱 자신의 번들 복사 단계를 **먼저** 걸고 `luil_ios_sign_bundle`을 **마지막에** 부른다. 서명 뒤에 바뀐 파일이 있으면 기기가 설치를 거절한다. 시뮬레이터의 권한 구역은 링크 옵션이라 순서와 상관없다. 보관·배포 때 Xcode 등 다른 도구가 번들을 다시 서명하는 것은 상관없다.
+- 앱이 자기 권한(App Groups, iCloud 등)을 더 실어야 하면 이 함수 대신 자기 서명 단계를 둔다. 그때도 시뮬레이터에는 앱 id·Keychain 묶음 구역이 있어야 비밀 저장소가 돈다.
+
 ## 뒤로 갈 때의 저장
 
 모바일 OS는 앱이 뒤로 간 뒤 종료 알림 없이 프로세스를 멈추거나 거둔다. 앱은 `app_lifecycle::background` 메시지(`app_delegate::make_lifecycle_message`)를 받을 때 저장한다.

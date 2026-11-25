@@ -192,7 +192,8 @@ xcrun simctl launch --console booted io.github.yuldk.luil.mobile-demo
 
 기기는 `ios-arm64` preset이다. 예제 번들은 [`examples/ios.cmake`](../../examples/ios.cmake)가 [`examples/ios/Info.plist.in`](../../examples/ios/Info.plist.in)을 대상마다 채워 세운다 (장면 목록, 빈 시작 화면, 간접 입력, iPhone·iPad). 번들 id는 `LUIL_IOS_BUNDLE_PREFIX`(기본 `io.github.yuldk.luil`) 뒤에 `hello`·`mobile-demo`다.
 
-- 시뮬레이터 번들은 ad-hoc 서명이다 ([`ios/sign_bundle.cmake`](../../cmake/ios/sign_bundle.cmake)). 앱 id·Keychain 권한은 실행 파일의 `__TEXT,__entitlements` 구역에 싣는다(Xcode의 시뮬레이터 빌드와 같다). 없으면 비밀 저장소가 `errSecMissingEntitlement`(-34018)로 거절되고, 서명에 실으면 프로비저닝 없는 제한 권한이라 앱이 뜨지 않는다.
+- 예제는 앱이 부르는 것과 같은 `luil_ios_sign_bundle`([`ios/sign.cmake`](../../cmake/ios/sign.cmake), 빌드 뒤 단계는 [`ios/sign_bundle.cmake`](../../cmake/ios/sign_bundle.cmake))로 서명한다 ([소비자 계약](consumer-contract.md#ios-앱-번들)).
+- 시뮬레이터 번들은 ad-hoc 서명이다. 앱 id·Keychain 권한은 실행 파일의 `__TEXT,__entitlements` 구역에 싣는다(Xcode의 시뮬레이터 빌드와 같다). 없으면 비밀 저장소가 `errSecMissingEntitlement`(-34018)로 거절되고, 서명에 실으면 프로비저닝 없는 제한 권한이라 앱이 뜨지 않는다.
 - 기기 번들은 `LUIL_IOS_CODE_SIGN_IDENTITY`(개발자 신원)와 `LUIL_IOS_PROVISIONING_PROFILE`(.mobileprovision)을 주면 profile을 넣고 그 권한으로 서명한다. 주지 않으면 서명하지 않아 기기에 설치되지 않는다. 번들 id가 profile의 앱 id(끝이 `*`인 와일드카드 포함)에 들지 않으면 서명 단계가 원인과 함께 멈춘다 — 서명은 되어도 기기가 설치를 거절하기 때문이다. 예제마다 번들 id가 달라 와일드카드 profile이 편하다. 무료 계정의 profile은 와일드카드가 없고 앱 id 하나에만 맞으므로, `LUIL_IOS_BUNDLE_IDENTIFIER_<대상>`(예: `-DLUIL_IOS_BUNDLE_IDENTIFIER_luil_mobile_demo=<앱 id>`)으로 예제 하나의 번들 id를 그 앱 id에 맞추고 그 대상만 빌드한다 (`--target luil_mobile_demo`).
 - 렌더러 경로는 실행 인자로 재현한다: `--renderer=cpu`, `--simulate-gpu-failure`, `--simulate-gpu-loss-after-frames=N` (`apply_debug_arguments`).
 

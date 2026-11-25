@@ -1,7 +1,7 @@
-# iOS 앱 번들 하나를 서명한다 (examples/ios.cmake의 luil_sign_ios_bundle이 빌드 뒤에 부른다).
+# iOS 앱 번들 하나를 서명한다 (cmake/ios/sign.cmake의 `luil_ios_sign_bundle`이 빌드 뒤에 부른다).
 #   cmake -DBUNDLE=<.app> -DIDENTITY=<서명 신원> [-DPROFILE=<.mobileprovision>] [-DWORK=<임시 폴더>] -P sign_bundle.cmake
 #  - 신원이 `-`이면 ad-hoc 서명이다. 시뮬레이터는 이것으로 돈다 (번들의 Info.plist까지 봉인해야 UserNotifications가 앱을 받는다).
-#    시뮬레이터의 앱 id 권한은 서명이 아니라 실행 파일의 `__TEXT,__entitlements` 구역에 실린다 (examples/ios.cmake). 서명에
+#    시뮬레이터의 앱 id 권한은 서명이 아니라 실행 파일의 `__TEXT,__entitlements` 구역에 실린다 (`luil_ios_sign_bundle`). 서명에
 #    실으면 프로비저닝이 없는 제한 권한이라 시뮬레이터가 앱을 띄우지 않는다.
 #  - 기기는 개발자 신원과 그 앱 id를 덮는 provisioning profile이 있어야 설치된다. profile을 번들에 `embedded.mobileprovision`으로
 #    넣고, 그 안의 권한(Entitlements)을 꺼내 서명에 싣는다.
@@ -70,7 +70,8 @@ if(PROFILE)
     if(NOT bundle_matches)
         message(FATAL_ERROR
             "The provisioning profile is for the app id ${profile_pattern}, but the bundle identifier is ${bundle_identifier}.\n"
-            "Use a profile that covers it (a wildcard profile works for every example), or set LUIL_IOS_BUNDLE_PREFIX to match the profile.")
+            "Use a profile that covers it (a wildcard profile covers every bundle identifier under its prefix), or change the bundle identifier to match the profile.\n"
+            "For the luil examples, set LUIL_IOS_BUNDLE_PREFIX or LUIL_IOS_BUNDLE_IDENTIFIER_<target>.")
     endif()
     set(entitlement_arguments --entitlements "${entitlements}")
 endif()

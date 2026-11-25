@@ -10,7 +10,7 @@ include_guard(GLOBAL)
 #    `INSTALL_RPATH`는 남긴다.
 #  - 빌드 뒤에 `<앱>.app/Frameworks/libsmb2.framework`로 복사하고 그 자리에서 서명한다. 신원을 주지 않으면 ad-hoc(`-`)이라
 #    시뮬레이터에서만 돈다. 기기는 앱과 같은 신원을 준다.
-#  - **앱을 서명하는 빌드 뒤 단계보다 먼저 부른다.** 같은 대상의 빌드 뒤 단계는 건 순서대로 돌고, 앱 서명이 안의 프레임워크
+#  - **앱을 서명하는 빌드 뒤 단계(`luil_ios_sign_bundle`, cmake/ios/sign.cmake)보다 먼저 부른다.** 같은 대상의 빌드 뒤 단계는 건 순서대로 돌고, 앱 서명이 안의 프레임워크
 #    서명을 봉인한다. 앱을 나중에 다시 서명하는 도구(Xcode 보관·배포)를 쓰면 그 도구가 프레임워크를 다시 서명해도 된다.
 # `LUIL_ENABLE_SMB`가 꺼져 있으면 아무것도 하지 않는다 (앱이 구성과 상관없이 부를 수 있다).
 function(luil_ios_embed_smb target)
