@@ -16,6 +16,7 @@
 #include <CoreGraphics/CoreGraphics.h>
 
 
+#include <algorithm>
 #include <cstddef>
 #include <memory>
 
@@ -64,9 +65,9 @@ namespace luil::macos {
 
             [[nodiscard]] bool render(const frame_state& state, std::u8string& error) override
             {
-                // 안전 영역이 없어 그릴 자리가 곧 표면이다.
-                const int width { state.origin_x + state.width };
-                const int height { state.origin_y + state.height };
+                // 버퍼는 표면 전체다. 안전 영역(iOS)의 오른쪽·아래 몫도 담아야 layer가 그림을 늘리지 않는다 — 배경은 표면 끝까지 칠한다.
+                const int width { std::max(state.origin_x + state.width, width_) };
+                const int height { std::max(state.origin_y + state.height, height_) };
                 if (width <= 0 || height <= 0)
                     return true;
 
