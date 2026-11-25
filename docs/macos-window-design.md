@@ -101,7 +101,7 @@ Skia view의 포인터 추적(`NSTrackingArea`)은 `inactive_hover`(기본 참)�
 
 - Win32는 `ui_frame::topmost`를 읽지 않고 `on_window_moving`을 부르지 않는다 (이 변경은 Windows 소스를 건드리지 않았다).
 - popup 판의 위·아래 화살표 칸(Win32 `scroll_up_strip`)은 없다. 작업 영역보다 긴 판은 휠로만 흘린다.
-- 실제 커서로는 확인하지 않은 것: 테두리 없는 창의 가장자리 크기 조절, 비활성 앱 위의 실제 포인터 hover(대본은 앱 큐에 넣은 사건이라 추적 영역을 거치지 않는다. 추적 옵션은 `tracking`으로 본다), 투명 창에서 알파 0인 자리의 누름 통과.
+- 판이 실제로 그려졌는가는 대본으로 보지 못한다 (`snapshot`은 다시 그려 찍는다). 화면 기록 권한이 필요한 일이라 아래처럼 실제 화면으로 확인했다.
 
 ## 검증
 
@@ -117,3 +117,8 @@ Skia view의 포인터 추적(`NSTrackingArea`)은 `inactive_hover`(기본 참)�
   | `luil_macos_window_titlebar` | 8. 제목 막대의 앱 단추(글리프·tooltip·이름·누름) |
 
 - 기존 demo의 drop-down·카드 메뉴·메뉴 막대 메뉴를 대본으로 열어 판으로 서는 것, Esc·바깥 누름에 닫히는 것, 판 위 hover 강조를 `snapshot <png> <popup id>`로 확인했다.
+- 실제 커서로 확인한 것 (macOS 27.2, 레티나 화면, 예제 `luil_tool_window`):
+  - 테두리 없는 창의 오른쪽 아래 모서리를 끌면 시스템이 크기를 바꾼다 (320×200 → 287×179점). 배치는 끌기 끝에 한 번 알린다 (`windowDidEndLiveResize`, Win32 `WM_EXITSIZEMOVE`와 같다).
+  - Finder가 앞에 있는 동안 포인터만 "Hover me"에 올리면 머무름 카드가 창 오른쪽 밖에 그려져 서고, 포인터가 떠나면 닫힌다. 앞의 앱은 Finder 그대로다.
+  - 둥근 모서리 바깥(알파 0) 자리의 누름은 기본값에서 이 창이 받고(앱이 앞으로 온다), `layered_click_through`면 뒤의 바탕화면으로 간다(Finder가 앞에 남는다).
+  - 이 확인에서 popup 판이 처음 설 때 그려지지 않는 결함을 찾아 고쳤다. 판이 아직 가려진 상태라 첫 그리기를 건너뛰고, 판에는 창 delegate가 없어 보이게 된 뒤 다시 그릴 계기가 없었다. 판도 가림 알림을 받는다 (이동·크기 알림은 판에서 쓰지 않는다).

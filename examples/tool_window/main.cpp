@@ -6,7 +6,7 @@
 //  - "Hover me"에 머무르면 곁에 미리보기 카드가 선다 (`hover_dwell`). 앱이 뒤에 있어도 선다.
 //  - 배치 보고·끌기 중 자리 고치기·popup 최종 자리를 stderr에 `luil tool:` 줄로 적는다. tests/macos의 입력 대본이 그 줄을 본다.
 //
-// 인자: --smoke-test, --titled(시스템 제목 막대), --opaque(불투명 바탕), --topmost, --all-spaces, --accessory, --active-hover,
+// 인자: --smoke-test, --titled(시스템 제목 막대), --opaque(불투명 바탕), --click-through(알파 0 자리의 누름을 뒤로), --topmost, --all-spaces, --accessory, --active-hover,
 //       --placement=x,y,w,h[,max], --position=x,y, --clamp-top=<y>(끌기 중 창 위 끝의 하한)
 
 #include "luil/luil.h"
@@ -361,6 +361,8 @@ int main(const int argc, const char* const* const argv)
         }
         else if (argument == u8"--opaque")
             config.presentation = luil::win32::window_presentation::standard;
+        else if (argument == u8"--click-through")
+            config.layered_click_through = true;
         else if (argument == u8"--topmost")
             config.topmost = true;
         else if (argument == u8"--all-spaces")

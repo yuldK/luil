@@ -301,6 +301,8 @@ namespace luil::macos {
         bool cursor_hidden { false };
         // 비치는 창의 그림자를 다시 잴 때다 (크기·모양이 바뀌었다).
         bool shadow_stale { true };
+        // 사용자가 가장자리를 끌어 크기를 바꾸는 중이다. 배치는 끝에 한 번 알린다 (Win32 `WM_EXITSIZEMOVE`와 같다).
+        bool live_resizing { false };
         // 배경 효과 view(창 내용 맨 아래)와 마지막으로 알린 상태다. 효과가 섰으면 바탕을 `backdrop_background`로 칠한다.
         NSVisualEffectView* effect { nil };
         bool backdrop_applied { false };
@@ -536,8 +538,12 @@ namespace luil::macos {
 
         // --- 창 알림 ---
 
+        // popup 판의 창 알림은 가림만 쓴다 (`on_occlusion_changed`). 판의 이동·크기는 host가 옮긴 것이라, 이 길로 다시 들어오면
+        // 판이 판을 닫고 옮기는 되돌이가 된다 (Win32 popup이 `WM_MOVE`를 타지 않는 것과 같다).
         void on_resized(native_surface& surface)
         {
+            if (surface.popup.has_value())
+                return;
             refresh_metrics(surface);
             report_placement(surface);
             pump();
@@ -545,7 +551,7 @@ namespace luil::macos {
 
         void on_key_window(native_surface& surface, const bool key)
         {
-            if (host_ == nullptr)
+            if (host_ == nullptr || surface.popup.has_value())
                 return;
             if (key)
                 host_->post_raw_input(surface_focus_gained_event { surface.id });
@@ -594,6 +600,16 @@ namespace luil::macos {
             [[NSRunLoop mainRunLoop] addTimer:clipboard_timer_ forMode:NSRunLoopCommonModes];
         }
 
+        // 가장자리 끌기의 처음과 끝이다. 끝에 그 크기를 한 번 알린다.
+        void on_live_resize(native_surface& surface, const bool active)
+        {
+            if (surface.popup.has_value())
+                return;
+            surface.live_resizing = active;
+            if (active == false)
+                report_placement(surface);
+        }
+
         void on_occlusion_changed(native_surface& surface)
         {
             surface.dirty = true;
@@ -605,6 +621,8 @@ namespace luil::macos {
         //  - caption 끌기 안에서는 배치를 알리지 않는다. 끝에 한 번 알린다 (Windows와 같다).
         void on_moved(native_surface& surface)
         {
+            if (surface.popup.has_value())
+                return;
             static_cast<void>(dismiss_popups(popup_dismiss_reason::surface_moved));
             place_popups();
             if (surface.dragging == false)
@@ -2009,7 +2027,7 @@ namespace luil::macos {
         //  - 전체 화면으로 드나드는 동안의 크기 변화는 알리지 않는다. 다 들어가고 나온 뒤에 한 번 알린다.
         void report_placement(native_surface& surface)
         {
-            if (host_ == nullptr || surface.window == nil || surface.window.miniaturized || surface.popup.has_value())
+            if (host_ == nullptr || surface.window == nil || surface.window.miniaturized || surface.popup.has_value() || surface.live_resizing)
                 return;
             window_placement placement { placement_of(surface) };
             if (surface.main())
@@ -2162,6 +2180,8 @@ namespace luil::macos {
         // 최소화에서 되살아났다. 그동안 미룬 전체 화면 대조를 한다.
         void on_deminiaturized(native_surface& surface)
         {
+            if (surface.popup.has_value())
+                return;
             report_placement(surface);
             if (surface.main())
                 reconcile_fullscreen();
@@ -3235,6 +3255,11 @@ namespace luil::macos {
             panel.collectionBehavior = NSWindowCollectionBehaviorTransient | NSWindowCollectionBehaviorIgnoresCycle | NSWindowCollectionBehaviorFullScreenAuxiliary;
             panel.title = make_ns_string(popup.id) ?: @"";
             popup.window = panel;
+            // 판이 처음 보이는 순간(가림 상태가 풀리는 때) 그린다. 그 전의 그리기는 보이지 않는 창이라 건너뛴다 (`pump`).
+            popup.delegate = [LuilWindowDelegate new];
+            popup.delegate.owner = this;
+            popup.delegate.surface = &popup;
+            panel.delegate = popup.delegate;
             popup.scale = anchor.scale;
             install_content(popup, NSMakeRect(0, 0, 1, 1));
             popup.router.set_touch_config(config_.touch);
@@ -4298,6 +4323,20 @@ namespace {
     static_cast<void>(notification);
     if (self.owner != nullptr && self.surface != nullptr)
         self.owner->on_resized(*self.surface);
+}
+
+- (void)windowWillStartLiveResize:(NSNotification*)notification
+{
+    static_cast<void>(notification);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_live_resize(*self.surface, true);
+}
+
+- (void)windowDidEndLiveResize:(NSNotification*)notification
+{
+    static_cast<void>(notification);
+    if (self.owner != nullptr && self.surface != nullptr)
+        self.owner->on_live_resize(*self.surface, false);
 }
 
 - (void)windowDidChangeBackingProperties:(NSNotification*)notification
