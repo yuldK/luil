@@ -38,6 +38,7 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkTypeface.h"
 
+#import <CoreHaptics/CoreHaptics.h>
 #import <QuartzCore/QuartzCore.h>
 #import <UIKit/UIKit.h>
 
@@ -404,6 +405,7 @@ namespace luil::ios {
             refresh_user_ui_language();
             // 휴대폰·태블릿이다. 창 caption이 없고 맨 위는 앱 바의 자리다. 하드웨어 키보드의 단축키는 Command다.
             // logic thread가 첫 frame을 짓기 전에 정한다.
+            //  - 햅틱은 기기에 진동 장치(Taptic Engine)가 있을 때만 참이다 (Core Haptics의 하드웨어 답). iPad와 시뮬레이터는 거짓이다.
             set_ui_platform({
                 .form_factor = ui_form_factor::mobile,
                 .window_caption = false,
@@ -411,7 +413,7 @@ namespace luil::ios {
                 .capabilities = {
                     .screen_orientation = true,
                     .system_bars = true,
-                    .haptics = true,
+                    .haptics = CHHapticEngine.capabilitiesForHardware.supportsHaptics == YES,
                     .notifications = macos::notification_center_available(),
                     .clipboard_image_copy = true,
                 },
@@ -446,7 +448,7 @@ namespace luil::ios {
             host_config.interaction.touch = config_.touch;
             host_config.interaction.text_edit_menu = true;
             router_.set_touch_config(config_.touch);
-            // 햅틱은 아무 thread에서 오므로 메인으로 넘긴다. 진동 장치가 없는 기기(iPad)에서는 조용하다.
+            // 햅틱은 아무 thread에서 오므로 메인으로 넘긴다. 진동 장치가 없는 기기(iPad)에서는 조용하다 (capability도 거짓이다).
             host_config.haptic = [](const haptic_feedback feedback) {
                 dispatch_async(dispatch_get_main_queue(), ^{
                   switch (feedback)

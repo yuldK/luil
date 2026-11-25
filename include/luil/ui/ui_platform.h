@@ -22,8 +22,9 @@ namespace luil {
         bool system_bars { false };
         // 볼륨 키를 앱이 받을 수 있다 (`device_request::volume_keys`).
         bool volume_keys { false };
-        // 햅틱을 낼 수 있다 (`haptic_request`, `app_host::perform_haptic`). 기기에 진동 장치가 없거나 사용자가
-        // 껐으면 요청해도 조용하다.
+        // 햅틱을 낼 수 있다 (`haptic_request`, `app_host::perform_haptic`). iOS는 기기에 진동 장치가 있을 때만 참이다
+        // (iPhone 참, iPad 거짓) — 앱은 거짓이면 "길게 누를 때 진동" 같은 설정을 감춘다. 사용자가 시스템에서 진동을
+        // 껐으면 참이어도 요청이 조용하다. 거짓인 플랫폼도 요청은 받고 아무 일도 하지 않는다.
         bool haptics { false };
         // 작업 표시줄 단추에 진행률과 오버레이를 걸 수 있다 (`ui_frame::taskbar`, `ui_window::taskbar`). 참은 이 프로세스가
         // 요청을 셸에 낼 수 있다는 뜻이다 — 단추가 실제로 섰는지는 Win32의 `taskbar_report`가 말한다.

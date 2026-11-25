@@ -1184,6 +1184,7 @@ if(LUIL_PLATFORM STREQUAL "ios")
             "$<BUILD_INTERFACE:luil_skia>"
             "$<BUILD_INTERFACE:luil_nlohmann_json>"
             "-framework UIKit"
+            "-framework CoreHaptics"
             "-framework QuartzCore"
             "-framework Foundation"
             "-framework CoreFoundation"

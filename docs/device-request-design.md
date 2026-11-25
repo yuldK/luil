@@ -28,13 +28,13 @@ frame은 그 셋을 이미 다 한다.
 
 `ui_platform::capabilities`는 host가 시작할 때 한 번 정한다. 기본값은 전부 거짓이다.
 
-| 플래그 | 뜻 | Windows | Android |
-| --- | --- | --- | --- |
-| `screen_orientation` | 화면 방향 요청을 옮긴다 | 거짓 | 참 |
-| `system_bars` | 시스템 막대를 숨기고 컷아웃 밑까지 그린다 | 거짓 | 참 |
-| `volume_keys` | 볼륨 올림·내림을 앱에 준다 | 거짓 | 참 |
-| `haptics` | 햅틱을 낸다 | 거짓 | 참 |
-| `global_hotkeys` | 앱이 뒤에 있어도 받는 전역 단축키를 건다 ([전역 단축키](global-hotkey-design.md)) | 참 | 거짓 |
+| 플래그 | 뜻 | Windows | Android | iOS |
+| --- | --- | --- | --- | --- |
+| `screen_orientation` | 화면 방향 요청을 옮긴다 | 거짓 | 참 | 참 |
+| `system_bars` | 시스템 막대를 숨기고 컷아웃 밑까지 그린다 | 거짓 | 참 | 참 |
+| `volume_keys` | 볼륨 올림·내림을 앱에 준다 | 거짓 | 참 | 거짓 |
+| `haptics` | 햅틱을 낸다 | 거짓 | 참 | 진동 장치가 있으면 참 (iPhone 참, iPad·시뮬레이터 거짓) |
+| `global_hotkeys` | 앱이 뒤에 있어도 받는 전역 단축키를 건다 ([전역 단축키](global-hotkey-design.md)) | 참 | 거짓 | 거짓 |
 
 하지 못하는 플랫폼도 요청을 **받는다.** 받고 아무 일도 하지 않는다. 그래서 앱은 플랫폼마다 frame을 다르게
 지을 필요가 없고, 설정 화면에 그 항목을 둘지만 플래그로 고른다 (mobile demo의 기기 페이지).

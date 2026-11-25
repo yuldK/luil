@@ -215,7 +215,7 @@ xcrun simctl launch --console booted io.github.yuldk.luil.mobile-demo
 | 클립보드 | UIPasteboard의 글·HTML·그림. 파일 목록 클립보드는 없다. 바뀜 알림은 내용을 읽지 않는 질문으로 짓는다 (붙여넣음 알림이 뜨지 않게) |
 | 파일 대화 상자 | 문서 선택기. 열기는 임시 폴더의 복사본, 폴더는 원본(보안 범위를 열어 둔다), 저장은 폴더를 골라 그 안의 기본 이름이다 |
 | 기기 요청 | 화면 방향(view controller의 방향 묶음), 몰입 모드(상태 표시줄·홈 표시줄 숨김), 노치 밑 그리기를 옮긴다. 볼륨 키는 받을 길이 없다 |
-| 햅틱 | `UIFeedbackGenerator` |
+| 햅틱 | `UIFeedbackGenerator`. `ui_platform_capabilities::haptics`는 기기에 진동 장치가 있을 때만 참이다 (Core Haptics `CHHapticEngine.capabilitiesForHardware.supportsHaptics`). iPhone은 참, iPad와 시뮬레이터는 거짓이다 |
 | 접근성 | VoiceOver 다리가 tree와 popup의 요소를 `UIAccessibilityElement`로 세운다. 역할 표·값·알림 대조는 macOS와 같은 `accessibility_mapping` 층이다 |
 | 시스템 외양 | 밝은·어두운 모양, 대비·움직임·투명도 줄이기. 사용자가 고르는 강조색은 없다 |
 | OS 알림·HTTP·비밀 저장소·동영상 장 복사 | macOS와 같은 파일이다 (UserNotifications, NSURLSession, Keychain, AVPlayerItemVideoOutput) |

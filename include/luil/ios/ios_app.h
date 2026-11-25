@@ -60,7 +60,9 @@ namespace luil::ios {
     //  - 시스템의 밝은·어두운 모양과 강조색(앱의 tint), 대비·움직임·투명도 줄이기와 글자 크기(Dynamic Type) 설정을 따른다.
     //  - frame의 기기 요청(`ui_frame::device`) 가운데 화면 방향과 상태 표시줄·홈 표시줄 숨김(몰입 모드), 노치 밑 그리기를 옮긴다.
     //    볼륨 키는 받을 길이 없다 (`ui_platform_capabilities::volume_keys`가 거짓이다).
-    //  - 햅틱(`haptic_request`, `app_host::perform_haptic`)은 `UIFeedbackGenerator`로 낸다. 진동 장치가 없는 iPad에서는 조용하다.
+    //  - 햅틱(`haptic_request`, `app_host::perform_haptic`)은 `UIFeedbackGenerator`로 낸다. `ui_platform_capabilities::haptics`는
+    //    기기에 진동 장치가 있을 때만 참이다 (Core Haptics의 하드웨어 답 — iPhone은 참, iPad와 시뮬레이터는 거짓). 거짓이어도
+    //    요청은 받고 조용하다.
     //  - 클립보드는 일반 붙여넣기 판(UIPasteboard)의 글·HTML·그림이다. 파일 대화 상자는 문서 선택기(UIDocumentPicker)다.
     //  - OS 알림은 UserNotifications다. 알림 권한은 `app_permission::notifications`로 묻는다.
     // 시작에 실패하면(logic driver가 없다 등) 1을 돌려준다. 그 밖에는 돌아오지 않는다.
