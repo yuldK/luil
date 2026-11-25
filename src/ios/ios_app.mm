@@ -21,6 +21,7 @@
 #include "ios/ios_input.h"
 #include "ios/webview_host_ios.h"
 #include "luil/text/utf8_text.h"
+#include "text/library_text.h"
 #include "luil/theme/ui_theme.h"
 #include "luil/ui/dialog_elements.h"
 #include "luil/ui/draw_primitives.h"
@@ -96,10 +97,12 @@ namespace luil::ios {
 - (NSRange)luilSelection;
 - (NSRange)luilMarked;
 - (void)luilSetText:(NSString*)text selection:(NSRange)selection marked:(NSRange)marked;
+- (void)luilOpenLink:(id)sender;
+- (void)luilCopyLink:(id)sender;
 @end
 
 // 창의 뿌리 view controller다. 상태 표시줄·홈 표시줄·화면 방향을 앱의 기기 요청대로 답한다.
-@interface LuilViewController : UIViewController
+@interface LuilViewController : UIViewController <UIEditMenuInteractionDelegate>
 @property(nonatomic, assign) luil::ios::application* owner;
 @property(nonatomic, strong) LuilView* luilView;
 @end
@@ -288,17 +291,6 @@ namespace luil::ios {
             const ui_element* element { nullptr };
             float origin_x { 0.0f };
             float origin_y { 0.0f };
-        };
-
-        // 텍스트 칸의 편집 메뉴다 (복사·잘라내기·붙여넣기·모두 선택). Android host와 같이 표면에 겹쳐 그린다.
-        struct edit_menu_state
-        {
-            ui_element_id target {};
-            std::u8string surface {};
-            std::shared_ptr<const ui_tree> tree {};
-            pixel_rect bounds {};
-            ui_element_id pressed {};
-            std::optional<std::pair<pointer_device, std::uint32_t>> capture {};
         };
 
         // 손가락·펜·마우스 접촉 하나다. 터치 객체는 접촉이 끝날 때까지 같은 객체다.
@@ -1068,6 +1060,12 @@ namespace luil::ios {
             scroll.allowedScrollTypesMask = UIScrollTypeMaskAll;
             scroll.cancelsTouchesInView = NO;
             [view_ addGestureRecognizer:scroll];
+            if (@available(iOS 16.0, *))
+            {
+                UIEditMenuInteraction* const interaction { [[UIEditMenuInteraction alloc] initWithDelegate:controller_] };
+                [view_ addInteraction:interaction];
+                edit_interaction_ = interaction;
+            }
         }
 
         void create_webviews()
@@ -1377,6 +1375,17 @@ namespace luil::ios {
             // IME 연결은 표면이 있는 동안만 칸에 붙인다.
             if (ime_ != nullptr && view_ != nil)
                 ime_->synchronize();
+            // 전체 선택이 앱에 닿아 선택이 섰으면 편집 메뉴를 다시 띄운다. 초점이 떠났으면 그만둔다.
+            if (reopen_edit_menu_)
+            {
+                if (focused_text_target().has_value() == false)
+                    reopen_edit_menu_ = false;
+                else if (const text_input_document document { committed_document() }; document.caret != document.anchor)
+                {
+                    reopen_edit_menu_ = false;
+                    open_edit_menu();
+                }
+            }
             if (host_->faulted() && fault_reported_ == false)
             {
                 // iOS 앱은 스스로 끝나지 않는다. 남기고 그리기를 멈춘다.
@@ -1579,8 +1588,6 @@ namespace luil::ios {
                 return;
             for (raw_input_event& event : events)
             {
-                if (route_edit_menu(event))
-                    continue;
                 routed_input routed { router_.route(std::move(event)) };
                 // popup 밖의 누름·휠은 닫는 계기다. 누름·휠 자체는 그대로 간다 (Win32와 같다).
                 const bool closed_popup { routed.pressed_outside && dismiss_popups(popup_dismiss_reason::pointer_press_outside) };
@@ -1756,7 +1763,33 @@ namespace luil::ios {
             if (view_.isFirstResponder == NO)
                 [view_ becomeFirstResponder];
             [view_ reloadInputViews];
+            represent_edit_menu();
         }
+
+        // 키보드를 다시 세우면(`reloadInputViews`) 시스템이 떠 있던 편집 메뉴를 닫는다. 길게 눌러 칸에 초점이 서는 순간 키보드와 메뉴가
+        // 함께 오므로, 방금 청한 메뉴면 키보드가 자리 잡은 뒤 다시 띄운다.
+        void represent_edit_menu()
+        {
+            if (edit_menu_requested_.has_value() == false || now() - *edit_menu_requested_ > std::chrono::milliseconds { 1500 })
+                return;
+            const std::shared_ptr<wake_state> state { wake_ };
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 400 * NSEC_PER_MSEC), dispatch_get_main_queue(), ^{
+              if (state->target != nullptr)
+                  state->target->open_edit_menu_again();
+            });
+        }
+
+    public:
+        void open_edit_menu_again()
+        {
+            if (focused_text_target().has_value() == false)
+                return;
+            edit_menu_requested_.reset();
+            open_edit_menu();
+            edit_menu_requested_.reset();
+        }
+
+    private:
 
         // 칸의 종류에 맞는 키보드를 고른다. 키보드가 떠 있으면 다시 세운다.
         void configure_keyboard()
@@ -1821,7 +1854,10 @@ namespace luil::ios {
             view_.smartDashesType = plain ? UITextSmartDashesTypeDefault : UITextSmartDashesTypeNo;
             view_.secureTextEntry = document.secret;
             if (view_.isFirstResponder)
+            {
                 [view_ reloadInputViews];
+                represent_edit_menu();
+            }
         }
 
         void submit_text()
@@ -1874,64 +1910,130 @@ namespace luil::ios {
             return location;
         }
 
-        // --- 편집 메뉴 (Android host와 같다) ---
+        // --- 편집 메뉴 ---
+        // 텍스트 칸을 길게 누르면 시스템 편집 메뉴를 띄운다 (iOS 16부터 `UIEditMenuInteraction`, 그 전은 `UIMenuController`).
+        //  - 시스템 메뉴의 붙여넣기는 사용자가 허락한 붙여넣기다. 다른 앱(앞선 실행 포함)이 넣은 글도 묻지 않고 읽힌다. 앱이 그린
+        //    메뉴에서 읽으면 iOS가 거절한다 (`PBErrorDomain` 13 "Operation not authorized").
+        //  - 항목은 view의 표준 편집 동작(`copy:`·`cut:`·`paste:`·`selectAll:`)이고, 켜고 끄는 규칙은 Android의 그린 메뉴와 같다
+        //    (`edit_action_allowed`). caret이 링크 안이면 링크 열기·주소 복사가 더 선다.
 
         void close_edit_menu()
         {
-            if (edit_menu_.has_value() == false)
+            reopen_edit_menu_ = false;
+            if (edit_menu_open_ == false)
                 return;
-            edit_menu_.reset();
-            dirty_ = true;
+            edit_menu_open_ = false;
+            if (@available(iOS 16.0, *))
+            {
+                if (edit_interaction_ != nil)
+                    [(UIEditMenuInteraction*)edit_interaction_ dismissMenu];
+            }
+            else
+                [[UIMenuController sharedMenuController] hideMenu];
         }
 
         void open_edit_menu()
         {
-            const interaction_snapshot interaction { host_->acquire_interaction() };
-            if (focused_text_target().has_value() == false)
+            if (view_ == nil || focused_text_target().has_value() == false)
                 return;
-            // 조합 중이면 먼저 확정한다. 그 뒤 전체 선택을 같은 앱 inbox에 넣는다.
+            // 조합 중이면 먼저 확정한다. 그 뒤 전체 선택을 같은 앱 inbox에 넣는다 (Android와 같다).
             if (ime_->composing())
             {
                 ime_->commit_composition();
                 if (environment_.policy != nullptr)
                     dispatch(environment_.policy->make_text_edit_action(text_edit_request { .target = *focused_text_target(), .command = text::text_edit_command::select_all }));
             }
-            edit_menu_ = edit_menu_state { .target = interaction.focused_input, .surface = interaction.focused_surface };
-            update_edit_menu();
-            dirty_ = true;
+            const text_location location { focused_text_location() };
+            if (location.element == nullptr || scale_ <= 0.0f)
+                return;
+            const rect_f bounds { location.element->bounds() };
+            const CGRect anchor { CGRectMake((location.origin_x + bounds.x) / scale_, (location.origin_y + bounds.y) / scale_, bounds.width / scale_, bounds.height / scale_) };
+            // 편집 동작은 첫 응답자에게 간다. 사용자가 키보드를 내려 놓았으면 되찾는다.
+            if (view_.isFirstResponder == NO)
+                [view_ becomeFirstResponder];
+            edit_menu_open_ = true;
+            edit_menu_requested_ = now();
+            if (@available(iOS 16.0, *))
+            {
+                if (edit_interaction_ == nil)
+                    return;
+                UIEditMenuConfiguration* const configuration { [UIEditMenuConfiguration configurationWithIdentifier:nil sourcePoint:CGPointMake(CGRectGetMidX(anchor), CGRectGetMinY(anchor))] };
+                [(UIEditMenuInteraction*)edit_interaction_ presentEditMenuWithConfiguration:configuration];
+            }
+            else
+            {
+                UIMenuController* const menu { [UIMenuController sharedMenuController] };
+                NSMutableArray<UIMenuItem*>* const items { [NSMutableArray array] };
+                for (const auto& [key, label] : link_actions())
+                    [items addObject:[[UIMenuItem alloc] initWithTitle:ns_text(label) action:key == u8"open-link" ? NSSelectorFromString(@"luilOpenLink:") : NSSelectorFromString(@"luilCopyLink:")]];
+                menu.menuItems = items;
+                [menu showMenuFromView:view_ rect:anchor];
+            }
         }
 
-        void update_edit_menu()
+    public:
+        // 그 편집 동작을 지금 할 수 있는가 (`canPerformAction:withSender:`). 키는 앱의 그린 메뉴와 같다 (`copy`·`cut`·`paste`·`all`·
+        // `open-link`·`copy-link`).
+        [[nodiscard]] bool edit_action_allowed(const std::u8string_view key) const
         {
-            if (edit_menu_.has_value() == false)
-                return;
-            const interaction_snapshot interaction { host_->acquire_interaction() };
+            if (ime_ == nullptr || ime_->target().has_value() == false)
+                return false;
             const text_location location { focused_text_location() };
             const auto value { location.element != nullptr ? location.element->text_input() : std::nullopt };
-            if (interaction.focused_input != edit_menu_->target || interaction.focused_surface != edit_menu_->surface || value.has_value() == false || location.element->focusable() == false)
-            {
-                close_edit_menu();
-                return;
-            }
-            const int width { std::min(content_width(), static_cast<int>(std::ceil(288.0f * scale_))) };
-            const int height { std::min(content_height(), static_cast<int>(std::ceil(text_edit_menu_height(text_edit_menu_has_link(*value)) * scale_))) };
-            const std::string os_language { user_ui_language() };
-            edit_menu_->tree = make_text_edit_menu(*value, text_edit_menu_strings(std::u8string { os_language.begin(), os_language.end() }), static_cast<float>(width), static_cast<float>(height), scale_);
-            const rect_f anchor { location.element->bounds() };
-            const int left { static_cast<int>(std::lround(location.origin_x + anchor.x + (anchor.width - static_cast<float>(width)) / 2.0f)) };
-            const int below { static_cast<int>(std::lround(location.origin_y + anchor.y + anchor.height + 4.0f * scale_)) };
-            const int above { static_cast<int>(std::lround(location.origin_y + anchor.y - static_cast<float>(height) - 4.0f * scale_)) };
-            edit_menu_->bounds = { std::clamp(left, insets_.left, insets_.left + content_width() - width),
-                std::clamp(below + height <= insets_.top + content_height() ? below : above, insets_.top, insets_.top + content_height() - height), width, height };
+            if (value.has_value() == false)
+                return false;
+            const bool selected { value->caret != value->anchor && value->composing == false };
+            const bool link { text_edit_menu_has_link(*value) };
+            if (key == u8"copy")
+                return selected && value->secret == false;
+            if (key == u8"cut")
+                return selected && value->secret == false && value->read_only == false;
+            if (key == u8"paste")
+                return value->read_only == false && [UIPasteboard generalPasteboard].hasStrings;
+            if (key == u8"all")
+                return value->text.empty() == false && value->composing == false;
+            if (key == u8"open-link")
+                return link && value->activate_link != nullptr && *value->activate_link != nullptr;
+            if (key == u8"copy-link")
+                return link;
+            return false;
         }
 
+        // 시스템 메뉴·단축키가 낸 편집 동작이다.
+        void edit_action(const std::u8string& key)
+        {
+            execute_edit_menu(key);
+            pump();
+        }
+
+        // 링크 줄의 항목이다 (키와 글). 링크 밖이면 비었다. 글은 라이브러리 표의 편집 메뉴 문구다.
+        [[nodiscard]] std::vector<std::pair<std::u8string, std::u8string>> link_actions() const
+        {
+            std::vector<std::pair<std::u8string, std::u8string>> actions {};
+            const std::string os_language { user_ui_language() };
+            const string_lookup strings { text_edit_menu_strings(std::u8string { os_language.begin(), os_language.end() }) };
+            if (edit_action_allowed(u8"open-link"))
+                actions.emplace_back(u8"open-link", std::u8string { library_text::text(strings, library_text::key::text_edit_menu_open_link) });
+            if (edit_action_allowed(u8"copy-link"))
+                actions.emplace_back(u8"copy-link", std::u8string { library_text::text(strings, library_text::key::text_edit_menu_copy_link) });
+            return actions;
+        }
+
+        void edit_menu_dismissed() noexcept
+        {
+            edit_menu_open_ = false;
+        }
+
+    private:
         void execute_edit_menu(const std::u8string& key)
         {
             const auto target { focused_text_target() };
             const text_location location { focused_text_location() };
             const auto value { location.element != nullptr ? location.element->text_input() : std::nullopt };
-            if (target.has_value() == false || value.has_value() == false || value->composing || environment_.policy == nullptr)
+            if (target.has_value() == false || value.has_value() == false || environment_.policy == nullptr)
                 return;
+            if (value->composing && ime_ != nullptr)
+                ime_->commit_composition();
             if (key == u8"copy" || key == u8"cut")
             {
                 if (value->secret || value->caret == value->anchor)
@@ -1948,7 +2050,9 @@ namespace luil::ios {
             else if (key == u8"all")
             {
                 dispatch(environment_.policy->make_text_edit_action(text_edit_request { .target = *target, .command = text::text_edit_command::select_all }));
-                dirty_ = true;
+                // 시스템 메뉴는 누르면 닫힌다. 앱이 선택을 넓힌 frame이 오면 복사할 수 있게 다시 띄운다 (`pump`).
+                edit_menu_open_ = false;
+                reopen_edit_menu_ = true;
                 return;
             }
             else if (key == u8"copy-link")
@@ -1965,62 +2069,6 @@ namespace luil::ios {
                 dispatch((*value->activate_link)(value->link));
             }
             close_edit_menu();
-        }
-
-        // 메뉴는 텍스트 초점을 옮기지 않는다. 메뉴 안에서 새로 시작한 접촉만 잡는다.
-        bool route_edit_menu(const raw_input_event& event)
-        {
-            if (edit_menu_.has_value() == false)
-                return false;
-            update_edit_menu();
-            if (edit_menu_.has_value() == false)
-                return false;
-            const auto hit = [this](const float x, const float y) -> ui_element_id {
-                const pixel_rect bounds { edit_menu_->bounds };
-                const ui_element* const element { edit_menu_->tree->hit_test(x + static_cast<float>(insets_.left - bounds.x), y + static_cast<float>(insets_.top - bounds.y)) };
-                return element != nullptr && element->enabled() && element->id().kind == ui_element_kind::menu_item ? element->id() : ui_element_id {};
-            };
-            if (const auto* const press { std::get_if<pointer_pressed_event>(&event) }; press != nullptr)
-            {
-                const pixel_rect bounds { edit_menu_->bounds };
-                const float x { press->x + static_cast<float>(insets_.left) };
-                const float y { press->y + static_cast<float>(insets_.top) };
-                if (x < bounds.x || y < bounds.y || x >= bounds.x + bounds.width || y >= bounds.y + bounds.height)
-                {
-                    close_edit_menu();
-                    return false;
-                }
-                edit_menu_->pressed = hit(press->x, press->y);
-                edit_menu_->capture = { { press->device, press->pointer_id } };
-                dirty_ = true;
-                return true;
-            }
-            if (const auto* const move { std::get_if<pointer_moved_event>(&event) }; move != nullptr && edit_menu_->capture == std::pair { move->device, move->pointer_id })
-            {
-                if (hit(move->x, move->y) != edit_menu_->pressed)
-                    edit_menu_->pressed = {};
-                dirty_ = true;
-                return true;
-            }
-            if (const auto* const release { std::get_if<pointer_released_event>(&event) }; release != nullptr && edit_menu_->capture == std::pair { release->device, release->pointer_id })
-            {
-                const ui_element_id pressed { edit_menu_->pressed };
-                const bool activate { pressed != ui_element_id {} && hit(release->x, release->y) == pressed };
-                edit_menu_->capture.reset();
-                edit_menu_->pressed = {};
-                dirty_ = true;
-                if (activate)
-                    execute_edit_menu(pressed.owner);
-                return true;
-            }
-            if (const auto* const cancel { std::get_if<pointer_cancelled_event>(&event) }; cancel != nullptr && edit_menu_->capture == std::pair { cancel->device, cancel->pointer_id })
-            {
-                close_edit_menu();
-                return true;
-            }
-            if (std::holds_alternative<key_pressed_event>(event) || std::holds_alternative<character_typed_event>(event) || std::holds_alternative<mouse_wheel_event>(event))
-                close_edit_menu();
-            return false;
         }
 
         // --- 파일 대화 상자·초점 요청 ---
@@ -2224,8 +2272,8 @@ namespace luil::ios {
         // 닫힘 계기 하나를 popup들에 묻는다. 하나라도 닫자는 메시지를 냈으면 참이다.
         bool dismiss_popups(const popup_dismiss_reason reason)
         {
-            bool dismissed { edit_menu_.has_value() };
-            if (edit_menu_.has_value())
+            bool dismissed { edit_menu_open_ };
+            if (edit_menu_open_)
             {
                 close_edit_menu();
                 if (reason == popup_dismiss_reason::escape_key)
@@ -2355,8 +2403,6 @@ namespace luil::ios {
             for (const overlay_entry& entry : overlays_)
                 if (overlaps(entry.bounds))
                     return true;
-            if (edit_menu_.has_value() && overlaps(edit_menu_->bounds))
-                return true;
             const float inset { 1.0f };
             const std::array<std::pair<float, float>, 5> probes {
                 std::pair { visible->x + visible->width / 2.0f, visible->y + visible->height / 2.0f },
@@ -2401,16 +2447,9 @@ namespace luil::ios {
             }
             if (with_webviews)
                 reveal_overlay_focus(interaction, ime_reveal);
-            prepared.layers.reserve(overlays_.size() + 1);
+            prepared.layers.reserve(overlays_.size());
             for (const overlay_entry& entry : overlays_)
                 prepared.layers.push_back(overlay_layer { entry.tree.get(), entry.bounds, entry.border, interaction_for_surface(interaction, entry.id), entry.scroll_y });
-            update_edit_menu();
-            if (edit_menu_.has_value())
-            {
-                interaction_snapshot menu_interaction {};
-                menu_interaction.pressed = edit_menu_->pressed;
-                prepared.layers.push_back(overlay_layer { edit_menu_->tree.get(), edit_menu_->bounds, true, std::move(menu_interaction) });
-            }
             state.overlays = prepared.layers;
             if (with_webviews)
                 state.holes = apply_webviews(prepared.tree.get(), interaction);
@@ -2484,7 +2523,12 @@ namespace luil::ios {
         std::optional<std::chrono::steady_clock::time_point> timer_deadline_ {};
         std::optional<std::chrono::steady_clock::time_point> update_deadline_ {};
         std::vector<overlay_entry> overlays_ {};
-        std::optional<edit_menu_state> edit_menu_ {};
+        // 시스템 편집 메뉴다 (iOS 16부터 `UIEditMenuInteraction`). 떠 있는가, 전체 선택 뒤 다시 띄울 것인가다.
+        id edit_interaction_ { nil };
+        bool edit_menu_open_ { false };
+        // 마지막으로 편집 메뉴를 청한 때다. 키보드가 그 직후 다시 서면 메뉴를 다시 띄운다 (`represent_edit_menu`).
+        std::optional<std::chrono::steady_clock::time_point> edit_menu_requested_ {};
+        bool reopen_edit_menu_ { false };
         std::shared_ptr<const ui_frame> overlay_frame_ {};
         overlay_input_router router_ {};
         pointer_sequence_tracker tracker_ {};
@@ -2689,6 +2733,69 @@ namespace luil::ios {
 - (BOOL)canBecomeFirstResponder
 {
     return YES;
+}
+
+// 표준 편집 동작이다. 시스템 편집 메뉴, 키보드의 붙여넣기 추천, 하드웨어 키보드의 Command+C·X·V·A가 부른다.
+//  - 글 칸에 초점이 없으면 모두 거절한다. 그때의 Command 단축키는 `pressesBegan:`을 거쳐 앱의 키로 간다.
+- (BOOL)canPerformAction:(SEL)action withSender:(id)sender
+{
+    if (action == @selector(copy:))
+        return self.owner != nullptr && self.owner->edit_action_allowed(u8"copy");
+    if (action == @selector(cut:))
+        return self.owner != nullptr && self.owner->edit_action_allowed(u8"cut");
+    if (action == @selector(paste:))
+        return self.owner != nullptr && self.owner->edit_action_allowed(u8"paste");
+    if (action == @selector(selectAll:))
+        return self.owner != nullptr && self.owner->edit_action_allowed(u8"all");
+    if (action == NSSelectorFromString(@"luilOpenLink:"))
+        return self.owner != nullptr && self.owner->edit_action_allowed(u8"open-link");
+    if (action == NSSelectorFromString(@"luilCopyLink:"))
+        return self.owner != nullptr && self.owner->edit_action_allowed(u8"copy-link");
+    if (action == @selector(select:) || action == @selector(delete:))
+        return NO;
+    return [super canPerformAction:action withSender:sender];
+}
+
+- (void)luilEdit:(const char8_t*)key
+{
+    if (self.owner != nullptr)
+        self.owner->edit_action(key);
+}
+
+- (void)copy:(id)sender
+{
+    static_cast<void>(sender);
+    [self luilEdit:u8"copy"];
+}
+
+- (void)cut:(id)sender
+{
+    static_cast<void>(sender);
+    [self luilEdit:u8"cut"];
+}
+
+- (void)paste:(id)sender
+{
+    static_cast<void>(sender);
+    [self luilEdit:u8"paste"];
+}
+
+- (void)selectAll:(id)sender
+{
+    static_cast<void>(sender);
+    [self luilEdit:u8"all"];
+}
+
+- (void)luilOpenLink:(id)sender
+{
+    static_cast<void>(sender);
+    [self luilEdit:u8"open-link"];
+}
+
+- (void)luilCopyLink:(id)sender
+{
+    static_cast<void>(sender);
+    [self luilEdit:u8"copy-link"];
 }
 
 // 텍스트 칸에 초점이 없으면 빈 입력 view다. 첫 응답자로 남아 하드웨어 키를 받되 소프트 키보드는 뜨지 않는다.
@@ -3174,6 +3281,46 @@ namespace luil::ios {
 {
     if (self.owner != nullptr)
         self.owner->scroll(recognizer);
+}
+
+// 시스템 편집 메뉴의 항목이다. 시스템이 고른 표준 동작(첫 응답자의 `canPerformAction:` 순서) 뒤에 링크 줄을 붙인다.
+- (UIMenu*)editMenuInteraction:(UIEditMenuInteraction*)interaction
+          menuForConfiguration:(UIEditMenuConfiguration*)configuration
+              suggestedActions:(NSArray<UIMenuElement*>*)suggestedActions API_AVAILABLE(ios(16.0))
+{
+    static_cast<void>(interaction);
+    static_cast<void>(configuration);
+    NSMutableArray<UIMenuElement*>* const elements { [NSMutableArray arrayWithArray:suggestedActions] };
+    if (self.owner != nullptr)
+    {
+        LuilView* const view { self.luilView };
+        for (const auto& [key, label] : self.owner->link_actions())
+        {
+            const bool open { key == u8"open-link" };
+            NSString* const title { luil::macos::make_ns_string(label) };
+            [elements addObject:[UIAction actionWithTitle:title != nil ? title : @""
+                                                    image:nil
+                                               identifier:nil
+                                                  handler:^(UIAction*) {
+                                                    if (open)
+                                                        [view luilOpenLink:nil];
+                                                    else
+                                                        [view luilCopyLink:nil];
+                                                  }]];
+        }
+    }
+    return [UIMenu menuWithChildren:elements];
+}
+
+- (void)editMenuInteraction:(UIEditMenuInteraction*)interaction
+    willDismissMenuForConfiguration:(UIEditMenuConfiguration*)configuration
+                           animator:(id<UIEditMenuInteractionAnimating>)animator API_AVAILABLE(ios(16.0))
+{
+    static_cast<void>(interaction);
+    static_cast<void>(configuration);
+    static_cast<void>(animator);
+    if (self.owner != nullptr)
+        self.owner->edit_menu_dismissed();
 }
 
 @end
