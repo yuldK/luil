@@ -418,14 +418,15 @@ namespace mobile_demo {
             column.note(u8"hotkeys-note", u8"앱이 뒤에 있어도 받는 키 조합을 걸 수 있다. 데스크톱 데모의 창 페이지에서 본다.");
 
 
-        // 집 안 NAS 같은 같은 네트워크의 기기에 붙으려면 Android 17부터 이 권한이 있어야 한다.
+        // 집 안 NAS 같은 같은 네트워크의 기기에 붙으려면 Android 17부터 이 권한이 있어야 한다. iOS는 앱이 묻지 않고, 처음
+        // 로컬 주소에 붙을 때 시스템이 스스로 묻는다 (그래서 늘 "묻지 않아도 된다"다).
         column.gap(20.0f);
         column.heading(u8"local-network-heading", u8"로컬 네트워크 권한");
         switch (local_network_)
         {
         case luil::permission_state::not_required:
             column.note(u8"local-network-state", u8"묻지 않아도 된다.");
-            column.note(u8"local-network-when", u8"Android 17부터 targetSdk 37 이상인 앱만 묻는다.");
+            column.wrapped_note(u8"local-network-when", u8"Android 17부터 targetSdk 37 이상인 앱만 묻는다. iOS는 처음 로컬 주소에 붙을 때 시스템이 묻는다.", width, scale);
             break;
         case luil::permission_state::granted:
             column.note(u8"local-network-state", local_network_answered_ ? u8"받았다 (방금 허락)." : u8"받았다.");

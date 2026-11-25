@@ -3,7 +3,9 @@
 <!-- iOS 예제 번들의 Info.plist다. examples/ios.cmake의 luil_add_ios_bundle이 대상마다 채운다.
      - 장면 목록(UIApplicationSceneManifest)이 있어야 host가 장면 하나를 세운다 (luil/ios/ios_app.h). 여러 창은 받지 않는다.
      - 간접 입력(UIApplicationSupportsIndirectInputEvents)을 켜야 iPad의 트랙패드·마우스 누름이 터치가 아닌 마우스로 온다.
-     - 시작 화면은 빈 UILaunchScreen이다. 없으면 iOS가 옛 화면 크기(호환 모드)로 앱을 띄운다. -->
+     - 시작 화면은 빈 UILaunchScreen이다. 없으면 iOS가 옛 화면 크기(호환 모드)로 앱을 띄운다.
+     - 로컬 네트워크 설명(NSLocalNetworkUsageDescription)은 앱이 처음 같은 네트워크의 기기(NAS의 SMB 등)에 붙을 때 시스템이
+       묻는 창의 글이다. 없으면 iOS의 일반 문구로 묻는다. -->
 <plist version="1.0">
 <dict>
     <key>CFBundleDevelopmentRegion</key>
@@ -37,6 +39,8 @@
         <integer>1</integer>
         <integer>2</integer>
     </array>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>같은 네트워크의 NAS 같은 기기에 연결합니다.</string>
     <key>UILaunchScreen</key>
     <dict/>
     <key>UIApplicationSceneManifest</key>

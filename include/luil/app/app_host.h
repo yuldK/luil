@@ -416,7 +416,8 @@ namespace luil {
     enum class app_permission
     {
         // 같은 네트워크(LAN)의 기기에 연결한다 — 집 안 NAS의 SMB나 http. Android 17부터 targetSdk 37 이상인
-        // 앱은 이것 없이 로컬 주소로 가는 연결이 막힌다 (`ACCESS_LOCAL_NETWORK`).
+        // 앱은 이것 없이 로컬 주소로 가는 연결이 막힌다 (`ACCESS_LOCAL_NETWORK`). iOS는 앱이 묻지 않는다 — 처음 로컬
+        // 주소에 붙을 때 시스템이 Info.plist의 `NSLocalNetworkUsageDescription`으로 묻고, 앱은 늘 `not_required`를 받는다.
         local_network,
         // OS 알림을 올린다 (os-notification-design.md). Android 13부터 targetSdk 33 이상인 앱은 이것 없이 알림이
         // 보이지 않는다 (`POST_NOTIFICATIONS`). macOS는 처음 한 번 묻는다 (UserNotifications의 허락).
@@ -427,7 +428,7 @@ namespace luil {
     // 권한의 지금 상태다.
     enum class permission_state
     {
-        // 이 플랫폼·이 앱에서는 묻지 않아도 된다 (Windows, Android 16 이하, targetSdk 36 이하).
+        // 이 플랫폼·이 앱에서는 묻지 않아도 된다 (Windows, Android 16 이하, targetSdk 36 이하, iOS의 로컬 네트워크).
         not_required,
         granted,
         // 아직 받지 못했다 (묻지 않았거나 거절됐다).
