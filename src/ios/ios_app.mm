@@ -151,6 +151,49 @@ namespace luil::ios {
             application* target { nullptr };
         };
 
+        // 배경 작업 시간 하나다 (`beginBackgroundTaskWithName:expirationHandler:`). 쥐기와 놓기는 UIKit이 아무 thread에서 부르도록
+        // 허락한 두 함수라 logic·worker thread에서 그대로 부른다. 만료 처리기는 메인 thread에서 불리고, 그 안에서 시간을 돌려준다.
+        class background_grant final : public background_work::grant
+        {
+        public:
+            struct state
+            {
+                UIApplication* application { nil };
+                std::atomic<UIBackgroundTaskIdentifier> task { UIBackgroundTaskInvalid };
+                std::atomic<bool> expired { false };
+
+                // 한 번만 돌려준다. 놓기와 만료가 엇갈려도 표를 먼저 비운 쪽만 돌려준다.
+                void end() noexcept
+                {
+                    if (const UIBackgroundTaskIdentifier held { task.exchange(UIBackgroundTaskInvalid) }; held != UIBackgroundTaskInvalid)
+                        [application endBackgroundTask:held];
+                }
+            };
+
+            explicit background_grant(std::shared_ptr<state> held) noexcept
+                : state_ { std::move(held) }
+            {
+            }
+
+            ~background_grant() override
+            {
+                state_->end();
+            }
+
+            void release() noexcept override
+            {
+                state_->end();
+            }
+
+            [[nodiscard]] bool expired() const noexcept override
+            {
+                return state_->expired.load();
+            }
+
+        private:
+            std::shared_ptr<state> state_ {};
+        };
+
         // 가족 이름 → typeface와 글자 → 대체 typeface를 함께 맡는다 (Android·macOS host와 같은 모양이다).
         struct registry_font_resolver final : font_resolver, font_fallback
         {
@@ -473,6 +516,28 @@ namespace luil::ios {
             };
             // 묻는 권한은 OS 알림 하나다 (UserNotifications의 허락). 로컬 네트워크는 iOS가 처음 쓸 때 스스로 묻고, 묻기 전에
             // 상태를 알 길이 없어 "묻지 않아도 됨"이다.
+            // 배경 작업 시간이다. 앱이 뒤로 갈 때의 lifecycle 메시지가 쥐고(`post_lifecycle`), 앱도 따로 쥔다.
+            //  - 만료 처리기는 시간을 돌려준 뒤 앱에 한 번 알린다 (`app_delegate::make_background_expired_message`).
+            //  - 처리기가 표를 적기 전에 불렸으면(쥔 thread가 메인이 아니다) 적은 뒤에 돌려준다.
+            host_config.hold_background = [wake, application = UIApplication.sharedApplication]() -> background_work {
+                if (application == nil)
+                    return {};
+                const auto held { std::make_shared<background_grant::state>() };
+                held->application = application;
+                const UIBackgroundTaskIdentifier task { [application beginBackgroundTaskWithName:@"luil"
+                                                                               expirationHandler:^{
+                                                                                 held->expired.store(true);
+                                                                                 held->end();
+                                                                                 if (wake->target != nullptr)
+                                                                                     wake->target->on_background_expired();
+                                                                               }] };
+                if (task == UIBackgroundTaskInvalid)
+                    return {};
+                held->task.store(task);
+                if (held->expired.load())
+                    held->end();
+                return background_work { std::make_unique<background_grant>(held) };
+            };
             host_config.permission = [](const app_permission permission) {
                 return permission == app_permission::notifications ? macos::notification_permission() : permission_state::not_required;
             };
@@ -587,6 +652,8 @@ namespace luil::ios {
         void on_foreground(const bool foreground)
         {
             visible_ = foreground;
+            if (foreground)
+                background_expired_ = false;
             post_lifecycle(foreground ? app_lifecycle::foreground : app_lifecycle::background);
             if (foreground)
             {
@@ -1340,13 +1407,29 @@ namespace luil::ios {
                 view_.keyboardAppearance = system_.prefers_light ? UIKeyboardAppearanceLight : UIKeyboardAppearanceDark;
         }
 
+        // 뒤로 갈 때는 배경 작업 시간을 먼저 쥐고, logic이 그 메시지를 처리하면 놓는다 (`post_app_message_holding`). 앱이 그
+        // 메시지를 받아 logic thread에서 저장하는 동안 iOS가 앱을 멈추지 않는다. 메시지가 비었으면 곧바로 놓는다.
         void post_lifecycle(const app_lifecycle lifecycle)
         {
             if (environment_.delegate == nullptr || host_ == nullptr)
                 return;
+            background_work work { lifecycle == app_lifecycle::background ? host_->hold_background_work() : background_work {} };
             if (app_message message { environment_.delegate->make_lifecycle_message(lifecycle) }; message.empty() == false)
+                host_->post_app_message_holding(std::move(message), std::move(work));
+        }
+
+    public:
+        // 배경 작업 시간이 만료됐다 (메인 thread의 만료 처리기). 뒤에 머문 한 번에 한 번만 앱에 알린다.
+        void on_background_expired()
+        {
+            if (background_expired_ || host_ == nullptr || stopped_ || environment_.delegate == nullptr)
+                return;
+            background_expired_ = true;
+            if (app_message message { environment_.delegate->make_background_expired_message() }; message.empty() == false)
                 host_->post_app_message(std::move(message));
         }
+
+    private:
 
         // 뒤로 가거나 장면이 떨어질 때다. 조합을 확정하고 진행 중인 접촉·키 반복을 거둔다.
         void commit_and_cancel_input()
@@ -2589,6 +2672,8 @@ namespace luil::ios {
         bool visible_ { false };
         bool stopped_ { false };
         bool fault_reported_ { false };
+        // 이번에 뒤에 머문 동안 배경 작업 시간의 만료를 앱에 알렸는가다 (`on_background_expired`).
+        bool background_expired_ { false };
         bool warned_windows_ { false };
         bool warned_docked_ { false };
         bool warned_exit_ { false };

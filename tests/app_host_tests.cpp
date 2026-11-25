@@ -7,9 +7,11 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -956,4 +958,182 @@ TEST_CASE("A key carrying a report ticket comes back with whether anyone took it
     }));
     const std::lock_guard<std::mutex> lock { mutex };
     REQUIRE(reports == std::vector<std::pair<std::uint64_t, bool>> { { 7u, false } });
+}
+
+namespace {
+    struct slow_intent
+    {
+        std::chrono::milliseconds duration {};
+    };
+
+    // 배경 작업 시간을 센다. 놓으면 그때까지 driver가 처리한 수를 적는다.
+    struct counting_grant_state
+    {
+        std::atomic<int> releases { 0 };
+        std::atomic<int> handled_at_release { -1 };
+        std::atomic<bool> expired { false };
+    };
+
+    class counting_grant final : public luil::background_work::grant
+    {
+    public:
+        counting_grant(std::shared_ptr<counting_grant_state> state, std::function<int()> handled)
+            : state_ { std::move(state) }
+            , handled_ { std::move(handled) }
+        {
+        }
+
+        void release() noexcept override
+        {
+            if (released_.exchange(true))
+                return;
+            state_->handled_at_release.store(handled_ != nullptr ? handled_() : -1);
+            state_->releases.fetch_add(1);
+        }
+
+        [[nodiscard]] bool expired() const noexcept override
+        {
+            return state_->expired.load();
+        }
+
+    private:
+        std::shared_ptr<counting_grant_state> state_ {};
+        std::function<int()> handled_ {};
+        std::atomic<bool> released_ { false };
+    };
+
+    // 느린 메시지를 받으면 그만큼 잠자는 driver다 (뒤로 갈 때의 저장 자리).
+    class slow_driver final : public luil::logic_driver
+    {
+    public:
+        void handle(luil::app_message message) override
+        {
+            if (message.get<close_intent>() != nullptr)
+            {
+                closed.store(true);
+                return;
+            }
+            if (const auto* const slow { message.get<slow_intent>() }; slow != nullptr)
+                std::this_thread::sleep_for(slow->duration);
+            handled.fetch_add(1);
+        }
+
+        [[nodiscard]] std::shared_ptr<const luil::ui_frame> make_frame() override
+        {
+            return std::make_shared<luil::ui_frame>();
+        }
+
+        [[nodiscard]] luil::app_message make_close_message() override
+        {
+            return luil::app_message { close_intent {} };
+        }
+
+        [[nodiscard]] bool shutdown_completed() const override
+        {
+            return closed.load();
+        }
+
+        std::atomic<int> handled { 0 };
+        std::atomic<bool> closed { false };
+    };
+}
+
+TEST_CASE("Background work is a no-op handle where the platform grants no time", "[host][background]")
+{
+    // 시간을 주지 않는 플랫폼(Windows·Android·macOS)은 빈 값이고, 놓기와 함께 게시해도 그냥 게시다.
+    slow_driver driver {};
+    luil::app_host host { luil::app_host::config {}, driver, nullptr };
+    luil::background_work work { host.hold_background_work() };
+    REQUIRE(work.held() == false);
+    REQUIRE(work.expired() == false);
+    work.release();
+    host.post_app_message_holding(luil::app_message { ping_intent {} }, host.hold_background_work());
+    REQUIRE(wait_until([&] { return driver.handled.load() == 1; }));
+}
+
+TEST_CASE("A background work handle releases once on release, destruction and reassignment", "[host][background]")
+{
+    const auto state { std::make_shared<counting_grant_state>() };
+    {
+        luil::background_work work { std::make_unique<counting_grant>(state, nullptr) };
+        REQUIRE(work.held());
+        work.release();
+        work.release();
+        REQUIRE(work.held() == false);
+        REQUIRE(state->releases.load() == 1);
+    }
+    REQUIRE(state->releases.load() == 1);
+
+    const auto first { std::make_shared<counting_grant_state>() };
+    const auto second { std::make_shared<counting_grant_state>() };
+    {
+        luil::background_work work { std::make_unique<counting_grant>(first, nullptr) };
+        // 다른 값을 대입하면 쥐고 있던 시간을 먼저 놓는다.
+        work = luil::background_work { std::make_unique<counting_grant>(second, nullptr) };
+        REQUIRE(first->releases.load() == 1);
+        REQUIRE(second->releases.load() == 0);
+        luil::background_work moved { std::move(work) };
+        REQUIRE(second->releases.load() == 0);
+        // 만료는 OS가 시간을 거두었다는 뜻이라 쥔 것으로 보지 않는다.
+        second->expired.store(true);
+        REQUIRE(moved.held() == false);
+        REQUIRE(moved.expired());
+    }
+    REQUIRE(second->releases.load() == 1);
+}
+
+TEST_CASE("A message posted holding background work keeps it until the driver has handled it", "[host][background]")
+{
+    slow_driver driver {};
+    const auto state { std::make_shared<counting_grant_state>() };
+    std::atomic<int> grants { 0 };
+    luil::app_host::config config {};
+    config.hold_background = [&]() {
+        grants.fetch_add(1);
+        return luil::background_work { std::make_unique<counting_grant>(state, [&driver] { return driver.handled.load(); }) };
+    };
+    luil::app_host host { std::move(config), driver, nullptr };
+    luil::background_work work { host.hold_background_work() };
+    REQUIRE(work.held());
+    REQUIRE(grants.load() == 1);
+
+    // 저장에 200ms 걸리는 메시지다. 처리가 끝나기 전에는 놓지 않고, 끝나면 곧바로 놓는다 (다음 메시지를 기다리지 않는다).
+    host.post_app_message(luil::app_message { ping_intent {} });
+    host.post_app_message_holding(luil::app_message { slow_intent { 200ms } }, std::move(work));
+    std::this_thread::sleep_for(100ms);
+    REQUIRE(state->releases.load() == 0);
+    REQUIRE(wait_until([&] { return state->releases.load() == 1; }));
+    REQUIRE(state->handled_at_release.load() == 2);
+
+    // 빈 메시지는 게시하지 않으므로 시간도 곧바로 놓는다.
+    const auto empty { std::make_shared<counting_grant_state>() };
+    host.post_app_message_holding(luil::app_message {}, luil::background_work { std::make_unique<counting_grant>(empty, nullptr) });
+    REQUIRE(empty->releases.load() == 1);
+}
+
+TEST_CASE("Background work posted from many threads is released after each message is handled", "[host][background]")
+{
+    slow_driver driver {};
+    luil::app_host host { luil::app_host::config {}, driver, nullptr };
+    constexpr int posters { 4 };
+    constexpr int per_poster { 50 };
+    std::vector<std::shared_ptr<counting_grant_state>> states {};
+    for (int index { 0 }; index < posters * per_poster; ++index)
+        states.push_back(std::make_shared<counting_grant_state>());
+    std::vector<std::thread> threads {};
+    for (int poster { 0 }; poster < posters; ++poster)
+        threads.emplace_back([&, poster] {
+            for (int index { 0 }; index < per_poster; ++index)
+            {
+                const auto& state { states[static_cast<std::size_t>(poster * per_poster + index)] };
+                host.post_app_message_holding(luil::app_message { ping_intent {} }, luil::background_work { std::make_unique<counting_grant>(state, nullptr) });
+            }
+        });
+    for (std::thread& thread : threads)
+        thread.join();
+    // 마지막 메시지 뒤에 다른 메시지가 오지 않아도 모두 놓인다.
+    REQUIRE(wait_until([&] {
+        return std::all_of(states.begin(), states.end(), [](const auto& state) { return state->releases.load() == 1; });
+    }));
+    REQUIRE(driver.handled.load() == posters * per_poster);
 }

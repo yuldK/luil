@@ -7,6 +7,7 @@
 #include "include/core/SkFont.h"
 #include "include/core/SkTypeface.h"
 
+#include <algorithm>
 #include <atomic>
 #include <chrono>
 #include <deque>
@@ -102,6 +103,15 @@ namespace luil {
         // 플랫폼의 권한 조회와 묻기다. 햅틱과 같이 만든 뒤로 바뀌지 않는다.
         std::function<permission_state(app_permission)> permission {};
         std::function<bool(app_permission)> request_permission {};
+        // 플랫폼의 배경 작업 시간이다. 햅틱과 같이 만든 뒤로 바뀌지 않는다.
+        std::function<background_work()> hold_background {};
+        // logic이 처리하면 놓을 배경 작업 시간과 그 메시지의 표다 (`post_app_message_holding`). 게시와 쌓기를 한 자물쇠로 묶어
+        // 표 순서대로 쌓인다.
+        std::mutex held_work_mutex {};
+        std::vector<std::pair<std::uint64_t, background_work>> held_work {};
+        // 쌓인 시간이 있을 수 있는가다. logic thread가 메시지마다 자물쇠를 잡지 않게 한다. 게시하는 쪽은 inbox에 넣기 **전에**
+        // 세운다 — 넣은 뒤에 세우면 logic이 먼저 처리하고 비었다고 보아, 다음 메시지가 올 때까지 시간을 놓지 않는다.
+        std::atomic<bool> holding_work { false };
 
         // 창 명령 큐다.
         // input thread가 넣고 UI thread가 신호를 받아 꺼낸다.
@@ -143,6 +153,42 @@ namespace luil {
         std::thread input_thread {};
     };
 
+    background_work::background_work(std::unique_ptr<grant> granted) noexcept
+        : grant_ { std::move(granted) }
+    {
+    }
+
+    background_work& background_work::operator=(background_work&& other) noexcept
+    {
+        if (this != &other)
+        {
+            release();
+            grant_ = std::move(other.grant_);
+        }
+        return *this;
+    }
+
+    background_work::~background_work()
+    {
+        release();
+    }
+
+    void background_work::release() noexcept
+    {
+        if (const std::unique_ptr<grant> granted { std::move(grant_) }; granted != nullptr)
+            granted->release();
+    }
+
+    bool background_work::held() const noexcept
+    {
+        return grant_ != nullptr && grant_->expired() == false;
+    }
+
+    bool background_work::expired() const noexcept
+    {
+        return grant_ != nullptr && grant_->expired();
+    }
+
     app_host::app_host(config configuration, logic_driver& driver, interaction_policy* const policy)
         : assembly_ { std::make_unique<assembly>() }
         , driver_ { driver }
@@ -173,6 +219,7 @@ namespace luil {
             };
         parts.permission = std::move(configuration.permission);
         parts.request_permission = std::move(configuration.request_permission);
+        parts.hold_background = std::move(configuration.hold_background);
         // 요청 내용은 큐로 나르고 wake는 신호만 전한다.
         // 종료 시 input join이 이 callback보다 늦게 오므로 assembly 수명은 안전하다.
         std::function<void(ui_command)> forward_ui_command {};
@@ -404,6 +451,52 @@ namespace luil {
             assembly_->haptic(feedback);
     }
 
+    background_work app_host::hold_background_work() const noexcept
+    {
+        if (assembly_->hold_background == nullptr)
+            return {};
+        // 플랫폼의 예외는 "시간을 받지 못했다"로 본다.
+        try
+        {
+            return assembly_->hold_background();
+        }
+        catch (...)
+        {
+            return {};
+        }
+    }
+
+    void app_host::post_app_message_holding(app_message message, background_work work) noexcept
+    {
+        if (message.empty())
+            return;
+        try
+        {
+            const std::lock_guard<std::mutex> lock { assembly_->held_work_mutex };
+            assembly_->holding_work.store(true);
+            std::uint64_t sequence { 0 };
+            const messaging::post_result result { assembly_->app_inbox.post(std::move(message), sequence) };
+            if (result == messaging::post_result::posted || result == messaging::post_result::posted_after_drop)
+                assembly_->held_work.emplace_back(sequence + 1, std::move(work));
+            assembly_->holding_work.store(assembly_->held_work.empty() == false);
+        }
+        catch (...)
+        {
+        }
+    }
+
+    void app_host::release_handled_work() noexcept
+    {
+        if (assembly_->holding_work.load() == false)
+            return;
+        // 지우면 그 자리에서 플랫폼에 돌려준다. 플랫폼의 놓기는 짧고 이 host로 돌아오지 않아 자물쇠 안에서 해도 된다.
+        const std::lock_guard<std::mutex> lock { assembly_->held_work_mutex };
+        auto& held { assembly_->held_work };
+        const auto end { std::find_if(held.begin(), held.end(), [handled = assembly_->handled_ticket](const auto& entry) { return entry.first > handled; }) };
+        held.erase(held.begin(), end);
+        assembly_->holding_work.store(held.empty() == false);
+    }
+
     void app_host::post_clipboard_request(clipboard_request request) noexcept
     {
         if (assembly_->execute_clipboard == nullptr)
@@ -621,9 +714,15 @@ namespace luil {
         catch (...)
         {
             assembly_->faulted.store(true);
-            const std::scoped_lock lock { assembly_->file_dialog_mutex };
-            assembly_->app_inbox.close();
-            assembly_->file_dialog_messages.clear();
+            {
+                const std::scoped_lock lock { assembly_->file_dialog_mutex };
+                assembly_->app_inbox.close();
+                assembly_->file_dialog_messages.clear();
+            }
+            // 멈춘 logic은 쌓인 메시지를 처리하지 않는다. 그 메시지들이 쥔 배경 작업 시간도 돌려준다.
+            const std::lock_guard<std::mutex> lock { assembly_->held_work_mutex };
+            assembly_->held_work.clear();
+            assembly_->holding_work.store(false);
         }
         assembly_->logic_thread_exited.store(true);
     }
@@ -663,6 +762,7 @@ namespace luil {
             {
                 driver_.handle(std::move(received.payload));
                 assembly_->handled_ticket = received.sequence + 1;
+                release_handled_work();
 
                 // 몰려온 메시지는 한 번에 처리하고 frame은 batch당 한 번만 게시한다.
                 // 상한이 렌더링 기회를 보존한다.
@@ -689,6 +789,7 @@ namespace luil {
                 {
                     driver_.handle(std::move(entry.payload));
                     assembly_->handled_ticket = entry.sequence + 1;
+                    release_handled_work();
                 }
                 changed = true;
             }

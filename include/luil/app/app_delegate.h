@@ -118,6 +118,16 @@ namespace luil {
             return {};
         }
 
+        // OS가 배경 작업 시간이 다 됐다고 알렸다 (iOS의 만료 처리기, `background_work`). host는 쥐고 있던 시간을 이미 모두
+        // 돌려주었고 앱은 곧 멈춘다. 뒤에 머문 한 번에 한 번만 불린다.
+        // 반환 메시지는 app inbox로 간다. 빈 메시지는 게시하지 않는다. 배경 작업 시간이 없는 플랫폼은 부르지 않는다.
+        //  - logic thread가 아직 저장하는 중이면 이 메시지는 저장이 끝난 뒤에야 처리된다. 저장 도중에 멈출 때를 알려면 저장하는
+        //    쪽이 `app_host::hold_background_work`로 쥔 값의 `expired`를 본다.
+        [[nodiscard]] virtual app_message make_background_expired_message()
+        {
+            return {};
+        }
+
         // 클립보드의 파일 목록을 읽었다 (`clipboard_files_paste_request`의 답). 반환 메시지는 app inbox로 간다.
         // 빈 메시지는 게시하지 않는다. 파일이 없거나 플랫폼이 다루지 않아도(`supported` 거짓) 답은 온다.
         [[nodiscard]] virtual app_message make_file_clipboard_message(const file_clipboard_content& content)

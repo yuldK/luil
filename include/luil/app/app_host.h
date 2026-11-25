@@ -568,6 +568,51 @@ namespace luil {
         std::optional<bool> fullscreen {};
     };
 
+    // 플랫폼이 쥐여 준 배경 작업 시간 하나다 (iOS `beginBackgroundTaskWithName:expirationHandler:`). 쥐고 있는 동안은 앱이 뒤로
+    // 가도 OS가 프로세스를 멈추지 않는다. 놓으면(`release`·소멸·다른 값의 대입) 그 시간을 OS에 돌려준다.
+    //  - `app_host::hold_background_work`로 얻는다. 시간을 주는 플랫폼은 지금 iOS뿐이다. 나머지(Android·macOS·Windows)는
+    //    빈 값을 돌려주고 놓기도 아무 일이 없다 — 앱은 플랫폼을 가리지 않고 같은 코드를 쓴다.
+    //  - 옮기기만 된다. 아무 thread에서 놓아도 된다. 한 값을 여러 thread가 함께 만지지는 않는다.
+    //  - 시간에는 OS가 정한 끝이 있다 (iOS는 흔히 30초 안팎). 그 끝에 OS가 만료를 알리면 host가 곧바로 시간을 돌려주고
+    //    (iOS는 만료 처리기 안에서 돌려주지 않으면 앱을 죽인다) `expired`가 참이 된다. 그 직후 앱은 멈춘다 — 저장은 늘 끝까지
+    //    쓰고 바꿔 다는 식(임시 파일 + 이름 바꾸기)으로 해서 반쯤 쓴 파일이 남지 않게 한다.
+    class background_work
+    {
+    public:
+        // 플랫폼이 구현하는 짝이다. 앱은 쓰지 않는다.
+        class grant
+        {
+        public:
+            grant() = default;
+            grant(const grant&) = delete;
+            grant& operator=(const grant&) = delete;
+            virtual ~grant() = default;
+            // 시간을 OS에 돌려준다. 여러 번 불려도, 만료와 엇갈려도 한 번만 돌려준다. 아무 thread에서 불린다.
+            virtual void release() noexcept = 0;
+            // OS가 시간이 다 됐다고 알려 와 이미 돌려주었는가다. 아무 thread에서 불린다.
+            [[nodiscard]] virtual bool expired() const noexcept = 0;
+        };
+
+        background_work() noexcept = default;
+        explicit background_work(std::unique_ptr<grant> granted) noexcept;
+        background_work(const background_work&) = delete;
+        background_work& operator=(const background_work&) = delete;
+        background_work(background_work&& other) noexcept = default;
+        // 쥐고 있던 시간을 먼저 놓고 `other`의 것을 받는다.
+        background_work& operator=(background_work&& other) noexcept;
+        ~background_work();
+
+        // 시간을 돌려준다. 빈 값이나 이미 놓은 값이면 아무 일도 없다.
+        void release() noexcept;
+        // 시간을 쥐고 있는가다. 플랫폼이 시간을 주지 않는다(빈 값), OS가 거절했다, 놓았다, 만료됐다면 거짓이다.
+        [[nodiscard]] bool held() const noexcept;
+        // OS가 만료를 알려 host가 이 시간을 거두어 갔는가다. 오래 걸리는 저장이 이것을 보고 남은 일을 멈춘다.
+        [[nodiscard]] bool expired() const noexcept;
+
+    private:
+        std::unique_ptr<grant> grant_ {};
+    };
+
     // 앱이 logic thread에 꽂는 구동기다.
     // 모든 메서드는 app_host의 logic thread에서 불린다 (shutdown_completed·
     // make_close_message·cancel은 UI thread에서도 불리므로 thread-safe해야 한다).
@@ -696,6 +741,9 @@ namespace luil {
             // `app_delegate::make_permission_message`로 앱에 알린다.
             std::function<permission_state(app_permission)> permission {};
             std::function<bool(app_permission)> request_permission {};
+            // 플랫폼의 배경 작업 시간이다 (`background_work`). 비어 있으면 시간을 주지 않는 플랫폼이라 늘 빈 값이다.
+            // 아무 thread에서 불리므로 thread-safe해야 하고 막히지 않아야 한다.
+            std::function<background_work()> hold_background {};
             // driver.start() 뒤, 최초 make_frame() 전에 순서대로 처리한다.
             // 플랫폼이 창을 확정한 크기·배율을 첫 레이아웃부터 쓰게 하는 시작 메시지다.
             std::vector<app_message> initial_messages {};
@@ -738,6 +786,15 @@ namespace luil {
         // 지어졌다 — 플랫폼이 "새 크기로 배치한 tree가 왔는가"를 앱의 협조 없이 아는 길이다
         // (layered-presentation-design.md).
         [[nodiscard]] std::uint64_t post_app_message_ticketed(app_message message) noexcept;
+        // `post_app_message`와 같고, logic이 이 메시지를 처리(`logic_driver::handle`이 돌아옴)할 때까지 `work`를 쥐고 있다가
+        // 놓는다. 메시지가 비었거나 버려졌으면 곧바로 놓는다. **어느 thread에서 불러도 된다.**
+        //  - iOS host가 뒤로 갈 때의 lifecycle 메시지를 이것으로 게시한다. 앱이 그 메시지를 받아 logic thread에서 저장하는
+        //    동안 OS가 앱을 멈추지 않는다.
+        void post_app_message_holding(app_message message, background_work work) noexcept;
+        // 배경 작업 시간을 하나 쥔다 (`background_work`). **어느 thread에서 불러도 된다.** 시간을 주지 않는 플랫폼은 빈 값이다.
+        //  - lifecycle 메시지를 처리한 뒤에도 이어지는 저장(worker에 맡긴 쓰기, 망 업로드)이 있으면 앱이 이것을 쥐었다가 끝날 때
+        //    놓는다. logic thread 안에서 오래 저장하면서 만료를 지켜보려는 앱도 처리 첫머리에 쥐고 `expired`를 본다.
+        [[nodiscard]] background_work hold_background_work() const noexcept;
         // 실행 중 터치 몸짓 설정을 바꾼다. **어느 thread에서 불러도 된다.**
         // 잘못된 값이면 거짓이고 직전 설정이 남는다.
         //  - 참은 **게시**의 성공이지 적용 완료가 아니다. input thread가 다음 이벤트를
@@ -805,6 +862,8 @@ namespace luil {
         void logic_thread_main();
         void logic_loop();
         void publish_frame();
+        // logic이 처리를 마친 메시지가 쥐고 있던 배경 작업 시간을 놓는다 (logic thread).
+        void release_handled_work() noexcept;
         // logic이 종료 신호를 처리할 때까지 기다린다.
         // 한계를 넘으면 포기한다.
         void wait_for_logic_shutdown() noexcept;

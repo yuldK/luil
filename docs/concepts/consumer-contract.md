@@ -57,6 +57,15 @@ luil 자체 소스와 문서는 [MIT 라이선스](../../LICENSE)를 따른다. 
 - luil은 libsmb2를 고치지 않고 쓴다. 고쳐 쓰려면 고친 소스도 LGPL로 공개해야 한다.
 - 같은 저장소의 libdcerpc 부분은 BSD-2 라이선스다.
 
+## 뒤로 갈 때의 저장
+
+모바일 OS는 앱이 뒤로 간 뒤 종료 알림 없이 프로세스를 멈추거나 거둔다. 앱은 `app_lifecycle::background` 메시지(`app_delegate::make_lifecycle_message`)를 받을 때 저장한다.
+
+- **iOS는 host가 배경 작업 시간을 쥔다.** 장면이 뒤로 갈 때(`sceneDidEnterBackground:`) host가 `beginBackgroundTaskWithName:expirationHandler:`로 시간을 쥐고 lifecycle 메시지를 게시한 뒤, logic이 그 메시지를 처리(`logic_driver::handle`이 돌아옴)하면 놓는다. 그 사이 logic thread가 몇 초 걸려 저장해도 iOS가 앱을 멈추지 않는다 (시뮬레이터와 기기(iPad mini, iOS 27)에서 3.5초 남짓 걸리는 저장이 뒤에서 끝까지 되는 것을 보았다. 시간을 쥐지 않으면 0.3초 만에 멈췄다가 앞으로 돌아온 뒤에야 이어졌다). 앱이 빈 메시지를 돌려주면 곧바로 놓는다.
+- **처리 뒤에도 이어지는 저장**(worker에 맡긴 쓰기, 업로드)은 앱이 `app_host::hold_background_work()`로 시간을 따로 쥐었다가 끝날 때 놓는다 (`background_work`, 소멸해도 놓는다). 아무 thread에서 쥐고 놓는다. 같은 원리로 앱이 쓰는 `app_host::post_app_message_holding(message, work)`도 있다.
+- **만료.** 시간에는 iOS가 정한 끝이 있다 (흔히 30초 안팎, 시뮬레이터와 기기 모두 뒤로 간 지 약 26초). 만료 처리기가 불리면 host가 그 시간을 곧바로 돌려주고(돌려주지 않으면 iOS가 앱을 죽인다), 그 시간의 `background_work::expired()`가 참이 되며, `app_delegate::make_background_expired_message()`가 뒤에 머문 한 번에 한 번 불려 그 메시지를 앱 inbox에 넣는다. 그 직후 앱은 멈춘다 — 저장이 끝나지 않은 채 멈출 수 있으므로 저장은 임시 파일에 다 쓴 뒤 이름을 바꿔 다는 식으로 해서 반쯤 쓴 파일이 남지 않게 한다. logic thread에서 오래 저장하며 만료를 지켜보려면 처리 첫머리에 시간을 하나 쥐고 `expired()`를 보며 남은 일을 멈춘다 (만료 메시지는 그 처리가 끝난 뒤에야 처리된다). 만료 뒤 앱은 죽지 않고 몇 초 안에 멈추며, 앞으로 돌아오면 이어서 돈다.
+- **다른 플랫폼은 아무 일도 없다.** Android·macOS·Windows는 시간을 주지 않는다 — `hold_background_work()`는 빈 값(`held()` 거짓), `post_app_message_holding`은 그냥 게시, 만료 메시지는 불리지 않는다. 앱은 플랫폼을 가리지 않고 같은 코드를 둔다.
+
 ## OS 알림
 
 [OS 알림](../os-notification-design.md)(`show_notification`)을 쓰는 앱이 지는 것이다.

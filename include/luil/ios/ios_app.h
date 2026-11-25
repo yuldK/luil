@@ -51,6 +51,9 @@ namespace luil::ios {
     //    `app_delegate::make_metrics_message`(폭 등급 포함)로 알리고, 그 자리에서 그린다. 안전 영역 밖의 거리는
     //    `window_metrics::outside`다. 회전·iPad 화면 나누기·Stage Manager의 크기 변경도 같은 길로 온다.
     //  - 앞에 서고 뒤로 갈 때 `app_delegate::make_lifecycle_message`를 게시한다. 뒤로 갈 때가 저장할 마지막 기회일 수 있다.
+    //    뒤로 갈 때는 배경 작업 시간(`beginBackgroundTask`)을 쥐고, logic이 그 메시지를 처리하면 놓는다 — 그 사이 logic thread의
+    //    저장을 iOS가 멈추지 않는다. 그 뒤로 이어지는 저장은 앱이 `app_host::hold_background_work`로 쥔다. 시간이 만료되면 host가
+    //    곧바로 돌려주고 `app_delegate::make_background_expired_message`로 알린다 (consumer-contract.md의 "뒤로 갈 때의 저장").
     //  - 터치·Apple Pencil(압력·기울기)·트랙패드와 마우스(iPad)·하드웨어 키보드 입력을 옮긴다 (touch-pen-input-design.md).
     //    Command가 주 단축키(`key_chord::control`의 자리)다. 텍스트 칸에 초점이 서면 입력기(UITextInput)를 붙이고 소프트
     //    키보드를 띄운다. 키보드가 올라오면 안전 영역이 그만큼 줄고 초점 칸을 다시 드러낸다 (docs/concepts/text-input.md).

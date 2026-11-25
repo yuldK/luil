@@ -205,7 +205,7 @@ xcrun simctl launch --console booted io.github.yuldk.luil.mobile-demo
 | 실행 루프와 깨우기 | 메인 run loop. 다른 thread의 깨우기는 `CFRunLoopPerformBlock`(공통 모드)이다 (macOS와 같다) |
 | 장면과 표면 | 장면(UIWindowScene) 하나, 창 하나다. 보조 창·도킹 표면은 무시한다. 창 caption이 없고 폼 팩터는 mobile이다 |
 | 안전 영역 | 상태 표시줄·노치·홈 표시줄·소프트 키보드를 뺀 자리를 `make_metrics_message`로 알리고 그 원점에서 그린다. 밖의 거리는 `window_metrics::outside`다 (Android와 같다). 떠 있는 iPad 키보드는 내용을 밀지 않는다 |
-| 수명 주기 | 장면이 앞에 서고 뒤로 갈 때 `make_lifecycle_message`다. 뒤에 있는 동안은 그리지 않는다. 앱은 스스로 끝나지 않는다 — 끝내기·창 닫기 명령은 무시하고, 시스템이 끝낼 때(`applicationWillTerminate:`) 종료 신호를 돌린다 |
+| 수명 주기 | 장면이 앞에 서고 뒤로 갈 때 `make_lifecycle_message`다. 뒤로 갈 때는 배경 작업 시간(`beginBackgroundTask`)을 쥐고 logic이 그 메시지를 처리하면 놓는다. 앱도 `hold_background_work`로 더 쥘 수 있고, 만료되면 host가 곧바로 돌려주고 `make_background_expired_message`로 알린다 ([뒤로 갈 때의 저장](consumer-contract.md#뒤로-갈-때의-저장)). 뒤에 있는 동안은 그리지 않는다. 앱은 스스로 끝나지 않는다 — 끝내기·창 닫기 명령은 무시하고, 시스템이 끝낼 때(`applicationWillTerminate:`) 종료 신호를 돌린다 |
 | 렌더러 | Metal(Ganesh) 다음 CPU다. 렌더러 파일은 macOS 것을 그대로 쓴다 (view layer의 자식 `CAMetalLayer`, CPU는 CGImage layer 내용). 그림판은 안전 영역 밖까지 표면 전체다 — 짧으면 layer가 늘리거나, iOS의 뒤집힌 좌표에서 아래에 붙는다 |
 | 배율·글자 크기 | `traitCollection.displayScale`(2·3). 글자 크기 설정(Dynamic Type)은 본문 글꼴의 확대 표로 옮긴다 (`set_system_font_sizes`) |
 | 입력 | 손가락·Apple Pencil(압력·기울기, 한 frame 사이 표본까지)·트랙패드와 마우스(누름·hover·두 손가락 스크롤)·하드웨어 키보드. 키 이름과 단축키는 macOS 변환이다 (HID 자리 → Carbon 가상 키). 앱이 받은 키의 자동 반복은 host가 한다 |
