@@ -39,6 +39,39 @@ if(PROFILE)
     if(NOT extract_result EQUAL 0)
         message(FATAL_ERROR "The provisioning profile has no entitlements: ${extract_error}")
     endif()
+    # 번들 id가 profile의 앱 id에 들지 않으면 서명은 되지만 기기가 설치를 거절한다. 여기서 원인과 함께 멈춘다.
+    #  - 앱 id는 `<팀 id>.<번들 id>`이고, 끝이 `*`인 와일드카드 profile은 그 앞까지 맞으면 된다.
+    execute_process(
+        COMMAND plutil -extract application-identifier raw -o - "${entitlements}"
+        OUTPUT_VARIABLE profile_application
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE application_result)
+    execute_process(
+        COMMAND plutil -extract CFBundleIdentifier raw -o - "${BUNDLE}/Info.plist"
+        OUTPUT_VARIABLE bundle_identifier
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        RESULT_VARIABLE identifier_result)
+    if(NOT application_result EQUAL 0 OR NOT identifier_result EQUAL 0)
+        message(FATAL_ERROR "Cannot read the app id of the provisioning profile or the bundle identifier of ${BUNDLE}.")
+    endif()
+    string(FIND "${profile_application}" "." team_end)
+    math(EXPR pattern_begin "${team_end} + 1")
+    string(SUBSTRING "${profile_application}" ${pattern_begin} -1 profile_pattern)
+    set(bundle_matches FALSE)
+    if(profile_pattern STREQUAL bundle_identifier OR profile_pattern STREQUAL "*")
+        set(bundle_matches TRUE)
+    elseif(profile_pattern MATCHES "\\*$")
+        string(REGEX REPLACE "\\*$" "" profile_prefix "${profile_pattern}")
+        string(FIND "${bundle_identifier}" "${profile_prefix}" prefix_position)
+        if(prefix_position EQUAL 0)
+            set(bundle_matches TRUE)
+        endif()
+    endif()
+    if(NOT bundle_matches)
+        message(FATAL_ERROR
+            "The provisioning profile is for the app id ${profile_pattern}, but the bundle identifier is ${bundle_identifier}.\n"
+            "Use a profile that covers it (a wildcard profile works for every example), or set LUIL_IOS_BUNDLE_PREFIX to match the profile.")
+    endif()
     set(entitlement_arguments --entitlements "${entitlements}")
 endif()
 
