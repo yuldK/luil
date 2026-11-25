@@ -6,7 +6,12 @@
 #include "luil/ui/image_decode.h"
 #include "luil/ui/image_encode.h"
 
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#import <UIKit/UIKit.h>
+#else
 #import <AppKit/AppKit.h>
+#endif
 #import <Foundation/Foundation.h>
 #import <UserNotifications/UserNotifications.h>
 
@@ -104,6 +109,22 @@ namespace {
                                                                                  intentIdentifiers:@[]
                                                                                            options:UNNotificationCategoryOptionCustomDismissAction] };
           [center setNotificationCategories:[NSSet setWithObject:category]];
+#if TARGET_OS_IPHONE
+          // iOS도 시작을 마치기 전에 온 눌림이 꺼진 앱을 띄운 눌림이다. 로컬 알림은 시작 선택에 표지를 싣지 않으므로(UserNotifications는
+          // delegate로만 알린다) 마친 뒤의 첫 눌림을 띄운 눌림으로 세지 않는다. host는 시작(`didFinishLaunching`) 안에서 이 함수를 부른다.
+          [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidFinishLaunchingNotification
+                                                            object:nil
+                                                             queue:nil
+                                                        usingBlock:^(NSNotification*) {
+                                                          dispatch_async(dispatch_get_main_queue(), ^{
+                                                            launch_tracker().finish_launching(false);
+                                                          });
+                                                        }];
+          if ([UIApplication sharedApplication] != nil && [UIApplication sharedApplication].applicationState == UIApplicationStateActive)
+              dispatch_async(dispatch_get_main_queue(), ^{
+                launch_tracker().finish_launching(false);
+              });
+#else
           // 시작을 마치기 전에 온 눌림은 꺼진 앱을 띄운 눌림이다. 마칠 때 AppKit이 알림으로 떴다고 알리면 그 뒤 첫 눌림도 그렇다.
           [[NSNotificationCenter defaultCenter] addObserverForName:NSApplicationDidFinishLaunchingNotification
                                                             object:nil
@@ -118,6 +139,7 @@ namespace {
               dispatch_async(dispatch_get_main_queue(), ^{
                 launch_tracker().finish_launching(false);
               });
+#endif
         });
         return center;
     }

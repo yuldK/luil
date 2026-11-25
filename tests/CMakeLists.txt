@@ -476,6 +476,11 @@ if(LUIL_PLATFORM STREQUAL "macos")
         PRIVATE
             "${LUIL_SOURCE_DIRECTORY}/macos/accessibility_mapping.cpp"
             macos_accessibility_tests.cpp)
+    # iOS 하드웨어 키보드의 HID 자리 변환도 UIKit을 모르는 층이다. 키 이름은 macOS 변환을 그대로 거친다.
+    target_sources(luil_core_tests
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}/ios/ios_input.cpp"
+            ios_input_tests.cpp)
     catch_discover_tests(luil_core_tests PROPERTIES TIMEOUT 120)
     # HTTP client·charset 변환·WebSocket 전송은 NSURLSession·CoreFoundation 위에 서고 실제 되돌이 서버와 주고받는다.
     # Android의 luil_net_tests와 같은 묶음이다. 라이브러리(luil)는 AppKit host를 끌어오므로 링크하지 않고 net 소스를

@@ -1078,6 +1078,121 @@ if(LUIL_PLATFORM STREQUAL "macos")
             luil_options)
 endif()
 
+if(LUIL_PLATFORM STREQUAL "ios")
+    # codicon 글꼴을 라이브러리 안에 싣는다. 앱 번들에 자원을 따로 넣는 단계를 만들지 않는다 (macOS·Android와 같다).
+    set(luil_codicon_source "${LUIL_GENERATED_DIRECTORY}/codicon_font.cpp")
+    add_custom_command(
+        OUTPUT "${luil_codicon_source}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT_FILE=${LUIL_ASSET_DIRECTORY}/codicon.ttf"
+            "-DOUTPUT_FILE=${luil_codicon_source}"
+            "-DSYMBOL=luil_codicon_font"
+            -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        DEPENDS
+            "${LUIL_ASSET_DIRECTORY}/codicon.ttf"
+            "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        COMMENT "Embedding the Codicons font"
+        VERBATIM)
+
+    # ios: UIKit 위의 앱 host다 (iPhone·iPad). 장면 하나의 창·popup overlay·터치와 Apple Pencil·하드웨어 키보드·입력기(UITextInput),
+    # 웹뷰(WKWebView)·VoiceOver(UIAccessibility)·문서 선택기·붙여넣기 판(UIPasteboard)이다.
+    #  - AppKit을 모르는 macOS 파일을 그대로 쓴다: Metal·CPU 렌더러, CoreText 글꼴, 갈무리, Keychain 비밀 저장소, UserNotifications
+    #    알림, AVFoundation 장 복사, 플랫폼 도구, NSURLSession 네트워크다. iOS가 다른 곳은 그 파일 안에서 `TARGET_OS_IPHONE`으로 가른다.
+    #  - 하드웨어 키의 이름·단축키는 macOS 변환(macos/macos_input.cpp)이다. iOS의 HID 자리를 Carbon 가상 키로 옮겨 넘긴다.
+    #  - 입력기 연결은 Android의 그림자 문서(android/android_text_input.cpp)다. 둘 다 UTF-16 index로 IME와 주고받는다.
+    #  - 파일 감시는 FSEvents가 없어 kqueue다 (ios/file_watcher_ios.cpp). 단일 인스턴스는 늘 첫째다 (Android와 같다).
+    #  - VoiceOver의 역할 표·값·알림 대조는 macOS와 같은 macos/accessibility_mapping.cpp다.
+    set(luil_ios_files)
+    luil_add_source_filter(luil_ios_files "ios"
+        "${public_headers}/ios/ios_app.h"
+        ios/ios_app.mm
+        ios/ios_input.cpp
+        ios/ios_input.h
+        ios/ios_clipboard.h
+        ios/ios_clipboard.mm
+        ios/file_dialog_ios.h
+        ios/file_dialog_ios.mm
+        ios/webview_host_ios.h
+        ios/webview_host_ios.mm
+        ios/accessibility_ios.h
+        ios/accessibility_ios.mm
+        ios/file_watcher_ios.cpp
+        ios/single_instance_ios.cpp
+        android/android_text_input.cpp
+        android/android_text_input.h
+        "${public_headers}/app/webview.h"
+        "${public_headers}/app/platform_services.h"
+        "${public_headers}/app/secret_store.h"
+        "${public_headers}/app/notification.h"
+        "${public_headers}/win32/video_frame_player.h"
+        luil/url_scheme.cpp
+        "${luil_codicon_source}")
+    luil_add_source_filter(luil_ios_files "macos"
+        macos/macos_assets.cpp
+        macos/macos_fonts.cpp
+        macos/macos_input.cpp
+        macos/macos_input.h
+        macos/macos_text.h
+        macos/surface_capture.h
+        macos/surface_capture.cpp
+        macos/cpu_skia_renderer.h
+        macos/cpu_skia_renderer.mm
+        macos/metal_skia_renderer.h
+        macos/metal_skia_renderer.mm
+        macos/frame_capture.h
+        macos/frame_capture.mm
+        macos/desktop_compat.cpp
+        macos/platform_services_macos.mm
+        macos/secret_store_macos.mm
+        macos/notification_center.h
+        macos/notification_macos.mm
+        macos/notification_rules.cpp
+        macos/notification_rules.h
+        macos/media_rules.cpp
+        macos/media_rules.h
+        macos/video_frame_player_macos.mm
+        macos/accessibility_mapping.cpp
+        macos/accessibility_mapping.h)
+    # net: macOS와 같은 NSURLSession 위의 `http_client`와 WebSocket 전송이다. SMB는 "지원 안 함"으로 답한다.
+    list(APPEND luil_ios_files ${luil_net_files})
+    luil_add_source_filter(luil_ios_files "net"
+        net/macos/macos_http_client.mm
+        net/macos/macos_text_transcode.cpp
+        net/macos/websocket_transport.mm
+        net/smb_client_unsupported.cpp)
+    add_library(luil STATIC ${luil_ios_files})
+    add_library(luil::luil ALIAS luil)
+    target_include_directories(luil
+        PRIVATE
+            "${LUIL_SOURCE_DIRECTORY}"
+            "${LUIL_GENERATED_PRIVATE_INCLUDE_DIRECTORY}")
+    # Objective-C++ 소스는 ARC로 컴파일한다 (macOS와 같다).
+    target_compile_options(luil PRIVATE "$<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>")
+    target_link_libraries(luil
+        PUBLIC
+            luil_core
+            luil_usage
+            "$<BUILD_INTERFACE:luil_skia>"
+            "$<BUILD_INTERFACE:luil_nlohmann_json>"
+            "-framework UIKit"
+            "-framework QuartzCore"
+            "-framework Foundation"
+            "-framework CoreFoundation"
+            "-framework CoreGraphics"
+            "-framework CoreText"
+            "-framework ImageIO"
+            "-framework WebKit"
+            "-framework Metal"
+            "-framework UniformTypeIdentifiers"
+            "-framework UserNotifications"
+            "-framework Security"
+            "-framework AVFoundation"
+            "-framework CoreMedia"
+            "-framework CoreVideo"
+        PRIVATE
+            luil_options)
+endif()
+
 # CommonMark 파서는 원본 C로 컴파일해 core 정적 라이브러리에 담는다.
 target_sources(luil_core PRIVATE
     "${LUIL_THIRD_PARTY_DIRECTORY}/md4c/md4c.c"

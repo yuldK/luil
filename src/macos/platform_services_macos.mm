@@ -2,8 +2,13 @@
 
 #include "macos/macos_text.h"
 
-#import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
+#include <TargetConditionals.h>
+#if TARGET_OS_IPHONE
+#import <UIKit/UIKit.h>
+#else
+#import <AppKit/AppKit.h>
+#endif
 
 #include <cerrno>
 #include <cstring>
@@ -13,15 +18,21 @@
 
 #include <fcntl.h>
 #include <pthread.h>
+#if TARGET_OS_IPHONE == 0
 #include <spawn.h>
+#endif
 #include <sys/file.h>
 #include <sys/resource.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
+#if TARGET_OS_IPHONE == 0
 extern char** environ;
+#endif
 
-// 플랫폼 도구의 macOS 쪽이다 (platform-services-design.md).
+// 플랫폼 도구의 macOS·iOS 쪽이다 (platform-services-design.md).
+//  - iOS는 같은 파일을 쓰고 다른 것만 가른다: 파일 관리자에서 보이기와 프로그램 띄우기는 없다(샌드박스가 다른 프로세스를
+//    띄우지 못하게 한다). 주소 열기는 UIApplication이다.
 //  - 파일 바꾸기·잠금·우선순위는 Android와 같은 POSIX 호출이다.
 //  - 주소 열기와 Finder에서 보이기는 NSWorkspace, 언어와 주의 첫날은 NSLocale·NSCalendar다.
 //  - 단일 인스턴스와 인자 넘기기는 single_instance_macos.mm이다.
@@ -143,6 +154,9 @@ namespace luil {
     {
         if (path.empty())
             return { platform_status::failed, u8"The path is empty.", std::nullopt };
+#if TARGET_OS_IPHONE
+        return unsupported(u8"iOS has no file manager that apps can open at a path.");
+#else
         @autoreleasepool
         {
             NSString* const text { macos::make_ns_string(path) };
@@ -154,12 +168,18 @@ namespace luil {
             [[NSWorkspace sharedWorkspace] activateFileViewerSelectingURLs:@[ url ]];
         }
         return success();
+#endif
     }
 
     platform_result launch_program(const std::u8string_view program, const std::span<const std::u8string> arguments, const launch_options& options)
     {
         if (program.empty())
             return { platform_status::failed, u8"The program path is empty.", std::nullopt };
+#if TARGET_OS_IPHONE
+        static_cast<void>(arguments);
+        static_cast<void>(options);
+        return unsupported(u8"iOS apps cannot start other programs.");
+#else
         std::vector<std::string> owned {};
         owned.reserve(arguments.size() + 1);
         owned.push_back(macos::narrow(program));
@@ -194,6 +214,7 @@ namespace luil {
         if (WIFEXITED(status))
             result.exit_code = WEXITSTATUS(status);
         return result;
+#endif
     }
 
     platform_result open_url(const std::u8string_view url, const open_url_options& options)
@@ -206,8 +227,16 @@ namespace luil {
             NSURL* const value { text != nil ? [NSURL URLWithString:text] : nil };
             if (value == nil)
                 return { platform_status::failed, u8"The URL is not valid.", std::nullopt };
+#if TARGET_OS_IPHONE
+            // UIApplication은 메인 thread에서만 부른다. 열 앱이 있는지는 묻지 않는다 (Info.plist에 scheme을 적은 앱만 물을 수 있다).
+            //  - 열지 못한 결과는 비동기로 와서 돌려주지 못한다. 주소 모양이 맞으면 `ok`다.
+            dispatch_async(dispatch_get_main_queue(), ^{
+              [[UIApplication sharedApplication] openURL:value options:@{} completionHandler:nil];
+            });
+#else
             if ([[NSWorkspace sharedWorkspace] openURL:value] == NO)
                 return { platform_status::not_found, u8"No app can open the URL.", std::nullopt };
+#endif
         }
         return success();
     }
