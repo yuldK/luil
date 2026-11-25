@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- iOS 예제 번들의 Info.plist다. examples/ios.cmake의 luil_add_ios_bundle이 대상마다 채운다.
+     - 장면 목록(UIApplicationSceneManifest)이 있어야 host가 장면 하나를 세운다 (luil/ios/ios_app.h). 여러 창은 받지 않는다.
+     - 간접 입력(UIApplicationSupportsIndirectInputEvents)을 켜야 iPad의 트랙패드·마우스 누름이 터치가 아닌 마우스로 온다.
+     - 시작 화면은 빈 UILaunchScreen이다. 없으면 iOS가 옛 화면 크기(호환 모드)로 앱을 띄운다. -->
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>ko</string>
+    <key>CFBundleDisplayName</key>
+    <string>@luil_bundle_name@</string>
+    <key>CFBundleExecutable</key>
+    <string>@luil_bundle_executable@</string>
+    <key>CFBundleIdentifier</key>
+    <string>@luil_bundle_identifier@</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>@luil_bundle_name@</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>@PROJECT_VERSION@</string>
+    <key>CFBundleVersion</key>
+    <string>@PROJECT_VERSION@</string>
+    <key>CFBundleSupportedPlatforms</key>
+    <array>
+        <string>@luil_bundle_platform@</string>
+    </array>
+    <key>LSRequiresIPhoneOS</key>
+    <true/>
+    <key>MinimumOSVersion</key>
+    <string>@LUIL_MINIMUM_IOS_VERSION@</string>
+    <key>UIDeviceFamily</key>
+    <array>
+        <integer>1</integer>
+        <integer>2</integer>
+    </array>
+    <key>UILaunchScreen</key>
+    <dict/>
+    <key>UIApplicationSceneManifest</key>
+    <dict>
+        <key>UIApplicationSupportsMultipleScenes</key>
+        <false/>
+    </dict>
+    <key>UIApplicationSupportsIndirectInputEvents</key>
+    <true/>
+    <key>UIViewControllerBasedStatusBarAppearance</key>
+    <true/>
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    <key>UISupportedInterfaceOrientations~ipad</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationPortraitUpsideDown</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+</dict>
+</plist>

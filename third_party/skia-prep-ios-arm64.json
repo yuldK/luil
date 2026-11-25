@@ -1,0 +1,24 @@
+{
+    "schema": 2,
+    "source": "https://github.com/yuldK/skia-prep",
+    "tag": "skia-157-b94213a11b3a-ios-arm64-r1",
+    "asset_base_url": "https://github.com/yuldK/skia-prep/releases/download/skia-157-b94213a11b3a-ios-arm64-r1",
+    "target": "ios-arm64",
+    "png_codec": "rust",
+    "skia_commit": "b94213a11b3a2edadfae89f0c57a7f4ab72772c9",
+    "skia_milestone": "157",
+    "package_revision": 1,
+    "toolchain": "clang",
+    "assets": {
+        "Release": {
+            "file": "skia-prep-b94213a11b3a-r1-ios-arm64-release.zip",
+            "size": 11923270,
+            "sha256": "7cb8f5826814ec0a12dd401928399aff8e1c6ed1e929818f553bde47ffa99a8a"
+        },
+        "Debug": {
+            "file": "skia-prep-b94213a11b3a-r1-ios-arm64-debug.zip",
+            "size": 185731558,
+            "sha256": "aefb8aaf18bc521ef8bb09d832f3338cd632c5645dcafa6b067f915f3d047c42"
+        }
+    }
+}

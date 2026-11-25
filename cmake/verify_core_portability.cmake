@@ -44,7 +44,7 @@ set(platform_header_pattern
     "(${windows_header_pattern}|${apple_header_pattern}|${android_header_pattern})[^>\"]*")
 # luil 안에서 core 위의 계층이다.
 #  - macOS 계층의 디렉터리 이름은 아직 정하지 않았다. 어느 쪽으로 정해도 잡히게 둘 다 적는다.
-set(upper_layer_pattern "(luil/)?(win32|android|mac|macos|net)/")
+set(upper_layer_pattern "(luil/)?(win32|android|mac|macos|ios|net)/")
 
 set(violations "")
 set(checked_count 0)

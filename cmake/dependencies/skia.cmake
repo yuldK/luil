@@ -115,6 +115,11 @@ function(luil_check_skia_abi flavor build_directory arguments_text)
         luil_check_skia_macos_deployment("${build_directory}")
         return()
     endif()
+    #  - iOS는 패키지의 배포 하한과, 기기·시뮬레이터 빌드가 이 구성과 같은지를 본다.
+    if(LUIL_SKIA_TARGET MATCHES "^ios-")
+        luil_check_skia_ios_deployment("${build_directory}")
+        return()
+    endif()
     if(NOT LUIL_SKIA_TARGET MATCHES "^win-")
         return()
     endif()
@@ -191,6 +196,51 @@ function(luil_check_skia_macos_deployment build_directory)
             "The Skia package needs macOS ${package_minimum} or newer, "
             "but this configure targets ${CMAKE_OSX_DEPLOYMENT_TARGET}.\n"
             "Raise CMAKE_OSX_DEPLOYMENT_TARGET to ${package_minimum}.")
+    endif()
+endfunction()
+
+# iOS 패키지가 세워진 배포 하한(`ios_deployment_target`)이 이 구성의 것 이하인지, 기기·시뮬레이터
+# (`ios_simulator`)가 이 구성의 SDK와 같은지 본다. 시뮬레이터 아카이브는 기기 SDK로 링크되지 않는다 (같은 arm64라도
+# 플랫폼 표지가 다르다) — ld가 `building for iOS, but linking in object file built for iOS Simulator`를 낸다.
+function(luil_check_skia_ios_deployment build_directory)
+    set(toolchain_file "${build_directory}/toolchain.json")
+    set(package_minimum "")
+    set(package_simulator "")
+    if(EXISTS "${toolchain_file}")
+        file(READ "${toolchain_file}" toolchain_text)
+        string(JSON package_minimum ERROR_VARIABLE toolchain_error
+            GET "${toolchain_text}" ios_deployment_target)
+        if(toolchain_error)
+            set(package_minimum "")
+        endif()
+        string(JSON package_simulator ERROR_VARIABLE simulator_error
+            GET "${toolchain_text}" ios_simulator)
+        if(simulator_error)
+            set(package_simulator "")
+        endif()
+    endif()
+    if(NOT package_minimum)
+        message(FATAL_ERROR
+            "Skia's toolchain.json does not record ios_deployment_target.\n"
+            "Build directory: ${build_directory}\n"
+            "Fetch the pinned package: scripts/fetch_skia.ps1 -Target ${LUIL_SKIA_TARGET} -Force")
+    endif()
+    if(CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS package_minimum)
+        message(FATAL_ERROR
+            "The Skia package needs iOS ${package_minimum} or newer, "
+            "but this configure targets ${CMAKE_OSX_DEPLOYMENT_TARGET}.\n"
+            "Raise CMAKE_OSX_DEPLOYMENT_TARGET to ${package_minimum}.")
+    endif()
+    if(NOT package_simulator STREQUAL "")
+        if(package_simulator AND NOT LUIL_SKIA_TARGET MATCHES "-simulator$")
+            message(FATAL_ERROR
+                "The Skia package at ${build_directory} is built for the iOS Simulator, "
+                "but this configure targets ${LUIL_SKIA_TARGET} (a device).")
+        elseif(NOT package_simulator AND LUIL_SKIA_TARGET MATCHES "-simulator$")
+            message(FATAL_ERROR
+                "The Skia package at ${build_directory} is built for iOS devices, "
+                "but this configure targets ${LUIL_SKIA_TARGET} (the simulator).")
+        endif()
     endif()
 endfunction()
 

@@ -7,6 +7,8 @@
 /third_party/skia-prep/
 /third_party/skia-prep-android-arm64/
 /third_party/skia-prep-mac-arm64/
+/third_party/skia-prep-ios-arm64/
+/third_party/skia-prep-ios-arm64-simulator/
 /third_party/skia-prep-archives/
 # scripts/fetch_webview2.ps1이 내려받아 푸는 자리다 (같은 규칙).
 # 판번은 third_party/webview2-prep.json이 고정한다.

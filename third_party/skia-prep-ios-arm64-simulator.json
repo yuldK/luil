@@ -1,0 +1,24 @@
+{
+    "schema": 2,
+    "source": "https://github.com/yuldK/skia-prep",
+    "tag": "skia-157-b94213a11b3a-ios-arm64-simulator-r1",
+    "asset_base_url": "https://github.com/yuldK/skia-prep/releases/download/skia-157-b94213a11b3a-ios-arm64-simulator-r1",
+    "target": "ios-arm64-simulator",
+    "png_codec": "rust",
+    "skia_commit": "b94213a11b3a2edadfae89f0c57a7f4ab72772c9",
+    "skia_milestone": "157",
+    "package_revision": 1,
+    "toolchain": "clang",
+    "assets": {
+        "Release": {
+            "file": "skia-prep-b94213a11b3a-r1-ios-arm64-simulator-release.zip",
+            "size": 12065997,
+            "sha256": "0a6bc622d4eba48d58b6596461704b339163050c476c24d9aa6b658931d85ec2"
+        },
+        "Debug": {
+            "file": "skia-prep-b94213a11b3a-r1-ios-arm64-simulator-debug.zip",
+            "size": 185857407,
+            "sha256": "b3989f1d39d96b0a36c37085c9f931eff822d24563ad27a2fdfc99d13ee2def2"
+        }
+    }
+}

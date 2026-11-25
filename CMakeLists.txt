@@ -18,6 +18,16 @@ project(luil VERSION 0.1.0 LANGUAGES C CXX)
 # 받는 갈래를 두지 않는다 — 플랫폼이 하나 더 늘 때 조용히 남의 설정을 받게 된다.
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(LUIL_PLATFORM "android")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "iOS")
+    # iPhone·iPad다. 기기(iphoneos)와 Apple Silicon 시뮬레이터(iphonesimulator)를 같은 이름으로 받고,
+    # 어느 쪽인지는 SDK로 가른다 (LUIL_IOS_SIMULATOR). 플랫폼 조립(UIKit)이 Objective-C++다.
+    set(LUIL_PLATFORM "ios")
+    enable_language(OBJCXX)
+    if(CMAKE_OSX_SYSROOT MATCHES "[Ss]imulator")
+        set(LUIL_IOS_SIMULATOR TRUE)
+    else()
+        set(LUIL_IOS_SIMULATOR FALSE)
+    endif()
 elseif(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
     set(LUIL_PLATFORM "macos")
     # 플랫폼 조립이 Objective-C++(.mm)다. core는 C++만 쓴다.
@@ -28,7 +38,7 @@ elseif(WIN32)
     enable_language(RC)
 else()
     message(FATAL_ERROR
-        "luil supports Windows 11 x64, Android arm64 and macOS arm64. "
+        "luil supports Windows 11 x64, Android arm64, macOS arm64 and iOS arm64. "
         "${CMAKE_SYSTEM_NAME} is not supported.")
 endif()
 
@@ -49,6 +59,9 @@ set(LUIL_SUPPORTED_GENERATORS
 #    libc++의 부동소수점 `to_chars`(chrono·`std::format`의 실수 서식)는 13.3부터라 쓰지 않는다.
 set(LUIL_MACOS_ARCHITECTURE "arm64")
 set(LUIL_MINIMUM_MACOS_VERSION "11.0")
+# iOS는 기기와 시뮬레이터 모두 arm64다 (skia-prep의 ios-arm64·ios-arm64-simulator). 하한은 패키지와 같은 15.0이다.
+set(LUIL_IOS_ARCHITECTURE "arm64")
+set(LUIL_MINIMUM_IOS_VERSION "15.0")
 
 set(LUIL_CMAKE_DIRECTORY "${PROJECT_SOURCE_DIR}/cmake")
 set(LUIL_THIRD_PARTY_DIRECTORY "${PROJECT_SOURCE_DIR}/third_party")
@@ -107,6 +120,10 @@ if(LUIL_PLATFORM STREQUAL "android")
     set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep-android-arm64")
 elseif(LUIL_PLATFORM STREQUAL "macos")
     set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep-mac-arm64")
+elseif(LUIL_PLATFORM STREQUAL "ios" AND LUIL_IOS_SIMULATOR)
+    set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep-ios-arm64-simulator")
+elseif(LUIL_PLATFORM STREQUAL "ios")
+    set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep-ios-arm64")
 elseif(EXISTS "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep/include/core/SkCanvas.h"
     OR NOT EXISTS "${LUIL_THIRD_PARTY_DIRECTORY}/skia/include/core/SkCanvas.h")
     set(LUIL_SKIA_DEFAULT_ROOT "${LUIL_THIRD_PARTY_DIRECTORY}/skia-prep")
@@ -254,11 +271,19 @@ elseif(LUIL_PLATFORM STREQUAL "android")
     set(LUIL_SKIA_LOTTIE_COMPONENTS
         libskottie.a libsksg.a libjsonreader.a libskresources.a libskshaper.a)
     set(LUIL_SKIA_AVIF_COMPONENTS libavif_decoder.a libavif.a libgav1.a libyuv.a)
-elseif(LUIL_PLATFORM STREQUAL "macos")
+elseif(LUIL_PLATFORM STREQUAL "macos" OR LUIL_PLATFORM STREQUAL "ios")
     # mac-arm64 패키지의 정적 아카이브다 (skia-prep docs/skia-build.md 9장, NOTICE.json의 core).
     # win-x64 목록에서 Direct3D 몫(spirv_cross·d3d12allocator)을 뺀 모양이다. libskia.a가
     # expat·코덱을 담고, 글꼴은 CoreText라 Android의 FreeType·expat 묶음이 없다.
-    set(LUIL_SKIA_TARGET "mac-arm64")
+    #  - iOS 패키지(ios-arm64·ios-arm64-simulator)는 mac과 같은 모양·목록·framework다. 글꼴은 CoreText, GPU는 Metal이다.
+    #    기기용과 시뮬레이터용은 섞이지 않는다 (링커가 "building for 'iOS-simulator'"로 멈춘다). SDK가 패키지를 고른다.
+    if(LUIL_PLATFORM STREQUAL "ios" AND LUIL_IOS_SIMULATOR)
+        set(LUIL_SKIA_TARGET "ios-arm64-simulator")
+    elseif(LUIL_PLATFORM STREQUAL "ios")
+        set(LUIL_SKIA_TARGET "ios-arm64")
+    else()
+        set(LUIL_SKIA_TARGET "mac-arm64")
+    endif()
     set(LUIL_SKIA_COMPONENTS
         libskia.a
         libskcms.a
@@ -483,6 +508,16 @@ elseif(LUIL_PLATFORM STREQUAL "macos")
         ARCHITECTURE "${LUIL_MACOS_ARCHITECTURE}"
         MINIMUM_VERSION "${LUIL_MINIMUM_MACOS_VERSION}"
     )
+elseif(LUIL_PLATFORM STREQUAL "ios")
+    include("${LUIL_CMAKE_DIRECTORY}/compiler/clang.cmake")
+    # Apple 헤더의 매크로를 막는 선택은 macOS와 같다 (luil_apply_macos_options).
+    include("${LUIL_CMAKE_DIRECTORY}/platform/macos.cmake")
+    include("${LUIL_CMAKE_DIRECTORY}/platform/ios.cmake")
+
+    luil_validate_ios_platform(
+        ARCHITECTURE "${LUIL_IOS_ARCHITECTURE}"
+        MINIMUM_VERSION "${LUIL_MINIMUM_IOS_VERSION}"
+    )
 endif()
 
 # 내부 규율(경고 수준·경고를 오류로·분석)이다.
@@ -497,14 +532,14 @@ if(LUIL_PLATFORM STREQUAL "windows")
         ENABLE_ANALYZE "${LUIL_ENABLE_MSVC_ANALYZE}"
         WARNINGS_AS_ERRORS "${LUIL_WARNINGS_AS_ERRORS}"
     )
-elseif(LUIL_PLATFORM STREQUAL "android" OR LUIL_PLATFORM STREQUAL "macos")
-    # 둘이 같은 규율을 쓴다. 둘 다 clang 계열이고, 위의 갈래가 clang.cmake를 들였다.
+elseif(LUIL_PLATFORM STREQUAL "android" OR LUIL_PLATFORM STREQUAL "macos" OR LUIL_PLATFORM STREQUAL "ios")
+    # 셋이 같은 규율을 쓴다. 둘 다 clang 계열이고, 위의 갈래가 clang.cmake를 들였다.
     luil_apply_clang_options(
         luil_options
         WARNINGS_AS_ERRORS "${LUIL_WARNINGS_AS_ERRORS}"
     )
 endif()
-if(LUIL_PLATFORM STREQUAL "macos")
+if(LUIL_PLATFORM STREQUAL "macos" OR LUIL_PLATFORM STREQUAL "ios")
     luil_apply_macos_options(luil_options)
 endif()
 
@@ -550,6 +585,9 @@ elseif(LUIL_PLATFORM STREQUAL "android" AND LUIL_BUILD_EXAMPLES)
 elseif(LUIL_PLATFORM STREQUAL "macos" AND LUIL_BUILD_EXAMPLES)
     # AppKit host 위의 hello와 데스크톱 demo다 (examples/macos.cmake).
     include("${PROJECT_SOURCE_DIR}/examples/macos.cmake")
+elseif(LUIL_PLATFORM STREQUAL "ios" AND LUIL_BUILD_EXAMPLES)
+    # UIKit host 위의 hello와 모바일 demo다 (examples/ios.cmake).
+    include("${PROJECT_SOURCE_DIR}/examples/ios.cmake")
 endif()
 if(LUIL_BUILD_TESTS)
     add_subdirectory(tests)
