@@ -1,5 +1,6 @@
 #include "macos/input_script.h"
 
+#include <cmath>
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>
@@ -150,6 +151,27 @@ namespace {
             return @"";
         const unichar value { static_cast<unichar>(lower[code]) };
         return [NSString stringWithCharacters:&value length:1];
+    }
+
+    // 창 사각형을 host의 화면 좌표 약속(주 화면 왼쪽 위 원점, 점 × 주 화면 배율)으로 적는다.
+    [[nodiscard]] std::string screen_rect_text(const NSRect frame)
+    {
+        NSArray<NSScreen*>* const screens { [NSScreen screens] };
+        const CGFloat scale { screens.count > 0 ? screens[0].backingScaleFactor : 1.0 };
+        const CGFloat height { screens.count > 0 ? screens[0].frame.size.height : 0.0 };
+        char text[128] {};
+        std::snprintf(text, sizeof(text), "%ld %ld %ld %ld", std::lround(NSMinX(frame) * scale), std::lround((height - NSMaxY(frame)) * scale), std::lround(frame.size.width * scale),
+            std::lround(frame.size.height * scale));
+        return text;
+    }
+
+    // 제목 막대 부속 view 안의 단추들이다.
+    void collect_buttons(NSView* const view, std::vector<NSButton*>& buttons)
+    {
+        if ([view isKindOfClass:[NSButton class]])
+            buttons.push_back((NSButton*)view);
+        for (NSView* const child in view.subviews)
+            collect_buttons(child, buttons);
     }
 
     void run_line(script_state& state, const std::string& line, double& delay)
@@ -378,8 +400,93 @@ namespace {
                     panel.directoryURL = [NSURL fileURLWithPath:value isDirectory:YES];
             }
         }
+        else if (command == "doubleclick")
+        {
+            double x { 0 };
+            double y { 0 };
+            words >> x >> y;
+            post_mouse(window, view, NSEventTypeMouseMoved, x, y, 0);
+            for (const NSInteger clicks : { NSInteger { 1 }, NSInteger { 2 } })
+            {
+                post_mouse(window, view, NSEventTypeLeftMouseDown, x, y, clicks);
+                post_mouse(window, view, NSEventTypeLeftMouseUp, x, y, clicks);
+            }
+        }
+        else if (command == "frame")
+        {
+            const char* const policy { NSApp.activationPolicy == NSApplicationActivationPolicyRegular ? "regular"
+                    : NSApp.activationPolicy == NSApplicationActivationPolicyAccessory                ? "accessory"
+                                                                                                     : "prohibited" };
+            const NSWindowCollectionBehavior behavior { window.collectionBehavior };
+            std::fprintf(stderr, "luil script: frame %s key=%d main=%d level=%ld all_spaces=%d opaque=%d titled=%d visible=%d active=%d policy=%s\n",
+                screen_rect_text(window.frame).c_str(), window.keyWindow ? 1 : 0, window.mainWindow ? 1 : 0, static_cast<long>(window.level),
+                (behavior & NSWindowCollectionBehaviorCanJoinAllSpaces) != 0 ? 1 : 0, window.opaque ? 1 : 0, (window.styleMask & NSWindowStyleMaskTitled) != 0 ? 1 : 0,
+                window.visible ? 1 : 0, NSApp.active ? 1 : 0, policy);
+        }
+        else if (command == "popups")
+        {
+            int count { 0 };
+            for (NSWindow* const candidate in NSApp.windows)
+            {
+                if ([NSStringFromClass([candidate class]) isEqualToString:@"LuilPopupPanel"] == NO || candidate.visible == NO)
+                    continue;
+                ++count;
+                std::fprintf(stderr, "luil script: popup %s %s parent=%s key=%d level=%ld\n", candidate.title.UTF8String ?: "", screen_rect_text(candidate.frame).c_str(),
+                    candidate.parentWindow != nil ? screen_rect_text(candidate.parentWindow.frame).c_str() : "none", candidate.keyWindow ? 1 : 0, static_cast<long>(candidate.level));
+            }
+            std::fprintf(stderr, "luil script: popups %d key_window=%s active=%d\n", count, NSApp.keyWindow != nil ? screen_rect_text(NSApp.keyWindow.frame).c_str() : "none",
+                NSApp.active ? 1 : 0);
+        }
+        else if (command == "titlebar")
+        {
+            std::string key {};
+            words >> key;
+            std::vector<NSButton*> buttons {};
+            // 제목 막대가 없는 창은 부속 view 목록을 물으면 예외를 던진다.
+            if ((window.styleMask & NSWindowStyleMaskTitled) != 0)
+                for (NSTitlebarAccessoryViewController* const controller in window.titlebarAccessoryViewControllers)
+                    collect_buttons(controller.view, buttons);
+            for (NSButton* const& button : buttons)
+            {
+                const std::string identifier { button.identifier.UTF8String ?: "" };
+                if (key.empty())
+                    std::fprintf(stderr, "luil script: titlebar %s tooltip=\"%s\" name=\"%s\" enabled=%d image=%d\n", identifier.c_str(), button.toolTip.UTF8String ?: "",
+                        button.accessibilityLabel.UTF8String ?: "", button.enabled ? 1 : 0, button.image != nil ? 1 : 0);
+                else if (identifier == key)
+                    [button performClick:nil];
+            }
+            if (key.empty())
+                std::fprintf(stderr, "luil script: titlebar buttons %zu\n", buttons.size());
+        }
+        else if (command == "tracking")
+        {
+            for (NSTrackingArea* const area in view.trackingAreas)
+                std::fprintf(stderr, "luil script: tracking always=%d active_app=%d\n", (area.options & NSTrackingActiveAlways) != 0 ? 1 : 0,
+                    (area.options & NSTrackingActiveInActiveApp) != 0 ? 1 : 0);
+        }
+        else if (command == "deactivate")
+        {
+            // 앱이 스스로 뒤로 가는 것만으로는 활성이 남는다. Finder에 활성을 넘긴다 (macOS 14부터는 넘겨 주는 쪽이 먼저 양보한다).
+            NSRunningApplication* const finder { [NSRunningApplication runningApplicationsWithBundleIdentifier:@"com.apple.finder"].firstObject };
+            if (finder != nil)
+            {
+                if (@available(macOS 14.0, *))
+                    [NSApp yieldActivationToApplication:finder];
+                [finder activateWithOptions:0];
+            }
+            else
+                [NSApp deactivate];
+        }
+        else if (command == "activate")
+            [NSApp activateIgnoringOtherApps:YES];
         else if (command == "quit")
-            [window performClose:nil];
+        {
+            // 닫기 단추가 없는 창(테두리 없는 창)은 `performClose:`가 소리만 낸다. 닫기 단추가 하는 일(delegate에 묻기)을 직접 밟는다.
+            if ((window.styleMask & NSWindowStyleMaskClosable) != 0)
+                [window performClose:nil];
+            else if ([window.delegate respondsToSelector:@selector(windowShouldClose:)])
+                static_cast<void>([window.delegate windowShouldClose:window]);
+        }
     }
 
     void schedule(const std::shared_ptr<script_state>& state, const double delay)
@@ -406,8 +513,13 @@ void luil_run_input_script(NSWindow* const window, NSView* const view)
         return;
     auto state { std::make_shared<script_state>() };
     for (std::string line {}; std::getline(file, line);)
+    {
+        // 저장소의 대본은 CRLF다. 줄 끝의 CR은 명령의 일부가 아니다.
+        if (line.empty() == false && line.back() == '\r')
+            line.pop_back();
         if (line.empty() == false && line.front() != '#')
             state->lines.push_back(line);
+    }
     state->window = window;
     state->view = view;
     state->main_view = view;

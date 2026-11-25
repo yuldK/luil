@@ -195,7 +195,7 @@ macOS host는 같은 공개 계약(`ui_webview`, `webview_element`, `webview_pol
 
 **첫 그림.** 위층은 첫 `didFinishNavigation`까지 숨되 자리의 크기는 먼저 준다. 아래층은 그때부터 구멍을 연다. Windows와 같은 규칙이다.
 
-**가림.** 자리표의 가운데와 안쪽 네 모서리 hit test에, **popup과의 겹침**을 더한다. macOS host의 popup은 별도 창이 아니라 같은 Skia view에 겹쳐 그리므로, 위층 웹뷰가 popup을 덮지 않으려면 겹치는 순간 숨어야 한다. 아래층은 구멍을 닫는다.
+**가림.** 자리표의 가운데와 안쪽 네 모서리 hit test다 (Windows와 같다). popup은 웹뷰 위에 따로 선 판이라 가림이 아니다 ([macOS 창 정책](macos-window-design.md#1-popup-판)).
 
 **포인터와 키보드.** 웹뷰는 NSView라 포인터를 스스로 받는다. 아래층의 구멍 자리는 Skia view의 `hitTest:`가 비켜 아래 웹뷰로 보낸다. 웹뷰 위에 포인터가 오면 Skia view는 tree에 떠남을 알리고 커서를 웹뷰에 맡긴다. 페이지를 누르면 WKWebView가 첫 응답자가 되고, host가 논리 초점을 자리표로 옮긴다(`access_focus_event`). Skia view를 누르면 첫 응답자를 되찾는다. Tab으로 논리 초점이 자리표에 **닿는 순간** 키보드 초점을 페이지로 넘긴다. 페이지 끝에서 밖으로 나오는 Tab은 아직 없다.
 

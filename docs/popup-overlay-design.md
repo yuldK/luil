@@ -125,6 +125,10 @@ UIA `ScrollIntoView`와 초점 요청도 그 항목을 보이게 흘린다 — �
 
 앵커 이동과 DPI 변화는 popup placement를 다시 계산한다. 앵커 선택과 재생성 규칙은 [popup-anchor-design.md](popup-anchor-design.md)를 따른다.
 
+## macOS
+
+macOS host도 popup마다 판(`NSPanel`) 하나를 세운다. 자리·모양·닫힘 계기·활성 규칙은 Win32와 같고, 판은 앵커 창의 자식 창이라 함께 움직인다. 갈래와 다른 점은 [macOS 창 정책](macos-window-design.md#1-popup-판)에 있다.
+
 ## 창이 하나뿐인 플랫폼 (Android)
 
 Android에는 popup마다 띄울 창이 없다. 같은 `ui_popup` 선언을 주 표면 안의 layer로 그린다. 데이터 모델(앵커 기준 논리 좌표, 분리 tree, `surface_tree_list`, 닫힘 factory)은 그대로이고 앱 코드도 같다.

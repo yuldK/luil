@@ -1,0 +1,24 @@
+# 1. popup을 창 밖의 판으로 띄운다. 주 창의 키 상태와 앱의 활성은 그대로다.
+# 도구 창(320×200 점)의 "Details"는 창 오른쪽 곁(앵커 기준 x 328)에, "List"는 창 아래로 펼쳐진다.
+wait 400
+click 60 62
+wait 400
+popups
+key 35
+wait 300
+popups
+click 60 98
+wait 400
+popups
+# 판 밖(주 창)을 누르면 닫힌다.
+click 250 150
+wait 300
+popups
+# 앱이 뒤에 있어도 머무름 카드가 선다. 앱은 비활성인 채이고 키 창도 없다.
+deactivate
+wait 500
+move 60 134
+wait 800
+popups
+frame
+quit

@@ -40,6 +40,15 @@ target_link_libraries(luil_hello PRIVATE luil::luil luil_options)
 luil_add_macos_bundle(luil_hello IDENTIFIER "io.github.yuldk.luil.hello" NAME "luil hello")
 luil_sign_macos_bundle(luil_hello)
 
+# tool window — 테두리 없는 작은 도구 창(늘 위·투명 바탕·직접 그린 머릿줄)을 주 창으로 쓰는 앱이다. 창 밖의 popup 판, caption 끌기와
+# 끌기 중 자리 고치기, 비활성 앱의 hover, 저장 배치로 열기를 한자리에서 본다 (tests/macos의 입력 대본이 이 앱을 띄운다).
+#  - macOS host의 설정(`macos::application_config`)을 쓰는 진입점이라 이 플랫폼에만 선다.
+add_executable(luil_tool_window "${luil_examples_directory}/tool_window/main.cpp")
+target_include_directories(luil_tool_window PRIVATE "${luil_examples_directory}")
+target_link_libraries(luil_tool_window PRIVATE luil::luil luil_options)
+luil_add_macos_bundle(luil_tool_window IDENTIFIER "io.github.yuldk.luil.tool" NAME "luil tool")
+luil_sign_macos_bundle(luil_tool_window)
+
 # demo — 데스크톱 demo를 AppKit host에 세운다. 페이지는 Windows와 같은 파일이고, 진입점은 demo_main.cpp의 macOS 갈래다.
 #  - 되돌이 HTTP 서버는 test 도우미의 POSIX 소켓 쪽이다 (Android test와 같은 파일).
 #  - Windows에만 있는 기능(작업 표시줄·알림 영역)은 페이지가 서되 그 자리는 "지원 안 함"으로 답한다.

@@ -1,0 +1,9 @@
+# 8. 시스템 제목 막대가 있는 창에서 caption 앱 단추가 제목 막대에 선다.
+wait 400
+titlebar
+titlebar pin
+wait 400
+titlebar
+frame
+ax
+quit
