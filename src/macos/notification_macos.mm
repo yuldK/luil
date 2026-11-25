@@ -16,6 +16,7 @@
 #import <UserNotifications/UserNotifications.h>
 
 #include <cstdint>
+#include <cstdio>
 #include <optional>
 #include <string>
 #include <utility>
@@ -302,6 +303,21 @@ namespace luil {
         }
         // 같은 id의 요청은 알림 센터가 바꾸기로 다룬다.
         UNNotificationRequest* const request { [UNNotificationRequest requestWithIdentifier:identifier content:body trigger:nil] };
+        // 메인 thread에서는 답을 기다리지 않는다. 앱이 앞에 있으면 알림 센터가 답하기 전에 메인 thread에서 delegate(`willPresent`)를
+        // 부르는데(iOS), 메인 thread가 여기서 기다리면 서로 막혀 시간이 다 가도록 답이 오지 않는다. 그때는 넘긴 것으로 `ok`이고,
+        // 알림 센터가 거절하면 그 까닭은 표준 오류로 남긴다.
+        if ([NSThread isMainThread])
+        {
+            [center addNotificationRequest:request
+                     withCompletionHandler:^(NSError* const added) {
+                       if (added == nil)
+                           return;
+                       remove_file(image);
+                       const std::u8string reason { error_text(u8"The notification center refused the notification", added) };
+                       std::fprintf(stderr, "luil: %.*s\n", static_cast<int>(reason.size()), reinterpret_cast<const char*>(reason.data()));
+                     }];
+            return succeeded();
+        }
         const dispatch_semaphore_t done { dispatch_semaphore_create(0) };
         __block NSError* added_error { nil };
         [center addNotificationRequest:request
