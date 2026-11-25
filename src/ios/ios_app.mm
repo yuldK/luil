@@ -41,6 +41,12 @@
 #import <QuartzCore/QuartzCore.h>
 #import <UIKit/UIKit.h>
 
+// 최소 판(`CMAKE_OSX_DEPLOYMENT_TARGET`)이 그 판보다 낮은가다. 낮을 때만 그 판에서 deprecated된 옛 길을 컴파일한다.
+//  - `@available`의 else 갈래도 컴파일은 되므로, 최소 판을 올린 구성에서는 옛 API가 deprecated 경고(-Werror)가 된다. 옛 갈래를
+//    이것으로 감싸 최소 판 15.0에서는 그대로, 16·17 이상에서는 새 길만 남긴다.
+#define LUIL_IOS_BEFORE_16 (__IPHONE_OS_VERSION_MIN_REQUIRED < 160000)
+#define LUIL_IOS_BEFORE_17 (__IPHONE_OS_VERSION_MIN_REQUIRED < 170000)
+
 #include <algorithm>
 #include <array>
 #include <atomic>
@@ -1928,8 +1934,10 @@ namespace luil::ios {
                 if (edit_interaction_ != nil)
                     [(UIEditMenuInteraction*)edit_interaction_ dismissMenu];
             }
+#if LUIL_IOS_BEFORE_16
             else
                 [[UIMenuController sharedMenuController] hideMenu];
+#endif
         }
 
         void open_edit_menu()
@@ -1960,6 +1968,7 @@ namespace luil::ios {
                 UIEditMenuConfiguration* const configuration { [UIEditMenuConfiguration configurationWithIdentifier:nil sourcePoint:CGPointMake(CGRectGetMidX(anchor), CGRectGetMinY(anchor))] };
                 [(UIEditMenuInteraction*)edit_interaction_ presentEditMenuWithConfiguration:configuration];
             }
+#if LUIL_IOS_BEFORE_16
             else
             {
                 UIMenuController* const menu { [UIMenuController sharedMenuController] };
@@ -1969,6 +1978,7 @@ namespace luil::ios {
                 menu.menuItems = items;
                 [menu showMenuFromView:view_ rect:anchor];
             }
+#endif
         }
 
     public:
@@ -2323,8 +2333,10 @@ namespace luil::ios {
                         [scene_ requestGeometryUpdateWithPreferences:preferences errorHandler:nil];
                     }
                 }
+#if LUIL_IOS_BEFORE_16
                 else
                     [UIViewController attemptRotationToDeviceOrientation];
+#endif
             }
             if (request.system_bars != applied_device_.system_bars)
             {
@@ -3238,12 +3250,35 @@ namespace luil::ios {
         self.owner->on_layout();
 }
 
-- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection
+- (void)viewDidLoad
 {
-    [super traitCollectionDidChange:previousTraitCollection];
+    [super viewDidLoad];
+    // iOS 17부터는 바뀜을 등록해 받는다 (`traitCollectionDidChange:`가 deprecated다). host가 읽는 특성만 본다 — 밝기·대비(외양),
+    // 글자 크기(Dynamic Type), 배율과 크기 등급(metrics).
+    if (@available(iOS 17.0, *))
+        [self registerForTraitChanges:@[
+            UITraitUserInterfaceStyle.class, UITraitAccessibilityContrast.class, UITraitPreferredContentSizeCategory.class, UITraitDisplayScale.class,
+            UITraitHorizontalSizeClass.class, UITraitVerticalSizeClass.class
+        ]
+                           withAction:@selector(luilTraitsChanged)];
+}
+
+- (void)luilTraitsChanged
+{
     if (self.owner != nullptr)
         self.owner->on_trait_change();
 }
+
+#if LUIL_IOS_BEFORE_17
+// iOS 15·16의 길이다. 17부터는 위의 등록이 같은 일을 하므로 여기서는 부르지 않는다 (두 번 불리지 않게).
+- (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection
+{
+    [super traitCollectionDidChange:previousTraitCollection];
+    if (@available(iOS 17.0, *))
+        return;
+    [self luilTraitsChanged];
+}
+#endif
 
 - (BOOL)prefersStatusBarHidden
 {

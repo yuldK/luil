@@ -174,7 +174,7 @@ iPhone·iPad다. 플랫폼을 모르는 층(`luil_core`), UIKit 위의 앱 host(
 
 | 항목 | 값 |
 | --- | --- |
-| 플랫폼 | `CMAKE_SYSTEM_NAME=iOS`. `LUIL_IOS_ARCHITECTURE`는 arm64 하나다 (기기와 Apple Silicon 시뮬레이터). x86_64 시뮬레이터는 패키지가 없다. 최소 판 `LUIL_MINIMUM_IOS_VERSION`은 패키지의 배포 하한과 같은 15.0이다 |
+| 플랫폼 | `CMAKE_SYSTEM_NAME=iOS`. `LUIL_IOS_ARCHITECTURE`는 arm64 하나다 (기기와 Apple Silicon 시뮬레이터). x86_64 시뮬레이터는 패키지가 없다. 최소 판 `LUIL_MINIMUM_IOS_VERSION`은 패키지의 배포 하한과 같은 15.0이다. 앱이 `CMAKE_OSX_DEPLOYMENT_TARGET`을 16.0·17.0 이상으로 올려도 경고 없이(`-Werror`) 지어진다 — host가 그 판에서 deprecated된 옛 길(`UIMenuController`, `attemptRotationToDeviceOrientation`, `traitCollectionDidChange:`)을 최소 판이 낮을 때만 컴파일한다 |
 | SDK | `CMAKE_OSX_SYSROOT`가 iphoneos(기기)나 iphonesimulator(시뮬레이터)다. 어느 쪽인지가 Skia 패키지를 고른다 (`LUIL_IOS_SIMULATOR`) |
 | 생성기 | preset은 Ninja Multi-Config |
 | 컴파일러 | Xcode의 clang. 앱 host는 Objective-C++(`OBJCXX`, ARC)다. 경고 규율·`AssertMacros.h` 정의는 macOS와 같다 |
@@ -210,7 +210,7 @@ xcrun simctl launch --console booted io.github.yuldk.luil.mobile-demo
 | 배율·글자 크기 | `traitCollection.displayScale`(2·3). 글자 크기 설정(Dynamic Type)은 본문 글꼴의 확대 표로 옮긴다 (`set_system_font_sizes`) |
 | 입력 | 손가락·Apple Pencil(압력·기울기, 한 frame 사이 표본까지)·트랙패드와 마우스(누름·hover·두 손가락 스크롤)·하드웨어 키보드. 키 이름과 단축키는 macOS 변환이다 (HID 자리 → Carbon 가상 키). 앱이 받은 키의 자동 반복은 host가 한다 |
 | 텍스트 입력 | view가 `UITextInput`이다. 문서와 IME의 연결은 Android의 그림자 문서(`ime_session`)를 그대로 쓴다 (UTF-16 index). 글을 입력하는 중의 글자 키·Backspace·Return은 글 입력 체계(한글 등 조합)에, 나머지는 앱의 키다. 텍스트 칸에 초점이 없으면 빈 입력 view로 소프트 키보드를 띄우지 않는다 |
-| popup·편집 메뉴 | popup은 표면 위에 겹쳐 그린다. 텍스트 칸을 길게 누르면 시스템 편집 메뉴(`UIEditMenuInteraction`, iOS 15는 `UIMenuController`)다. 시스템 메뉴의 붙여넣기만 다른 앱이 넣은 글을 묻지 않고 읽는다 — 앱이 그린 메뉴에서 읽으면 iOS가 거절한다(`PBErrorDomain` 13). 링크 안이면 링크 열기·주소 복사가 붙는다 |
+| popup·편집 메뉴 | popup은 표면 위에 겹쳐 그린다. 텍스트 칸을 길게 누르면 시스템 편집 메뉴(`UIEditMenuInteraction`, iOS 15는 `UIMenuController` — 최소 판이 16 이상인 구성에는 들지 않는다)다. 시스템 메뉴의 붙여넣기만 다른 앱이 넣은 글을 묻지 않고 읽는다 — 앱이 그린 메뉴에서 읽으면 iOS가 거절한다(`PBErrorDomain` 13). 링크 안이면 링크 열기·주소 복사가 붙는다 |
 | 웹뷰 | WKWebView. Skia view의 형제 UIView로 위층·아래층에 선다 |
 | 클립보드 | UIPasteboard의 글·HTML·그림. 파일 목록 클립보드는 없다. 바뀜 알림은 내용을 읽지 않는 질문으로 짓는다 (붙여넣음 알림이 뜨지 않게) |
 | 파일 대화 상자 | 문서 선택기. 열기는 임시 폴더의 복사본, 폴더는 원본(보안 범위를 열어 둔다), 저장은 폴더를 골라 그 안의 기본 이름이다 |
