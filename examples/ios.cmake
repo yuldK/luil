@@ -37,6 +37,27 @@ function(luil_add_ios_bundle target)
     set_target_properties("${target}" PROPERTIES
         MACOSX_BUNDLE TRUE
         MACOSX_BUNDLE_INFO_PLIST "${plist}")
+    # 시뮬레이터는 권한을 실행 파일의 `__TEXT,__entitlements` 구역에서 읽는다 (Xcode가 시뮬레이터 빌드에 하는 것과 같다).
+    #  - 앱 id와 Keychain 묶음이 없으면 비밀 저장소가 `errSecMissingEntitlement`(-34018)로 거절된다. 접두는 팀 id 자리라 시뮬레이터에서는
+    #    아무 값이나 된다. 서명에 실으면 프로비저닝 없는 제한 권한이라 앱이 뜨지 않는다.
+    if(LUIL_IOS_SIMULATOR)
+        set(entitlements "${CMAKE_CURRENT_BINARY_DIR}/${target}-simulator.entitlements")
+        file(WRITE "${entitlements}" "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+    <key>application-identifier</key>
+    <string>LUILSIMULATOR.${luil_bundle_identifier}</string>
+    <key>keychain-access-groups</key>
+    <array>
+        <string>LUILSIMULATOR.${luil_bundle_identifier}</string>
+    </array>
+</dict>
+</plist>
+")
+        target_link_options("${target}" PRIVATE "LINKER:-sectcreate,__TEXT,__entitlements,${entitlements}")
+        set_property(TARGET "${target}" APPEND PROPERTY LINK_DEPENDS "${entitlements}")
+    endif()
     luil_sign_ios_bundle("${target}")
 endfunction()
 

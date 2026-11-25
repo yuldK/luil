@@ -192,7 +192,7 @@ xcrun simctl launch --console booted io.github.yuldk.luil.mobile-demo
 
 기기는 `ios-arm64` preset이다. 예제 번들은 [`examples/ios.cmake`](../../examples/ios.cmake)가 [`examples/ios/Info.plist.in`](../../examples/ios/Info.plist.in)을 대상마다 채워 세운다 (장면 목록, 빈 시작 화면, 간접 입력, iPhone·iPad). 번들 id는 `LUIL_IOS_BUNDLE_PREFIX`(기본 `io.github.yuldk.luil`) 뒤에 `hello`·`mobile-demo`다.
 
-- 시뮬레이터 번들은 ad-hoc 서명이다 ([`ios/sign_bundle.cmake`](../../cmake/ios/sign_bundle.cmake)).
+- 시뮬레이터 번들은 ad-hoc 서명이다 ([`ios/sign_bundle.cmake`](../../cmake/ios/sign_bundle.cmake)). 앱 id·Keychain 권한은 실행 파일의 `__TEXT,__entitlements` 구역에 싣는다(Xcode의 시뮬레이터 빌드와 같다). 없으면 비밀 저장소가 `errSecMissingEntitlement`(-34018)로 거절되고, 서명에 실으면 프로비저닝 없는 제한 권한이라 앱이 뜨지 않는다.
 - 기기 번들은 `LUIL_IOS_CODE_SIGN_IDENTITY`(개발자 신원)와 `LUIL_IOS_PROVISIONING_PROFILE`(.mobileprovision)을 주면 profile을 넣고 그 권한으로 서명한다. 주지 않으면 서명하지 않아 기기에 설치되지 않는다. 번들 id가 profile의 앱 id에 맞아야 한다.
 - 렌더러 경로는 실행 인자로 재현한다: `--renderer=cpu`, `--simulate-gpu-failure`, `--simulate-gpu-loss-after-frames=N` (`apply_debug_arguments`).
 
@@ -206,11 +206,11 @@ xcrun simctl launch --console booted io.github.yuldk.luil.mobile-demo
 | 장면과 표면 | 장면(UIWindowScene) 하나, 창 하나다. 보조 창·도킹 표면은 무시한다. 창 caption이 없고 폼 팩터는 mobile이다 |
 | 안전 영역 | 상태 표시줄·노치·홈 표시줄·소프트 키보드를 뺀 자리를 `make_metrics_message`로 알리고 그 원점에서 그린다. 밖의 거리는 `window_metrics::outside`다 (Android와 같다). 떠 있는 iPad 키보드는 내용을 밀지 않는다 |
 | 수명 주기 | 장면이 앞에 서고 뒤로 갈 때 `make_lifecycle_message`다. 뒤에 있는 동안은 그리지 않는다. 앱은 스스로 끝나지 않는다 — 끝내기·창 닫기 명령은 무시하고, 시스템이 끝낼 때(`applicationWillTerminate:`) 종료 신호를 돌린다 |
-| 렌더러 | Metal(Ganesh) 다음 CPU다. 렌더러 파일은 macOS 것을 그대로 쓴다 (view layer의 자식 `CAMetalLayer`, CPU는 CGImage layer 내용) |
+| 렌더러 | Metal(Ganesh) 다음 CPU다. 렌더러 파일은 macOS 것을 그대로 쓴다 (view layer의 자식 `CAMetalLayer`, CPU는 CGImage layer 내용). 그림판은 안전 영역 밖까지 표면 전체다 — 짧으면 layer가 늘리거나, iOS의 뒤집힌 좌표에서 아래에 붙는다 |
 | 배율·글자 크기 | `traitCollection.displayScale`(2·3). 글자 크기 설정(Dynamic Type)은 본문 글꼴의 확대 표로 옮긴다 (`set_system_font_sizes`) |
 | 입력 | 손가락·Apple Pencil(압력·기울기, 한 frame 사이 표본까지)·트랙패드와 마우스(누름·hover·두 손가락 스크롤)·하드웨어 키보드. 키 이름과 단축키는 macOS 변환이다 (HID 자리 → Carbon 가상 키). 앱이 받은 키의 자동 반복은 host가 한다 |
 | 텍스트 입력 | view가 `UITextInput`이다. 문서와 IME의 연결은 Android의 그림자 문서(`ime_session`)를 그대로 쓴다 (UTF-16 index). 글을 입력하는 중의 글자 키·Backspace·Return은 글 입력 체계(한글 등 조합)에, 나머지는 앱의 키다. 텍스트 칸에 초점이 없으면 빈 입력 view로 소프트 키보드를 띄우지 않는다 |
-| popup·편집 메뉴 | 표면 위에 겹쳐 그린다. 텍스트 칸을 길게 누르면 Android와 같은 편집 메뉴다 |
+| popup·편집 메뉴 | popup은 표면 위에 겹쳐 그린다. 텍스트 칸을 길게 누르면 시스템 편집 메뉴(`UIEditMenuInteraction`, iOS 15는 `UIMenuController`)다. 시스템 메뉴의 붙여넣기만 다른 앱이 넣은 글을 묻지 않고 읽는다 — 앱이 그린 메뉴에서 읽으면 iOS가 거절한다(`PBErrorDomain` 13). 링크 안이면 링크 열기·주소 복사가 붙는다 |
 | 웹뷰 | WKWebView. Skia view의 형제 UIView로 위층·아래층에 선다 |
 | 클립보드 | UIPasteboard의 글·HTML·그림. 파일 목록 클립보드는 없다. 바뀜 알림은 내용을 읽지 않는 질문으로 짓는다 (붙여넣음 알림이 뜨지 않게) |
 | 파일 대화 상자 | 문서 선택기. 열기는 임시 폴더의 복사본, 폴더는 원본(보안 범위를 열어 둔다), 저장은 폴더를 골라 그 안의 기본 이름이다 |
