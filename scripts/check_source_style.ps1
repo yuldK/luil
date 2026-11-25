@@ -158,6 +158,48 @@ function Add-CodeLayoutErrors {
     }
 }
 
+# nlohmann/json을 값 하나로 중괄호 초기화하는 자리를 찾는다.
+# `json x { y }`·`auto x { j }`는 MSVC에서 복사지만 clang·gcc에서는 initializer_list 생성자가
+# 이겨 원소 하나짜리 배열 `[y]`가 된다. 형이 글자로 보이는 자리만 잡는다 — 함수가 돌려준
+# json을 `auto`로 받는 자리는 못 보므로 scripts/make_json_brace_trap.ps1의 진단 헤더가 맡는다.
+#  - `json o { { "k", v } }`(객체)와 `json x {}`는 걸리지 않는다. 원소 하나짜리 배열은 `json::array({ v })`로 쓴다.
+#  - `//` 뒤의 글은 보지 않는다.
+$json_brace_patterns = @(
+    # `json x { y }`·`nlohmann::json member_ { other }`
+    '(?<![\w:])(?:nlohmann::)?(?:ordered_)?json\s+[A-Za-z_]\w*\s*\{\s*[^\s{}]',
+    # `auto v { json::array() }`·`auto p { nlohmann::json::parse(text) }`
+    '\bauto\s+[A-Za-z_]\w*\s*\{\s*(?:nlohmann::)?(?:ordered_)?json\s*(?:::|\{|\()',
+    # `auto v { *body.json }`·`auto v { (*body.json)["a"] }`·`auto v { body.json->at("a") }`
+    '\bauto\s+[A-Za-z_]\w*\s*\{\s*(?:\(\s*)?\*\s*[\w.>-]*\bjson\b',
+    '\bauto\s+[A-Za-z_]\w*\s*\{\s*[\w.>-]*\.json\s*->'
+)
+
+function Add-JsonBraceErrors {
+    param(
+        [Parameter(Mandatory)]
+        [string]$text,
+
+        [Parameter(Mandatory)]
+        [string]$relative,
+
+        [Parameter(Mandatory)]
+        [AllowEmptyCollection()]
+        [System.Collections.Generic.List[string]]$errors
+    )
+
+    foreach ($pattern in $json_brace_patterns) {
+        foreach ($match in [regex]::Matches($text, $pattern)) {
+            $line_start = if ($match.Index -gt 0) { $text.LastIndexOf("`n", $match.Index - 1) + 1 } else { 0 }
+            if ($text.Substring($line_start, $match.Index - $line_start).Contains('//')) {
+                continue
+            }
+            $line_number = 1 + ([regex]::Matches($text.Substring(0, $match.Index), "`n")).Count
+            $errors.Add(
+                "$relative`:$line_number`: Brace-initializing a nlohmann::json from one value makes a one-element array on clang/gcc; use '='.")
+        }
+    }
+}
+
 function Get-RelativeKey {
     param(
         [Parameter(Mandatory)]
@@ -266,6 +308,7 @@ foreach ($file in $files) {
             $errors.Add("$relative`: A template declaration and its signature must be on separate lines.")
         }
         Add-CodeLayoutErrors -text $text -relative $relative -errors $errors
+        Add-JsonBraceErrors -text $text -relative $relative -errors $errors
         # 빈 몸통은 선언과 같은 줄의 `{}`이거나 `{`와 `}`가 각자 제 줄이다. 줄을 바꾼 뒤 합치지 않는다.
         foreach ($empty_body in [regex]::Matches($text, '(?m)^[ ]*\{\};?[ ]*\r?$')) {
             $empty_line = 1 + ([regex]::Matches($text.Substring(0, $empty_body.Index), "`n")).Count

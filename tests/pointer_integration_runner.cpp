@@ -547,7 +547,7 @@ namespace luil::testing {
             };
             auto no_change = [&](const json& before, const bool scroll) {
                 settle();
-                const auto after { uia.status() };
+                const auto after = uia.status();
                 require(after["left"] == before["left"] && after["right"] == before["right"], "Unexpected click/context action: " + after.dump());
                 if (scroll)
                     require(after["scroll"] == before["scroll"], "Non-touch input started pan: " + after.dump());
@@ -563,23 +563,23 @@ namespace luil::testing {
             const POINT pan_end { uia.point(L"scroll-content", 0.5, 0.25) };
 
             test("touch tap / one activation / native WM_POINTER", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 click(touch, button);
                 static_cast<void>(uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1 && state["touch_down"] > before["touch_down"]; }, "Touch tap"));
                 settle();
                 require(uia.status()["left"] == before["left"].get<int>() + 1, "Promoted mouse duplicated touch click");
             });
             test("touch long press / right click only", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 hold(touch, button);
                 touch.up(button);
-                const auto after { uia.wait([&](const json& state) { return state["right"] == before["right"].get<int>() + 1; }, "Touch long press") };
+                const auto after = uia.wait([&](const json& state) { return state["right"] == before["right"].get<int>() + 1; }, "Touch long press");
                 require(after["left"] == before["left"], "Long press also clicked");
             });
             test("touch pan / scroll / no click", [&] {
                 reset_scroll();
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(pan_start);
                 touch.move(pan_end);
                 touch.up(pan_end);
@@ -587,7 +587,7 @@ namespace luil::testing {
                 no_change(before, false);
             });
             {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 uia.invoke(L"zoom-visible");
                 static_cast<void>(uia.wait([](const json& state) { return state["zoom_visible"] == true; }, "Show zoom target"));
                 const POINT first { uia.point(L"zoom", 0.25) };
@@ -617,12 +617,12 @@ namespace luil::testing {
                         const POINT outer_second { uia.point(L"zoom", 0.9) };
                         touch.move(outer_first);
                         touch.move(outer_second, 1);
-                        const auto expanded { uia.wait([&](const json& state) { return state["zoom"].get<float>() > before["zoom"].get<float>() * 1.3f; }, "Pinch expand") };
+                        const auto expanded = uia.wait([&](const json& state) { return state["zoom"].get<float>() > before["zoom"].get<float>() * 1.3f; }, "Pinch expand");
                         const POINT inner_first { uia.point(L"zoom", 0.3) };
                         const POINT inner_second { uia.point(L"zoom", 0.7) };
                         touch.move(inner_first);
                         touch.move(inner_second, 1);
-                        const auto contracted { uia.wait([&](const json& state) { return state["zoom"].get<float>() < expanded["zoom"].get<float>() * 0.8f; }, "Pinch contract") };
+                        const auto contracted = uia.wait([&](const json& state) { return state["zoom"].get<float>() < expanded["zoom"].get<float>() * 0.8f; }, "Pinch contract");
                         // 두 접촉을 가운데 둘레로 30도 시계 방향으로 돌린다. 간격이 같아 배율은 거의 그대로이고 rotation이 양수가 된다.
                         const POINT center { (inner_first.x + inner_second.x) / 2, (inner_first.y + inner_second.y) / 2 };
                         const auto turn = [&center](const POINT point, const double degrees) {
@@ -638,14 +638,14 @@ namespace luil::testing {
                         const POINT turned_second { turn(inner_second, 30.0) };
                         touch.move(turned_first);
                         touch.move(turned_second, 1);
-                        const auto rotated { uia.wait([&](const json& state) { return state["rotation"].get<float>() > contracted["rotation"].get<float>() + 20.0f; }, "Pinch rotate clockwise") };
+                        const auto rotated = uia.wait([&](const json& state) { return state["rotation"].get<float>() > contracted["rotation"].get<float>() + 20.0f; }, "Pinch rotate clockwise");
                         require(rotated["rotation"].get<float>() < contracted["rotation"].get<float>() + 40.0f, "Rotation overshot the injected turn");
                         require(std::abs(rotated["zoom"].get<float>() / contracted["zoom"].get<float>() - 1.0f) < 0.05f, "Rotation changed the zoom");
                         touch.up(turned_first);
                         POINT moved { turned_second };
                         moved.y += 24;
                         touch.move(moved, 1);
-                        const auto panned { uia.wait([&](const json& state) { return state["zoom_y"].get<float>() > rotated["zoom_y"].get<float>() + 8.0f; }, "Remaining finger pan") };
+                        const auto panned = uia.wait([&](const json& state) { return state["zoom_y"].get<float>() > rotated["zoom_y"].get<float>() + 8.0f; }, "Remaining finger pan");
                         touch.up(moved, PEN_FLAG_NONE, 1);
                         require(panned["zoom"] == rotated["zoom"], "Remaining finger changed zoom");
                         require(panned["rotation"] == rotated["rotation"], "Remaining finger changed rotation");
@@ -660,7 +660,7 @@ namespace luil::testing {
                 touch.move(pan_end);
                 static_cast<void>(uia.wait([](const json& state) { return state["scroll"] > 20.0f; }, "Pan started"));
                 uia.invoke(L"pan");
-                const auto stopped { uia.wait([](const json& state) { return state["pan"] == false && state["config_ok"] == true; }, "Disable pan") };
+                const auto stopped = uia.wait([](const json& state) { return state["pan"] == false && state["config_ok"] == true; }, "Disable pan");
                 touch.move(pan_start);
                 touch.up(pan_start);
                 no_change(stopped, true);
@@ -668,7 +668,7 @@ namespace luil::testing {
                 static_cast<void>(uia.wait([](const json& state) { return state["pan"] == true; }, "Restore pan"));
             });
             test("runtime long press disabled / no context action", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 uia.invoke(L"hold");
                 static_cast<void>(uia.wait([](const json& state) { return state["hold"] == false; }, "Disable hold"));
@@ -680,7 +680,7 @@ namespace luil::testing {
                 static_cast<void>(uia.wait([](const json& state) { return state["hold"] == true; }, "Restore hold"));
             });
             test("target disabled during touch", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 uia.invoke(L"target");
                 static_cast<void>(uia.wait([](const json& state) { return state["enabled"] == false; }, "Disable target"));
@@ -691,35 +691,35 @@ namespace luil::testing {
             });
             test("second finger released first / only owner clicks", [&] {
                 reset_scroll();
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 touch.down(pan_start, PEN_FLAG_NONE, 1);
                 touch.move(pan_end, 1);
                 touch.up(pan_end, PEN_FLAG_NONE, 1);
                 no_change(before, true);
                 touch.up(button);
-                const auto after { uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "Owner finger click") };
+                const auto after = uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "Owner finger click");
                 require(after["touch_down"] == before["touch_down"].get<int>() + 2, "Second native contact did not arrive");
                 require(after["right"] == before["right"] && after["scroll"] == before["scroll"], "Second contact took over controls");
             });
             test("owner released first / remaining finger never takes over", [&] {
                 reset_scroll();
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 touch.down(pan_start, PEN_FLAG_NONE, 1);
                 touch.up(button);
-                const auto released { uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "First finger release") };
+                const auto released = uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "First finger release");
                 touch.move(pan_end, 1);
                 touch.up(pan_end, PEN_FLAG_NONE, 1);
                 no_change(released, true);
             });
             {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 static_cast<void>(uia.wait([&](const json& state) { return state["touch_down"] > before["touch_down"]; }, "Touch before mouse takeover"));
                 restore.mouse(window, button, MOUSEEVENTF_LEFTDOWN);
                 restore.mouse(window, button, MOUSEEVENTF_LEFTUP);
-                const auto taken { uia.wait([&](const json& state) { return state["mouse_down"] > before["mouse_down"] && state["left"] > before["left"]; }, "Mouse after touch") };
+                const auto taken = uia.wait([&](const json& state) { return state["mouse_down"] > before["mouse_down"] && state["left"] > before["left"]; }, "Mouse after touch");
                 touch.up(button);
                 if (taken["touch_up_at_mouse_down"] > before["touch_up"] && taken["touch_canceled"] == before["touch_canceled"])
                     skip("touch/mouse overlap: Windows ended synthetic touch normally before delivering mouse DOWN");
@@ -730,11 +730,11 @@ namespace luil::testing {
                     });
             }
             {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 static_cast<void>(uia.wait([&](const json& state) { return state["touch_down"] > before["touch_down"]; }, "Touch before pen takeover"));
                 click(pen, button);
-                const auto taken { uia.wait([&](const json& state) { return state["pen_down"] > before["pen_down"] && state["left"] > before["left"]; }, "Pen after touch") };
+                const auto taken = uia.wait([&](const json& state) { return state["pen_down"] > before["pen_down"] && state["left"] > before["left"]; }, "Pen after touch");
                 touch.up(button);
                 if (taken["touch_up_at_pen_down"] > before["touch_up"] && taken["touch_canceled"] == before["touch_canceled"])
                     skip("touch/pen overlap: Windows ended synthetic touch normally before delivering pen DOWN");
@@ -745,7 +745,7 @@ namespace luil::testing {
                     });
             }
             test("modal covers pending touch / no click or context action", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 uia.invoke(L"modal");
                 static_cast<void>(uia.wait([](const json& state) { return state["modal"] == true; }, "Modal appeared"));
@@ -762,7 +762,7 @@ namespace luil::testing {
                 touch.move(pan_end);
                 static_cast<void>(uia.wait([](const json& state) { return state["scroll"] > 20.0f; }, "Pan before modal"));
                 uia.invoke(L"modal");
-                const auto blocked { uia.wait([](const json& state) { return state["modal"] == true; }, "Pan modal appeared") };
+                const auto blocked = uia.wait([](const json& state) { return state["modal"] == true; }, "Pan modal appeared");
                 touch.move(pan_start);
                 touch.up(pan_start);
                 no_change(blocked, true);
@@ -770,34 +770,34 @@ namespace luil::testing {
                 static_cast<void>(uia.wait([](const json& state) { return state["modal"] == false; }, "Pan modal dismissed"));
             });
             test("pen tip click / native WM_POINTER", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 click(pen, button);
                 static_cast<void>(uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1 && state["pen_down"] > before["pen_down"]; }, "Pen tip"));
                 settle();
                 require(uia.status()["left"] == before["left"].get<int>() + 1, "Promoted mouse duplicated pen click");
             });
             test("pen barrel / right click", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 click(pen, button, PEN_FLAG_BARREL);
-                const auto after { uia.wait([&](const json& state) { return state["right"] == before["right"].get<int>() + 1; }, "Pen barrel") };
+                const auto after = uia.wait([&](const json& state) { return state["right"] == before["right"].get<int>() + 1; }, "Pen barrel");
                 require(after["left"] == before["left"], "Barrel also left clicked");
             });
             test("pen barrel changes during contact / right click only", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 pen.down(button);
                 pen.move(button, 0, PEN_FLAG_BARREL);
                 pen.up(button, PEN_FLAG_BARREL);
-                const auto after { uia.wait([&](const json& state) { return state["right"] == before["right"].get<int>() + 1; }, "Pen barrel switch") };
+                const auto after = uia.wait([&](const json& state) { return state["right"] == before["right"].get<int>() + 1; }, "Pen barrel switch");
                 require(after["left"] == before["left"], "Barrel switch completed old left click");
             });
             test("pen hover / no action", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 pen.send(button, POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE);
                 static_cast<void>(uia.wait([&](const json& state) { return state["pen_hover"] > before["pen_hover"]; }, "Pen hover delivered"));
                 no_change(before, false);
             });
             test("pen hover over text / I-beam without WM_SETCURSOR", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 const POINT text_point { uia.point(L"text", 0.3) };
                 pen.send(text_point, POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE);
                 static_cast<void>(uia.wait([&](const json& state) { return state["pen_hover"] > before["pen_hover"]; }, "Pen hover over text"));
@@ -810,23 +810,23 @@ namespace luil::testing {
                 require(uia.status()["set_cursor"] == before["set_cursor"], "Pen cursor test received WM_SETCURSOR");
             });
             test("pen long hold / ordinary left click", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 pen.down(button);
                 hold(pen, button);
                 pen.up(button);
-                const auto after { uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "Pen hold") };
+                const auto after = uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "Pen hold");
                 require(after["right"] == before["right"], "Pen hold became touch long press");
             });
             test("pen drag / no touch pan", [&] {
                 reset_scroll();
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 pen.down(pan_start);
                 pen.move(pan_end);
                 pen.up(pan_end);
                 no_change(before, true);
             });
             test("pen eraser / no ordinary click", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 click(pen, button, PEN_FLAG_ERASER | PEN_FLAG_INVERTED);
                 static_cast<void>(uia.wait([&](const json& state) { return state["pen_down"] == before["pen_down"].get<int>() + 1; }, "Eraser contact delivered"));
                 no_change(before, false);
@@ -834,12 +834,12 @@ namespace luil::testing {
             test("pen ink / pressure stroke then eraser removes it", [&] {
                 uia.invoke(L"ink-visible");
                 static_cast<void>(uia.wait([](const json& state) { return state["ink_visible"] == true; }, "Show ink target"));
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 pen.down(uia.point(L"ink", 0.2, 0.5));
                 pen.move(uia.point(L"ink", 0.5, 0.55));
                 pen.move(uia.point(L"ink", 0.8, 0.5));
                 pen.up(uia.point(L"ink", 0.8, 0.5));
-                const auto drawn { uia.wait([&](const json& state) { return state["ink_strokes"] == before["ink_strokes"].get<int>() + 1; }, "Pen ink stroke") };
+                const auto drawn = uia.wait([&](const json& state) { return state["ink_strokes"] == before["ink_strokes"].get<int>() + 1; }, "Pen ink stroke");
                 // 합성 펜은 압력 512를 싣는다 (0~1024의 가운데).
                 require(std::abs(drawn["ink_pressure"].get<double>() - 0.5) < 0.01, "Pen ink lost its pressure: " + drawn.dump());
                 no_change(before, false);
@@ -847,7 +847,7 @@ namespace luil::testing {
                 pen.down(uia.point(L"ink", 0.5, 0.2), eraser);
                 pen.move(uia.point(L"ink", 0.5, 0.8), 0, eraser);
                 pen.up(uia.point(L"ink", 0.5, 0.8), eraser);
-                const auto erased { uia.wait([&](const json& state) { return state["ink_strokes"] == before["ink_strokes"]; }, "Eraser removes the ink stroke") };
+                const auto erased = uia.wait([&](const json& state) { return state["ink_strokes"] == before["ink_strokes"]; }, "Eraser removes the ink stroke");
                 require(erased["ink_erased"].get<int>() == before["ink_erased"].get<int>() + 1, "Eraser removed an unexpected count: " + erased.dump());
                 no_change(before, false);
                 uia.invoke(L"ink-visible");
@@ -856,32 +856,32 @@ namespace luil::testing {
             test("pen Shift click / UIA text selection", [&] {
                 pen.remove();
                 click(pen, uia.point(L"text", 0.1));
-                const auto anchored { uia.wait([](const json& state) { return state["caret"] > 0 && state["caret"] == state["anchor"]; }, "Text anchor") };
+                const auto anchored = uia.wait([](const json& state) { return state["caret"] > 0 && state["caret"] == state["anchor"]; }, "Text anchor");
                 restore.key(window, true);
                 click(pen, uia.point(L"text", 0.45));
                 restore.key(window, false);
-                const auto selected { uia.wait([](const json& state) { return state["caret"] != state["anchor"]; }, "Shift selection") };
+                const auto selected = uia.wait([](const json& state) { return state["caret"] != state["anchor"]; }, "Shift selection");
                 require(selected["anchor"] == anchored["anchor"], "Shift click lost anchor");
                 require(!uia.selected_text().empty(), "UIA reported empty selection");
             });
             test("mouse long hold / ordinary left click", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 restore.mouse(window, button, MOUSEEVENTF_LEFTDOWN);
                 std::this_thread::sleep_for(std::chrono::milliseconds { 750 });
                 restore.mouse(window, button, MOUSEEVENTF_LEFTUP);
-                const auto after { uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "Mouse hold") };
+                const auto after = uia.wait([&](const json& state) { return state["left"] == before["left"].get<int>() + 1; }, "Mouse hold");
                 require(after["right"] == before["right"] && after["mouse_down"] > before["mouse_down"], "Mouse hold became a gesture");
             });
             test("mouse drag / no touch pan", [&] {
                 reset_scroll();
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 restore.mouse(window, pan_start, MOUSEEVENTF_LEFTDOWN);
                 restore.mouse(window, pan_end, 0);
                 restore.mouse(window, pan_end, MOUSEEVENTF_LEFTUP);
                 no_change(before, true);
             });
             {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 static_cast<void>(uia.wait([&](const json& state) { return state["touch_down"] > before["touch_down"]; }, "Contact before minimize"));
                 ShowWindow(window, SW_MINIMIZE);
@@ -891,12 +891,12 @@ namespace luil::testing {
                 uia.activate();
                 activate_window(window);
                 settle();
-                const auto restored { uia.status() };
+                const auto restored = uia.status();
                 touch.up(button);
                 if (restored["capture_changed"] > before["capture_changed"])
                 {
                     test("OS pointer capture lost on minimize / late UP swallowed", [&] { no_change(before, false); });
-                    const auto ended { uia.status() };
+                    const auto ended = uia.status();
                     test("fresh contact after OS capture loss", [&] {
                         click(touch, button);
                         static_cast<void>(uia.wait([&](const json& state) { return state["left"] == ended["left"].get<int>() + 1; }, "Touch after capture loss"));
@@ -909,12 +909,12 @@ namespace luil::testing {
                 }
             }
             {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(button);
                 touch.send(button, POINTER_FLAG_UPDATE | POINTER_FLAG_INRANGE | POINTER_FLAG_INCONTACT | POINTER_FLAG_CANCELED);
                 touch.up(button);
                 settle();
-                const auto after { uia.status() };
+                const auto after = uia.status();
                 if (after["canceled_message"] > before["canceled_message"] || after["touch_canceled"] > before["touch_canceled"])
                     test("native canceled touch / no click or context action", [&] { no_change(before, false); });
                 else
@@ -927,18 +927,18 @@ namespace luil::testing {
             static_cast<void>(uia.wait([](const json& state) { return state["web"].value("ready", false); }, "WebView runtime/page readiness", std::chrono::seconds { 20 }));
             const POINT web_point { uia.point(L"web") };
             auto web_click = [&](synthetic_device& device, const char* type) {
-                const auto before { uia.status()["web"] };
+                const auto before = uia.status()["web"];
                 click(device, web_point);
                 json state_after {};
                 state_after = uia.wait([&](const json& state) { return state["web"].value("down", 0) == before["down"].get<int>() + 1 && state["web"].value("up", 0) == before["up"].get<int>() + 1; },
                     "Web pointer sequence");
-                const auto after { state_after["web"] };
+                const auto after = state_after["web"];
                 require(after["type"] == type && after["orphan"] == 0, "WebView pointer identity/sequence mismatch");
             };
             test("WebView touch pointerType / paired down-up", [&] { web_click(touch, "touch"); });
             test("WebView pen pointerType / paired down-up", [&] { web_click(pen, "pen"); });
             test("WebView modal during touch / terminal event / late UP swallowed", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(web_point);
                 static_cast<void>(uia.wait([&](const json& state) { return state["web"].value("down", 0) == before["web"]["down"].get<int>() + 1; }, "Web contact before modal"));
                 uia.invoke(L"modal");
@@ -957,7 +957,7 @@ namespace luil::testing {
                 web_click(touch, "touch");
             });
             test("WebView hide during touch / terminal event / late UP swallowed", [&] {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 touch.down(web_point);
                 static_cast<void>(uia.wait([&](const json& state) { return state["web"].value("down", 0) == before["web"]["down"].get<int>() + 1; }, "Web touch down"));
                 uia.invoke(L"web-visible");
@@ -977,7 +977,7 @@ namespace luil::testing {
                 web_click(touch, "touch");
             });
             {
-                const auto before { uia.status() };
+                const auto before = uia.status();
                 const POINT first { uia.point(L"web", 0.25) };
                 const POINT second { uia.point(L"web", 0.75) };
                 touch.down(first);

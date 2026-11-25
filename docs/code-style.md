@@ -18,3 +18,19 @@ luil의 C++ 소스는 사람이 규칙에 맞춰 손으로 쓴다. 규칙 전문
 | 여러 줄 블록의 닫는 `}`가 제 줄에 서는지 | 한 줄 함수·enum·`case` |
 | 줄 끝 `&&`·`\|\|` | namespace 끝 주석 |
 | 줄을 바꾼 뒤의 `{}` | 초기화의 의미, 수명 범위 |
+| 형이 글자로 보이는 json 중괄호 초기화 | 함수가 돌려준 json을 `auto x { f() }`로 받기 |
+
+## nlohmann::json 초기화
+
+json 값은 `=`로 받는다. 값 하나를 담은 중괄호는 MSVC에서 복사지만 clang·gcc에서는 initializer_list 생성자가 이겨 원소 하나짜리 배열이 된다 (`{"a":1}`이 `[{"a":1}]`로 온다). Windows에서 통과한 코드가 macOS·iOS·Android에서 조용히 틀린다.
+
+- `json x = y;`·`const auto x = f();`·`return j;`로 쓴다. `json x { y }`·`auto x { j }`·`json m_ { j }`·`return { j };`·`f({ j })`는 쓰지 않는다. 참조(`const json& r { j }`)는 그대로 묶이므로 괜찮다.
+- 원소 하나짜리 배열이 뜻이면 `json::array({ v })`로 적는다. 객체 `{ { "k", v } }`와 빈 `{}`는 그대로 쓴다.
+- 검사 script는 형이 글자로 보이는 자리만 본다. 나머지는 진단 헤더가 잡는다. `scripts/make_json_brace_trap.ps1`이 만든 json.hpp 사본을 `-I`로 앞세운 빌드에서 시험을 돌리면 그런 자리마다 backtrace를 찍고 멈춘다. clang·gcc 전용이다 (MSVC는 그 자리를 복사로 골라 잡을 것이 없다).
+
+```sh
+pwsh -NoProfile -File scripts/make_json_brace_trap.ps1
+cmake --preset macos-arm64-core -B build/json-audit -DCMAKE_CXX_FLAGS="-I$PWD/build/json-brace-trap/include"
+cmake --build build/json-audit --config Debug
+ctest --test-dir build/json-audit -C Debug
+```

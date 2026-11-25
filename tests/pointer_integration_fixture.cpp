@@ -211,7 +211,7 @@ send();
                     if (event->kind == win32::webview_event_kind::web_message_received)
                     {
                         const std::string payload { event->message.begin(), event->message.end() };
-                        const auto parsed { nlohmann::json::parse(payload, nullptr, false) };
+                        const auto parsed = nlohmann::json::parse(payload, nullptr, false);
                         if (parsed.is_object())
                             web_ = parsed;
                     }
