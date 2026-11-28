@@ -558,6 +558,8 @@
       if (d.k === "api" && st.split("::").pop() === q) score += 30;
       if (d.k === "page") score += inTitle ? 6 : 2;
       if (d.k !== "api") score += n > 1 ? 3 : 0.5;
+      // 개념 문서의 사례(특정 입력에서 무슨 일이 나는가)는 질문·설명보다 뒤에 둔다
+      if (d.k === "case") score *= 0.6;
       out.push({ d, score, part: hit < n });
     }
     out.sort((a, b) => b.score - a.score);
@@ -583,7 +585,7 @@
     return html;
   }
 
-  const KIND_LABEL = { page: "문서", sec: "문서", faq: "질문", api: "API" };
+  const KIND_LABEL = { page: "문서", sec: "문서", faq: "질문", case: "사례", api: "API" };
 
   function buildSearch() {
     const wrap = el("div", { class: "search", role: "search" });

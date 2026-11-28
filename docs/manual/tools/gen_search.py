@@ -72,8 +72,10 @@ def main():
             if h2:
                 text = text.replace(text_of(h2.group(1)), "", 1).strip()
             entries.append({"k": "sec", "p": pg["file"], "s": sid, "pt": pg["title"], "st": title, "t": (text + (" " + paths if paths else "")).strip()})
+            # data-kind="case" 절(개념 문서의 "사례로 확인하기")은 질문이 아니라 사례라서 따로 표시하고 검색에서 낮게 친다
+            case = 'data-kind="case"' in attrs
             for q in faqs:
-                entries.append({"k": "faq", "p": pg["file"], "s": sid, "pt": pg["title"] + " · 자주 묻는 질문", "st": text_of(q.group(1)), "t": text_of(q.group(2))})
+                entries.append({"k": "case" if case else "faq", "p": pg["file"], "s": sid, "pt": pg["title"] + (" · 사례" if case else " · 자주 묻는 질문"), "st": text_of(q.group(1)), "t": text_of(q.group(2))})
         # 헤더 → 문서 (인용으로 짐작)
         for hp in sorted(set(re.findall(r'data-src="(include/luil/[^":]+)', src))):
             header_pages.setdefault(hp, [])
