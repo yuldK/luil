@@ -396,8 +396,11 @@ namespace luil {
                 };
                 auto button { std::make_unique<button_element>(ui_element_id { ui_element_kind::tab_close, key }, close_button) };
                 // 항목에 딸린 보조 버튼이다. 묶음 안에 두면 ←/→가 탭과 닫기를
-                // 번갈아 지난다 — 키보드로는 넘침 메뉴가 그 자리다
-                // (focus-group-design.md).
+                // 번갈아 지난다 (focus-group-design.md).
+                //  - 라이브러리는 탭을 닫는 키를 받지 않는다. 키보드로 닫는 길은 앱이 짓는다: 탭에 초점을 두고
+                //    Shift+F10으로 여는 `context_menu`의 닫기 항목, 또는 앱 명령(Ctrl+W 같은)이다. 넘침 메뉴는 넘칠 때만
+                //    서고 내용도 앱의 것이라 닫는 길이 되지 않는다.
+                //  - 보조 기술은 이름을 단 이 단추를 접근 tree에서 바로 누른다.
                 button->set_tab_stop(false);
                 // 글리프뿐인 단추라 이름을 주지 않으면 접근 tree에서 통째로 빠진다 (`ui_element::accessibility`). 기본 문구로
                 // 툴팁이자 접근 이름을 단다 — 정보 막대·안내 풍선의 닫기와 같은 선례다. 어느 탭의 단추인지 이름에 든다.
