@@ -1,5 +1,6 @@
 #include "ui/line_fold.h"
 
+#include "luil/text/grapheme.h"
 #include "luil/text/utf8_text.h"
 
 #include <algorithm>
@@ -83,5 +84,20 @@ namespace luil {
             return with_visible(content, boundaries, start, found);
         const std::size_t previous { *std::prev(std::lower_bound(boundaries.begin(), boundaries.end(), cut)) };
         return with_visible(content, boundaries, start, std::max(previous, start));
+    }
+
+    std::size_t trim_hanging_end(const std::u8string_view line) noexcept
+    {
+        std::size_t end { line.size() };
+        while (end > 0)
+        {
+            // 공백 뒤 결합 부호는 그 공백과 한 글자소이고 보이는 글자라 매달지 않는다 (`hangs_at`).
+            const std::size_t previous { text::grapheme_previous(line, end) };
+            const auto decoded { text::utf8_decode(line, previous) };
+            if (decoded.length != end - previous || text::line_break_hangs(decoded.codepoint) == false)
+                break;
+            end = previous;
+        }
+        return end;
     }
 }

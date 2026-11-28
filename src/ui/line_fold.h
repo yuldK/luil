@@ -39,4 +39,7 @@ namespace luil {
     // 늘어 다시 줄일 때 물러서는 자리다.
     [[nodiscard]] line_fold previous_line_fold(
         std::u8string_view content, std::span<const std::size_t> boundaries, std::span<const text::line_break_opportunity> opportunities, std::size_t start, std::size_t cut) noexcept;
+    // 접은 줄 `line`(글자소 경계에서 시작하고 끝난다)에서 끝에 매단 공백을 걷어낸 길이다. `line_fold::visible`과 같은
+    // 기준이라, 접은 줄을 그릴 때 정렬할 폭을 줄 폭(`text_layout_line::width`)과 맞춘다.
+    [[nodiscard]] std::size_t trim_hanging_end(std::u8string_view line) noexcept;
 }

@@ -4,6 +4,7 @@
 #include "luil/ui/draw_primitives.h"
 #include "luil/ui/font_scale.h"
 #include "ui/font_synthesis.h"
+#include "ui/line_fold.h"
 
 #include "include/core/SkFont.h"
 #include "include/core/SkPaint.h"
@@ -157,23 +158,33 @@ namespace luil {
                 const std::size_t begin { std::min(line.begin, text.size()) };
                 const std::size_t end { std::clamp(line.end, begin, text.size()) };
                 std::u8string piece { text.substr(begin, end - begin) };
+                // 정렬할 폭을 잴 글의 길이다. 접은 줄은 끝에 매단 공백을 뺀다.
+                std::size_t aligned { std::u8string::npos };
                 if (style.wrap)
                 {
                     // 말줄임한 마지막 줄은 남은 글을 한 줄로 펴서(줄 바꿈은 공백) 끝을 줄인다.
                     const bool last_truncated { layout.truncated && index + 1 == layout.lines.size() };
                     if (last_truncated)
                         std::replace(piece.begin(), piece.end(), u8'\n', u8' ');
+                    const std::size_t ranged { piece.size() };
                     while (piece.empty() == false && (piece.back() == u8'\n' || piece.back() == u8'\r'))
                         piece.pop_back();
                     if (last_truncated)
                         piece = elide_text(piece, box.width, font);
+                    // 공백에서 접은 줄은 그 공백이 줄 끝에 매달린다. 줄 폭(`text_layout_line::width`)이 그 공백을 빼므로
+                    // 정렬도 같은 폭으로 해야 끝·가운데 정렬의 글이 공백만큼 안쪽에 서거나 상자 왼쪽 밖으로 나가지 않는다.
+                    //  - 문단·글의 끝 줄은 접은 줄이 아니라 공백을 그대로 둔다 — 줄 폭도 그 공백을 넣는다.
+                    //  - 말줄임한 마지막 줄은 줄인 글을 다시 잰다.
+                    const bool paragraph_end { end >= text.size() || text[end] == u8'\n' || text[end] == u8'\r' || piece.size() != ranged };
+                    if (last_truncated == false && paragraph_end == false)
+                        aligned = trim_hanging_end(piece);
                 }
                 else
                 {
                     // 상자가 좁으면 글자를 잘라 옆 UI를 침범하지 않게 한다.
                     piece = elided(piece, style.elide, box.width, font);
                 }
-                const float width { measure_text(piece, font) };
+                const float width { measure_text(std::u8string_view { piece }.substr(0, aligned), font) };
                 float offset { 0.0f };
                 if (style.align == text_align::end)
                     offset = box.width - width;

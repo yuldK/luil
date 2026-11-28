@@ -187,3 +187,38 @@ TEST_CASE("A text block halo rings the letters for text over a picture", "[ui][t
     // 글자는 테두리 위에 얹힌다.
     REQUIRE(haloed.count(SK_ColorWHITE) > 0);
 }
+
+TEST_CASE("A wrapped line aligns without the space that hangs at its end", "[ui][text-block][native]")
+{
+    // 공백에서 접은 줄은 그 공백이 줄 끝에 매달리고 줄 폭에서 빠진다 (docs/line-break-design.md). 끝·가운데 정렬도 그 폭으로
+    // 자리를 잡아야 글이 공백만큼 안쪽에 서지 않는다.
+    const SkPaint ink { luil::solid_paint(SK_ColorBLACK) };
+    const std::u8string_view text { u8"alpha beta" };
+    for (const luil::text_align align : { luil::text_align::center, luil::text_align::end })
+    {
+        text_canvas surface {};
+        auto context { surface.context() };
+        const luil::text_block_style style { .font = { .size = 16.0f }, .align = align, .vertical = luil::text_vertical_align::top, .wrap = true };
+        const SkFont font { luil::make_text_font(context, style.font) };
+        const float word { luil::measure_text(u8"alpha", font) };
+        // "alpha"는 들고 매단 공백까지는 들지 않는 폭이다. 옛 그리기는 공백까지 재서 첫 줄을 상자 왼쪽 밖에 세웠다.
+        const float space { luil::measure_text(u8"alpha ", font) - word };
+        REQUIRE(space > 1.0f);
+        const luil::rect_f box { 40.0f, 10.0f, word + space * 0.5f, 120.0f };
+        const luil::rect_f drawn { luil::draw_text_block(context, text, box, style, ink) };
+        REQUIRE(drawn.height == Catch::Approx(2.0f * luil::text_block_line_height(style)));
+        REQUIRE(drawn.x >= box.x - 0.01f);
+        REQUIRE(drawn.x + drawn.width <= box.x + box.width + 0.01f);
+
+        // 첫 줄의 글자가 상자의 끝(또는 가운데)에 맞춰 선다 — 공백 몫만큼 안쪽에 서지 않는다.
+        const float line_height { luil::text_block_line_height(style) };
+        const auto first { surface.ink_columns({ 0.0f, box.y, 400.0f, line_height }) };
+        REQUIRE(first.has_value());
+        REQUIRE(static_cast<float>(first->first) >= box.x - 2.0f);
+        const float left { align == luil::text_align::end ? box.x + box.width - word : box.x + (box.width - word) * 0.5f };
+        REQUIRE(static_cast<float>(first->first) >= left - 2.0f);
+        REQUIRE(static_cast<float>(first->second) <= left + word + 2.0f);
+        if (align == luil::text_align::end)
+            REQUIRE(static_cast<float>(first->second) >= box.x + box.width - space * 0.5f - 2.0f);
+    }
+}
