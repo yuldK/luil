@@ -1,0 +1,2132 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>목록과 트리 뷰 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — list_element·virtual_list_element·grouped_list_element로 평평한 목록, 트리 뷰, 여러 항목 선택, 지연 로딩, 끌어 놓기, 아주 큰 목록을 만드는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  /* 트리 뷰 재현 — luil 치수: 행 24, 들여쓰기 14, 삼각형 16 (논리 픽셀) */
+  .tv-grid { display: grid; gap: 14px; }
+  @media (min-width: 1180px) { .tv-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .tv-side, .tv-panel { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .tv-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .tv-tools input[type="search"] { flex: 1 1 160px; min-width: 0; }
+  .tv-tools label { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; cursor: pointer; }
+  .tv-tools select { font-size: var(--fs-xs); min-height: 26px; }
+  .tv { position: relative; height: 266px; overflow: hidden; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--panel); outline: none; font-size: 13px; line-height: 24px; user-select: none; -webkit-user-select: none; touch-action: none; }
+  .tv:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .tv-canvas { position: absolute; left: 0; right: 0; top: 0; }
+  .tv-row { position: absolute; left: 0; right: 0; height: 24px; display: flex; align-items: center; gap: 4px; padding-right: 8px; white-space: nowrap; color: var(--fg); cursor: default; }
+  .tv-row:hover { background: var(--sunk); }
+  .tv-row.sel { background: var(--accent-wash); }
+  .tv-row.sel:hover { background: var(--accent-wash-2); }
+  .tv:focus .tv-row.cur::after { content: ""; position: absolute; inset: 1px 2px; border: 1px solid var(--accent); border-radius: 3px; pointer-events: none; }
+  .tv-row.dis { color: var(--fg-3); }
+  .tv-row.status { color: var(--fg-2); font-style: italic; }
+  .tv-row.status.failed { color: var(--error); font-style: normal; }
+  .tv-exp { flex: none; width: 16px; height: 24px; display: grid; place-items: center; color: var(--fg-3); }
+  .tv-exp[data-exp] { cursor: pointer; }
+  .tv-exp[data-exp]:hover { color: var(--fg); }
+  .tv-exp .ci { font-size: 14px; transition: transform .12s ease; }
+  .tv-exp.open .ci { transform: rotate(90deg); }
+  .tv-ico { flex: none; font-size: 15px; color: var(--fg-2); }
+  .tv-row.status.loading .tv-ico { animation: tv-spin 1s linear infinite; }
+  @keyframes tv-spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .tv-row.status.loading .tv-ico { animation: none; } .tv-exp .ci { transition: none; } }
+  .tv-label { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .tv-empty { padding: 10px 12px; color: var(--fg-3); font-size: var(--fs-sm); }
+  .tv-status { font-family: var(--font-code); font-size: 11px; color: var(--fg-3); }
+  .tv-state { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .tv-state dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .tv-state dd { margin: 0; overflow-wrap: anywhere; }
+  .tv-state code { font-size: 11.5px; background: none; padding: 0; }
+  .tv-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 300px; overflow: auto; padding: 4px 0; font-size: 12px; }
+  .tv-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .tv-entry:first-child { background: var(--accent-wash); }
+  .tv-entry .in { font-weight: 600; color: var(--fg); }
+  .tv-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .tv-entry .msg::before { content: "→ "; color: var(--fg-3); }
+  .tv-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
+  .tv-keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--fg-3); }
+  .tv-keys kbd { font-family: var(--font-code); font-size: 10.5px; border: 1px solid var(--line-2); border-radius: 3px; padding: 0 4px; color: var(--fg-2); background: var(--panel); }
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+</style>
+</head>
+<body data-page="lists">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>목록과 트리 뷰</h1>
+      <p class="summary">luil의 목록은 셋이고, 트리 뷰는 따로 있는 컴포넌트가 아니라 두 목록의 모드다. 앱이 지금 보이는 노드만 깊이와 함께 펴서 넘기면 목록이 들여쓰기·삼각형·키보드·보조 기술을 맡는다. 고른 것, 펼친 것, 커서, 스크롤 위치는 모두 앱 상태다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>list_element.h</code>·<code>virtual_list_element.h</code>·<code>grouped_list_element.h</code>·<code>item_model.h</code>·<code>selection_model.h</code></dd></div>
+          <div><dt>실습</dt><dd>파일 트리 — 지연 로딩, 거르기·정렬, 여러 항목 선택, 키보드, 가상화</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="messaging.html">스레드 경계 메시징</a> · <a class="xref" href="input.html">입력과 초점</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>평평한 목록·트리 뷰·아주 큰 목록 가운데 어느 컴포넌트를 쓸지 고른다.</li>
+            <li>트리 뷰를 만들고, 펼침·지연 로딩·거르기·정렬을 앱 상태로 다룬다.</li>
+            <li>여러 항목 선택을 <code>selection_model.h</code>의 규칙으로 처리한다.</li>
+            <li>클릭·키·보조 기술이 각각 어떤 메시지를 내는지 알고 <code>handle</code>을 쓴다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 목록을 쓰나</h2>
+          <p class="lede">고르는 기준은 행 수가 아니라 계약이다. 모든 행을 tree에 세우는가, 창에 걸치는 행만 세우는가.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB84;</i><code>list_element</code></h4>
+            <ul>
+              <li>모든 행을 tree에 세운다. 행 하나하나가 Tab·화살표의 자리다.</li>
+              <li>단일 선택, 펼침 삼각형, 끌어서 순서 바꾸기, 우클릭 메뉴.</li>
+              <li>몇백 줄까지. 보조 기술의 형제 순회가 온전하다.</li>
+              <li>트리 모드에 ←/→·PageUp/Down이 없다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB86;</i><code>virtual_list_element</code></h4>
+            <ul>
+              <li>모델 전체를 값으로 받고, 창에 걸치는 행과 커서 행만 세운다.</li>
+              <li>자리는 목록 하나이고 키보드는 앱 상태인 <code>cursor</code>를 옮긴다.</li>
+              <li>←/→ 계층 키, Page, 여러 항목 선택, 두 번 누름, Enter 실행, 여러 항목 끌어 놓기, 격자 모드.</li>
+              <li>행이 많거나 위 기능이 필요하면 이것이다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB17;</i><code>grouped_list_element</code></h4>
+            <ul>
+              <li>그룹 머리행이 스크롤 중 창 위에 붙는 내용 컨테이너다.</li>
+              <li>스스로 흘리지 않는다. <code>scroll_view_element</code>의 내용으로 둔다.</li>
+              <li>선택·커서가 없다. 행은 앱이 짓는다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="prose">
+          <p><strong>트리 뷰는 두 목록의 모드다.</strong> 앱은 지금 보이는 노드만 깊이 우선으로 펴서 줄마다 <code>depth</code>와 <code>expansion</code>(<code>none</code>·<code>collapsed</code>·<code>expanded</code>)을 붙여 넘긴다. 접힌 가지의 자식은 담지 않는다. 그래서 라이브러리에는 트리 모델이 없고, 화살표는 화면 순서 그대로 돈다. 계층 모델을 줄로 펴는 일은 순수 함수 <code>flatten_tree</code>가 돕는다. 표(<code>table_element</code>)의 트리 열도 같은 가상 목록 위에 선다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>페이지 목록, 설정 항목처럼 짧은 단일 선택</td><td><code>list_element</code></td><td><a class="xref" href="#build-flat">평평한 목록</a></td></tr>
+              <tr><td>고정된 작은 트리 (폴더 몇 개)</td><td><code>list_element</code> + <code>set_expanded</code></td><td><a class="xref" href="#build-tree">트리 뷰 (작은 트리)</a></td></tr>
+              <tr><td>펼칠 때 자식을 불러오는 트리, ←/→ 키</td><td><code>virtual_list_element</code> + <code>flatten_tree</code></td><td><a class="xref" href="#build-lazy">트리 뷰 (지연 로딩)</a></td></tr>
+              <tr><td>Ctrl·Shift로 여러 개 고르기</td><td><code>virtual_list_element</code> + <code>selection_model.h</code></td><td><a class="xref" href="#build-select">선택</a></td></tr>
+              <tr><td>행마다 체크 박스 (세 상태)</td><td><code>table_element</code>의 <code>check_column</code></td><td><a class="xref" href="#build-check">체크 박스</a></td></tr>
+              <tr><td>끌어서 순서 바꾸기 / 폴더에 놓기</td><td><code>list_config::reorder</code> / <code>virtual_list_config::drag</code>·<code>drop</code></td><td><a class="xref" href="#build-drag">끌어 놓기</a></td></tr>
+              <tr><td>십만 줄 로그, 큰 계층</td><td><code>virtual_list_element</code> + <code>shared_items</code></td><td><a class="xref" href="#build-large">아주 큰 목록</a></td></tr>
+              <tr><td>"오늘·이번 주·지난" 같은 묶음 머리행</td><td><code>grouped_list_element</code></td><td><a class="xref" href="#build-grouped">그룹 머리행</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 값은 앱이, 의도는 목록이</h2>
+          <p class="lede">목록은 아무것도 기억하지 않는다. 앱이 준 값으로 tree를 짓고, 사용자의 몸짓을 앱의 메시지로 바꿔 돌려줄 뿐이다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>임자</th><th>목록에 싣는 자리</th></tr></thead>
+            <tbody>
+              <tr><td>항목 (키·이름·깊이·펼침·활성)</td><td>앱</td><td><code>items</code> · <code>shared_items</code></td></tr>
+              <tr><td>고른 키 / 여러 선택</td><td>앱</td><td><code>selected</code> · <code>selection</code></td></tr>
+              <tr><td>키보드 커서 (가상 목록만)</td><td>앱</td><td><code>cursor</code></td></tr>
+              <tr><td>펼친 가지의 집합</td><td>앱 (라이브러리는 줄마다의 <code>expansion</code>만 본다)</td><td><code>flatten_tree</code>의 <code>expanded</code></td></tr>
+              <tr><td>스크롤 위치</td><td>앱 (element는 범위 안으로 다듬기만 한다)</td><td><code>scroll_offset</code></td></tr>
+              <tr><td>키보드 초점, hover, 눌림, 끌기</td><td>input thread의 <code>interaction_controller</code></td><td>— (<code>interaction_snapshot</code>)</td></tr>
+              <tr><td>글자 탐색 질의</td><td>controller — 1초(<code>typeahead_reset_time</code>) 안에 친 글자를 잇는다</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>한 번의 클릭이 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>행을 누르고 같은 자리에서 뗀다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller가 게시된 tree로 hit test해 그 행의 <code>left_click</code> 액션을 실행한다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>액션이 앱이 준 factory(<code>select</code>·<code>pick</code>·<code>move</code>…)를 불러 <code>input_action</code>을 만든다. 보통 <code>make_app_action(intent)</code>로 싼 앱 메시지다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱의 <code>handle</code>이 메시지를 받아 고른 키·커서·펼친 집합을 고친다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>다음 <code>make_frame()</code>이 새 값으로 목록을 <strong>처음부터 다시 짓는다</strong>. 무엇이 바뀌었는지는 항목 키가 말한다.</span></div>
+          <div role="listitem"><span class="who">input · UI</span><span>controller가 새 tree를 받아 마지막 포인터 자리로 hover를 다시 찾고, UI thread가 그린다.</span></div>
+        </div>
+        <div class="prose">
+          <p>factory는 input thread(포인터·키)나 UI thread(보조 기술)에서 불린다. 그래서 앱 상태를 참조로 잡지 말고 <strong>값으로 캡처한 람다</strong>여야 한다. 가상 목록의 <code>build_row</code>는 tree를 짓는 동안 logic thread에서 불리고, 게시된 뒤에는 불리지 않는다. 앱 상태를 바꾸지 않는 순수 함수로 쓴다.</p>
+        </div>
+        <h3>키와 자리표</h3>
+        <div class="prose">
+          <ul>
+            <li>항목 키는 앱이 정하고 frame 사이에 안정해야 한다. 선택·커서·재정렬 메시지에 그대로 실린다.</li>
+            <li><code>list_element</code>의 행 id는 <code>{ list_row, key }</code>라 <strong>목록 owner가 들어가지 않는다</strong>. 같은 표면의 모든 <code>list_element</code> 사이에서 키가 유일해야 한다. 겹치면 <code>ui_tree::duplicate_ids()</code>에 나타난다.</li>
+            <li><code>virtual_list_element</code>의 행 id는 <code>virtual_list_row_id(owner, key)</code> — 목록 owner와 키 사이에 U+001F를 둔다. 키는 목록 <strong>안에서만</strong> 유일하면 된다.</li>
+          </ul>
+        </div>
+        <h3>계층: 깊이·부모·펼침</h3>
+        <div class="prose">
+          <ul>
+            <li>줄마다 <code>depth</code>(0이 뿌리)와 <code>expansion</code>만 있다. <strong>부모는 저장하지 않는다.</strong> 평탄화한 순서에서 앞쪽으로 처음 만나는 더 얕은 줄이 부모다. ←가 부모로 갈 때도, 보조 기술이 "n개 중 m번째"를 셀 때도 이 규칙을 쓴다.</li>
+            <li>펼침을 바꾸는 메시지는 둘이다. 뒤집기 <code>toggle(key)</code>는 <code>list_element</code>에만 있고, 절대값 <code>set_expanded(key, expanded)</code>는 두 목록에 다 있다. 보조 기술의 Expand·Collapse는 절대값만 탄다 — 오래된 발행본을 본 토글 둘이 두 번 뒤집기 때문이다.</li>
+          </ul>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">선택과 커서는 다르다</span><code>list_element</code>는 키보드 초점이 행에 서고, 화살표는 초점만 옮긴다. 선택은 클릭·Space·Enter가 내는 <code>select</code>로만 바뀐다. <code>virtual_list_element</code>는 초점이 목록 자신에 서고, "지금 어디"는 앱의 <code>cursor</code>다. 화살표가 선택까지 옮길지는 <code>move</code>를 받은 앱이 정한다.</div></div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 파일 트리">
+        <header class="sec-head">
+          <h2>실습: 파일 트리</h2>
+          <p class="lede"><code>virtual_list_element</code> + <code>flatten_tree</code> + <code>selection_model.h</code>로 만든 트리 뷰를 브라우저로 재현했다. 누를 때마다 목록이 낼 메시지와 앱이 바꾸는 상태가 오른쪽에 쌓인다.</p>
+        </header>
+        <div class="lw" data-title="파일 트리" data-surface="virtual_list_element · flatten_tree · item_selection" data-reset id="tv-lab">
+          <div class="lw-body tv-grid">
+            <div class="tv-side">
+              <div class="tv-tools">
+                <input type="search" data-tv="filter" placeholder="거르기 (예: list, md)" aria-label="이름으로 거르기 (tree_flatten_options::keep)">
+                <label title="tree_flatten_options::expand_matches"><input type="checkbox" data-tv="expm"> 찾는 동안 펼치기</label>
+                <select data-tv="sort" aria-label="형제 순서 (tree_flatten_options::less)">
+                  <option value="model">모델 순서</option>
+                  <option value="folders">폴더 먼저·이름순</option>
+                </select>
+                <label title="virtual_list_config::multiple_selection"><input type="checkbox" data-tv="multi"> 여러 항목 선택</label>
+              </div>
+              <div class="tv" data-tv="view" tabindex="0" role="tree" aria-label="파일 트리 (luil 재현)" data-keys><div class="tv-canvas" data-tv="canvas"></div></div>
+              <div class="tv-status" data-tv="status"></div>
+              <div class="tv-keys"><span><kbd>↑</kbd><kbd>↓</kbd> 커서</span><span><kbd>←</kbd><kbd>→</kbd> 접기·펴기·부모·첫 자식</span><span><kbd>Shift</kbd> 범위</span><span><kbd>Ctrl</kbd> 커서만</span><span><kbd>Ctrl</kbd>+<kbd>Space</kbd> 뒤집기</span><span><kbd>Ctrl</kbd>+<kbd>A</kbd></span><span><kbd>Enter</kbd> 실행</span><span>글자 찾기</span><span>두 번 누름</span><span>휠</span></div>
+            </div>
+            <div class="tv-panel">
+              <dl class="tv-state" data-tv="state" aria-label="앱 상태"></dl>
+              <div class="tv-log" data-tv="log" aria-live="polite" aria-label="메시지 기록"></div>
+            </div>
+          </div>
+          <div class="lw-foot">판정은 전부 원본을 옮긴 함수다 — <code>flatten_tree</code>·<code>tree_nodes_to_load</code>·<code>request_ledger</code>(<code>item_model.cpp</code>), <code>selection_pick</code>·<code>selection_move</code>·<code>selection_toggle</code>·<code>selection_select_all</code>·<code>selection_reconcile</code>(<code>selection_model.cpp</code>), 화살표·Page·Home/End·글자 찾기·←/→(<code>virtual_list_element.cpp</code>). 원본 C++을 컴파일한 대조기로 무작위 입력 4만여 건을 견주어 같음을 확인했다. <code>\\server\share</code>는 처음 펼칠 때 일부러 실패한다 — 실패 줄에서 Enter로 다시 시도한다. 불러오는 동안 접었다 펴면 옛 요청의 결과가 버려지는 것도 볼 수 있다. 그림은 같은 치수로 그린 재현이지 luil의 실제 렌더링이 아니다.</div>
+        </div>
+      </section>
+
+      <section class="sec" id="build-flat">
+        <header class="sec-head">
+          <h2>만들기: 평평한 목록</h2>
+          <p class="lede"><code>items</code>에 키·이름·아이콘을 넣고, 고른 키를 <code>selected</code>에 싣고, <code>select</code>를 단다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1174-1196" data-path="examples/demo_main.cpp" data-start="1174"><script type="text/plain">
+            // 사이드바 내용: 페이지를 오가는 배타 선택이다.
+            [[nodiscard]] std::unique_ptr<luil::ui_element> make_navigation() const
+            {
+                luil::list_config navigation {};
+                navigation.owner = u8"navigation";
+                navigation.row_height = 32.0f;
+                navigation.scroll_offset = navigation_scroll_;
+                navigation.scroll = [](const float delta) { return luil::make_app_action(navigation_scroll_intent { delta }); };
+                const auto add_page = [&navigation](const std::u8string_view key, std::u8string label) {
+                    const char32_t icon { key == page_overview ? luil::codicons::icon_rocket : (key == page_theme ? luil::codicons::icon_settings_gear : luil::codicons::icon_file) };
+                    navigation.items.push_back({ std::u8string { key }, std::move(label), icon });
+                };
+                for (const navigation_page& page : navigation_pages)
+                    add_page(page.key, std::u8string { page.label });
+                navigation.selected = page_;
+                navigation.select = [](const std::u8string& value) { return luil::make_app_action(navigate_intent { value }); };
+
+                luil::stack_config config {};
+                config.padding = luil::edge_insets::symmetric(8.0f, 4.0f);
+                auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"navigation" }, config) };
+                auto pages { std::make_unique<luil::list_element>(std::move(navigation)) };
+                pages->set_access_name(u8"페이지");
+                column->add_flexible(std::move(pages));
+</script></div>
+        <div class="prose">
+          <p>데모 셸의 페이지 목록이다. 앱은 <code>navigate_intent</code>를 받아 <code>page_</code>를 바꾸고, 다음 frame에 <code>navigation.selected = page_</code>로 다시 싣는다. 목록 자신은 무엇이 골라졌는지 기억하지 않는다.</p>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">빠뜨리면 조용히 사라지는 것</span><code>select</code>가 없으면 행이 눌리지 않을 뿐 아니라 <strong>Tab의 자리도 아니다</strong> — 키보드로 목록에 들어갈 수 없다. <code>scroll</code>이 없으면 스크롤 막대를 만들지 않는다. 둘 다 오류 없이 그렇게 된다.</div></div>
+      </section>
+
+      <section class="sec" id="build-tree">
+        <header class="sec-head">
+          <h2>만들기: 트리 뷰 (작은 트리)</h2>
+          <p class="lede">앱이 트리와 펼친 키 집합을 들고, 펼친 가지만 따라 내려가며 지금 보이는 줄만 <code>list_config::items</code>에 넣는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:35-57" data-path="examples/demo/lists_page.cpp" data-start="35"><script type="text/plain">
+        // tree view가 보여 주는 고정 트리다 (pre-order).
+        // 무엇이 펼쳐졌는지는 **앱 상태**이고, 목록에는 "지금 보이는 줄들"만 준다 —
+        // 그래서 라이브러리는 계층을 모른 채 들여쓰기만 그린다.
+        struct tree_node
+        {
+            std::u8string_view key {};
+            std::u8string_view label {};
+            int depth { 0 };
+            bool branch { false };
+        };
+
+        constexpr tree_node tree_nodes[] {
+            { u8"src", u8"src", 0, true },
+            { u8"src/ui", u8"ui", 1, true },
+            { u8"src/ui/list_element.cpp", u8"list_element.cpp", 2, false },
+            { u8"src/ui/ui_tree.cpp", u8"ui_tree.cpp", 2, false },
+            { u8"src/win32", u8"win32", 1, true },
+            { u8"src/win32/win32_window.cpp", u8"win32_window.cpp", 2, false },
+            { u8"docs", u8"docs", 0, true },
+            { u8"docs/list-view-design.md", u8"list-view-design.md", 1, false },
+            { u8"docs/components.md", u8"components.md", 1, false },
+            { u8"README.md", u8"README.md", 0, false },
+        };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:358-408" data-path="examples/demo/lists_page.cpp" data-start="358"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> lists_page::make_tree_panel(const float viewport_height)
+    {
+        // 펼친 가지만 따라 내려가며 **지금 보이는 줄들**을 편다.
+        // 접힌 가지의 자식은 아예 담지 않으므로 라이브러리는 계층을 몰라도 된다.
+        luil::list_config config {};
+        config.owner = u8"tree";
+        int hidden_below { -1 };
+        for (const tree_node& node : tree_nodes)
+        {
+            if (hidden_below >= 0 && node.depth > hidden_below)
+                continue;
+            hidden_below = -1;
+            const std::u8string key { node.key };
+            const bool expanded { node.branch && is_expanded(key) };
+            luil::list_item item {};
+            item.key = key;
+            item.label = std::u8string { node.label };
+            item.icon = node.branch ? (expanded ? luil::codicons::icon_folder_opened : luil::codicons::icon_folder) : luil::codicons::icon_file;
+            item.depth = node.depth;
+            if (node.branch)
+                item.expansion = expanded ? luil::list_expansion::expanded : luil::list_expansion::collapsed;
+            config.items.push_back(std::move(item));
+            if (node.branch && expanded == false)
+                hidden_below = node.depth;
+        }
+
+        const float content_height { static_cast<float>(config.items.size()) * tree_row_height };
+        tree_scroll_ = luil::clamp_scroll(content_height, viewport_height, tree_scroll_);
+        config.row_height = tree_row_height;
+        config.scroll_offset = tree_scroll_;
+        config.selected = tree_selected_;
+        config.select = [](const std::u8string& key) { return luil::make_app_action(tree_select_intent { key }); };
+        // 절대 상태 factory 하나로 삼각형 클릭과 보조 기술의 펼치기가 함께 선다.
+        config.set_expanded = [](const std::u8string& key, const bool expanded) { return luil::make_app_action(tree_expand_intent { key, expanded }); };
+        config.scroll = [](const float delta) { return luil::make_app_action(tree_scroll_intent { delta }); };
+        config.scroll_to = [](const float offset) { return luil::make_app_action(tree_scroll_to_intent { offset }); };
+
+        luil::stack_config inset {};
+        inset.padding = luil::edge_insets::all(panel_inset);
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tree" }, inset) };
+        auto tree { std::make_unique<luil::list_element>(std::move(config)) };
+        tree->set_access_name(u8"접는 트리");
+        column->add_flexible(std::move(tree));
+
+        luil::panel_config surface_panel {};
+        surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
+        surface_panel.corner_radius = 6.0f;
+        auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_list_panel, u8"tree" }, std::move(surface_panel)) };
+        panel->set_content(std::move(column));
+        return panel;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="362-369,380-381" data-title="숨긴 깊이">펼친 가지만 따라 내려간다. 접힌 가지를 만나면 그 깊이를 적어 두고, 더 깊은 줄은 건너뛴다. 이것이 평탄화의 전부다.</li>
+            <li data-lines="370-379" data-title="줄 하나">키·이름·아이콘·깊이를 넣는다. 가지면 <code>expansion</code>에 펼침 상태를 넣는다. 펼친 폴더는 아이콘도 앱이 바꾼다.</li>
+            <li data-lines="384-387" data-title="스크롤 값 다듬기">tree를 짓기 <strong>전에</strong> <code>clamp_scroll</code>로 앱의 값을 다듬는다. 그래야 창·막대·행 자리가 한 값을 본다.</li>
+            <li data-lines="388-393" data-title="고른 키와 메시지">고른 키를 싣고 메시지 넷을 단다: 고르기, 펼침(절대값), 스크롤 두 가지. <code>set_expanded</code> 하나로 삼각형 클릭과 보조 기술의 펼치기가 함께 선다.</li>
+            <li data-lines="395-407" data-title="조립">목록을 패널에 담는다. 이름(<code>set_access_name</code>)은 보조 기술이 읽는 목록의 이름이다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:196-211" data-path="examples/demo/lists_page.cpp" data-start="196"><script type="text/plain">
+        if (const auto* const select { message.get<tree_select_intent>() }; select != nullptr)
+        {
+            tree_selected_ = select->key;
+            return true;
+        }
+        if (const auto* const expand { message.get<tree_expand_intent>() }; expand != nullptr)
+        {
+            // 펼침은 키의 집합이다. 목표 상태 그대로 넣고 뺀다 — 같은 메시지가
+            // 겹쳐 와도 결과가 같다.
+            const auto found { std::find(tree_expanded_.begin(), tree_expanded_.end(), expand->key) };
+            if (expand->expanded && found == tree_expanded_.end())
+                tree_expanded_.push_back(expand->key);
+            else if (expand->expanded == false && found != tree_expanded_.end())
+                tree_expanded_.erase(found);
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>펼침은 키의 집합이고, 목표 상태 그대로 넣고 뺀다. 같은 메시지가 겹쳐 와도 결과가 같다(멱등). <code>toggle</code>을 쓰면 오래된 frame을 보고 낸 두 번의 클릭이 두 번 뒤집는다.</p>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">이 모드에는 ←/→가 없다</span><code>list_element</code>의 트리는 그리기와 삼각형만 트리다. 펼치고 접는 길은 삼각형 클릭과 보조 기술의 Expand·Collapse뿐이고, ←/→는 세로 묶음의 키가 아니라 앱 정책으로 흐른다. 키보드로 계층을 다루려면 다음 조각의 가상 목록을 쓴다.</div></div>
+      </section>
+
+      <section class="sec" id="build-lazy">
+        <header class="sec-head">
+          <h2>만들기: 트리 뷰 (지연 로딩, ←/→ 키)</h2>
+          <p class="lede">앱이 <code>tree_node</code> 계층과 펼친 키 집합을 들고, frame마다 <code>flatten_tree</code> → <code>tree_row_items</code>로 줄을 편다. <code>set_expanded</code>를 달면 ←/→가 계층 키가 된다.</p>
+        </header>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1141-1196" data-path="examples/demo/workbench_page.cpp" data-start="1141"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> workbench_page::make_tree_panel()
+    {
+        luil::tree_flatten_options options {};
+        options.loading_label = u8"불러오는 중…";
+        options.failed_label = u8"목록을 가져오지 못했습니다";
+        const std::vector<luil::tree_row> rows { luil::flatten_tree(repository_, expanded_, options) };
+
+        luil::virtual_list_config list {};
+        list.owner = u8"workbench-tree";
+        list.items = luil::tree_row_items(rows);
+        list.row_height = 22.0f;
+        list.selected = tree_cursor_;
+        list.cursor = tree_cursor_;
+        list.scroll_offset = tree_scroll_;
+        list.select = [](const std::u8string& key) { return luil::make_app_action(workbench_tree_cursor_intent { key }); };
+        list.move = [](const std::u8string& key) { return luil::make_app_action(workbench_tree_cursor_intent { key }); };
+        list.activate = [](const std::u8string& key) { return luil::make_app_action(workbench_tree_activate_intent { key }); };
+        list.set_expanded = [](const std::u8string& key, const bool expanded) { return luil::make_app_action(workbench_tree_expand_intent { key, expanded }); };
+        list.scroll = [](const float delta) { return luil::make_app_action(workbench_tree_scroll_intent { delta }); };
+        // 불러오는 중 줄과 실패 줄만 앱이 짓는다: 스피너와 안내, 사유와 다시 시도 링크다. 나머지 줄은 목록의 기본 행(이름 한 줄)이다.
+        list.build_row = [](const luil::virtual_list_item& item, std::size_t, bool) -> std::unique_ptr<luil::ui_element> {
+            if (item.key.ends_with(luil::tree_loading_suffix))
+            {
+                luil::stack_config config {};
+                config.direction = luil::stack_direction::row;
+                config.spacing = 6.0f;
+                config.padding = luil::edge_insets::symmetric(8.0f, 0.0f);
+                config.cross_alignment = luil::stack_alignment::center;
+                auto row { std::make_unique<luil::stack_element>(workbench_id(u8"loading-row:" + item.key), config) };
+                row->add(std::make_unique<luil::spinner_element>(workbench_id(u8"loading-spinner:" + item.key), luil::spinner_config { .name = item.label, .size = 12.0f }),
+                    luil::stack_item { .length = 14.0f, .cross_length = 14.0f });
+                row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"loading-text:" + item.key), luil::label_config { .text = item.label }));
+                return row;
+            }
+            const std::u8string node { failed_node(item.key) };
+            if (node.empty())
+                return nullptr;
+            luil::stack_config config {};
+            config.direction = luil::stack_direction::row;
+            config.spacing = 8.0f;
+            config.padding = luil::edge_insets::symmetric(8.0f, 0.0f);
+            config.cross_alignment = luil::stack_alignment::center;
+            auto row { std::make_unique<luil::stack_element>(workbench_id(u8"failed:" + node), config) };
+            row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"failed-text:" + node), luil::label_config { .text = item.label, .color = luil::label_color_role::error }));
+            auto retry { std::make_unique<luil::text_button_element>(workbench_id(u8"retry:" + node), luil::text_button_config { .text = u8"다시 시도", .visual = luil::text_button_visual::link }) };
+            retry->set_action(luil::ui_trigger::left_click, luil::make_message_action(workbench_tree_retry_intent { node }));
+            row->add_fit(std::move(retry));
+            return row;
+        };
+
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(8.0f);
+        config.spacing = 6.0f;
+        auto column { std::make_unique<luil::stack_element>(workbench_id(u8"tree-column"), config) };
+        column->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"tree-title"), luil::label_config { .text = u8"저장소", .color = luil::label_color_role::primary }));
+        column->add_flexible(std::make_unique<luil::virtual_list_element>(std::move(list)));
+</script></div>
+        <div class="prose">
+          <p>저장소 계층 패널이다. 노드 줄은 목록의 기본 행(이름 한 줄)이고, 상태 줄(불러오는 중·실패)만 앱이 <code>build_row</code>로 짓는다 — 상태 줄의 키는 <code>노드 키 + U+001F + loading/failed</code>라서 <code>tree_loading_suffix</code>로 가린다. <code>selected</code>와 <code>cursor</code>에 같은 키를 싣는다. 화살표가 곧 선택인 트리다.</p>
+        </div>
+        <h3>펼치면 불러오고, 늦은 결과는 버린다</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:594-637" data-path="examples/demo/workbench_page.cpp" data-start="594"><script type="text/plain">
+        if (const auto* const expand { message.get<workbench_tree_expand_intent>() }; expand != nullptr)
+        {
+            if (expand->expanded)
+            {
+                expanded_.insert(expand->key);
+                start_loads(now);
+                return true;
+            }
+            expanded_.erase(expand->key);
+            // 묻는 중에 접었으면 요청을 거둔다. 다시 펼치면 새로 묻고, 옛 요청의 결과는 버려진다.
+            if (luil::tree_node* const node { find_node(expand->key) }; node != nullptr && node->load == luil::node_load::loading)
+            {
+                loads_.cancel(expand->key);
+                node->load = luil::node_load::unloaded;
+            }
+            return true;
+        }
+        if (const auto* const cursor { message.get<workbench_tree_cursor_intent>() }; cursor != nullptr)
+        {
+            tree_cursor_ = cursor->key;
+            return true;
+        }
+        const auto retry = [this, now](const std::u8string& key) {
+            luil::tree_node* const node { find_node(key) };
+            if (node == nullptr || node->load != luil::node_load::failed)
+                return;
+            node->load = luil::node_load::unloaded;
+            start_loads(now);
+        };
+        if (const auto* const activate { message.get<workbench_tree_activate_intent>() }; activate != nullptr)
+        {
+            retry(failed_node(activate->key));
+            return true;
+        }
+        if (const auto* const again { message.get<workbench_tree_retry_intent>() }; again != nullptr)
+        {
+            retry(again->key);
+            return true;
+        }
+        if (const auto* const scroll { message.get<workbench_tree_scroll_intent>() }; scroll != nullptr)
+        {
+            tree_scroll_ = std::max(0.0f, tree_scroll_ + scroll->delta);
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:292-303" data-path="examples/demo/workbench_page.cpp" data-start="292"><script type="text/plain">
+    void workbench_page::start_loads(const std::chrono::steady_clock::time_point now)
+    {
+        // 펼쳤지만 묻지 않은 폴더마다 표를 받아 요청을 낸다. 노드는 "묻는 중"이 되고, 평탄화가 그 아래에 불러오는 중 줄을 둔다.
+        for (const std::u8string& key : luil::tree_nodes_to_load(repository_, expanded_))
+        {
+            luil::tree_node* const node { find_node(key) };
+            if (node == nullptr)
+                continue;
+            node->load = luil::node_load::loading;
+            pending_.push_back({ key, loads_.issue(key), now + load_delay });
+        }
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:316-340" data-path="examples/demo/workbench_page.cpp" data-start="316"><script type="text/plain">
+    void workbench_page::tick(const std::chrono::steady_clock::time_point now)
+    {
+        std::vector<pending_load> waiting {};
+        for (pending_load& load : pending_)
+        {
+            if (load.due > now)
+            {
+                waiting.push_back(std::move(load));
+                continue;
+            }
+            // 거둔 요청이나 같은 폴더를 다시 물은 뒤의 옛 요청이면 결과를 버린다.
+            if (loads_.settle(load.key, load.token) == false)
+                continue;
+            luil::tree_node* const node { find_node(load.key) };
+            if (node == nullptr)
+                continue;
+            if (load.key == u8"archive" && archive_attempts_++ == 0)
+            {
+                node->load = luil::node_load::failed;
+                continue;
+            }
+            node->children = children_for(load.key);
+            node->load = luil::node_load::loaded;
+        }
+        pending_ = std::move(waiting);
+</script></div>
+        <div class="prose">
+          <ol>
+            <li><code>set_expanded(key, true)</code>를 받으면 펼친 집합에 넣고 <code>tree_nodes_to_load</code>를 부른다. 펼쳤지만 아직 묻지 않은(<code>unloaded</code>) 노드들의 키가 나온다. 접힌 가지 아래는 보지 않는다.</li>
+            <li>키마다 <code>request_ledger::issue</code>로 표를 받고 노드를 <code>loading</code>으로 바꾼다. 평탄화가 그 아래에 "불러오는 중" 줄을 세운다 — 비활성이라 고를 수 없다.</li>
+            <li>결과가 오면 <code>settle(key, token)</code>이 그 키의 <strong>마지막</strong> 표인지 가른다. 그사이 접었다 다시 펼쳤으면 옛 표는 거짓이라 버린다.</li>
+            <li>실패하면 <code>failed</code>로 둔다. 실패 줄은 <strong>활성</strong>이다 — 키보드가 그 줄에 서서 Enter(<code>activate</code>)로 다시 시도할 수 있어야 하기 때문이다.</li>
+            <li>묻는 중에 접으면 <code>cancel</code>로 요청을 거두고 노드를 <code>unloaded</code>로 돌린다.</li>
+          </ol>
+        </div>
+        <h3>←/→는 test가 잠근 규칙대로</h3>
+        <div class="code" data-lang="cpp" data-src="tests/virtual_tree_tests.cpp:137-181" data-path="tests/virtual_tree_tests.cpp" data-start="137"><script type="text/plain">
+TEST_CASE("Left and right walk the hierarchy", "[ui][list][tree][keys]")
+{
+    SECTION("Left collapses an expanded branch")
+    {
+        const auto actions { press(u8"src", luil::key_code::arrow_left) };
+        REQUIRE(message_at<expand_intent>(actions, 0) != nullptr);
+        REQUIRE(message_at<expand_intent>(actions, 0)->expanded == false);
+    }
+
+    SECTION("Left on a leaf or a collapsed branch goes to the parent")
+    {
+        const auto from_leaf { press(u8"src/main.cpp", luil::key_code::arrow_left) };
+        REQUIRE(message_at<move_intent>(from_leaf, 0) != nullptr);
+        REQUIRE(message_at<move_intent>(from_leaf, 0)->key == u8"src");
+        const auto from_branch { press(u8"src/ui", luil::key_code::arrow_left) };
+        REQUIRE(message_at<move_intent>(from_branch, 0) != nullptr);
+        REQUIRE(message_at<move_intent>(from_branch, 0)->key == u8"src");
+    }
+
+    SECTION("Right expands a collapsed branch and enters an expanded one")
+    {
+        const auto expanded { press(u8"src/ui", luil::key_code::arrow_right) };
+        REQUIRE(message_at<expand_intent>(expanded, 0) != nullptr);
+        REQUIRE(message_at<expand_intent>(expanded, 0)->expanded);
+        const auto entered { press(u8"src", luil::key_code::arrow_right) };
+        REQUIRE(message_at<move_intent>(entered, 0) != nullptr);
+        REQUIRE(message_at<move_intent>(entered, 0)->key == u8"src/ui");
+    }
+
+    SECTION("Right on an expanded empty branch is swallowed")
+    {
+        recording_policy policy {};
+        REQUIRE(press(u8"docs", luil::key_code::arrow_right, &policy).empty());
+        REQUIRE(policy.keys == 0);
+    }
+
+    SECTION("Keys with nowhere to go flow up")
+    {
+        recording_policy policy {};
+        static_cast<void>(press(u8"README.md", luil::key_code::arrow_left, &policy));
+        REQUIRE(policy.keys == 1);
+        static_cast<void>(press(u8"README.md", luil::key_code::arrow_right, &policy));
+        REQUIRE(policy.keys == 2);
+    }
+}
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>커서가 선 줄</th><th>←</th><th>→</th></tr></thead>
+            <tbody>
+              <tr><td>펼친 가지</td><td><code>set_expanded(key, false)</code></td><td>첫 자식으로 커서 이동. 자식이 없으면(빈 폴더) 키만 삼킨다</td></tr>
+              <tr><td>접힌 가지</td><td>부모로 이동. 깊이 0이면 소비하지 않는다</td><td><code>set_expanded(key, true)</code></td></tr>
+              <tr><td>잎</td><td>부모로 이동. 깊이 0이면 소비하지 않는다</td><td>소비하지 않는다 (위로 흐른다 — 표에서는 가로 스크롤)</td></tr>
+              <tr><td>Ctrl·Shift와 함께</td><td colspan="2">계층 키가 아니다. 위로 흐른다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">커서가 든 가지를 접으면</span>라이브러리는 커서를 고치지 않는다. 커서 키가 모델에서 사라지면 목록은 첫 활성 항목을 커서로 보는데, 앱 상태는 사라진 키를 가리켜 둘이 어긋난다. 접는 메시지를 받은 앱이 커서를 그 가지로 올리는 것이 안전하다 — <a class="xref" href="#build-large">아주 큰 목록</a>의 예가 그렇게 한다.</div></div>
+      </section>
+
+      <section class="sec" id="build-select">
+        <header class="sec-head">
+          <h2>만들기: 단일 선택과 여러 선택</h2>
+          <p class="lede">단일 선택은 앱이 키 하나를 든다. 여러 선택은 <code>item_selection</code>을 들고 <code>selection_model.h</code>의 순수 함수로 다음 값을 계산한다.</p>
+        </header>
+        <h3>커서와 선택을 가른 단일 선택</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:467-486" data-path="examples/demo/lists_page.cpp" data-start="467"><script type="text/plain">
+        luil::virtual_list_config config {};
+        config.owner = u8"log";
+        // 모델 **전체**를 넘긴다. 창에 걸치지 않는 항목도 담아야 Home/End와 글자
+        // 탐색이 화면이 아니라 모델의 끝까지 간다.
+        config.shared_items = log_items_;
+        config.selected = log_selected_;
+        config.cursor = log_cursor_;
+        config.row_height = log_grid_ ? log_tile_height : log_row_height;
+        config.columns = log_grid_ ? log_grid_columns : 0;
+        config.scroll_offset = log_scroll_;
+        // 기본 행은 이름 한 줄이다. 색인 badge와 오른쪽 보조 칸은 앱의 것이라
+        // 여기서 짓는다 (그 둘 말고는 전부 목록이 쥔다).
+        config.build_row = make_log_row;
+        config.select = [](const std::u8string& key) { return luil::make_app_action(log_select_intent { key }); };
+        config.double_click = [](const std::u8string& key) { return luil::make_app_action(log_open_intent { key }); };
+        // `move`가 없으면 목록은 Tab의 자리조차 아니다 — 커서가 앱 상태라
+        // 라이브러리가 고칠 수 없고, 옮길 길이 없는 화살표는 아무 일도 하지 않는다.
+        config.move = [](const std::u8string& key) { return luil::make_app_action(log_cursor_intent { key }); };
+        config.scroll = [](const float delta) { return luil::make_app_action(log_scroll_intent { delta }); };
+        config.scroll_to = [](const float offset) { return luil::make_app_action(log_scroll_to_intent { offset }); };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:217-233" data-path="examples/demo/lists_page.cpp" data-start="217"><script type="text/plain">
+        if (const auto* const select { message.get<log_select_intent>() }; select != nullptr)
+        {
+            // 고르는 것이 커서도 함께 옮긴다. 목록은 누름에 `select`만 내므로,
+            // 여기서 커서를 두고 오면 다음 화살표가 아까 서 있던 자리에서 이어져
+            // 방금 누른 줄에서 달아난다.
+            log_selected_ = select->key;
+            log_cursor_ = select->key;
+            return true;
+        }
+        if (const auto* const cursor { message.get<log_cursor_intent>() }; cursor != nullptr)
+        {
+            // 화살표·Page·Home/End·글자는 **커서만** 옮긴다.
+            // 훑는 것과 고르는 것을 가른 쪽을 이 페이지가 고른 것이고, 그 선택이
+            // 앱의 것이라 element는 옮길 키만 실어 보낸다.
+            log_cursor_ = cursor->key;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>화살표·Page·Home/End·글자는 <code>move</code>를 내고, 이 앱은 커서만 옮긴다. 누르면 <code>select</code>가 오고 고른 것과 커서를 함께 옮긴다. 화살표가 곧 선택인 목록을 원하면 <code>move</code>를 받을 때 선택도 옮기면 된다 — 정하는 것은 앱이다.</p>
+        </div>
+        <h3>여러 선택: 목록 설정과 handle</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1214-1227" data-path="examples/demo/workbench_page.cpp" data-start="1214"><script type="text/plain">
+        luil::virtual_list_config& rows { table.rows };
+        rows.items = change_items();
+        rows.row_height = 24.0f;
+        rows.multiple_selection = true;
+        rows.selection = selection_.keys;
+        rows.cursor = selection_.cursor;
+        rows.scroll_offset = changes_scroll_;
+        rows.scroll = [](const float delta) { return luil::make_app_action(workbench_change_scroll_intent { delta }); };
+        rows.pick = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(workbench_change_pick_intent { key, context }); };
+        rows.move_with = [](const std::u8string& key, const luil::virtual_list_move_context& context) { return luil::make_app_action(workbench_change_move_intent { key, context }); };
+        rows.toggle_at_cursor = [](const std::u8string& key) { return luil::make_app_action(workbench_change_toggle_intent { key }); };
+        rows.select_all = []() { return luil::make_app_action(workbench_change_select_all_intent {}); };
+        rows.double_click = [](const std::u8string& key) { return luil::make_app_action(workbench_change_check_intent { key }); };
+        rows.context_menu = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(workbench_menu_intent { key, context.x, context.y }); };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:639-658" data-path="examples/demo/workbench_page.cpp" data-start="639"><script type="text/plain">
+        if (const auto* const pick { message.get<workbench_change_pick_intent>() }; pick != nullptr)
+        {
+            selection_ = luil::selection_pick(selection_, change_items(), pick->key, pick->context);
+            return true;
+        }
+        if (const auto* const move { message.get<workbench_change_move_intent>() }; move != nullptr)
+        {
+            selection_ = luil::selection_move(selection_, change_items(), move->key, move->context);
+            return true;
+        }
+        if (const auto* const toggle { message.get<workbench_change_toggle_intent>() }; toggle != nullptr)
+        {
+            selection_ = luil::selection_toggle(selection_, change_items(), toggle->key);
+            return true;
+        }
+        if (message.get<workbench_change_select_all_intent>() != nullptr)
+        {
+            selection_ = luil::selection_select_all(selection_, change_items());
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>변경 표의 본문(<code>table_config::rows</code>)이 바로 <code>virtual_list_config</code>라서, 표의 행 설정이 그대로 목록의 여러 선택 설정이다. 표가 아닌 목록에 같은 규칙을 단 예는 저장소에 없어 아래에 묶어 썼다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="여러 선택 목록 하나 (직접 작성)" data-compile="pre-select"><script type="text/plain">
+struct photo_pick_intent
+{
+    std::u8string key {};
+    luil::ui_action_context context {};
+};
+struct photo_move_intent
+{
+    std::u8string key {};
+    luil::virtual_list_move_context context {};
+};
+struct photo_toggle_intent
+{
+    std::u8string key {};
+};
+struct photo_select_all_intent
+{
+};
+struct photo_scroll_intent
+{
+    float delta { 0.0f };
+};
+
+class photo_list
+{
+public:
+    // logic thread가 받은 메시지 하나다. 다음 선택은 selection_model.h의 순수 함수가 계산한다.
+    bool handle(const luil::app_message& message)
+    {
+        if (const auto* const pick { message.get<photo_pick_intent>() }; pick != nullptr)
+            selection_ = luil::selection_pick(selection_, items_, pick->key, pick->context);
+        else if (const auto* const move { message.get<photo_move_intent>() }; move != nullptr)
+            selection_ = luil::selection_move(selection_, items_, move->key, move->context);
+        else if (const auto* const toggle { message.get<photo_toggle_intent>() }; toggle != nullptr)
+            selection_ = luil::selection_toggle(selection_, items_, toggle->key);
+        else if (message.get<photo_select_all_intent>() != nullptr)
+            selection_ = luil::selection_select_all(selection_, items_);
+        else if (const auto* const scroll { message.get<photo_scroll_intent>() }; scroll != nullptr)
+            scroll_ += scroll->delta;
+        else
+            return false;
+        return true;
+    }
+
+    // 모델이 바뀌면(거르기·정렬·삭제) 옛 모델과 새 모델로 선택을 맞춘다.
+    void replace_items(std::vector<luil::virtual_list_item> items)
+    {
+        const std::vector<luil::virtual_list_item> previous { std::move(items_) };
+        items_ = std::move(items);
+        selection_ = luil::selection_reconcile(selection_, previous, items_);
+    }
+
+    [[nodiscard]] std::unique_ptr<luil::virtual_list_element> build(const float viewport_height)
+    {
+        scroll_ = luil::clamp_scroll(luil::virtual_list_content_height(items_, 24.0f), viewport_height, scroll_);
+        luil::virtual_list_config config {};
+        config.owner = u8"photos";
+        config.items = items_;
+        config.multiple_selection = true;
+        config.selection = selection_.keys;
+        config.cursor = selection_.cursor;
+        config.scroll_offset = scroll_;
+        config.pick = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(photo_pick_intent { key, context }); };
+        config.move_with = [](const std::u8string& key, const luil::virtual_list_move_context& context) { return luil::make_app_action(photo_move_intent { key, context }); };
+        config.toggle_at_cursor = [](const std::u8string& key) { return luil::make_app_action(photo_toggle_intent { key }); };
+        config.select_all = [] { return luil::make_app_action(photo_select_all_intent {}); };
+        config.scroll = [](const float delta) { return luil::make_app_action(photo_scroll_intent { delta }); };
+        return std::make_unique<luil::virtual_list_element>(std::move(config));
+    }
+
+private:
+    std::vector<luil::virtual_list_item> items_ {};
+    luil::item_selection selection_ {};
+    float scroll_ { 0.0f };
+};
+</script></div>
+        <script type="text/plain" id="pre-select" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/layout_metrics.h"
+#include "luil/ui/selection_model.h"
+#include "luil/ui/virtual_list_element.h"
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <h3>규칙 한 벌: 기준점·범위·뒤집기</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>몸짓</th><th>고른 것</th><th>기준점</th><th>커서</th></tr></thead>
+            <tbody>
+              <tr><td>누름 · 이동 (수식 키 없음)</td><td>그것 하나</td><td>그리로</td><td>그리로</td></tr>
+              <tr><td>Ctrl+누름</td><td>그것을 뒤집는다</td><td>그리로</td><td>그리로</td></tr>
+              <tr><td>Shift+누름 · Shift+이동</td><td>기준점부터 그것까지만</td><td>그대로</td><td>그리로</td></tr>
+              <tr><td>Ctrl+Shift+누름 · 이동</td><td>지금 것에 기준점~그것을 더한다</td><td>그대로</td><td>그리로</td></tr>
+              <tr><td>Ctrl+이동</td><td>그대로</td><td>그대로</td><td>그리로</td></tr>
+              <tr><td>Ctrl+Space (<code>toggle_at_cursor</code>)</td><td>커서 항목을 뒤집는다</td><td>커서로</td><td>그대로</td></tr>
+              <tr><td>Ctrl+A (<code>select_all</code>)</td><td>활성 항목 전부</td><td>그대로</td><td>그대로</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>비활성 항목은 범위 안에 있어도 고르지 않는다. 고른 키는 언제나 <strong>모델 순서</strong>다 — 같은 선택이 언제나 같은 값이라 비교와 시험이 쉽다.</li>
+            <li>기준점이 모델에 없으면 커서를, 커서도 없으면 옮겨 간 자리를 기준점으로 쓰고 그 키를 <code>anchor</code>에 다시 적는다.</li>
+            <li>모델이 바뀌면 <code>selection_reconcile(selection, previous, items)</code>: 없거나 비활성이 된 키는 빠지고, 사라진 커서는 옛 모델에서 <strong>뒤쪽</strong>으로 가장 가까운 남은 항목으로(뒤에 없으면 앞쪽으로) 간다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/keyboard_selection_tests.cpp:273-283" data-path="tests/keyboard_selection_tests.cpp" data-start="273"><script type="text/plain">
+TEST_CASE("The selection helpers turn list messages into the next selection", "[ui][list][selection]")
+{
+    // 앱이 하는 일 전체다: 메시지를 받아 도우미로 다음 값을 계산한다.
+    const std::vector<luil::virtual_list_item> items { make_items(8) };
+    luil::item_selection selection { u8"item-2", u8"item-2", { u8"item-2" } };
+    selection = luil::selection_move(selection, items, u8"item-3", { luil::value_step::increase, true, false });
+    selection = luil::selection_move(selection, items, u8"item-4", { luil::value_step::increase, true, false });
+    REQUIRE(selection.keys == std::vector<std::u8string> { u8"item-2", u8"item-3", u8"item-4" });
+    REQUIRE(selection.anchor == u8"item-2");
+    REQUIRE(selection.cursor == u8"item-4");
+}
+</script></div>
+      </section>
+
+      <section class="sec" id="build-check">
+        <header class="sec-head">
+          <h2>만들기: 행의 체크 박스</h2>
+          <p class="lede">목록 설정에는 체크 칸이 없다. 행마다 체크 박스를 두는 라이브러리의 길은 표(<code>table_element</code>)의 체크 열이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1243-1248" data-path="examples/demo/workbench_page.cpp" data-start="1243"><script type="text/plain">
+        table.check_column = u8"path";
+        table.check_state_of = [changes](const luil::virtual_list_item& row, std::size_t) {
+            const auto found { std::find_if(changes.begin(), changes.end(), [&row](const change& item) { return item.path == row.key; }) };
+            return found != changes.end() && found->staged ? luil::check_state::checked : luil::check_state::unchecked;
+        };
+        table.toggle_check = [](const std::u8string& key) { return luil::make_app_action(workbench_change_check_intent { key }); };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:659-664" data-path="examples/demo/workbench_page.cpp" data-start="659"><script type="text/plain">
+        if (const auto* const check { message.get<workbench_change_check_intent>() }; check != nullptr)
+        {
+            if (const auto found { find_change(check->key) }; found != changes_.end())
+                stage_changes(u8"스테이지 바꿈", { found->path }, found->staged == false);
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>상태는 켬·끔·일부(<code>check_state::mixed</code>) 셋이고, 다음 상태는 앱이 정한다. 일부를 누르면 보통 켬이다.</li>
+            <li>체크 박스는 Tab의 자리가 아니다. 눌러도 초점이 본문 목록에 남는다.</li>
+            <li>Space는 커서 행의 <code>toggle_check</code>다. 단, 본문이 <code>rows.activate</code>를 쓰면 Space는 실행 키라서 체크까지 오지 않는다.</li>
+            <li><strong>라이브러리는 체크를 위아래로 전파하지 않는다.</strong> 폴더의 일부 상태는 앱이 <code>aggregate_check</code>로 계산한다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/check_element_tests.cpp:133-148" data-path="tests/check_element_tests.cpp" data-start="133"><script type="text/plain">
+TEST_CASE("A parent check aggregates its children", "[ui][check]")
+{
+    using luil::check_state;
+    REQUIRE(luil::aggregate_check({}) == check_state::unchecked);
+    const std::vector<check_state> all_on { check_state::checked, check_state::checked };
+    REQUIRE(luil::aggregate_check(all_on) == check_state::checked);
+    const std::vector<check_state> all_off { check_state::unchecked, check_state::unchecked };
+    REQUIRE(luil::aggregate_check(all_off) == check_state::unchecked);
+    const std::vector<check_state> some { check_state::checked, check_state::unchecked };
+    REQUIRE(luil::aggregate_check(some) == check_state::mixed);
+    // 일부 상태인 자식이 하나라도 있으면 부모도 일부다 (손주가 섞였다).
+    const std::vector<check_state> nested { check_state::checked, check_state::mixed };
+    REQUIRE(luil::aggregate_check(nested) == check_state::mixed);
+    const std::vector<check_state> lone_mixed { check_state::mixed };
+    REQUIRE(luil::aggregate_check(lone_mixed) == check_state::mixed);
+}
+</script></div>
+        <div class="code" data-lang="cpp" data-label="계층 위의 세 상태 집계 (직접 작성)" data-compile="pre-check"><script type="text/plain">
+// 잎은 켠 집합에 있으면 켜짐이고, 가지는 자식들의 상태를 모은다 (aggregate_check).
+// 결과를 키마다 적어 두면 표의 check_state_of가 행 키로 읽는다.
+luil::check_state collect_checks(const luil::tree_node& node, const std::unordered_set<std::u8string>& checked, std::unordered_map<std::u8string, luil::check_state>& states)
+{
+    luil::check_state state { checked.contains(node.key) ? luil::check_state::checked : luil::check_state::unchecked };
+    if (node.children.empty() == false)
+    {
+        std::vector<luil::check_state> children {};
+        children.reserve(node.children.size());
+        for (const luil::tree_node& child : node.children)
+            children.push_back(collect_checks(child, checked, states));
+        state = luil::aggregate_check(children);
+    }
+    states[node.key] = state;
+    return state;
+}
+
+// 체크 칸을 눌렀다 (toggle_check(행 키)). 가지를 누르면 그 아래 잎 전부가 같은 값이 된다.
+void set_checked(const luil::tree_node& node, const bool on, std::unordered_set<std::u8string>& checked)
+{
+    if (node.children.empty())
+    {
+        if (on)
+            checked.insert(node.key);
+        else
+            checked.erase(node.key);
+        return;
+    }
+    for (const luil::tree_node& child : node.children)
+        set_checked(child, on, checked);
+}
+</script></div>
+        <script type="text/plain" id="pre-check" data-prelude>
+#include "luil/ui/check_element.h"
+#include "luil/ui/item_model.h"
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+      </section>
+
+      <section class="sec" id="build-drag">
+        <header class="sec-head">
+          <h2>만들기: 끌어서 순서 바꾸기와 폴더에 놓기</h2>
+          <p class="lede">평평한 목록은 <code>reorder</code> 하나로, 가상 목록은 <code>drag</code>·<code>accepts_drop</code>·<code>drop</code> 셋으로 선다.</p>
+        </header>
+        <h3>평평한 목록의 순서 바꾸기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:417-434" data-path="examples/demo/lists_page.cpp" data-start="417"><script type="text/plain">
+        // 앱이 대는 것은 항목·스크롤 값과 메시지 factory뿐이다.
+        // 행 그리기·끌기·막대 조립·창 다듬기는 전부 목록의 몫이 되었다.
+        luil::list_config config {};
+        config.owner = u8"items";
+        for (const std::u8string& value : items_)
+        {
+            luil::list_item item {};
+            item.key = value;
+            item.label = value;
+            config.items.push_back(std::move(item));
+        }
+        config.row_height = list_row_height;
+        config.scroll_offset = scroll_;
+        config.reorder = [](const std::u8string& moved, const std::u8string& target) { return luil::make_app_action(reorder_intent { moved, target }); };
+        // 세로 목록이라 끄는 동안은 위아래 화살표다 (평소 모양 grab은 라이브러리가 고른다).
+        config.row_active_cursor = cursor_reorder;
+        config.scroll = [](const float delta) { return luil::make_app_action(list_scroll_intent { delta }); };
+        config.scroll_to = [](const float offset) { return luil::make_app_action(list_scroll_to_intent { offset }); };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:263-280" data-path="examples/demo/lists_page.cpp" data-start="263"><script type="text/plain">
+        if (const auto* const reorder { message.get<reorder_intent>() }; reorder != nullptr)
+        {
+            if (reorder->moved == reorder->target)
+                return true;
+            auto find = [this](const std::u8string& value) {
+                for (auto position = items_.begin(); position != items_.end(); ++position)
+                    if (*position == value)
+                        return position;
+                return items_.end();
+            };
+            const auto moved { find(reorder->moved) };
+            if (moved == items_.end())
+                return true;
+            const std::u8string value { *moved };
+            items_.erase(moved);
+            items_.insert(find(reorder->target), value);
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>reorder(moved, target)</code>를 달면 모든 행이 끌 수 있고 받을 수 있는 자리가 되고, 잡는 손잡이가 선다. 따로 켜는 플래그가 없다 — "손잡이는 있는데 끌리지 않는" 조합이 생기지 않는다.</li>
+            <li>"target 자리로"의 뜻은 앱이 정한다. 이 데모는 "지우고 대상 <strong>앞</strong>에 끼운다"라서 아래로 끌어 놓으면 놓은 행의 바로 위에 선다.</li>
+            <li>받는 쪽은 같은 목록의 행이고, 자기 자신 위와 밖에서 온 파일 끌기는 받지 않는다.</li>
+            <li>트리에서는 "저 자리로"가 앞·뒤·자식으로 갈리므로 <code>reorder</code>의 뜻이 하나가 아니다. 계층의 끌어 놓기는 가상 목록의 <code>drop</code>으로 앱이 정한다.</li>
+          </ul>
+        </div>
+        <h3>가상 목록: 고른 것 모두를 폴더에 놓기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/files_page.cpp:560-578" data-path="examples/demo/files_page.cpp" data-start="560"><script type="text/plain">
+        // 고른 행을 끌면 고른 것 모두가, 고르지 않은 행을 끌면 그것 하나가 간다.
+        config.drag = [selection = selection_, labels = items_](const std::u8string& key, const luil::ui_action_context&) {
+            luil::drag_payload payload {};
+            payload.dragged_owner = key;
+            if (std::find(selection.begin(), selection.end(), key) != selection.end())
+                payload.dragged_owners = selection;
+            for (const luil::virtual_list_item& item : labels)
+                if (item.key == key)
+                    payload.label = item.label;
+            payload.rejected_cursor = luil::ui_cursor::not_allowed;
+            return payload;
+        };
+        // 폴더 행에만 놓는다. 끌리는 폴더 자신은 받지 않는다 — 출발 목록까지 견주므로 보관함의 같은 키 폴더는 받는다.
+        //  - 안에서 시작한 끌기만 받는다. 밖에서 온 끌기(탐색기의 파일, 브라우저의 글·링크)는 옮길 항목 키가 없다.
+        config.accepts_drop = [](const std::u8string& key, const luil::drag_payload& payload) { return payload.external() == false && is_folder(key) && payload.carries(files_list_id, key) == false; };
+        config.drop = [](const std::u8string& key, const luil::drag_payload& payload, const luil::ui_action_context& context) {
+            std::vector<std::u8string> items { payload.dragged_owners.empty() ? std::vector<std::u8string> { payload.dragged_owner } : payload.dragged_owners };
+            return luil::make_app_action(files_drop_intent { u8"파일", key, std::move(items), context.control });
+        };
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>drag(key, context)</code>가 payload를 짓는다. 고른 행을 끌면 <code>dragged_owners</code>에 고른 키들을 담는다 — 기본 ghost가 <code>+N</code>을 보이고, 함께 끌리는 행은 제자리에 흐리게 남는다.</li>
+            <li><code>accepts_drop(key, payload)</code>가 받을 행(폴더)을 정한다. 끌리는 자신을 거절할 때는 키만 견주지 말고 <code>payload.carries(목록 id, 키)</code>로 묻는다 — 다른 목록의 같은 키를 거절하지 않도록.</li>
+            <li><code>drop(key, payload, context)</code>의 <code>context.control</code>이 복사·옮기기를 가른다.</li>
+            <li>끌기는 누른 채 <code>drag_start_distance</code>(기본 6)를 넘겨야 서므로 클릭과 함께 산다. 끄는 동안 목록 가장자리 띠(32 논리 픽셀)에 대면 목록이 흐른다.</li>
+            <li>놓을 자리는 언제나 <strong>행 전체</strong>다. 행 사이 틈(앞·뒤) 표시는 탭 막대에만 있다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-menu">
+        <header class="sec-head">
+          <h2>만들기: 행의 컨텍스트 메뉴</h2>
+          <p class="lede"><code>context_menu(key, context)</code>를 단다. 우클릭은 고르지 않는다 — 고르지 않은 행이면 먼저 고를지 앱이 정한다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:722-732" data-path="examples/demo/workbench_page.cpp" data-start="722"><script type="text/plain">
+        if (const auto* const menu { message.get<workbench_menu_intent>() }; menu != nullptr)
+        {
+            // 고르지 않은 행을 우클릭하면 그 행 하나를 고르고 연다 (탐색기의 규칙).
+            if (luil::selection_contains(selection_, menu->key) == false)
+                selection_ = luil::selection_pick(selection_, change_items(), menu->key, {});
+            menu_open_ = true;
+            submenu_.clear();
+            menu_x_ = menu->x;
+            menu_y_ = menu->y;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>context.x</code>·<code>context.y</code>는 메뉴를 띄울 자리다 (물리 픽셀, 창 좌표). 수식 키는 그 순간의 것이다.</li>
+            <li>터치의 길게 누르기와 펜의 배럴 버튼도 우클릭이라 이 하나로 함께 선다. 삼각형 위의 우클릭도 그 행의 메뉴다. 비활성 행에서는 나지 않는다.</li>
+            <li>키보드의 Shift+F10은 초점 element에서 root 쪽으로 우클릭 액션을 찾는다. <code>list_element</code>는 초점이 행이라 그 행의 메뉴가 열리지만, <code>virtual_list_element</code>는 초점이 목록 자신이라 <strong>행의 메뉴에 닿지 않는다</strong>(코드에서 확인한 동작). 가상 목록에서 키보드로 메뉴를 열려면 앱이 단축키를 따로 둔다.</li>
+            <li><code>build_row</code>가 지은 단추 위의 우클릭은 그 단추의 몫이다. 우클릭은 부모로 올라가지 않는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-activate">
+        <header class="sec-head">
+          <h2>만들기: 두 번 누름과 Enter 실행</h2>
+          <p class="lede">"열기"는 가상 목록의 <code>double_click</code>(포인터)과 <code>activate</code>(키보드) 두 문으로 온다. 같은 메시지를 주면 된다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th>두 번 누름</th><th>Enter · Space</th></tr></thead>
+            <tbody>
+              <tr><td><code>list_element</code></td><td>따로 없다. 두 번째 누름도 <code>select</code>다</td><td>초점 행의 클릭, 곧 <code>select(key)</code></td></tr>
+              <tr><td><code>virtual_list_element</code></td><td><code>double_click(key)</code>. 첫 누름이 이미 골랐으므로 두 번째 누름은 다시 고르지 않는다</td><td><code>activate(커서 키)</code>. 커서 행이 비활성이면 아무것도 내지 않는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:480-484" data-path="examples/demo/lists_page.cpp" data-start="480"><script type="text/plain">
+        config.select = [](const std::u8string& key) { return luil::make_app_action(log_select_intent { key }); };
+        config.double_click = [](const std::u8string& key) { return luil::make_app_action(log_open_intent { key }); };
+        // `move`가 없으면 목록은 Tab의 자리조차 아니다 — 커서가 앱 상태라
+        // 라이브러리가 고칠 수 없고, 옮길 길이 없는 화살표는 아무 일도 하지 않는다.
+        config.move = [](const std::u8string& key) { return luil::make_app_action(log_cursor_intent { key }); };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/virtual_list_element_tests.cpp:1058-1087" data-path="tests/virtual_list_element_tests.cpp" data-start="1058"><script type="text/plain">
+TEST_CASE("A second press on the same row sends its key to the double click factory", "[ui][list][interaction]")
+{
+    struct double_click_intent
+    {
+        std::u8string key {};
+    };
+
+    luil::virtual_list_config config { make_config(8) };
+    config.move = move_factory();
+    config.select = select_factory();
+    config.double_click = [](const std::u8string& key) { return luil::input_action { luil::app_message { double_click_intent { key } } }; };
+    luil::interaction_controller controller {};
+    controller.set_tree(published(config, 100.0f));
+
+    // 첫 누름은 평소처럼 고른다.
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 100.0f, 70.0f, luil::pointer_button::left, at(0) }));
+    const auto first { controller.process(luil::pointer_released_event { 100.0f, 70.0f, luil::pointer_button::left, at(10) }) };
+    REQUIRE(message_at<select_intent>(first, 0) != nullptr);
+    REQUIRE(message_at<double_click_intent>(first, 0) == nullptr);
+
+    // 앱이 고른 것을 싣고 다시 지은 tree에서도 같은 행의 두 번째 누름이다.
+    config.cursor = item_key(3);
+    config.selected = item_key(3);
+    controller.set_tree(published(config, 100.0f));
+    static_cast<void>(controller.process(luil::pointer_pressed_event { 100.0f, 70.0f, luil::pointer_button::left, at(120) }));
+    const auto second { controller.process(luil::pointer_released_event { 100.0f, 70.0f, luil::pointer_button::left, at(130) }) };
+    REQUIRE(second.size() == 1u);
+    REQUIRE(message_at<double_click_intent>(second, 0) != nullptr);
+    REQUIRE(message_at<double_click_intent>(second, 0)->key == item_key(3));
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>두 번 누름의 판정은 500ms·4px(<code>double_click_time</code>·<code>double_click_distance</code>)다. 터치는 12 논리 픽셀 허용치다.</li>
+            <li><code>activate</code>는 키보드만의 문이다. 목록의 빈 자리(마지막 행 아래)를 눌러도 커서 행이 실행되지 않는다.</li>
+            <li>저장소 계층은 <code>activate</code>로 실패 줄의 다시 시도를 실행한다 — 위 <a class="xref" href="#build-lazy">지연 로딩</a> 예의 <code>workbench_tree_activate_intent</code>다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-large">
+        <header class="sec-head">
+          <h2>만들기: 아주 큰 목록과 트리</h2>
+          <p class="lede">모델은 <code>shared_items</code>로 공유해 넘긴다. 값(<code>items</code>)은 frame마다 깊은 복사다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:150-164" data-path="examples/demo/lists_page.cpp" data-start="150"><script type="text/plain">
+        // 만 줄이 넘는 모델을 **값으로** 한 번 짓고, 바뀌지 않는 채 공유한다.
+        // tree에 서는 것은 창에 걸치는 몇 줄뿐이고 frame마다 오르는 것은 참조 수 하나다.
+        std::vector<luil::virtual_list_item> log_items {};
+        log_items.reserve(log_item_count);
+        for (std::size_t index = 0; index < log_item_count; ++index)
+        {
+            luil::virtual_list_item item {};
+            item.key = log_key(index);
+            item.label = std::u8string { log_levels[index % log_levels.size()] } + u8" " + log_number(index);
+            log_items.push_back(std::move(item));
+        }
+        log_items_ = std::make_shared<const std::vector<luil::virtual_list_item>>(std::move(log_items));
+        // 커서의 첫 자리를 앱이 적어 둔다. 비워 두면 목록은 첫 항목을 커서로 보는데
+        // 앱 상태는 비어 있어, 같은 자리를 둘이 다르게 알고 아래 줄이 없는 것을 가리킨다.
+        log_cursor_ = log_items_->front().key;
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>list_element</code>는 모든 행을 tree에 세우므로 십만 줄이 곧 십만 element다. <code>virtual_list_element</code>는 창에 걸치는 행(위아래 <code>overscan</code> 2줄 더)과 커서 행, 창 밖의 고른 행 64개까지만 짓는다.</li>
+            <li>공유 모델은 <strong>넘긴 뒤에 고치지 않는다</strong>. 게시된 tree를 여러 thread가 읽으므로, 바꿀 때는 새 vector로 갈아 끼운다. 앞 frame의 tree는 옛 vector를 쥔 채 끝까지 산다.</li>
+            <li>설계 문서는 10만 항목을 frame마다 넘기는 비용을 "값으로 약 2.1ms, 공유로 약 0.1ms"로 적는다. 창에 걸치는 구간 찾기는 앞에서부터 높이를 더하는 O(n)이고, 누적 높이 캐시는 아직 없다.</li>
+            <li>트리를 크게 쓸 때는 펼침이 바뀔 때만 <code>flatten_tree</code>를 다시 부르고, 그 사이에는 같은 <code>shared_ptr</code>을 넘긴다. 아래 예가 그 모양이고, 보조 기술이 목록(List)이 아니라 계층(Tree)으로 읽게 역할도 바꾼다 — 기본값은 <code>list</code>·<code>list_item</code>이다.</li>
+          </ul>
+        </div>
+        <div class="code tall" data-lang="cpp" data-label="큰 트리: 공유 모델 + 펼침 캐시 + Tree 역할 (직접 작성)" data-compile="pre-large"><script type="text/plain">
+struct tree_cursor_intent
+{
+    std::u8string key {};
+};
+struct tree_expand_intent
+{
+    std::u8string key {};
+    bool expanded { false };
+};
+struct tree_open_intent
+{
+    std::u8string key {};
+};
+struct tree_scroll_intent
+{
+    float delta { 0.0f };
+};
+
+// 노드가 십만 개인 계층이다. 모델·펼침·커서·스크롤은 전부 앱 상태다.
+class big_tree
+{
+public:
+    std::vector<luil::tree_node> roots {};
+
+    // tree_expand_intent를 받은 자리다.
+    void expand(const std::u8string& key, const bool expanded)
+    {
+        // 접는 가지 안에 커서가 있으면 커서를 그 가지로 올린다 — 라이브러리는 이 일을 하지 않는다.
+        if (expanded == false && rows_ != nullptr)
+        {
+            const std::vector<luil::virtual_list_item>& rows { *rows_ };
+            for (std::size_t parent = 0; parent < rows.size(); ++parent)
+            {
+                if (rows[parent].key != key)
+                    continue;
+                for (std::size_t child = parent + 1; child < rows.size() && rows[child].depth > rows[parent].depth; ++child)
+                    if (rows[child].key == cursor_)
+                        cursor_ = key;
+                break;
+            }
+        }
+        if (expanded)
+            expanded_.insert(key);
+        else
+            expanded_.erase(key);
+        rows_.reset(); // 펼침이 바뀔 때만 다시 편다
+    }
+
+    [[nodiscard]] std::unique_ptr<luil::virtual_list_element> build(const float viewport_height)
+    {
+        // 바뀌지 않은 frame에는 같은 vector를 공유해 넘긴다 (참조 수 하나만 오른다).
+        if (rows_ == nullptr)
+            rows_ = std::make_shared<const std::vector<luil::virtual_list_item>>(luil::tree_row_items(luil::flatten_tree(roots, expanded_)));
+        scroll_ = luil::clamp_scroll(luil::virtual_list_content_height(*rows_, row_height), viewport_height, scroll_);
+
+        luil::virtual_list_config config {};
+        config.owner = u8"big-tree";
+        config.shared_items = rows_;
+        config.selected = cursor_;
+        config.cursor = cursor_;
+        config.row_height = row_height;
+        config.scroll_offset = scroll_;
+        // 보조 기술이 목록(List)이 아니라 계층(Tree)으로 읽게 한다.
+        config.role = luil::access_role::tree;
+        config.row_role = luil::access_role::tree_item;
+        config.select = [](const std::u8string& key) { return luil::make_app_action(tree_cursor_intent { key }); };
+        config.move = [](const std::u8string& key) { return luil::make_app_action(tree_cursor_intent { key }); };
+        config.activate = [](const std::u8string& key) { return luil::make_app_action(tree_open_intent { key }); };
+        config.double_click = [](const std::u8string& key) { return luil::make_app_action(tree_open_intent { key }); };
+        config.set_expanded = [](const std::u8string& key, const bool expanded) { return luil::make_app_action(tree_expand_intent { key, expanded }); };
+        config.scroll = [](const float delta) { return luil::make_app_action(tree_scroll_intent { delta }); };
+        return std::make_unique<luil::virtual_list_element>(std::move(config));
+    }
+
+private:
+    static constexpr float row_height { 22.0f };
+    std::unordered_set<std::u8string> expanded_ {};
+    std::shared_ptr<const std::vector<luil::virtual_list_item>> rows_ {};
+    std::u8string cursor_ {};
+    float scroll_ { 0.0f };
+};
+</script></div>
+        <script type="text/plain" id="pre-large" data-prelude>
+#include "luil/ui/item_model.h"
+#include "luil/ui/layout_metrics.h"
+#include "luil/ui/virtual_list_element.h"
+#include <cstddef>
+#include <memory>
+#include <string>
+#include <unordered_set>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+      </section>
+
+      <section class="sec" id="build-grouped">
+        <header class="sec-head">
+          <h2>만들기: 그룹 머리행이 있는 목록</h2>
+          <p class="lede">그룹마다 <code>list_group { key, title, content_height, content }</code>를 만들어 <code>grouped_list_element</code>에 담고, 그것을 <code>scroll_view_element</code>의 내용으로 둔다.</p>
+        </header>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/lists_page.cpp:522-566" data-path="examples/demo/lists_page.cpp" data-start="522"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> lists_page::make_grouped_section(const float viewport_height)
+    {
+        // 머리행을 누르면 어느 그룹인지 토스트로 보여 준다 (activate factory의 예).
+        luil::grouped_list_config config {};
+        config.owner = u8"history";
+        config.activate = [](const std::u8string& key) { return luil::make_app_action(toast_request_intent { u8"그룹 머리행: " + key, luil::toast_severity::info }); };
+
+        const auto make_rows = [](const std::u8string_view prefix, const int count) {
+            luil::stack_config rows_config {};
+            auto rows { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"rows-" + std::u8string { prefix } }, rows_config) };
+            for (int index = 1; index <= count; ++index)
+                rows->add(make_label(luil::ui_element_id { kind_text, std::u8string { prefix } + u8"-" + to_u8(index) }, u8"    " + std::u8string { prefix } + u8" 문서 " + to_u8(index), 11.0f,
+                              luil::label_color_role::primary),
+                    grouped_row_height);
+            return rows;
+        };
+
+        std::vector<luil::list_group> groups {};
+        const auto add_group = [&](std::u8string key, std::u8string title, const int count) {
+            luil::list_group group {};
+            group.key = std::move(key);
+            group.title = std::move(title);
+            group.content_height = static_cast<float>(count) * grouped_row_height;
+            group.content = make_rows(group.key, count);
+            groups.push_back(std::move(group));
+        };
+        add_group(u8"오늘", u8"오늘", 4);
+        add_group(u8"이번 주", u8"이번 주", 6);
+        add_group(u8"지난", u8"지난", 8);
+
+        auto list { std::make_unique<luil::grouped_list_element>(std::move(config), std::move(groups)) };
+        list->set_access_name(u8"그룹 머리행 목록");
+        const float content_height { list->content_height() };
+        grouped_scroll_ = luil::clamp_scroll(content_height, viewport_height, grouped_scroll_);
+
+        auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { kind_grouped_list }, luil::scroll_view_config { content_height, grouped_scroll_ }) };
+        view->set_content(std::move(list));
+
+        luil::panel_config surface_panel {};
+        surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
+        surface_panel.corner_radius = 6.0f;
+        auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_layout, u8"grouped-panel" }, std::move(surface_panel)) };
+        panel->set_content(std::move(view));
+        return panel;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>측정 단계가 없어서 그룹 내용의 높이(<code>content_height</code>)는 앱이 알린다.</li>
+            <li>머리행은 지나가는 동안 창 위에 붙고, 다음 그룹의 머리행이 다가오면 밀려 올라간다. 겹치는 자리에서는 머리행이 hit를 이긴다.</li>
+            <li><code>activate</code>가 있을 때만 머리행이 눌린다. 그룹 접기는 라이브러리 기능이 아니다 — 앱이 <code>activate</code>를 받아 그 그룹의 내용과 높이를 비워 다시 짓는다.</li>
+            <li>선택·커서·스크롤 factory가 없다. 목록은 세로 묶음이고, ↑/↓가 그 안의 Tab 자리(눌리는 머리행과 앱의 행)를 돈다. 휠과 되살리기는 앱이 <code>scroll_view_element</code>의 id로 경로 표에 적는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-empty">
+        <header class="sec-head">
+          <h2>만들기: 빈 상태</h2>
+          <p class="lede">목록 셋 모두 빈 상태(placeholder) 설정이 없다. 목록 대신 글을 짓거나, 고를 수 없는 안내 줄 하나를 싣는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-label="안내 줄 하나 (직접 작성)" data-compile="pre-empty"><script type="text/plain">
+// 항목이 없으면 고를 수 없는 안내 줄 하나를 싣는다.
+//  - 비활성 행은 흐리게 그려지고 눌리지 않으며 Tab의 자리도 아니다.
+//  - 안내 줄의 키는 실제 항목 키와 겹치지 않게 짓는다 (행 자리표는 kind와 키뿐이다).
+[[nodiscard]] std::unique_ptr<luil::ui_element> make_files(const std::vector<std::u8string>& files, const std::u8string& selected)
+{
+    luil::list_config config {};
+    config.owner = u8"files";
+    config.selected = selected;
+    if (files.empty())
+        config.items.push_back({ .key = u8"files-empty", .label = u8"파일이 없습니다", .enabled = false });
+    for (const std::u8string& file : files)
+        config.items.push_back({ .key = file, .label = file });
+    config.select = [](const std::u8string& key) { return luil::make_app_action(pick_file_intent { key }); };
+    auto list { std::make_unique<luil::list_element>(std::move(config)) };
+    list->set_access_name(u8"파일");
+    return list;
+}
+</script></div>
+        <script type="text/plain" id="pre-empty" data-prelude>
+#include "luil/ui/list_element.h"
+#include "luil/ui/ui_events.h"
+#include <memory>
+#include <string>
+#include <vector>
+namespace sample {
+struct pick_file_intent
+{
+    std::u8string key {};
+};
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li>빈 <code>list_element</code>는 행이 없으니 Tab의 자리가 없다.</li>
+            <li>빈 <code>virtual_list_element</code>는 <code>move</code>나 <code>activate</code>가 있으면 Tab의 자리로 남는다. 화살표는 갈 곳이 없어 삼키고, Space·Enter는 커서가 없어 아무것도 내지 않는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 필드는 <a class="xref" href="api.html#list-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="list_element">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/list_element.h:12-37" data-path="include/luil/ui/list_element.h" data-start="12"><script type="text/plain">
+    // 줄이 가지인지 잎인지다 (tree).
+    enum class list_expansion
+    {
+        // 삼각형이 없다 — 잎이거나, 접힘을 쓰지 않는 평평한 목록이다.
+        none,
+        collapsed,
+        expanded,
+    };
+
+    // 목록의 줄 하나다.
+    struct list_item
+    {
+        // 항목을 가리키는 앱 정의 키다 (ui_element_id::owner 규약).
+        std::u8string key {};
+        std::u8string label {};
+        // 0이면 앞 글리프가 없다.
+        char32_t icon { 0 };
+        // tree의 깊이다. 0이면 뿌리 줄이다.
+        // **앱이 평탄화해서 준다** — 접힌 가지의 자식은 `items`에 담지 않는다.
+        // 그래서 라이브러리는 tree 모델을 갖지 않고, 지금 보이는 줄들이 곧 묶음의
+        // 항목이 되어 화살표가 화면 순서 그대로 돈다 (list-view-design.md).
+        int depth { 0 };
+        list_expansion expansion { list_expansion::none };
+        // 거짓이면 흐리게 그리고 고를 수 없다 (Tab도 서지 않는다).
+        bool enabled { true };
+    };
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/list_element.h:49-118" data-path="include/luil/ui/list_element.h" data-start="49"><script type="text/plain">
+    struct list_config
+    {
+        // 같은 화면에 목록이 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        std::vector<list_item> items {};
+        // 고른 항목의 키다 (앱 상태).
+        // element는 이 값을 받아 그리고 고르자는 메시지만 낸다.
+        // 묶음에 Tab으로 들어오면 이 행에 선다 (`focus_entry`).
+        std::u8string selected {};
+        // 줄 하나의 높이다 (논리 픽셀).
+        float row_height { 24.0f };
+        // 지금 흘러간 양이다 (논리 픽셀, 앱 상태).
+        // 범위 밖 값은 `arrange`가 다듬고 `scroll_offset()`으로 되돌려 준다.
+        float scroll_offset { 0.0f };
+        // 없으면 행이 눌리지 않는다.
+        //  - 그러면 행이 **Tab 자리가 아니게 되어** 목록에 키보드가 서지 않는다.
+        //    `tab_stop`의 기본값("누를 수 있으면 자리")이 하는 일이라, 파생마다
+        //    키보드를 켜고 끄는 규칙을 따로 두지 않는다 (list-view-design.md).
+        list_message_factory select {};
+        // 펼침 삼각형을 눌렀을 때다.
+        //  - **없으면 삼각형을 만들지 않는다** (`set_expanded`가 대신 선다).
+        //    `expansion`만 있고 factory가 없으면 아무 일도 하지 않는 삼각형이
+        //    생긴다 (규약 5장).
+        //  - 둘 중 하나라도 있으면 **모든 행이 삼각형 자리를 비운다.** 잎과
+        //    가지의 글이 줄을 맞춰야 tree로 읽힌다.
+        list_message_factory toggle {};
+        // 그 가지의 펼침을 **이 상태로** 하라는 절대 메시지다. 없으면 보조 기술이
+        // 펼치고 접을 수 없다 (UIA Expand·Collapse가 거절된다).
+        //  - 토글로 흘리면 오래된 발행본을 본 같은 명령 둘이 두 번 뒤집는다 —
+        //    그룹의 `set_collapsed`와 같은 갈래다.
+        //  - 이것만 있으면 삼각형의 클릭도 여기서 나온다 (지금 상태의 반대를 담아).
+        std::function<input_action(const std::u8string& key, bool expanded)> set_expanded {};
+        // 끌어 놓아 순서를 바꿀 때다.
+        //  - **없으면 잡는 손잡이도 drag도 drop도 만들지 않는다.** 손잡이를 따로
+        //    켜는 플래그를 두면 "손잡이는 있는데 끌리지 않는" 조합이 생긴다.
+        //  - 평평한 목록에서만 뜻이 하나다. tree에서 "저 자리로"는 앞·뒤·자식으로
+        //    갈리므로 그 뜻은 앱이 정한다 (list-view-design.md).
+        list_reorder_message_factory reorder {};
+        // 행을 우클릭하면 낸다. 터치의 길게 누르기·펜의 배럴 버튼도 우클릭이라 이 하나로 함께 선다.
+        //  - 펼침 삼각형 위에서 눌러도 그 행의 메뉴다 — 삼각형은 행의 일부로 보인다.
+        //  - 고르지 않는다. 우클릭한 행을 먼저 고를지는 앱이 정한다.
+        //  - 비활성 행에서는 나지 않는다 (클릭과 같다).
+        //  - Tab 자리를 바꾸지 않는다. 자리는 `select`(좌클릭)가 정한다.
+        list_context_message_factory context_menu {};
+        // 행을 잡고 끄는 동안의 포인터 모양이다.
+        // `inherit`이면 라이브러리가 drag 역할에서 고른다(`grabbing`).
+        // `reorder`가 있을 때만 뜻이 있다 — 무엇이 자연스러운 모양인지는 목록이
+        // 세로인지 격자인지에 달려 있어 앱이 정한다.
+        ui_cursor row_active_cursor { ui_cursor::inherit };
+        // 없으면 스크롤 막대를 만들지 않는다 (짧은 목록).
+        std::function<input_action(float delta)> scroll {};
+        // 스크롤을 **이 자리로** 하라는 절대 메시지다 (offset은 논리 픽셀).
+        // 안에 서는 막대의 `scrollbar_config::scroll_to`로 그대로 이어진다 —
+        // 없으면 보조 기술이 막대의 자리를 정할 수 없다.
+        std::function<input_action(float offset)> scroll_to {};
+        // 창의 위·아래 가장자리 표시다 (구분선과 흘린 쪽의 그림자).
+        // `scroll_area_config::edges`와 같은 설정·같은 그림이다. 기본값은 전부 거짓이다.
+        scroll_edges edges {};
+    };
+
+    // 목록 오른쪽에 서는 스크롤 막대의 폭이다 (논리 픽셀).
+    // 막대의 보이는 폭에 좌우 여백을 더한 값이다.
+    inline constexpr float list_scrollbar_width { scrollbar_visual_width + 8.0f };
+    // 깊이 한 칸의 들여쓰기와 펼침 삼각형이 차지하는 폭이다 (논리 픽셀).
+    inline constexpr float list_indent_step { 14.0f };
+    inline constexpr float list_expander_width { 16.0f };
+    // 잡는 손잡이가 차지하는 폭이다 (논리 픽셀).
+    // 깊이 **밖**의 칸이다 — 손잡이는 행의 것이지 tree 계층의 것이 아니다.
+    inline constexpr float list_handle_width { 20.0f };
+
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>같은 화면의 목록을 구분하지 못한다 (행 id에는 들어가지 않는다)</td></tr>
+                  <tr><td><code>selected</code></td><td>빈 글</td><td>고른 행이 없다. Tab으로 들어오면 첫 구성원에 선다</td></tr>
+                  <tr><td><code>row_height</code></td><td>24 (논리 픽셀)</td><td>— 모든 행이 같은 높이다</td></tr>
+                  <tr><td><code>select</code></td><td>없음</td><td>행이 눌리지 않고 <strong>Tab 자리도 아니다</strong></td></tr>
+                  <tr><td><code>toggle</code> · <code>set_expanded</code></td><td>없음</td><td>삼각형을 만들지 않는다. 하나라도 있으면 모든 행이 삼각형 자리를 비운다. 보조 기술의 펼치기는 <code>set_expanded</code>만 탄다</td></tr>
+                  <tr><td><code>reorder</code></td><td>없음</td><td>손잡이도 끌기도 놓기도 만들지 않는다</td></tr>
+                  <tr><td><code>context_menu</code></td><td>없음</td><td>우클릭·길게 누르기가 아무 일도 하지 않는다</td></tr>
+                  <tr><td><code>scroll</code> · <code>scroll_to</code></td><td>없음</td><td>막대를 만들지 않는다 / 보조 기술이 막대 자리를 정할 수 없다</td></tr>
+                  <tr><td><code>edges</code></td><td>전부 거짓</td><td>창의 위·아래 구분선과 그림자가 없다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="virtual_list_element">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/virtual_list_element.h:17-45" data-path="include/luil/ui/virtual_list_element.h" data-start="17"><script type="text/plain">
+    // 모델 안의 항목 하나다.
+    //
+    // **행을 짓지 않고도 아는 것만 담는다.** 화면에 걸치지 않는 항목은 element가
+    // 되지 않으므로, 키보드가 알아야 하는 것(순서·이름·고를 수 있는가)은 전부
+    // 여기 있어야 한다. 그리는 데 필요한 나머지는 앱이 자기 모델에서 꺼내
+    // `build_row`에서 쓴다 — 라이브러리가 행의 내용을 알 필요가 없다.
+    struct virtual_list_item
+    {
+        // 항목을 가리키는 앱 정의 키다 (`ui_element_id::owner` 규약).
+        // 모델 안에서 유일해야 한다 — 선택·커서·행 자리표가 전부 이 값이다.
+        std::u8string key {};
+        // 글자 탐색이 읽는 이름이다.
+        // 비어 있으면 그 항목은 글자로 찾을 수 없다 (`search_label`과 같은 규약).
+        std::u8string label {};
+        // 이 행의 높이다 (논리 픽셀).
+        // 0이면 `virtual_list_config::row_height`다 — "없음은 언제나 0으로
+        // 말한다"는 `stack_item`의 규칙 그대로다.
+        //  - 값이 섞여 있어도 된다. 창에 걸치는 범위는 앞에서부터 더한 합으로
+        //    찾으므로 항목 수에 비례한 일이 한 번 생기는데, 그것은 **더하기뿐**이라
+        //    행을 짓는 것과 견줄 비용이 아니다.
+        float height { 0.0f };
+        // 거짓이면 흐리게 그리고 고를 수 없다 (키보드도 건너뛴다).
+        bool enabled { true };
+        // 계층의 깊이다. 0이면 뿌리 줄이다 (`list_item::depth`와 같다).
+        // **앱이 평탄화해서 준다** — 접힌 가지의 자식은 모델에 담지 않는다 (list-view-design.md의 평탄화).
+        int depth { 0 };
+        // 잎·접힘·펼침이다. 삼각형과 ←·→, 보조 기술의 펼침 상태가 이 값을 읽는다.
+        list_expansion expansion { list_expansion::none };
+    };
+</script></div>
+            <div class="walk side">
+              <div class="code tall" data-lang="cpp" data-src="include/luil/ui/virtual_list_element.h:99-258" data-path="include/luil/ui/virtual_list_element.h" data-start="99"><script type="text/plain">
+    struct virtual_list_config
+    {
+        // 같은 화면에 목록이 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        // **모델 전체**다. 화면에 걸치지 않는 항목도 전부 담는다.
+        //  - 담기는 것은 값이지 element가 아니다. tree에 서는 것은 창에 걸치는 몇 줄뿐이다.
+        //  - 이 vector는 **frame마다 깊은 복사**다. 항목마다 키와 이름 문자열을 새로 복사하므로
+        //    모델 크기에 비례한다 — 큰 목록은 `shared_items`로 넘긴다.
+        std::vector<virtual_list_item> items {};
+        // 공유하는 불변 모델이다. 있으면 `items` 대신 이것을 읽고, `items`는 비워 둔다.
+        //  - 모델이 바뀌지 않는 frame에서는 참조 수 하나만 오른다. 큰 목록에서 frame마다 하던 복사가 사라진다.
+        //  - **넘긴 뒤에는 고치지 않는다.** 게시된 tree는 여러 thread가 읽으므로, 바꿀 때는 새 vector를 만들어
+        //    갈아 끼운다 (앞 frame의 tree는 옛 vector를 쥔 채 끝까지 산다).
+        //  - 키·선택·커서·스크롤 같은 나머지 값은 지금처럼 frame마다 준다.
+        std::shared_ptr<const std::vector<virtual_list_item>> shared_items {};
+        // 고른 항목의 키다 (앱 상태).
+        std::u8string selected {};
+        // 여러 항목을 함께 고르는 목록이다 (앱 상태). 켜면 `selection`의 키들(과 `selected`)이 고른 행으로
+        // 그려지고, 보조 기술은 다중 선택 목록으로 읽는다 (`access_info::multiple_selection`).
+        //  - 어떻게 더하고 빼는지는 앱이 정한다 — 행의 누름은 `pick`이 수식 키와 함께 받는다.
+        //  - 꺼져 있으면 `selection`은 읽지 않는다. 지금까지의 단일 선택 목록 그대로다.
+        //  - 고른 행은 창 밖에서도 지어진다 (`virtual_list_offscreen_selection_limit`). `selected`도 같다.
+        bool multiple_selection { false };
+        std::vector<std::u8string> selection {};
+        // 키보드 커서가 선 항목의 키다 (앱 상태).
+        //
+        // **선택과 갈라 둔다.** 화살표로 훑다가 Enter로 고르는 것과, 화살표가
+        // 곧 선택인 것은 앱마다 다르다 — `move` 메시지를 받은 앱이 커서만 옮길지
+        // 선택까지 옮길지 정하면 둘 다 표현된다.
+        //  - 비어 있으면 `selected`가 커서다. 그것도 비어 있으면 첫 항목이다.
+        //  - 커서가 선 행은 창에 걸치지 않아도 **반드시 짓는다.** 그러지 않으면
+        //    초점 테를 그릴 자리가 없고, 커스텀 행 안의 컨트롤이 사라진다.
+        std::u8string cursor {};
+        // 줄 하나의 기본 높이다 (논리 픽셀).
+        // `virtual_list_item::height`가 0인 항목이 이 값을 쓴다.
+        float row_height { 24.0f };
+        // 지금 흘러간 양이다 (논리 픽셀, 앱 상태).
+        // 범위 밖 값은 `arrange`가 다듬고 `metrics()`가 다듬은 값을 되돌려 준다.
+        float scroll_offset { 0.0f };
+        // 창 위아래로 더 짓는 행 수다.
+        // 0이면 걸치는 것만 짓는다 — 휠을 굴리는 동안 행이 나타나는 것이 보인다.
+        int overscan { 2 };
+        // 행 내용을 짓는다. 비어 있으면 기본 행(`label` 한 줄)이다.
+        virtual_row_builder build_row {};
+        // 행을 눌렀을 때다.
+        //  - 없으면 행이 눌리지 않는다. 목록은 그래도 커서를 옮길 수 있다 —
+        //    `list_element`와 갈리는 자리다. 저쪽은 행이 Tab의 자리라 누를 수
+        //    없으면 키보드도 서지 않지만, 이쪽은 **목록 자신이 자리**다.
+        virtual_list_message_factory select {};
+        // 키보드가 커서를 이 항목으로 옮기자는 메시지다.
+        //
+        // **없으면 키보드 탐색을 켜지 않는다** — 커서는 앱 상태라 라이브러리가
+        // 고칠 수 없고, 옮길 길이 없는 화살표는 아무 일도 하지 않는 키가 된다
+        // ("없는 것은 두지 않는다").
+        virtual_list_message_factory move {};
+        // `move`에 걸음과 수식 키의 뜻을 더한 짝이다 (keyboard-selection-design.md). 있으면 `move` 대신 쓴다.
+        //
+        // 다중 선택 목록의 키보드 범위 선택이 여기서 선다. `move`는 키만 받아 Shift+↓와 ↓를 가를 수 없다.
+        //  - 화살표·Page·Home/End는 그 걸음과 Shift(`extend`)·Ctrl(`keep_selection`)을 싣는다. Ctrl+화살표도 이 목록의
+        //    키가 된다 (선택을 두고 커서만 옮기기). `move`만 든 목록에서 그 키는 지금처럼 앱 단축키로 흐른다.
+        //  - 글자 탐색은 걸음 없이 그냥 옮긴 것이다 (`step` 비어 있음, 수식 키 거짓).
+        //  - 행 누름은 고르기를 `pick`·`select`가 이미 정했으므로 커서만 옮긴다 (`keep_selection` 참).
+        //  - **제자리여도 낸다.** 커서는 그대로여도 고른 것이 바뀌는 걸음(첫 항목에서 Home을 누르면 선택이 그 하나로
+        //    접힌다)이 있어서다. 커서만 옮기는 Ctrl 걸음만 제자리에서 내지 않는다.
+        //  - 받은 앱은 `selection_move`(ui/selection_model.h)로 다음 선택을 계산하면 된다.
+        virtual_list_move_with_factory move_with {};
+        // 커서가 선 항목을 **실행**하자는 메시지다 (Space·Enter).
+        //
+        // 커서와 선택을 갈라 둔 값이 여기서 나온다. 화살표로 훑고 Enter로 고르는
+        // 모델은 이 factory가 있어야 실제로 표현된다 — 없으면 키보드에서 고를
+        // 길이 아예 없어, 앱은 `move`를 받을 때 선택까지 함께 옮기는 수밖에 없고
+        // 그러면 커서와 선택을 가른 뜻이 사라진다.
+        //  - 통상 `select`와 같은 메시지를 낸다. 다르게 두는 자리도 있다 —
+        //    Enter가 "열기"이고 클릭이 "고르기"인 목록이 그렇다.
+        //  - **키보드만의 문이다.** 포인터는 행을 직접 누르므로 이 자리를 지나지
+        //    않는다 — 목록의 빈 자리를 눌러 커서 행이 실행되는 일은 없다
+        //    (`hit_test`가 목록 자신을 답하지 않는다).
+        virtual_list_message_factory activate {};
+        // 행을 두 번 눌렀을 때다 (마우스 더블 클릭·두 번 탭). 그 행의 키를 받는다.
+        //  - 첫 누름은 평소처럼 `select`·`pick`이다. 같은 자리의 두 번째 누름이 이것이 되고, 그 누름은 다시 고르지
+        //    않는다 — 이미 첫 누름이 골랐다.
+        //  - 포인터만의 문이다. 키보드의 짝은 `activate`다 (Enter가 "열기"인 목록은 둘에 같은 메시지를 준다).
+        //  - 비어 있으면 두 번째 누름도 평소의 누름이다.
+        virtual_list_message_factory double_click {};
+        // 행을 눌렀을 때 그 누름의 문맥까지 받는다. 있으면 `select` 대신 쓴다 (다중 선택 목록의 Ctrl·Shift+클릭).
+        //  - 커서를 함께 옮기는 것(`move`)은 `select`와 같다.
+        virtual_list_pick_factory pick {};
+        // 행을 우클릭하면 낸다. 터치의 길게 누르기·펜의 배럴 버튼도 우클릭이라 이 하나로 함께 선다.
+        //  - 고르지도 커서를 옮기지도 않는다. 다중 선택 목록에서 "고르지 않은 행을 우클릭하면 그 행만 고르고,
+        //    고른 행이면 선택을 둔 채 메뉴를 연다" 같은 규칙은 앱마다 다르므로 이 메시지를 받은 앱이 정한다.
+        //  - 비활성 행에서는 나지 않는다 (누름과 같다).
+        //  - `build_row`가 지은 내용 중 **누를 수 있는 것**(단추 같은 것) 위의 우클릭은 그것의 몫이다. 우클릭은
+        //    부모로 올라가지 않는다. 그 위에서도 행의 메뉴를 열려면 앱이 그 요소에 같은 우클릭 동작을 단다.
+        virtual_list_context_message_factory context_menu {};
+        // 보조 기술이 이 항목을 고른 것에 더하라·빼라고 했다 (UIA AddToSelection·RemoveFromSelection).
+        // `multiple_selection`일 때만 쓴다. 고르기(Select)는 행의 누름과 같다.
+        //  - 없으면 `pick`을 Ctrl+누름의 문맥(`control` 참, 좌표 없음)으로 부른다 — 포인터로 하나 더 고르거나 빼는 몸짓과
+        //    같은 길이다. 이미 그 상태인 명령은 먼저 걸러지므로 고르지 않은 행에만 더하기가, 고른 행에만 빼기가 온다.
+        //  - `pick`도 없으면 그 명령은 할 수 없다.
+        virtual_list_message_factory add_to_selection {};
+        virtual_list_message_factory remove_from_selection {};
+        // Ctrl+Space다. 커서 항목을 고른 것에 더하거나 뺀다 (`multiple_selection`일 때만). 그 키를 받는다.
+        //  - 커서가 비활성 항목이면 키는 목록이 삼키고 아무것도 내지 않는다.
+        virtual_list_message_factory toggle_at_cursor {};
+        // Ctrl+A다. 모든 항목을 고르자는 메시지다 (`multiple_selection`일 때만).
+        //  - **목록의 키다.** 초점이 행 안의 부품에 있어도 그 부품이 쓰지 않으면 목록까지 올라온다
+        //    (key-propagation-design.md). 초점이 행 안의 텍스트 칸이면 칸의 전체 선택이 먼저다.
+        //  - 비어 있으면 Ctrl+A는 지금처럼 앱 정책으로 흐른다.
+        std::function<input_action()> select_all {};
+        // 행을 끌어 옮기는 drag & drop이다. 누른 행의 키와 끌기가 시작되는 순간의 문맥(수식 키)으로 payload를 짓는다.
+        //  - 고른 항목들을 함께 끌려면 `dragged_owners`에 그 키들을 담는다 (기본 ghost가 `+N`을 보인다). 함께 끌리는 행은
+        //    제자리에 흐리게 남는다.
+        //  - `source`를 비워 두면 그 행이고, `container`를 비워 두면 이 목록이다. 놓을 수 없는 행 위의 금지 모양은
+        //    `rejected_cursor`로 청한다.
+        //  - 비어 있으면 행을 끌 수 없다. 끌기는 누른 채 `interaction_config::drag_start_distance`를 넘겨야 서므로 클릭과 함께 산다.
+        std::function<drag_payload(const std::u8string& key, const ui_action_context& context)> drag {};
+        // 이 행에 놓을 수 있는가다 (폴더 같은 container 행). 받는 행 위에 머물면 그 행이 놓을 자리로 강조된다.
+        //  - 끌리는 항목 자신에 놓지 못하게 하는 것도 여기서 답한다. 키는 목록 안에서만 유일하므로 출발 목록까지
+        //    견주는 `drag_payload::carries(목록 id, 키)`로 묻는다 — 키만 견주면 다른 목록에서 온 같은 키의 행을 거절한다.
+        //  - `drop`과 함께 있어야 행이 놓을 자리가 된다.
+        std::function<bool(const std::u8string& key, const drag_payload& payload)> accepts_drop {};
+        // 이 행에 놓았다. 놓는 순간의 문맥을 받는다 — Ctrl(`control`)로 복사·옮기기를 가른다.
+        std::function<input_action(const std::u8string& key, const drag_payload& payload, const ui_action_context& context)> drop {};
+        // 스크롤 위치를 옮기자는 메시지다 (delta는 논리 픽셀).
+        // 휠·막대·키보드 되살리기가 전부 이 하나를 쓴다 (`scroll_area_config`와 같다).
+        std::function<input_action(float delta)> scroll {};
+        // 스크롤 위치를 **이 자리로** 하라는 절대 메시지다 (offset은 논리 픽셀).
+        std::function<input_action(float offset)> scroll_to {};
+        scrollbar_visibility bar { scrollbar_visibility::automatic };
+        // 창의 위·아래 가장자리 표시다 (구분선과 흘린 쪽의 그림자).
+        // 안의 영역에 그대로 이어진다 — `scroll_area_config::edges`와 같은 설정·같은 그림이다.
+        scroll_edges edges {};
+        // 보조 기술이 이 목록과 그 행을 읽는 역할이다.
+        //  - 목록 위에 다른 뜻을 얹는 컴포넌트가 바꾼다. 표(`table_element`)의 본문은 표(DataGrid)와 행(DataItem)이다.
+        //  - 선택 container 규칙(`access_selection_container`)은 역할을 따르므로, 바꾼 역할도 선택 container여야
+        //    고른 행을 읽는다 (`list`·`tree`·`table`).
+        access_role role { access_role::list };
+        access_role row_role { access_role::list_item };
+        // 가지를 이 상태로 하라는 절대 메시지다 (`list_config::set_expanded`와 같다). 있으면 목록이 계층이 된다.
+        //  - 행 앞에 깊이만큼 들여쓰고 가지에는 삼각형을 세운다. 잎도 삼각형 자리를 비워 글이 줄을 맞춘다.
+        //  - ←는 펼친 가지를 접고, 접혔거나 잎이면 부모로 간다. →는 접힌 가지를 펴고, 펼친 가지면 첫 자식으로 간다.
+        //    갈 곳이 없는 ←·→는 소비하지 않아 위로 흐른다 (표에서는 가로 스크롤이 된다).
+        //  - 보조 기술의 펼치기·접기도 이 메시지다. 행은 펼침 상태를 ExpandCollapse로 알린다.
+        std::function<input_action(const std::u8string& key, bool expanded)> set_expanded {};
+        // 행 앞에 들여쓰기와 삼각형 자리를 두는가. 계층을 다른 자리에 그리는 컴포넌트(표의 트리 열)가 끈다.
+        bool tree_gutter { true };
+        // ←·→를 계층 키로 쓰는가. ←·→에 다른 뜻을 먼저 주는 컴포넌트(셀 커서가 있는 표)가 끄고, 계층 키가 필요한
+        // 자리에서 `step_tree`를 직접 부른다.
+        bool tree_keys { true };
+        // 격자(타일) 모드의 열 수다 (virtual-list-grid-design.md). 0이면 지금처럼 한 줄에 하나다.
+        //  - 격자 모드에서는 모든 칸이 `row_height` 높이다 (`virtual_list_item::height`를 보지 않는다).
+        //  - ↑/↓는 한 줄(열 수만큼), ←/→는 한 칸이다. Page는 창에 드는 줄 수만큼, Home/End는 처음·끝이다.
+        //  - 계층(`set_expanded`)과 함께 쓰지 않는다 — ←/→가 칸 이동이 된다.
+        std::size_t columns { 0 };
+        // 0보다 크면 칸 폭이 이 값(논리 픽셀) 이상인 만큼 열을 정한다 (창 폭에 따라 열 수가 바뀐다). `columns`보다 앞선다.
+        //  - 열 수가 바뀌어도 같은 항목을 보이려면 앱이 `virtual_list_grid_offset_keeping`으로 스크롤 값을 다시 정한다.
+        float minimum_column_width { 0.0f };
+        // 키보드가 커서를 창 밖으로 옮겼을 때 들이는 자리다. `center`는 커서 항목을 창 가운데로 들인다.
+        virtual_list_reveal reveal { virtual_list_reveal::nearest };
+    };
+</script></div>
+              <ol class="walk-steps-src">
+                <li data-lines="101-113" data-title="모델">모델 <strong>전체</strong>다. <code>items</code>는 frame마다 깊은 복사이고, 큰 모델은 <code>shared_items</code>로 공유한다. 둘 다 주면 <code>items</code>는 읽지 않는다.</li>
+                <li data-lines="114-131" data-title="선택과 커서">단일 선택은 <code>selected</code>, 여러 선택은 <code>multiple_selection</code> + <code>selection</code>. 커서는 선택과 따로인 앱 상태이고, 커서 행은 창 밖이어도 짓는다.</li>
+                <li data-lines="132-142" data-title="치수와 행">기본 행 높이 24, 위아래로 더 짓는 <code>overscan</code> 2줄. <code>build_row</code>가 비면 이름 한 줄의 기본 행이다.</li>
+                <li data-lines="143-176" data-title="누름과 키">누름(<code>select</code>), 키보드 커서(<code>move</code> 또는 수식 키까지 받는 <code>move_with</code>), 실행(<code>activate</code>, Space·Enter). <code>move</code>·<code>move_with</code>가 없으면 키보드 탐색을 켜지 않는다.</li>
+                <li data-lines="177-207" data-title="두 번 누름·문맥·여러 선택">두 번 누름(<code>double_click</code>), 수식 키를 받는 누름(<code>pick</code>), 우클릭(<code>context_menu</code>), 보조 기술의 더하기·빼기, Ctrl+Space, Ctrl+A.</li>
+                <li data-lines="208-221" data-title="끌어 놓기">payload를 짓는 <code>drag</code>, 받을 행을 정하는 <code>accepts_drop</code>, 놓기의 <code>drop</code>. <code>drop</code> 없이 <code>accepts_drop</code>만 있으면 놓을 자리가 아니다.</li>
+                <li data-lines="222-236" data-title="스크롤과 역할">스크롤 두 메시지, 막대 보이기, 가장자리. 보조 기술의 역할(<code>role</code>·<code>row_role</code>) — 트리로 읽히게 하려면 <code>tree</code>·<code>tree_item</code>.</li>
+                <li data-lines="237-247" data-title="계층">절대값 <code>set_expanded</code>가 있으면 목록이 계층이 된다. ←는 접거나 부모로, →는 펴거나 첫 자식으로. 들여쓰기(<code>tree_gutter</code>)와 ←/→(<code>tree_keys</code>)를 따로 끌 수 있다.</li>
+                <li data-lines="248-257" data-title="격자와 들이기">격자 모드의 열 수와 최소 칸 폭, 커서를 창 안으로 들이는 자리(<code>nearest</code>·<code>center</code>). 격자와 계층은 함께 쓰지 않는다.</li>
+              </ol>
+            </div>
+          </section>
+          <section data-tab="item_model">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/item_model.h:26-104" data-path="include/luil/ui/item_model.h" data-start="26"><script type="text/plain">
+    // 노드의 자식을 불러온 상태다 (지연 로딩).
+    enum class node_load
+    {
+        // 자식이 다 있다. 자식이 없으면 잎이다.
+        loaded,
+        // 아직 묻지 않았다. 자식이 없어도 가지다 (펼치면 불러온다).
+        unloaded,
+        // 묻는 중이다. 펼쳐 두면 "불러오는 중" 줄이 선다.
+        loading,
+        // 묻다가 실패했다. 펼쳐 두면 실패 줄이 선다 (다시 시도의 자리).
+        failed,
+    };
+
+    // 계층 모델의 노드 하나다 (앱의 모델에서 frame마다 짓거나, 앱이 이 모양 그대로 든다).
+    struct tree_node
+    {
+        // 항목 키다. 모델 전체에서 유일해야 한다 (`virtual_list_item::key` 규약).
+        std::u8string key {};
+        std::u8string label {};
+        std::vector<tree_node> children {};
+        node_load load { node_load::loaded };
+        bool enabled { true };
+    };
+
+    // 평탄화한 줄의 종류다.
+    enum class tree_row_kind
+    {
+        // 모델의 노드다.
+        node,
+        // 펼친 노드의 자식을 불러오는 중이다. 고를 수 없다 (비활성 항목).
+        loading,
+        // 펼친 노드의 자식을 불러오지 못했다. 고를 수 있다 — 키보드가 그 줄에 서서 다시 시도를 실행할 수 있어야 한다.
+        failed,
+    };
+
+    // 평탄화한 줄 하나다.
+    struct tree_row
+    {
+        // 목록에 그대로 싣는 항목이다 (깊이·펼침 포함).
+        virtual_list_item item {};
+        tree_row_kind kind { tree_row_kind::node };
+        // 상태 줄(불러오는 중·실패)이 딸린 노드의 키다. 노드 줄이면 자기 키다.
+        std::u8string node {};
+    };
+
+    // 상태 줄의 키에 붙는 꼬리다. 상태 줄 키는 `노드 키 + U+001F + 꼬리`다 — 표의 부품 키와 같은 구분자라 앱 키와 겹치지
+    // 않는다 (앱 키에 U+001F를 쓰지 않는 한).
+    inline constexpr std::u8string_view tree_loading_suffix { u8"\u001Floading" };
+    inline constexpr std::u8string_view tree_failed_suffix { u8"\u001Ffailed" };
+
+    struct tree_flatten_options
+    {
+        // 상태 줄의 이름이다. 앱의 언어로 준다 (라이브러리는 글을 정하지 않는다).
+        std::u8string loading_label {};
+        std::u8string failed_label {};
+        // 형제 순서다. 비어 있으면 모델 순서다. 같은 부모 아래 형제끼리만 견준다 (계층은 그대로다).
+        std::function<bool(const tree_node& left, const tree_node& right)> less {};
+        // 남길 노드다. 비어 있으면 모두 남긴다.
+        //  - 남긴 노드의 조상은 함께 남는다 — 맞는 파일이 접힌 폴더 안에 있어도 그 길이 보인다 (Qt의 재귀 필터).
+        //  - 남긴 노드의 자손은 그 자손도 맞아야 남는다.
+        std::function<bool(const tree_node& node)> keep {};
+        // 필터로 남은 자손이 있는 가지를 펼친 것으로 본다 (찾는 동안 맞는 것이 다 보이게). 펼침 상태(`expanded`)는
+        // 바꾸지 않는다 — 필터를 지우면 앱이 들고 있던 펼침으로 돌아간다.
+        bool expand_matches { false };
+    };
+
+    // 계층 모델을 목록의 줄로 편다 (가상 목록·표의 트리 열).
+    //  - 가지는 자식이 있거나 아직 다 불러오지 않은(`loaded`가 아닌) 노드다. 펼침은 `expanded`에 키가 있는가다.
+    //  - 펼친 가지의 자식이 그 아래에 깊이 + 1로 선다. 접힌 가지의 자식은 줄이 되지 않는다.
+    //  - 펼친 가지가 `unloaded`·`loading`이면 그 아래에 불러오는 중 줄, `failed`면 실패 줄이 선다.
+    //  - 자식이 없고 다 불러온 펼친 가지는 빈 가지로 남는다 (펼침 상태 그대로).
+    [[nodiscard]] std::vector<tree_row> flatten_tree(std::span<const tree_node> roots, const std::unordered_set<std::u8string>& expanded, const tree_flatten_options& options = {});
+
+    // 줄들의 항목만이다 (`virtual_list_config::items`에 싣는다).
+    [[nodiscard]] std::vector<virtual_list_item> tree_row_items(std::span<const tree_row> rows);
+
+    // 펼쳐 두었는데 아직 묻지 않은(`unloaded`) 노드들의 키다 (모델 순서). 앱이 이 키들에 불러오기를 시작하고 노드를
+    // `loading`으로 바꾼다. 접힌 가지 아래는 보지 않는다.
+    [[nodiscard]] std::vector<std::u8string> tree_nodes_to_load(std::span<const tree_node> roots, const std::unordered_set<std::u8string>& expanded);
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/item_model.h:146-177" data-path="include/luil/ui/item_model.h" data-start="146"><script type="text/plain">
+    // 비동기 요청 하나의 표다. 결과에 함께 실려 와 **늦게 온 결과**를 가른다.
+    struct request_token
+    {
+        std::uint64_t value { 0 };
+
+        [[nodiscard]] bool operator==(const request_token&) const = default;
+    };
+
+    // 키마다 마지막으로 낸 요청을 기억하는 장부다 (앱 상태에 둔다).
+    //
+    // 폴더를 펼쳐 목록을 묻고, 결과가 오기 전에 접었다 다시 펼치면 요청이 둘이다. 먼저 낸 것이 늦게 오면 새 결과를
+    // 옛 결과가 덮는다. 요청마다 표를 받고, 결과가 오면 그 키의 **마지막** 표와 같은지 보고 다르면 버린다.
+    //  - 같은 키의 새 요청은 앞 요청을 무효로 만든다. 다른 키의 요청은 서로 모른다.
+    //  - 빈 키 하나만 쓰면 검색어 후보·미리 보기처럼 "마지막 것만 산다"는 요청 하나의 장부다.
+    class request_ledger
+    {
+    public:
+        // 이 키의 새 요청 표다. 그 키의 앞 표는 이제 낡았다.
+        [[nodiscard]] request_token issue(std::u8string_view key);
+        // 이 표가 그 키의 마지막 요청인가. 끝냈거나 취소한 키, 낸 적 없는 표는 거짓이다.
+        [[nodiscard]] bool current(std::u8string_view key, request_token token) const;
+        // 결과를 받아들였다. 맞는 표면 그 키를 지우고 참이다 — 같은 결과가 두 번 와도 한 번만 받는다.
+        [[nodiscard]] bool settle(std::u8string_view key, request_token token);
+        // 그 키의 요청을 거둔다 (접었다·떠났다). 뒤에 오는 결과는 모두 낡았다.
+        void cancel(std::u8string_view key);
+        // 기다리는 요청 수다.
+        [[nodiscard]] std::size_t pending() const noexcept;
+
+    private:
+        std::unordered_map<std::u8string, std::uint64_t> latest_ {};
+        std::uint64_t next_ { 0 };
+    };
+</script></div>
+          </section>
+          <section data-tab="selection_model">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/selection_model.h:11-61" data-path="include/luil/ui/selection_model.h" data-start="11"><script type="text/plain">
+    // 여러 항목을 고르는 목록의 선택 상태다 (keyboard-selection-design.md).
+    //
+    // **값은 앱이 든다.** 라이브러리는 입력의 뜻(`ui_action_context`, `virtual_list_move_context`)을 메시지로
+    // 보내고, 앱은 받은 메시지에서 이 파일의 순수 함수로 다음 상태를 계산해 다음 frame에 목록에 싣는다.
+    // 규칙을 앱마다 다시 짜면 반드시 한 앱이 기준점을 틀린다 — Qt의 ExtendedSelection, WPF DataGrid의
+    // Extended 모드, Windows 탐색기가 같은 규칙을 쓴다.
+    //
+    // 세 값이 갈린다.
+    //  - `anchor`(기준점)는 Shift 범위가 시작하는 자리다. 그냥 고르거나 Ctrl로 하나를 뒤집을 때 그 자리로 옮긴다.
+    //  - `cursor`는 키보드 초점 테가 선 자리다 (`virtual_list_config::cursor`).
+    //  - `keys`는 고른 항목이다. **모델 순서**로 둔다 — 같은 선택이 언제나 같은 값이라 비교와 test가 쉽다.
+    struct item_selection
+    {
+        std::u8string anchor {};
+        std::u8string cursor {};
+        std::vector<std::u8string> keys {};
+
+        [[nodiscard]] bool operator==(const item_selection&) const = default;
+    };
+
+    // 그 키가 골라져 있는가.
+    [[nodiscard]] bool selection_contains(const item_selection& selection, std::u8string_view key) noexcept;
+
+    // 행을 눌렀다 (`virtual_list_config::pick`이 받은 문맥).
+    //  - 그냥 누름: 그것 하나만 고르고 기준점·커서를 그리로 옮긴다.
+    //  - Ctrl: 그것을 뒤집고 기준점·커서를 그리로 옮긴다.
+    //  - Shift: 기준점부터 그것까지만 고른다. 기준점은 그대로다.
+    //  - Ctrl+Shift: 기준점부터 그것까지를 지금 고른 것에 더한다.
+    //  - 비활성 항목이나 모델에 없는 키는 아무것도 바꾸지 않는다. 범위 안의 비활성 항목은 고르지 않는다.
+    [[nodiscard]] item_selection selection_pick(item_selection selection, std::span<const virtual_list_item> items, std::u8string_view key, const ui_action_context& context);
+
+    // 키보드가 커서를 옮겼다 (`virtual_list_config::move_with`가 받은 문맥).
+    //  - 수식 키 없음: 그것 하나만 고르고 기준점·커서를 그리로 옮긴다.
+    //  - `extend`(Shift): 기준점부터 그것까지만 고른다.
+    //  - `keep_selection`(Ctrl): 커서만 옮긴다.
+    //  - 둘 다: 기준점부터 그것까지를 지금 고른 것에 더한다.
+    //  - 기준점이 모델에 없으면 지금 커서를(그것도 없으면 옮겨 간 자리를) 기준점으로 삼는다.
+    [[nodiscard]] item_selection selection_move(item_selection selection, std::span<const virtual_list_item> items, std::u8string_view key, const virtual_list_move_context& context);
+
+    // 그 항목을 고른 것에 더하거나 뺀다 (Ctrl+Space, `virtual_list_config::toggle_at_cursor`). 기준점을 그리로 옮긴다.
+    [[nodiscard]] item_selection selection_toggle(item_selection selection, std::span<const virtual_list_item> items, std::u8string_view key);
+
+    // 활성 항목을 전부 고른다 (Ctrl+A, `virtual_list_config::select_all`). 기준점과 커서는 그대로다.
+    [[nodiscard]] item_selection selection_select_all(item_selection selection, std::span<const virtual_list_item> items);
+
+    // 모델이 바뀐 뒤(필터·정렬·삭제) 선택을 새 모델에 맞춘다.
+    //  - 새 모델에 없는 키와 비활성이 된 키는 고른 것에서 빠진다. 남은 것은 새 모델 순서로 다시 선다.
+    //  - 커서가 사라졌으면 **옛 모델에서 커서 뒤쪽의 가장 가까운 남은 항목**으로, 뒤에 없으면 앞쪽으로 옮긴다.
+    //    옛 모델을 모르면(빈 span) 새 모델의 첫 활성 항목이다. 새 모델이 비면 비운다.
+    //  - 기준점이 사라졌으면 같은 규칙으로 옮기되, 찾지 못하면 커서로 둔다.
+    [[nodiscard]] item_selection selection_reconcile(item_selection selection, std::span<const virtual_list_item> previous, std::span<const virtual_list_item> items);
+</script></div>
+          </section>
+          <section data-tab="grouped_list_element">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/grouped_list_element.h:11-33" data-path="include/luil/ui/grouped_list_element.h" data-start="11"><script type="text/plain">
+    // 목록의 그룹 하나다.
+    struct list_group
+    {
+        // 그룹을 가리키는 앱 정의 키다 (ui_element_id::owner 규약).
+        std::u8string key {};
+        std::u8string title {};
+        // 머리행 아래 내용의 높이다 (논리 픽셀).
+        // 측정 단계가 없으므로 담는 쪽이 알려 준다.
+        float content_height { 0.0f };
+        // 그룹의 행들이다 (nullptr이면 없는 것이다).
+        std::unique_ptr<ui_element> content {};
+    };
+
+    // 머리행을 눌렀을 때 그룹 키를 담은 메시지다 (예: 그룹 접기).
+    using list_group_message_factory = std::function<input_action(const std::u8string& key)>;
+
+    struct grouped_list_config
+    {
+        // 같은 화면에 목록이 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        // 없으면 머리행이 눌리지 않는다.
+        list_group_message_factory activate {};
+    };
+</script></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">목록은 콜백을 부르지 않는다. 앱이 준 factory가 메시지를 만들고, 목록은 그것을 돌려줄 뿐이다. 클릭·두 번 누름·우클릭은 <strong>뗀 순간</strong> 나간다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th><code>list_element</code></th><th><code>virtual_list_element</code></th></tr></thead>
+            <tbody>
+              <tr><td>행 클릭</td><td><code>select(key)</code></td><td><code>pick(key, context)</code>가 있으면 그것, 없으면 <code>select(key)</code>. 그 행이 커서가 아니면 이어서 <code>move(key)</code>나 <code>move_with(key, { .keep_selection = true })</code></td></tr>
+              <tr><td>두 번 누름</td><td>없다. 두 번째 누름도 <code>select</code></td><td><code>double_click(key)</code> 하나. 다시 고르지 않는다</td></tr>
+              <tr><td>Enter · Space</td><td>초점 행의 클릭 = <code>select(key)</code></td><td><code>activate(커서 키)</code>. 커서가 없거나 비활성이면 삼키기만 한다</td></tr>
+              <tr><td>삼각형 클릭</td><td><code>toggle(key)</code>, 없으면 <code>set_expanded(key, !지금)</code></td><td><code>set_expanded(key, !지금)</code></td></tr>
+              <tr><td>← / →</td><td>목록의 키가 아니다 → 앱 정책</td><td>위 <a class="xref" href="#build-lazy">←/→ 표</a>의 <code>set_expanded</code> 또는 커서 이동</td></tr>
+              <tr><td>↑↓ · Page · Home · End</td><td>초점만 옮긴다. 메시지 없음</td><td><code>move(key)</code> 또는 <code>move_with(key, { step, extend, keep_selection })</code>. 창 밖이면 <code>scroll(delta)</code>를 함께 낸다</td></tr>
+              <tr><td>글자</td><td>초점만 옮긴다</td><td><code>move(key)</code> 또는 <code>move_with(key, {})</code></td></tr>
+              <tr><td>Ctrl+Space · Ctrl+A</td><td>—</td><td><code>toggle_at_cursor(커서 키)</code> · <code>select_all()</code> (여러 선택일 때만)</td></tr>
+              <tr><td>우클릭 · 길게 누르기 · 배럴 버튼</td><td><code>context_menu(key, context)</code>. 삼각형 위도 그 행</td><td><code>context_menu(key, context)</code></td></tr>
+              <tr><td>끌어 놓기</td><td>같은 목록의 다른 행에 놓으면 <code>reorder(moved, target)</code></td><td><code>drag</code> → payload. 받는 행에 놓으면 <code>drop(key, payload, context)</code></td></tr>
+              <tr><td>휠 · 막대</td><td><code>scroll(delta)</code> · <code>scroll_to(offset)</code></td><td><code>scroll(delta)</code> · <code>scroll_to(offset)</code></td></tr>
+              <tr><td>보조 기술 Expand · Collapse</td><td><code>set_expanded</code>. <code>toggle</code>만 있으면 거절된다</td><td><code>set_expanded</code></td></tr>
+              <tr><td>보조 기술 Add · RemoveFromSelection</td><td>—</td><td><code>add_to_selection</code>·<code>remove_from_selection</code>, 없으면 <code>pick(key, { .control = true })</code></td></tr>
+              <tr><td>그룹 머리행 클릭 · Space · Enter</td><td colspan="2"><code>grouped_list_config::activate(그룹 키)</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>받은 메시지</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td><code>select</code></td><td>고른 키(와 커서). 가상 목록의 누름은 <code>move</code>도 함께 오므로 커서를 따로 맞출 필요가 없다</td></tr>
+              <tr><td><code>move</code> · <code>move_with</code></td><td>커서 키. <code>move_with</code>면 <code>selection_move</code>로 선택까지</td></tr>
+              <tr><td><code>pick</code></td><td><code>selection_pick</code></td></tr>
+              <tr><td><code>set_expanded(key, bool)</code></td><td>펼친 키 집합에 넣고 뺀다 (목표 상태라 겹쳐 와도 같다). 지연 로딩이면 불러오기를 시작하거나 거둔다</td></tr>
+              <tr><td><code>reorder(moved, target)</code></td><td>순서를 바꾼다. 같은 키 둘이면 무시한다</td></tr>
+              <tr><td><code>drop(key, payload, context)</code></td><td><code>payload.dragged_owners</code>(비면 <code>dragged_owner</code>)를 <code>key</code>로 옮기거나 복사한다 (<code>context.control</code>)</td></tr>
+              <tr><td><code>context_menu(key, context)</code></td><td>필요하면 먼저 고르고, <code>context.x</code>·<code>context.y</code>에 메뉴를 연다</td></tr>
+              <tr><td><code>scroll</code> · <code>scroll_to</code></td><td>스크롤 값을 더하거나 정한다. 다음 frame에서 <code>clamp_scroll</code></td></tr>
+              <tr><td><code>activate</code> · <code>double_click</code></td><td>"열기" 같은 앱 동작</td></tr>
+              <tr><td>모델이 바뀜 (정렬·거르기·삭제)</td><td><code>selection_reconcile(selection, previous, items)</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">두 목록의 키는 사는 곳이 다르다. <code>list_element</code>는 초점 묶음의 키를, <code>virtual_list_element</code>는 자기 모델 위의 키를 쓴다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="list_element 키">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>동작</th></tr></thead>
+                <tbody>
+                  <tr><td>Tab · Shift+Tab</td><td>목록 전체가 한 자리다. 들어오면 <code>selected</code> 행에 선다. 그 행이 없거나 초점을 받을 수 없으면 첫 구성원이다</td></tr>
+                  <tr><td>↑ · ↓</td><td>이전·다음 구성원(활성 행)으로 초점을 옮긴다. <strong>끝에서 돈다.</strong> 메시지는 없다</td></tr>
+                  <tr><td>Home · End</td><td>처음·끝 구성원. 돌지 않는다. 이미 거기여도 삼킨다</td></tr>
+                  <tr><td>← · →</td><td>목록의 키가 아니다 (세로 묶음의 축과 맞지 않는다). 트리 모드여도 같다</td></tr>
+                  <tr><td>PageUp · PageDown</td><td>목록의 키가 아니다</td></tr>
+                  <tr><td>Space · Enter</td><td>초점 행의 클릭 = <code>select(key)</code></td></tr>
+                  <tr><td>Ctrl · Alt · Meta와 함께</td><td>목록의 키가 아니다. 앱 단축키다</td></tr>
+                  <tr><td>글자</td><td>묶음의 글자 탐색. 초점만 옮기고 선택은 그대로다</td></tr>
+                  <tr><td>Shift+F10</td><td>초점 행의 <code>context_menu</code> (행 가운데 좌표)</td></tr>
+                  <tr><td>F2 · Delete</td><td>목록이 다루지 않는다 → 앱 정책</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>비활성 행은 구성원이 아니다. 삼각형과 막대도 Tab 자리가 아니어서, ↑↓가 행과 삼각형을 번갈아 지나지 않는다. 초점 테는 키보드로 옮긴 초점에만 그린다 — 강조색 2px 선을 몸 밖 1px 띄워 모서리 5px로 두른다.</p></div>
+          </section>
+          <section data-tab="virtual_list_element 키">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>동작</th></tr></thead>
+                <tbody>
+                  <tr><td>Tab</td><td>목록 자신이 한 자리다 (행도 막대도 아니다). <code>move</code>·<code>move_with</code>·<code>activate</code> 중 하나라도 있어야 자리다</td></tr>
+                  <tr><td>↑ · ↓</td><td>활성 항목 한 칸. 비활성은 건너뛰고 칸으로 세지 않는다. <strong>끝에서 멈춘다</strong> (삼키고 메시지 없음)</td></tr>
+                  <tr><td>PageUp · PageDown</td><td>커서부터 <strong>실제 행 높이</strong>를 더해 창 높이를 넘기 전까지. 칸 수는 활성 행만 센다</td></tr>
+                  <tr><td>Home · End</td><td>모델의 처음·끝 <strong>활성</strong> 항목</td></tr>
+                  <tr><td>커서를 모를 때</td><td>첫 걸음이 첫 활성 항목을 집는다</td></tr>
+                  <tr><td>← · → (계층)</td><td><a class="xref" href="#build-lazy">←/→ 표</a>대로. Ctrl·Shift와 함께면 계층 키가 아니다</td></tr>
+                  <tr><td>Shift + 단계 키</td><td><code>move_with</code>면 <code>extend</code>. <code>move</code>만 든 목록에서는 Shift가 보이지 않아 그냥 이동이다</td></tr>
+                  <tr><td>Ctrl + 단계 키</td><td><code>move_with</code>면 <code>keep_selection</code>(커서만). <code>move</code>만이면 앱 단축키다</td></tr>
+                  <tr><td>Space · Enter</td><td><code>activate(커서 키)</code>. 비활성 커서면 아무것도 내지 않는다. <code>activate</code>가 없으면 키가 앱으로 흐른다</td></tr>
+                  <tr><td>Ctrl+Space · Ctrl+A</td><td><code>toggle_at_cursor</code> · <code>select_all</code> (여러 선택만). 비활성 커서의 Ctrl+Space는 삼킨다</td></tr>
+                  <tr><td>글자</td><td>모델 <strong>전체</strong>에서 <code>label</code> 접두를 대소문자 없이 찾는다. 첫 글자는 커서 다음부터, 1초 안에 이어 친 글자는 커서부터. 끝에서 처음으로 돈다. 못 찾아도 글자는 목록이 삼킨다</td></tr>
+                  <tr><td>Shift+F10</td><td>행의 메뉴에 닿지 않는다 (초점이 목록 자신이라서 — 코드에서 확인한 동작)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>커서를 옮긴 자리가 창 밖이면 <code>scroll(delta)</code>를 함께 내고, 이미 보이면 내지 않는다. 커서가 제자리면 <code>move</code>는 내지 않지만, <code>move_with</code>는 고른 것이 바뀌는 걸음(그냥·Shift)이면 제자리여도 낸다. 목록에 키보드 초점이 있을 때만 커서 행에 1px 강조 테를 그린다.</p></div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>대상</th><th>역할</th><th>상태</th></tr></thead>
+                <tbody>
+                  <tr><td><code>list_element</code> 목록</td><td><code>list</code> (고정)</td><td>이름 = <code>set_access_name</code></td></tr>
+                  <tr><td><code>list_element</code> 행</td><td><code>list_item</code> (고정, <strong>tree_item이 아니다</strong>)</td><td>이름 = label, <code>selected</code>, 가지면 <code>expanded</code>, <code>enabled</code></td></tr>
+                  <tr><td><code>virtual_list_element</code> 목록</td><td><code>config.role</code> (기본 <code>list</code>)</td><td><code>multiple_selection</code>, 값 = 커서 항목의 label</td></tr>
+                  <tr><td><code>virtual_list_element</code> 행</td><td><code>config.row_role</code> (기본 <code>list_item</code>)</td><td>이름, <code>selected</code>, 가지면 <code>expanded</code></td></tr>
+                  <tr><td>표의 행</td><td>본문은 <code>table</code>, 행은 <code>data_item</code> (표가 덮어쓴다)</td><td>펼침은 행이 알린다</td></tr>
+                  <tr><td>그룹 머리행</td><td><code>header</code></td><td>이름 = title</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li><strong>깊이와 "n개 중 m번째"는 가상 목록만 모델로 답한다.</strong> 같은 깊이의 형제를 세어 <code>PositionInSet</code>·<code>SizeOfSet</code>·<code>Level</code>을 낸다. <code>list_element</code>는 그 값을 내지 않는다.</li>
+                <li>가상 목록은 창 밖 항목도 모델로 답한다 (항목 찾기, 고른 항목 읽기, 이름, 들이기). 창 밖의 고른 행은 tree에도 64개까지 짓는다.</li>
+                <li>펼침·고름 명령은 "이미 그 상태"면 빈 계획이라 메시지를 내지 않는다.</li>
+              </ul>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th></th><th>Windows UIA</th><th>macOS</th><th>iOS</th></tr></thead>
+                <tbody>
+                  <tr><td>트리 역할</td><td><code>tree</code>/<code>tree_item</code> → Tree / TreeItem</td><td>AXOutline / AXOutlineRow</td><td>행은 잎 요소</td></tr>
+                  <tr><td>목록 역할</td><td>List / ListItem</td><td>AXTable / AXRow</td><td>행은 잎 요소</td></tr>
+                  <tr><td>펼침 상태</td><td>ExpandCollapse (<code>expanded</code>가 있으면 역할과 무관)</td><td><code>tree_item</code>의 AXDisclosing만. <code>list_item</code> 행의 펼침은 속성으로 서지 않는다</td><td>말하지 않는다</td></tr>
+                  <tr><td>깊이</td><td><code>Level</code> (가상 목록의 모델 깊이 + 1)</td><td>AXDisclosureLevel — 평탄화한 행은 조상이 없어 0</td><td>—</td></tr>
+                  <tr><td>창 밖 항목</td><td>ItemContainer · VirtualizedItem으로 모델이 답한다</td><td>지어진 행만 보인다</td><td>지어진 행만 보인다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>Android에는 접근성 다리가 없다 (<a class="xref" href="platforms.html">플랫폼과 host</a>).</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">목록 코드에는 플랫폼 분기가 없다. 차이는 공용 controller의 입력 장치 규칙과 각 플랫폼의 접근성 다리에서 난다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>터치 몸짓</th><th>목록에서</th></tr></thead>
+            <tbody>
+              <tr><td>탭</td><td>클릭이다 (뗄 때). 허용치 12 논리 픽셀 안에서 떼야 한다</td></tr>
+              <tr><td>두 번 탭</td><td>같은 대상에서 500ms·12 논리 픽셀 안이면 <code>double_click</code>. 마우스 클릭 뒤의 탭은 두 번 탭이 아니다</td></tr>
+              <tr><td>길게 누르기</td><td>움직이지 않고 600ms면 손을 떼기 전에 <strong>우클릭</strong> → <code>context_menu</code>. 우클릭 액션이 없는 대상은 길게 눌러도 탭이다</td></tr>
+              <tr><td>빠른 쓸기</td><td>400ms 안에 축 방향으로 12 논리 픽셀을 넘기면 스크롤. 놓으면 관성으로 잇는다</td></tr>
+              <tr><td>끌기 (순서 바꾸기)</td><td>스크롤이 될 수 없게 된 뒤에야 선다: 400ms의 스크롤 창이 닫힐 때까지 거의 움직이지 않다가, 길게 누르기(600ms)가 차기 전에 12 논리 픽셀 넘게 움직인다. 흘릴 것이 없는 목록에서는 바로 끌기다</td></tr>
+              <tr><td>펜 배럴 버튼</td><td>우클릭이다</td></tr>
+              <tr><td>쓸어서 지우기</td><td>목록에 없다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>플랫폼별 기본 행 높이는 없다. 두 목록 모두 24 논리 픽셀이고, 휴대폰 데모도 데스크톱과 같은 높이를 쓴다. 터치에 더 큰 행이 필요하면 앱이 <code>row_height</code>(가상 목록은 항목별 <code>height</code>)를 정한다.</li>
+            <li>Android host는 길게 누르기·이동 허용치를 시스템 설정으로 덮고, 길게 누르기 햅틱을 켜서 시작한다. iOS도 햅틱을 켜서 시작한다. Windows는 끈 채다.</li>
+            <li>Windows는 두 번 누름 시간을 <code>GetDoubleClickTime()</code>으로 받는다.</li>
+            <li>macOS는 Command+←/→를 Home/End로 바꿔 보낸다. 그리고 Command를 주 단축키와 meta 둘 다로 싣는데, 가상 목록의 key handler는 Alt·Meta가 함께면 키를 쓰지 않는다 — 그래서 <strong>macOS의 Command+A는 가상 목록의 <code>select_all</code>에 닿지 않는다</strong> (test 없이 코드에서 확인한 동작).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong><code>list_element</code>의 행 키는 화면 전체에서 유일해야 한다.</strong> 행 id에 목록 owner가 없다. 트리와 다른 목록이 같은 경로 키를 보이면 id가 겹치고, 초점·액션이 첫 행으로 간다. 가상 목록은 owner를 붙여 이 문제가 없다.</li>
+          <li><strong>키를 frame마다 새로 짓지 않는다 (색인·주소 금지).</strong> 선택·커서·펼침·재정렬이 키로 오가고, 두 번 누름도 같은 id의 두 번째 누름이어야 선다.</li>
+          <li><strong>펼침은 앱의 것이다.</strong> 삼각형을 눌러도 앱이 펼친 집합을 고쳐 다시 평탄화하지 않으면 화면이 그대로다. 접힌 가지의 자식을 <code>items</code>에 넣으면 그대로 보인다 — 라이브러리는 거르지 않는다.</li>
+          <li><strong><code>toggle</code>만 주면 보조 기술이 펼칠 수 없다.</strong> Expand·Collapse는 절대값 <code>set_expanded</code>로만 선다.</li>
+          <li><strong>factory 없이 <code>expansion</code>만 주면 삼각형이 없다.</strong> 그런데 그 행은 보조 기술에 펼침 상태를 그대로 알린다.</li>
+          <li><strong>고른 자식·커서가 든 가지를 접어도 라이브러리는 아무것도 고치지 않는다.</strong> <code>list_element</code>는 그 행이 사라져 초점이 거둬지고 <code>selected</code>는 낡은 채 남는다. 가상 목록은 첫 활성 항목을 커서로 그리지만 앱의 <code>cursor</code>는 옛 키다. 앱이 커서를 부모로 올리거나 <code>selection_reconcile</code>을 부른다 — 이때 커서는 접힌 가지 <strong>다음</strong> 줄로 간다(다음이 없을 때만 앞쪽).</li>
+          <li><strong>큰 모델을 <code>items</code>로 넘기면 frame마다 모델만큼 복사한다.</strong> <code>shared_items</code>로 넘기고, 넘긴 vector는 고치지 말고 갈아 끼운다.</li>
+          <li><strong><code>list_element</code>에 보이는 행만 잘라 넣지 않는다.</strong> End와 화살표가 데이터 전체가 아니라 잘라 넣은 부분으로 조용히 좁아진다. 많으면 가상 목록이다.</li>
+          <li><strong>tree를 짓기 전에 <code>clamp_scroll</code>로 스크롤 값을 다듬는다.</strong> 앱 값과 목록이 재는 값이 어긋나면 커서를 따라가는 스크롤이 한 번에 닿지 않는다.</li>
+          <li><strong>정책을 둔 앱은 휠과 되살리기를 직접 잇는다.</strong> 정책이 있으면 휠은 <code>on_wheel</code>로만 가므로 <code>route_wheel</code>을 불러야 한다. <code>list_element</code>에서 키보드로 옮긴 초점을 화면에 들이는 것도 <code>on_focus_moved</code>의 몫이다.</li>
+          <li><strong><code>build_row</code>는 순수 함수여야 한다.</strong> 페이지(<code>this</code>)나 앱 상태를 참조로 잡지 말고 값으로 담는다.</li>
+          <li><strong>행 안의 컨트롤은 제 초점을 받는다.</strong> 그 위의 우클릭은 행의 메뉴가 아니다. Ctrl+A·Ctrl+Space는 그 컨트롤이 쓰지 않으면 목록까지 올라온다.</li>
+          <li><strong>Tab 자리 조건.</strong> 가상 목록에 <code>move</code>·<code>move_with</code>·<code>activate</code>가 모두 없으면 Tab 자리조차 아니다. <code>list_element</code>는 <code>select</code>가 없으면 키보드가 서지 않는다.</li>
+          <li><strong>가상 목록을 한 tree에서 두 번 배치하는 컨테이너에 넣지 않는다.</strong> 행은 높이가 있는 첫 배치에서 한 번만 짓는다.</li>
+          <li><strong>비활성 항목은 <code>selected</code>·<code>selection</code>에 있어도 고른 것으로 그리지 않는다.</strong> 보조 기술의 선택 읽기에서도 빠진다.</li>
+          <li><strong><code>activate</code>는 키보드만, <code>double_click</code>은 포인터만이다.</strong> <code>list_element</code>에서는 Enter가 곧 <code>select</code>라 "Enter=열기, 클릭=고르기"를 가를 수 없다.</li>
+          <li><strong>그냥 두면 트리로 읽히지 않는다.</strong> <code>list_element</code>는 <code>list</code>/<code>list_item</code> 고정이고, 가상 목록도 기본은 같다. 가상 목록에 <code>role = access_role::tree</code>, <code>row_role = access_role::tree_item</code>을 준다.</li>
+          <li><strong>격자 모드(<code>columns</code>)와 계층(<code>set_expanded</code>)을 함께 쓰지 않는다.</strong> ←/→가 칸 이동이 된다.</li>
+          <li><strong>글자 탐색은 평탄화한 모델에서만 찾는다.</strong> 접힌 가지 아래의 노드나 <code>label</code>이 빈 항목은 찾지 못한다.</li>
+          <li><strong>앱 키에 U+001F를 쓰지 않는다.</strong> 상태 줄 키와 행 자리표가 그 구분자를 쓴다.</li>
+          <li><strong>조용히 무시되는 설정.</strong> <code>items</code>와 <code>shared_items</code>를 둘 다 주면 <code>items</code>는 읽히지 않는다. <code>multiple_selection</code>이 거짓이면 <code>selection</code>·<code>toggle_at_cursor</code>·<code>select_all</code>은 쓰이지 않는다. <code>move</code>와 <code>move_with</code>를 둘 다 주면 키는 <code>move_with</code>로 가고 행 누름의 커서 이동은 <code>move</code>로 간다. <code>accepts_drop</code>만 있고 <code>drop</code>이 없으면 놓을 자리가 아니다. 격자 모드는 항목별 <code>height</code>를 보지 않는다.</li>
+          <li><strong>선형 비용.</strong> 창에 걸치는 구간·행 자리·내용 높이는 frame마다 O(n)이고, <code>selection_model.h</code> 함수와 보조 기술의 항목 찾기는 키를 선형으로 찾는다. 설계 문서의 100만 줄 계측은 아직 "측정 전"이다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>트리 뷰는 어떻게 만드나?</summary><div class="faq-a"><p class="faq-short">트리 전용 element는 없다. 지금 보이는 노드만 깊이 우선으로 펴서 <code>depth</code>·<code>expansion</code>과 함께 넘긴다.</p><p>작은 트리는 <code>list_element</code>에 <code>set_expanded</code>를 단다 (<a class="xref" href="#build-tree">작은 트리</a>). 크거나 ←/→가 필요하면 <code>virtual_list_element</code>에 <code>set_expanded</code>를 단다 (<a class="xref" href="#build-lazy">지연 로딩</a>). 계층 모델을 펴는 일은 <code>flatten_tree</code>가 한다.</p></div></details>
+          <details class="faq"><summary>펼침 상태는 누가 들고 있나?</summary><div class="faq-a"><p class="faq-short">앱이다. 목록은 <code>toggle(key)</code>나 <code>set_expanded(key, bool)</code> 메시지만 낸다.</p><p>데모는 <code>std::vector&lt;std::u8string&gt;</code>에, 작업대는 <code>std::unordered_set&lt;std::u8string&gt;</code>에 든다. 앱이 그 집합으로 다시 평탄화하지 않으면 삼각형을 눌러도 화면이 그대로다.</p></div></details>
+          <details class="faq"><summary>여러 개를 고르려면?</summary><div class="faq-a"><p class="faq-short"><code>virtual_list_element</code>에서 <code>multiple_selection = true</code>를 켜고 <code>selection_model.h</code>로 계산한다. <code>list_element</code>는 단일 선택이다.</p><p><code>selection</code>·<code>cursor</code>를 싣고 <code>pick</code>·<code>move_with</code>·<code>toggle_at_cursor</code>·<code>select_all</code>을 단다. 받은 메시지는 <code>selection_pick</code>·<code>selection_move</code>·<code>selection_toggle</code>·<code>selection_select_all</code>로 다음 값을 계산한다 (<a class="xref" href="#build-select">선택</a>).</p></div></details>
+          <details class="faq"><summary>노드가 10만 개면?</summary><div class="faq-a"><p class="faq-short"><code>virtual_list_element</code>를 쓰고 모델은 <code>shared_items</code>로 공유해 넘긴다.</p><p>tree에 서는 것은 창에 걸치는 행과 커서 행, 창 밖의 고른 행(64개까지)뿐이다. 펼침이 바뀔 때만 <code>flatten_tree</code>를 다시 부른다 (<a class="xref" href="#build-large">아주 큰 목록</a>). 걸치는 구간 계산은 여전히 frame마다 O(n) 더하기다.</p></div></details>
+          <details class="faq"><summary>화살표로 움직이면 선택도 따라오나?</summary><div class="faq-a"><p class="faq-short"><code>list_element</code>는 따라오지 않는다. 가상 목록은 <code>move</code>를 받은 앱이 정한다.</p><p><code>list_element</code>는 초점만 옮기고 Space·Enter·클릭이 <code>select</code>를 낸다. 작업대 트리는 <code>move</code>와 <code>select</code>에 같은 메시지를 줘서 "화살표 = 선택"으로 만들고, 로그 목록은 커서만 옮긴다.</p></div></details>
+          <details class="faq"><summary>←/→로 접고 펴거나 부모로 갈 수 있나?</summary><div class="faq-a"><p class="faq-short"><code>virtual_list_element</code>에 <code>set_expanded</code>가 있을 때만 된다.</p><p>←는 펼친 가지를 접고, 접혔거나 잎이면 부모로 간다. →는 접힌 가지를 펴고, 펼친 가지면 첫 자식으로 간다. <code>list_element</code>에서 ←/→는 앱 정책으로 흐른다.</p></div></details>
+          <details class="faq"><summary>클릭은 "고르기", Enter와 더블 클릭은 "열기"로 가르려면?</summary><div class="faq-a"><p class="faq-short">가상 목록에 <code>select</code>(클릭), <code>activate</code>(Enter·Space), <code>double_click</code>(두 번 누름)을 따로 준다.</p><p><code>list_element</code>에는 그 갈래가 없다 — Enter가 곧 <code>select</code>다.</p></div></details>
+          <details class="faq"><summary>행을 우클릭하면 그 행이 골라지나?</summary><div class="faq-a"><p class="faq-short">골라지지 않는다. <code>context_menu(key, context)</code>만 난다.</p><p>"고르지 않은 행을 우클릭하면 그 행만 고르고 연다"(탐색기 규칙)는 앱이 <code>selection_contains</code>로 보고 <code>selection_pick</code>을 불러 만든다 (<a class="xref" href="#build-menu">컨텍스트 메뉴</a>).</p></div></details>
+          <details class="faq"><summary>행에 체크 박스를 둘 수 있나? 폴더의 "일부"는?</summary><div class="faq-a"><p class="faq-short">목록 설정에는 없다. 표의 <code>check_column</code>·<code>check_state_of</code>·<code>toggle_check</code>를 쓴다.</p><p>폴더의 일부 상태는 앱이 <code>aggregate_check</code>로 계산해 <code>check_state::mixed</code>로 답한다. 가지를 누르면 자식 전부를 바꾸는 전파도 앱이 한다 (<a class="xref" href="#build-check">체크 박스</a>).</p></div></details>
+          <details class="faq"><summary>끌어서 순서를 바꿀 때 "앞에/뒤에/안에"는?</summary><div class="faq-a"><p class="faq-short">라이브러리는 구분하지 않는다. 놓을 자리는 언제나 행 전체다.</p><p><code>list_element</code>는 <code>reorder(moved, target)</code> 하나이고 데모는 대상 앞에 끼운다. 가상 목록은 받는 행에 <code>drop</code>이 오고 뜻은 앱이 정한다.</p></div></details>
+          <details class="faq"><summary>같은 키를 두 목록에 써도 되나?</summary><div class="faq-a"><p class="faq-short">가상 목록끼리는 된다. <code>list_element</code>끼리는 안 된다.</p><p>가상 목록의 자리표에는 목록 owner가 든다. <code>list_element</code>의 행 id는 <code>{ list_row, key }</code>라 같은 표면에서 겹치면 <code>duplicate_ids()</code>에 나타나고 초점·액션이 첫 행으로 간다.</p></div></details>
+          <details class="faq"><summary>고른 자식이 든 부모를 접으면 선택과 초점은?</summary><div class="faq-a"><p class="faq-short">라이브러리는 고치지 않는다. 앱이 고친다.</p><p><code>list_element</code>는 초점 행이 사라져 초점이 거둬지고, <code>selected</code>는 그대로지만 그 행이 없어 고른 것으로 그려지지 않는다. 가상 목록은 첫 활성 항목을 커서로 본다. 앱이 커서를 부모로 올리거나, <code>selection_reconcile</code>을 부르면 커서가 접힌 가지 다음 줄로 간다.</p></div></details>
+          <details class="faq"><summary>펼칠 때 자식을 불러오려면 (지연 로딩)?</summary><div class="faq-a"><p class="faq-short">노드를 <code>node_load::unloaded</code>로 두고, 펼침 메시지에서 <code>tree_nodes_to_load</code>와 <code>request_ledger</code>로 요청한다.</p><p>자식이 없어도 <code>unloaded</code>면 가지로 보인다. 요청한 노드는 <code>loading</code>으로 바꾸고, 결과는 <code>settle</code>이 참일 때만 들인다. 실패 줄은 Enter로 다시 시도할 수 있게 활성이다 (<a class="xref" href="#lab">실습</a>에서 해 볼 수 있다).</p></div></details>
+          <details class="faq"><summary>스크린 리더가 Tree로 읽게 하려면?</summary><div class="faq-a"><p class="faq-short">가상 목록에서 <code>role = access_role::tree</code>, <code>row_role = access_role::tree_item</code>을 준다.</p><p>Windows는 Tree / TreeItem이 되고 <code>Level</code>은 모델의 깊이에서 난다. <code>list_element</code>로는 할 수 없다. macOS는 AXOutline이 되지만 평탄화한 행의 AXDisclosureLevel은 0이다.</p></div></details>
+          <details class="faq"><summary>휠을 굴려도 <code>list_element</code>가 흐르지 않는다.</summary><div class="faq-a"><p class="faq-short"><code>scroll</code> factory가 있는지, 앱 정책의 <code>on_wheel</code>이 <code>route_wheel</code>을 부르는지 본다.</p><p><code>scroll</code>이 있고 내용이 넘쳐야 목록이 흘리는 자리가 된다. 앱 정책이 있으면 휠은 <code>on_wheel</code>로만 가는데 기본 구현은 아무것도 하지 않는다.</p></div></details>
+          <details class="faq"><summary>글자를 치면 어디로 가나?</summary><div class="faq-a"><p class="faq-short">라벨 접두(대소문자 무시)로 찾는다. 1초가 지나면 질의를 잊는다.</p><p>첫 글자는 다음 항목부터, 이어 친 글자는 지금 항목부터 찾는다. <code>list_element</code>는 초점을 옮기고, 가상 목록은 <code>move</code>를 낸다. 맞는 것이 없어도 글자는 목록이 삼킨다.</p></div></details>
+          <details class="faq"><summary>목록이 비었을 때 안내 글은?</summary><div class="faq-a"><p class="faq-short">설정은 없다. 목록 대신 글을 짓거나 고를 수 없는 안내 줄을 싣는다 (<a class="xref" href="#build-empty">빈 상태</a>).</p></div></details>
+          <details class="faq"><summary>행 높이를 행마다 다르게 할 수 있나?</summary><div class="faq-a"><p class="faq-short"><code>virtual_list_element</code>만 된다 — <code>virtual_list_item::height</code> (0이면 <code>row_height</code>).</p><p>Page 키도 실제 높이로 잰다. <code>list_element</code>는 모든 행이 <code>row_height</code>다. 격자 모드는 항목별 높이를 보지 않는다.</p></div></details>
+          <details class="faq"><summary>macOS에서 Command+A로 다 고르지 못한다.</summary><div class="faq-a"><p class="faq-short">코드상 그렇게 동작한다. 가상 목록의 key handler는 Meta가 함께면 키를 쓰지 않는데, macOS host는 Command를 meta로도 싣는다.</p><p>test로 잠긴 동작은 아니고 소스를 따라가 확인한 것이다. 앱이 메뉴의 "전체 선택"이나 자기 단축키로 <code>select_all</code>과 같은 메시지를 내면 된다.</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/grouped_list_element.h" target="_blank" rel="noopener">include/luil/ui/grouped_list_element.h</a><span class="n">최상위 기호 5</span></div>
+            <div class="hdr-syms"><a href="api.html#list-group" title="구조체"><span class="kb t">S</span>list_group</a><a href="api.html#list-group-message-factory" title="별칭"><span class="kb t">=</span>list_group_message_factory</a><a href="api.html#grouped-list-config" title="구조체"><span class="kb t">S</span>grouped_list_config</a><a href="api.html#list-header-height" title="상수"><span class="kb ">k</span>list_header_height</a><a href="api.html#grouped-list-element" title="클래스"><span class="kb t">C</span>grouped_list_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/item_model.h" target="_blank" rel="noopener">include/luil/ui/item_model.h</a><span class="n">최상위 기호 14</span></div>
+            <div class="hdr-syms"><a href="api.html#node-load" title="열거형"><span class="kb e">E</span>node_load</a><a href="api.html#tree-node" title="구조체"><span class="kb t">S</span>tree_node</a><a href="api.html#tree-row-kind" title="열거형"><span class="kb e">E</span>tree_row_kind</a><a href="api.html#tree-row" title="구조체"><span class="kb t">S</span>tree_row</a><a href="api.html#tree-loading-suffix" title="상수"><span class="kb ">k</span>tree_loading_suffix</a><a href="api.html#tree-failed-suffix" title="상수"><span class="kb ">k</span>tree_failed_suffix</a><a href="api.html#tree-flatten-options" title="구조체"><span class="kb t">S</span>tree_flatten_options</a><a href="api.html#flatten-tree" title="함수"><span class="kb f">f</span>flatten_tree</a><a href="api.html#tree-row-items" title="함수"><span class="kb f">f</span>tree_row_items</a><a href="api.html#tree-nodes-to-load" title="함수"><span class="kb f">f</span>tree_nodes_to_load</a><a href="api.html#view-order" title="구조체"><span class="kb t">S</span>view_order</a><a href="api.html#sort-filter" title="함수"><span class="kb f">f</span>sort_filter</a><a href="api.html#request-token" title="구조체"><span class="kb t">S</span>request_token</a><a href="api.html#request-ledger" title="클래스"><span class="kb t">C</span>request_ledger</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/list_element.h" target="_blank" rel="noopener">include/luil/ui/list_element.h</a><span class="n">최상위 기호 11</span></div>
+            <div class="hdr-syms"><a href="api.html#list-expansion" title="열거형"><span class="kb e">E</span>list_expansion</a><a href="api.html#list-item" title="구조체"><span class="kb t">S</span>list_item</a><a href="api.html#list-message-factory" title="별칭"><span class="kb t">=</span>list_message_factory</a><a href="api.html#list-reorder-message-factory" title="별칭"><span class="kb t">=</span>list_reorder_message_factory</a><a href="api.html#list-context-message-factory" title="별칭"><span class="kb t">=</span>list_context_message_factory</a><a href="api.html#list-config" title="구조체"><span class="kb t">S</span>list_config</a><a href="api.html#list-scrollbar-width" title="상수"><span class="kb ">k</span>list_scrollbar_width</a><a href="api.html#list-indent-step" title="상수"><span class="kb ">k</span>list_indent_step</a><a href="api.html#list-expander-width" title="상수"><span class="kb ">k</span>list_expander_width</a><a href="api.html#list-handle-width" title="상수"><span class="kb ">k</span>list_handle_width</a><a href="api.html#list-element" title="클래스"><span class="kb t">C</span>list_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/selection_model.h" target="_blank" rel="noopener">include/luil/ui/selection_model.h</a><span class="n">최상위 기호 7</span></div>
+            <div class="hdr-syms"><a href="api.html#item-selection" title="구조체"><span class="kb t">S</span>item_selection</a><a href="api.html#selection-contains" title="함수"><span class="kb f">f</span>selection_contains</a><a href="api.html#selection-pick" title="함수"><span class="kb f">f</span>selection_pick</a><a href="api.html#selection-move" title="함수"><span class="kb f">f</span>selection_move</a><a href="api.html#selection-toggle" title="함수"><span class="kb f">f</span>selection_toggle</a><a href="api.html#selection-select-all" title="함수"><span class="kb f">f</span>selection_select_all</a><a href="api.html#selection-reconcile" title="함수"><span class="kb f">f</span>selection_reconcile</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/virtual_list_element.h" target="_blank" rel="noopener">include/luil/ui/virtual_list_element.h</a><span class="n">최상위 기호 23</span></div>
+            <div class="hdr-syms"><a href="api.html#virtual-list-item" title="구조체"><span class="kb t">S</span>virtual_list_item</a><a href="api.html#virtual-row-builder" title="별칭"><span class="kb t">=</span>virtual_row_builder</a><a href="api.html#virtual-list-message-factory" title="별칭"><span class="kb t">=</span>virtual_list_message_factory</a><a href="api.html#virtual-list-pick-factory" title="별칭"><span class="kb t">=</span>virtual_list_pick_factory</a><a href="api.html#virtual-list-move-context" title="구조체"><span class="kb t">S</span>virtual_list_move_context</a><a href="api.html#virtual-list-move-with-factory" title="별칭"><span class="kb t">=</span>virtual_list_move_with_factory</a><a href="api.html#virtual-list-context-message-factory" title="별칭"><span class="kb t">=</span>virtual_list_context_message_factory</a><a href="api.html#virtual-list-offscreen-selection-limit" title="상수"><span class="kb ">k</span>virtual_list_offscreen_selection_limit</a><a href="api.html#virtual-list-reveal" title="열거형"><span class="kb e">E</span>virtual_list_reveal</a><a href="api.html#virtual-list-config" title="구조체"><span class="kb t">S</span>virtual_list_config</a><a href="api.html#virtual-list-grid-columns" title="함수"><span class="kb f">f</span>virtual_list_grid_columns</a><a href="api.html#virtual-list-grid-offset-keeping" title="함수"><span class="kb f">f</span>virtual_list_grid_offset_keeping</a><a href="api.html#virtual-list-reveal-offset" title="함수"><span class="kb f">f</span>virtual_list_reveal_offset</a><a href="api.html#virtual-list-step-target" title="함수"><span class="kb f">f</span>virtual_list_step_target</a><a href="api.html#virtual-list-search-target" title="함수"><span class="kb f">f</span>virtual_list_search_target</a><a href="api.html#virtual-list-span" title="구조체"><span class="kb t">S</span>virtual_list_span</a><a href="api.html#virtual-list-row-id" title="함수"><span class="kb f">f</span>virtual_list_row_id</a><a href="api.html#virtual-list-expander-id" title="함수"><span class="kb f">f</span>virtual_list_expander_id</a><a href="api.html#virtual-list-row-span" title="함수"><span class="kb f">f</span>virtual_list_row_span</a><a href="api.html#virtual-list-content-height" title="함수"><span class="kb f">f</span>virtual_list_content_height</a><a href="api.html#virtual-list-range" title="구조체"><span class="kb t">S</span>virtual_list_range</a><a href="api.html#virtual-list-visible-range" title="함수"><span class="kb f">f</span>virtual_list_visible_range</a><a href="api.html#virtual-list-element" title="클래스"><span class="kb t">C</span>virtual_list_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<script src="assets/textlab.js"></script>
+<script src="assets/treemodel.js"></script>
+<script src="assets/lists-lab.js"></script>
+<script>
+  LuilListsLab.setup(document.getElementById("tv-lab"));
+</script>
+</body>
+</html>
