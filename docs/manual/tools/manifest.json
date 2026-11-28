@@ -90,7 +90,8 @@
    "window"
   ],
   "include/luil/app/app_host.h": [
-   "threads"
+   "threads",
+   "start"
   ],
   "include/luil/app/color_picker_popup.h": [
    "pickers"
@@ -135,7 +136,8 @@
    "platforms"
   ],
   "include/luil/luil.h": [
-   "overview"
+   "overview",
+   "start"
   ],
   "include/luil/macos/macos_app.h": [
    "platforms"
@@ -509,7 +511,8 @@
    "scrolling"
   ],
   "include/luil/version.h": [
-   "overview"
+   "overview",
+   "start"
   ],
   "include/luil/win32/app_host.h": [
    "threads"

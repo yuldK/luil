@@ -66,8 +66,8 @@ luil 설명서(`docs/manual/`)의 문서를 더하거나 고칠 때 지키는 �
 </html>
 ```
 
-새 문서는 `assets/manual.js`의 `DOCS.sections`에 한 줄을 더해야 왼쪽 목차·앞뒤 문서·검색에 잡힌다.
-`tools/manifest.json`의 `planned`에서 그 id를 빼고, `headers` 표가 그 문서를 가리키는지 확인한다.
+새 문서는 `assets/manual.js`의 `DOCS.sections`에 한 줄이 있어야 왼쪽 목차·앞뒤 문서·검색에 잡힌다.
+`tools/manifest.json`의 `headers` 표가 그 문서 id를 가리키는 헤더들이 이 문서가 설명해야 할 범위다.
 
 ### 2.2 컴포넌트 문서의 조각 차례
 
@@ -158,14 +158,31 @@ namespace sample { /*SAMPLE*/ }
 
 ## 6. 다 쓴 뒤 돌리는 것
 
+문서 하나를 쓸 때는 그 문서만 넘긴다 (여럿이 함께 쓸 때 서로의 파일을 덮지 않는다).
+
 ```bash
-python3 docs/manual/tools/fill_excerpts.py          # 발췌 채우기
-python3 docs/manual/tools/gen_pages.py              # 관련 헤더 영역
-python3 docs/manual/tools/gen_search.py             # 검색 색인·문서 지도
-python3 docs/manual/tools/fill_excerpts.py --check  # 발췌 = 원문
-python3 docs/manual/tools/check_ids.py              # 지어낸 이름 없음
-python3 docs/manual/tools/check_samples.py          # 손으로 쓴 예제가 컴파일됨
-python3 docs/manual/tools/check_coverage.py         # 헤더마다 문서
+python3 docs/manual/tools/fill_excerpts.py docs/manual/lists.html          # 발췌 채우기
+python3 docs/manual/tools/gen_pages.py docs/manual/lists.html              # 관련 헤더 영역
+python3 docs/manual/tools/fill_excerpts.py --check docs/manual/lists.html  # 발췌 = 원문
+python3 docs/manual/tools/check_ids.py docs/manual/lists.html              # 지어낸 이름 없음
+python3 docs/manual/tools/check_samples.py docs/manual/lists.html          # 손으로 쓴 예제가 컴파일됨
+node docs/manual/tools/check_page.mjs docs/manual/lists.html               # 브라우저 네 가지: 오류·넘침·빈 코드
 ```
-API가 바뀌었으면 먼저 `tools/gen_api.py`(libclang 필요)로 `assets/api-index.js`를 다시 만든다.
-브라우저에서 데스크톱·휴대폰 폭, 밝게·어둡게로 열어 콘솔 오류와 가로 넘침이 없는지 본다.
+
+설명서 전체를 손볼 때(관리자):
+
+```bash
+python3 docs/manual/tools/gen_api.py        # API가 바뀌었으면 (libclang 필요) → assets/api-index.js
+python3 docs/manual/tools/gen_pages.py      # 모든 문서의 관련 헤더 영역
+python3 docs/manual/tools/gen_search.py     # 검색 색인·문서 지도
+python3 docs/manual/tools/check_coverage.py # 헤더마다 문서
+```
+
+## 7. 본보기
+
+`lists.html`(목록과 트리 뷰)이 컴포넌트 문서의 본보기다. 조각 차례, 발췌와 손 예제의 비율, 표의 모양,
+함정(`ol.recap`)과 질문(`details.faq`)의 글투를 그대로 따른다. 실습은 `assets/lists-lab.js`처럼 문서 이름의
+`assets/<문서>-lab.js` 하나에 두고, 원본 함수를 옮겼으면 `assets/treemodel.js`처럼 따로 떼어 원본과 대조할 수 있게 한다.
+
+여럿이 나눠 쓸 때 공용 파일(`assets/manual.css`, `assets/manual.js`, `tools/*`, `manifest.json`, 다른 문서)은
+고치지 않는다. 문서만의 스타일은 그 문서의 `<style>`에 둔다. 차례(`DOCS`)와 manifest는 관리자가 맞춘다.

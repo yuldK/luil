@@ -21,6 +21,7 @@
         pages: [
           { id: "home", file: "index.html", title: "설명서 홈" },
           { id: "overview", file: "overview.html", title: "luil 개요" },
+          { id: "start", file: "start.html", title: "설치와 첫 앱" },
         ],
       },
       {
@@ -43,7 +44,35 @@
       {
         id: "ui",
         name: "컴포넌트",
-        pages: [{ id: "lists", file: "lists.html", title: "목록과 트리 뷰" }],
+        pages: [
+          { id: "containers", file: "containers.html", title: "배치 요소" },
+          { id: "scrolling", file: "scrolling.html", title: "스크롤과 확대" },
+          { id: "buttons", file: "buttons.html", title: "단추와 명령" },
+          { id: "choices", file: "choices.html", title: "체크·라디오·선택 묶음" },
+          { id: "values", file: "values.html", title: "슬라이더·숫자·별점·진행" },
+          { id: "pickers", file: "pickers.html", title: "날짜·시간·색 고르기" },
+          { id: "text-display", file: "text-display.html", title: "글 표시와 글꼴" },
+          { id: "text-input", file: "text-input.html", title: "텍스트 입력과 서식 글" },
+          { id: "lists", file: "lists.html", title: "목록과 트리 뷰" },
+          { id: "table", file: "table.html", title: "표" },
+          { id: "tabs", file: "tabs.html", title: "탭" },
+          { id: "menus", file: "menus.html", title: "메뉴와 메뉴 막대" },
+          { id: "popups", file: "popups.html", title: "드롭다운·콤보·팝업" },
+          { id: "dialogs", file: "dialogs.html", title: "대화 상자와 시트" },
+          { id: "notifications", file: "notifications.html", title: "알림" },
+          { id: "media", file: "media.html", title: "이미지·영상·웹·잉크" },
+        ],
+      },
+      {
+        id: "app",
+        name: "앱과 플랫폼",
+        pages: [
+          { id: "window", file: "window.html", title: "창과 셸 통합" },
+          { id: "services", file: "services.html", title: "플랫폼 서비스와 네트워크" },
+          { id: "theming", file: "theming.html", title: "테마와 스타일" },
+          { id: "accessibility", file: "accessibility.html", title: "접근성" },
+          { id: "i18n", file: "i18n.html", title: "다국어" },
+        ],
       },
       {
         id: "ref",

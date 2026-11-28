@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """문서 안의 자동 영역을 다시 채운다.
 
-    python3 docs/manual/tools/gen_pages.py
+    python3 docs/manual/tools/gen_pages.py                       # 모든 문서
+    python3 docs/manual/tools/gen_pages.py docs/manual/lists.html # 그 문서만
 
 <!-- auto:headers --> … <!-- /auto:headers -->
     manifest.json이 이 문서에 배정한 공개 헤더마다 설명과 대표 기호(API 찾아보기로 가는 링크)를 늘어놓는다.
@@ -55,8 +56,12 @@ def main():
         for pid in ids:
             pages_headers.setdefault(pid, []).append(h)
 
+    import sys
+    only = {Path(a).name for a in sys.argv[1:] if not a.startswith("-")}
     changed = 0
     for pid, file in docs.items():
+        if only and file not in only:
+            continue
         f = MANUAL / file
         if not f.exists() or pid in ("api", "home"):
             continue
