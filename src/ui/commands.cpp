@@ -14,9 +14,7 @@ namespace luil {
         //    주 역할을 Ctrl이 맡는데 함께 눌린 Meta(Windows 키, macOS의 Command)다.
         [[nodiscard]] bool extra_modifier_down(const key_pressed_event& event) noexcept
         {
-            const bool primary { event.primary_shortcut_down() };
-            const bool primary_on_meta { primary && event.control == false };
-            return (event.control && primary == false) || (event.meta && primary_on_meta == false);
+            return (event.control && event.primary_shortcut_down() == false) || event.non_primary_meta_down();
         }
 
         bool matches(const key_chord& chord, const key_pressed_event& event) noexcept

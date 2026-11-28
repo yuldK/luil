@@ -224,6 +224,39 @@ TEST_CASE("Ctrl+A and Ctrl+Space are the list's own keys", "[ui][list][selection
     REQUIRE(policy.keys == 1);
 }
 
+TEST_CASE("Command+A on macOS selects all like Ctrl+A, while the Windows key still flows to the app", "[ui][list][selection][keys]")
+{
+    recording_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(published(selecting_config()));
+    focus_list(controller);
+
+    // macOS host는 Command를 주 단축키이자 Meta로 싣는다 (`macos_input`). 물리 Control은 눌리지 않았다.
+    luil::key_pressed_event command_a { key(luil::key_code::key_a, false, false, 10) };
+    command_a.primary_shortcut = true;
+    command_a.word_navigation = false;
+    command_a.meta = true;
+    REQUIRE(message_at<select_all_intent>(controller.process(command_a), 0) != nullptr);
+    REQUIRE(policy.keys == 0);
+
+    // Windows의 Ctrl+A는 그대로다.
+    REQUIRE(message_at<select_all_intent>(controller.process(key(luil::key_code::key_a, true, false, 20)), 0) != nullptr);
+    REQUIRE(policy.keys == 0);
+
+    // 주 단축키가 아닌 Meta(Windows 키)와 함께면 앱 단축키라 흐른다.
+    luil::key_pressed_event windows_a { key(luil::key_code::key_a, true, false, 30) };
+    windows_a.meta = true;
+    static_cast<void>(controller.process(windows_a));
+    REQUIRE(policy.keys == 1);
+
+    // Command+화살표의 뜻은 정하지 않았다. 목록이 받지 않고 앱으로 흐른다.
+    luil::key_pressed_event command_down { key(luil::key_code::arrow_down, false, false, 40) };
+    command_down.primary_shortcut = true;
+    command_down.meta = true;
+    static_cast<void>(controller.process(command_down));
+    REQUIRE(policy.keys == 2);
+}
+
 TEST_CASE("Ctrl+A reaches the list from a button inside a custom row", "[ui][list][selection][keys]")
 {
     luil::virtual_list_config config { selecting_config() };

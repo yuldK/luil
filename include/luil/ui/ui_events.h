@@ -516,6 +516,14 @@ namespace luil {
             return primary_shortcut.value_or(control);
         }
 
+        // 주 단축키를 맡지 않은 Meta가 눌렸는가. Windows 키, 주 역할을 Ctrl이 맡는데 함께 눌린 Command가 그것이다.
+        //  - macOS는 Command를 주 단축키이자 `meta`로 싣는다. Meta가 눌리면 키를 흘리는 element는 `meta` 대신 이것을 봐야
+        //    Command+A 같은 주 단축키가 닿는다 (`commands`의 조합 판정과 같은 규칙이다).
+        [[nodiscard]] bool non_primary_meta_down() const noexcept
+        {
+            return meta && (primary_shortcut_down() == false || control);
+        }
+
         [[nodiscard]] bool word_navigation_down() const noexcept
         {
             return word_navigation.value_or(control);

@@ -538,7 +538,10 @@ namespace luil {
         const bool selection_keys { config_.multiple_selection && (config_.select_all != nullptr || config_.toggle_at_cursor != nullptr) };
         if (selection_keys || config_.set_expanded != nullptr || (grid() && moves_cursor()))
             set_key_handler([this](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
-                if (event.alt || event.meta)
+                // Alt와 Meta는 앱 단축키라 흘린다. 주 단축키를 맡은 Meta(macOS의 Command)의 A만은 받는다 — `meta`만 보고
+                // 흘리면 macOS의 Command+A가 `select_all`에 닿지 않는다. Command+화살표의 뜻은 정하지 않아 지금처럼 흘린다.
+                const bool primary_meta_select_all { event.key == key_code::key_a && event.non_primary_meta_down() == false };
+                if (event.alt || (event.meta && primary_meta_select_all == false))
                     return std::nullopt;
                 // 격자의 ←/→는 한 칸이다. Shift는 범위, Ctrl은 커서만 옮기기다 (↑/↓와 같은 수식 키 뜻).
                 if (grid() && moves_cursor() && (event.key == key_code::arrow_left || event.key == key_code::arrow_right))
