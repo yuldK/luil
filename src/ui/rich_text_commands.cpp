@@ -22,9 +22,11 @@ namespace luil {
 
         // 칸이 넘긴 복사·잘라내기·붙여넣기 키다 (docs/rich-edit-exchange-design.md). 명령표와 따로 고정이다.
         //  - Ctrl+C·X·V(Shift 포함, Ctrl+Shift+V는 서식 없이 붙이기), Ctrl+Insert(Shift 포함), Shift+Insert, Shift+Delete다.
+        //  - Ctrl은 주 단축키다 (macOS는 Command). macOS host는 Command를 `meta`로도 실으므로 주 단축키를 맡지 않은
+        //    Meta만 막는다 — `meta`를 막으면 칸이 넘긴 Command+C가 여기서 버려져 아무 일도 하지 않는다.
         [[nodiscard]] std::optional<rich_text_command> rich_text_clipboard_command_of(const key_pressed_event& event) noexcept
         {
-            if (event.alt || event.meta)
+            if (event.alt || event.non_primary_meta_down())
                 return std::nullopt;
             const bool primary { event.primary_shortcut_down() };
             if (primary)

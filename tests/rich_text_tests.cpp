@@ -400,4 +400,29 @@ TEST_CASE("The rich text key handler maps the standard clipboard keys before the
     REQUIRE(handler(alt_copy).has_value() == false);
     // 명령표의 키는 그대로다.
     REQUIRE(command_of(luil::key_code::key_b, true, false) == luil::rich_text_command::bold);
+
+    // macOS host는 Command를 주 단축키이자 Meta로 싣는다. Command+C·X·V도 같은 명령이다 — 칸이 넘긴 키를 버리지 않는다.
+    const auto command_key = [](const luil::key_code key, const bool shift) {
+        luil::key_pressed_event event { key };
+        event.shift = shift;
+        event.primary_shortcut = true;
+        event.word_navigation = false;
+        event.meta = true;
+        return event;
+    };
+    const auto command_in_handler = [&handler](const luil::key_pressed_event& event) -> std::optional<luil::rich_text_command> {
+        const auto actions { handler(event) };
+        if (actions.has_value() == false)
+            return std::nullopt;
+        return command_in(*actions);
+    };
+    REQUIRE(command_in_handler(command_key(luil::key_code::key_c, false)) == luil::rich_text_command::copy);
+    REQUIRE(command_in_handler(command_key(luil::key_code::key_x, false)) == luil::rich_text_command::cut);
+    REQUIRE(command_in_handler(command_key(luil::key_code::key_v, false)) == luil::rich_text_command::paste);
+    REQUIRE(command_in_handler(command_key(luil::key_code::key_v, true)) == luil::rich_text_command::paste_plain);
+    // 주 단축키를 맡지 않은 Meta(Windows 키)와 함께면 편집 키가 아니다.
+    luil::key_pressed_event windows_copy { luil::key_code::key_c };
+    windows_copy.control = true;
+    windows_copy.meta = true;
+    REQUIRE(handler(windows_copy).has_value() == false);
 }
