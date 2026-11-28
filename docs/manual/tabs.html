@@ -40,7 +40,7 @@
   .tb-grid { display: grid; gap: 14px; }
   @media (min-width: 1180px) { .tb-grid { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); align-items: start; } }
   .tb-side, .tb-panel { display: grid; gap: 10px; min-width: 0; align-content: start; }
-  .tb-stage { position: relative; min-height: 168px; padding-top: 2px; }
+  .tb-stage { position: relative; min-height: 44px; padding-top: 2px; }
   .tb-bar { position: relative; background: var(--sunk); outline: 1px solid var(--line-2); border-radius: 3px; user-select: none; -webkit-user-select: none; touch-action: none; font-size: 12.5px; }
   .tb-strip { position: absolute; top: 0; bottom: 0; overflow: hidden; }
   .tb-tab { position: absolute; top: 0; bottom: 0; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 4px 0 10px; border-right: 1px solid var(--line); color: var(--fg-2); white-space: nowrap; cursor: default; }
@@ -57,7 +57,7 @@
   .tb-btn:disabled { color: var(--fg-3); cursor: default; }
   .tb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   .tb-btn .ci { font-size: 14px; }
-  .tb-menu { position: absolute; z-index: 2; display: grid; min-width: 150px; max-height: 200px; overflow: auto; padding: 4px; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-row); }
+  .tb-menu { position: absolute; z-index: 3; display: grid; min-width: 150px; max-height: 200px; overflow: auto; padding: 4px; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-row); }
   .tb-menu button { appearance: none; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: var(--fs-xs); text-align: left; padding: 5px 10px; border-radius: var(--r-control); cursor: pointer; }
   .tb-menu button:hover:not(:disabled), .tb-menu button:focus-visible { background: var(--accent-wash); outline: none; }
   .tb-menu button:disabled { color: var(--fg-3); cursor: default; }
@@ -178,15 +178,15 @@
         <h3>조립과 id</h3>
         <figure class="anat">
           <div class="anat-bar" aria-hidden="true">
-            <span class="anat-btn">&#x2039;</span>
+            <span class="anat-btn"><i class="ci" aria-hidden="true">&#xEAB5;</i></span>
             <div class="anat-strip">
-              <span class="anat-tab sel"><span class="nm">보고서</span><span class="x">&#x2715;</span></span>
-              <span class="anat-tab"><span class="nm">메모</span><span class="x">&#x2715;</span></span>
+              <span class="anat-tab sel"><span class="nm">보고서</span><span class="x"><i class="ci" aria-hidden="true">&#xEA76;</i></span></span>
+              <span class="anat-tab"><span class="nm">메모</span><span class="x"><i class="ci" aria-hidden="true">&#xEA76;</i></span></span>
               <span class="anat-tab cut"><span class="nm">일정</span></span>
             </div>
-            <span class="anat-btn">&#x203A;</span>
+            <span class="anat-btn"><i class="ci" aria-hidden="true">&#xEAB6;</i></span>
             <span class="anat-btn">&#x22EF;</span>
-            <span class="anat-btn">+</span>
+            <span class="anat-btn"><i class="ci" aria-hidden="true">&#xEA60;</i></span>
           </div>
           <figcaption class="anat-keys"><span>앞·뒤 단추 <code>tab_step_back</code> · <code>tab_step_forward</code></span><span>탭 <code>{ tab, key }</code></span><span>닫기 <code>{ tab_close, key }</code></span><span>넘침 메뉴 <code>tab_overflow</code></span><span>꼬리 — 앱의 element</span></figcaption>
         </figure>
@@ -554,7 +554,7 @@
             <li>문서 1을 문서 3 위에 놓는다 → [2, 1, 3]. 바라는 것은 [2, 3, 1]이다.</li>
             <li>문서 3을 문서 1 위에 놓는다(왼쪽으로) → [3, 1, 2]. 맞다.</li>
           </ul>
-          코드를 따라 센 것이다 (코드에서 확인한 동작, 실행해 보지 않았다). 앞·뒤를 싣는 <code>move</code>를 쓰면 이 문제가 없다 — <a class="xref" href="#build-move">다음 조각</a>.</div></div>
+          이 처리 줄(67-84)을 그대로 오려 컴파일해 돌린 결과다 — 데모 앱 자체를 띄워 본 것은 아니다. 앞·뒤를 싣는 <code>move</code>를 쓰면 이 문제가 없다 — <a class="xref" href="#build-move">다음 조각</a>.</div></div>
       </section>
 
       <section class="sec" id="build-move">
@@ -800,7 +800,7 @@ TEST_CASE("Moving a tab names the side and refuses the spots that keep the order
             };
         }
 </script></div>
-        <div class="prose"><p>정책의 <code>interaction_policy::on_key</code>가 이 함수를 부른다. 막대가 tree에 있고 가둠(modal)이 없을 때만 명령으로 바꾼다. 초점이 어디에 있든 창 범위로 받는다.</p></div>
+        <div class="prose"><p>정책의 <code>interaction_policy::on_key</code>가 이 함수를 부른다. 막대가 tree에 있고 가둠(modal)이 없을 때만 명령으로 바꾼다. 초점 컨트롤이 소비하지 않은 키를 창 범위(<code>command_scope::window</code>) 명령표와 맞춘다.</p></div>
         <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:613-620" data-path="examples/demo/tabs_page.cpp" data-start="613"><script type="text/plain">
     std::vector<luil::input_action> tabs_page::route_key(const luil::ui_tree* const tree, const luil::key_pressed_event& event)
     {
@@ -911,7 +911,7 @@ TEST_CASE("Moving a tab names the side and refuses the spots that keep the order
             <tbody>
               <tr><td>탭 폭</td><td><code>fitted_tab_width</code> — 들어가면 <code>tab_width</code>, 모자라면 같은 폭으로 나누되 <code>min_tab_width</code> 밑으로는 줄이지 않는다. 최소가 0이거나 <code>tab_width</code> 이상이면 줄이지 않는다</td></tr>
               <tr><td>넘침 판정</td><td>탭 수 × 가장 작은 폭 + 꼬리 폭이 막대 폭보다 크면 넘친다. 단추 폭은 떼기 전의 폭으로 본다</td></tr>
-              <tr><td>단추 자리</td><td>넘칠 때만. 오른쪽부터 꼬리 → 넘침 단추 → (한 탭씩이면) 뒤 단추, 왼쪽에 앞 단추. 단추 폭은 모두 <code>tab_overflow_width</code>(28)다. 띠가 남은 자리를 갖는다</td></tr>
+              <tr><td>단추 자리</td><td>넘칠 때만. 오른쪽부터 꼬리 → 넘침 단추 → (한 탭씩이면) 뒤 단추, 왼쪽에 앞 단추. 넘침·앞·뒤 단추의 폭은 <code>tab_overflow_width</code>(28)이고 꼬리는 <code>trailing_width</code>다. 띠가 남은 자리를 갖는다. 넘치지 않으면 꼬리는 마지막 탭 바로 뒤에 선다</td></tr>
               <tr><td>스크롤 다듬기</td><td>최대치는 (탭 수 × 폭 − 띠 폭)이고 0 밑이면 0이다. 값은 0과 최대치 사이로 다듬는다</td></tr>
               <tr><td>한 탭씩</td><td><code>tab_step_offset</code> — 가는 쪽 끝의 탭 하나를 온전히 드러내는 값. 끝에 닿은 쪽 단추는 비활성이다</td></tr>
             </tbody>
@@ -1072,7 +1072,7 @@ TEST_CASE("Tab selection reveals an offscreen tab while wheel scrolling remains 
 }
 </script></div>
         <h3>휠과 키보드 초점을 띠로 보내기</h3>
-        <div class="prose"><p>정책이 있으면 휠과 초점 되살리기는 정책 몫이다. 기본 <code>on_wheel</code>·<code>on_focus_moved</code>는 빈 목록이라 ←/→로 넘친 탭에 초점을 옮겨도 띠가 저절로 흐르지 않는다. 모바일 데모는 표 없는 <code>route_reveal</code>·<code>route_wheel</code>을 돌려준다:</p></div>
+        <div class="prose"><p>정책이 있으면 휠과 초점 되살리기는 정책 몫이다. 기본 <code>on_wheel</code>·<code>on_focus_moved</code>는 빈 목록이라 ←/→로 넘친 탭에 초점을 옮겨도 띠가 저절로 흐르지 않는다. 모바일 데모의 정책은 페이지마다의 표를 먼저 묻고, 아무도 답하지 않으면 표 없는 <code>route_wheel</code>·<code>route_reveal</code>로 물러선다:</p></div>
         <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:431-449" data-path="examples/mobile_demo/app.cpp" data-start="431"><script type="text/plain">
     std::vector<luil::input_action> mobile_policy::on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta)
     {
@@ -2197,25 +2197,25 @@ TEST_CASE("A tab bar is one tab stop and its close buttons are not stops", "[ui]
           <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
         </header>
         <ol class="recap">
-          <li><div><strong>닫기 단추는 키보드·보조 기술에 없다.</strong> 이름이 없어 접근 tree에서 접히고 Tab 자리도 아니다. Ctrl+W 같은 앱 명령과 컨텍스트 메뉴의 "닫기"를 따로 둔다. 설계 문서(<code>docs/tab-bar-style-design.md</code>)는 숨은 단추도 "키보드·보조 기술이 닿는다"고 적지만 코드는 그렇지 않다 (코드에서 확인한 동작).</div></li>
-          <li><div><strong>라이브러리는 Ctrl+Tab·Ctrl+W·Delete를 받지 않는다.</strong> 탭 막대에 키 처리가 없다. 다음 탭·현재 탭 닫기는 앱 명령이다.</div></li>
-          <li><div><strong>탭 id에 막대 owner가 붙지 않는다.</strong> 탭은 <code>{ tab, key }</code>라 한 tree의 두 막대가 같은 키를 쓰면 id가 겹친다. 첫 등록이 이기고 뒤의 탭은 보조 기술에서 사라진다. 초점 진입 자리도 첫 막대의 탭을 찾는다. 키는 tree 전체에서 고유하게 짓는다 (코드에서 확인한 동작).</div></li>
-          <li><div><strong>창이 달라도 owner와 키가 같으면 남의 탭이 "내 탭"이 된다.</strong> 같은 막대인지는 payload의 막대 id와 그 키가 이 막대에 있는지로 본다. 두 창이 같은 owner와 같은 키를 쓰면 다른 창의 탭이 <code>move</code>로 온다 (코드에서 확인한 동작).</div></li>
-          <li><div><strong>모바일 데모의 순서 바꾸기는 오른쪽으로 한 칸 모자란다.</strong> 옛 <code>reorder</code>를 받아 대상의 앞에 끼워서다. 바로 오른쪽 이웃에 놓으면 제자리다. <code>move</code>를 쓴다 (<a class="xref" href="#build-basic">따라 하지 말 것</a>).</div></li>
-          <li><div><strong>옛 <code>reorder</code>는 앞·뒤를 모른다.</strong> 자기 자신만 거절하고 순서가 그대로인 자리도 받는다. "대상 자리"를 어떻게 풀지는 앱 몫이다.</div></li>
-          <li><div><strong><code>select</code>가 없으면 키보드로 갈 수 없다.</strong> 탭에 <code>left_click</code>이 없어 묶음에 구성원이 없고, 막대가 Tab 순서에서 빠진다. 보조 기술의 고르기도 할 수 없는 일이 된다.</div></li>
-          <li><div><strong>닫을 때 다음 선택은 앱이 정한다.</strong> element는 고르지 않는다. 비워 두면 <code>selected</code>가 사라진 키를 가리킨다.</div></li>
-          <li><div><strong><code>receive</code>만으로는 탭을 끌 수 없다.</strong> 끌기 출발은 <code>reorder</code>·<code>move</code>·<code>unclaimed_drop</code> 중 하나가 있어야 선다.</div></li>
-          <li><div><strong>스크롤 값은 앱 상태다.</strong> 넘침 메뉴·새 탭·키 명령으로 고른 탭을 드러내는 것도 앱이다. 배치가 다듬은 값은 <code>scroll_offset()</code>으로 되읽는다.</div></li>
-          <li><div><strong>정책이 있으면 휠과 초점 되살리기는 정책 몫이다.</strong> 기본은 빈 목록이라 넘친 탭으로 화살표를 옮겨도 띠가 흐르지 않는다. 표를 쓰면 띠(<code>tab_strip</code>)를 이름 댄다. 설계 문서는 "되살리기가 띠를 흘린다"고 적지만 정책이 내야 선다.</div></li>
-          <li><div><strong><code>step</code>·<code>wheel_steps</code>는 <code>scroll</code> factory가 있어야 선다.</strong> 넘치지 않으면 앞·뒤 단추가 숨는다.</div></li>
-          <li><div><strong>이름 없는 단추는 보조 기술이 모른다.</strong> <code>overflow_tooltip</code>·<code>step_back_tooltip</code>·<code>step_forward_tooltip</code>이 비면 그 단추가 접힌다.</div></li>
-          <li><div><strong>막대에 이름을 주려고 tooltip을 달면 빈 자리에 글 상자가 뜬다.</strong> <code>set_access_name</code>을 쓴다. 두 데모 모두 막대에 이름을 주지 않는다.</div></li>
-          <li><div><strong>상태 점은 설명이 없으면 읽히지 않는다.</strong> <code>tab_indicator</code>와 글 없는 배지에 <code>description</code>을 적는다.</div></li>
-          <li><div><strong>가운데 버튼 닫기는 기본으로 켜져 있다.</strong> 닫을 수 없는 탭은 가운데 버튼을 무시한다. 끄려면 <code>middle_click_close = false</code>다.</div></li>
-          <li><div><strong>컨텍스트 메뉴 좌표는 물리 픽셀이다.</strong> popup 자리는 배율로 나눈다.</div></li>
-          <li><div><strong>factory는 순수해야 한다.</strong> 보조 기술 길에서는 UI thread가 계획으로 factory를 부르고 결과를 버리기도 한다 (코드에서 확인한 동작).</div></li>
-          <li><div><strong>떠나는 페이지는 같은 크기·배율이어야 그려진다.</strong> 다르면 새 화면만 그린다. 전환이 도는 동안 포인터가 막히므로 끝나면 앱이 놓아야 풀린다.</div></li>
+          <li><strong>닫기 단추는 키보드·보조 기술에 없다.</strong> 이름이 없어 접근 tree에서 접히고 Tab 자리도 아니다. Ctrl+W 같은 앱 명령과 컨텍스트 메뉴의 "닫기"를 따로 둔다. 설계 문서(<code>docs/tab-bar-style-design.md</code>)는 숨은 단추도 "키보드·보조 기술이 닿는다"고 적지만 코드는 그렇지 않다 (코드에서 확인한 동작).</li>
+          <li><strong>라이브러리는 Ctrl+Tab·Ctrl+W·Delete를 받지 않는다.</strong> 탭 막대에 키 처리가 없다. 다음 탭·현재 탭 닫기는 앱 명령이다.</li>
+          <li><strong>탭 id에 막대 owner가 붙지 않는다.</strong> 탭은 <code>{ tab, key }</code>라 한 tree의 두 막대가 같은 키를 쓰면 id가 겹친다. 첫 등록이 이기고 뒤의 탭은 보조 기술에서 사라진다. 초점 진입 자리도 첫 막대의 탭을 찾는다. 키는 tree 전체에서 고유하게 짓는다 (코드에서 확인한 동작).</li>
+          <li><strong>창이 달라도 owner와 키가 같으면 남의 탭이 "내 탭"이 된다.</strong> 같은 막대인지는 payload의 막대 id와 그 키가 이 막대에 있는지로 본다. 두 창이 같은 owner와 같은 키를 쓰면 다른 창의 탭이 <code>move</code>로 온다 (코드에서 확인한 동작).</li>
+          <li><strong>모바일 데모의 순서 바꾸기는 오른쪽으로 한 칸 모자란다.</strong> 옛 <code>reorder</code>를 받아 대상의 앞에 끼워서다. 바로 오른쪽 이웃에 놓으면 제자리다. <code>move</code>를 쓴다 (<a class="xref" href="#build-basic">따라 하지 말 것</a>).</li>
+          <li><strong>옛 <code>reorder</code>는 앞·뒤를 모른다.</strong> 자기 자신만 거절하고 순서가 그대로인 자리도 받는다. "대상 자리"를 어떻게 풀지는 앱 몫이다.</li>
+          <li><strong><code>select</code>가 없으면 키보드로 갈 수 없다.</strong> 탭에 <code>left_click</code>이 없어 묶음에 구성원이 없고, 막대가 Tab 순서에서 빠진다. 보조 기술의 고르기도 할 수 없는 일이 된다.</li>
+          <li><strong>닫을 때 다음 선택은 앱이 정한다.</strong> element는 고르지 않는다. 비워 두면 <code>selected</code>가 사라진 키를 가리킨다.</li>
+          <li><strong><code>receive</code>만으로는 탭을 끌 수 없다.</strong> 끌기 출발은 <code>reorder</code>·<code>move</code>·<code>unclaimed_drop</code> 중 하나가 있어야 선다.</li>
+          <li><strong>스크롤 값은 앱 상태다.</strong> 넘침 메뉴·새 탭·키 명령으로 고른 탭을 드러내는 것도 앱이다. 배치가 다듬은 값은 <code>scroll_offset()</code>으로 되읽는다.</li>
+          <li><strong>정책이 있으면 휠과 초점 되살리기는 정책 몫이다.</strong> 기본은 빈 목록이라 넘친 탭으로 화살표를 옮겨도 띠가 흐르지 않는다. 표를 쓰면 띠(<code>tab_strip</code>)를 이름 댄다. 설계 문서는 "되살리기가 띠를 흘린다"고 적지만 정책이 내야 선다.</li>
+          <li><strong><code>step</code>·<code>wheel_steps</code>는 <code>scroll</code> factory가 있어야 선다.</strong> 넘치지 않으면 앞·뒤 단추가 숨는다.</li>
+          <li><strong>이름 없는 단추는 보조 기술이 모른다.</strong> <code>overflow_tooltip</code>·<code>step_back_tooltip</code>·<code>step_forward_tooltip</code>이 비면 그 단추가 접힌다.</li>
+          <li><strong>막대에 이름을 주려고 tooltip을 달면 빈 자리에 글 상자가 뜬다.</strong> <code>set_access_name</code>을 쓴다. 두 데모 모두 막대에 이름을 주지 않는다.</li>
+          <li><strong>상태 점은 설명이 없으면 읽히지 않는다.</strong> <code>tab_indicator</code>와 글 없는 배지에 <code>description</code>을 적는다.</li>
+          <li><strong>가운데 버튼 닫기는 기본으로 켜져 있다.</strong> 닫을 수 없는 탭은 가운데 버튼을 무시한다. 끄려면 <code>middle_click_close = false</code>다.</li>
+          <li><strong>컨텍스트 메뉴 좌표는 물리 픽셀이다.</strong> popup 자리는 배율로 나눈다.</li>
+          <li><strong>factory는 순수해야 한다.</strong> 보조 기술 길에서는 UI thread가 계획으로 factory를 부르고 결과를 버리기도 한다 (코드에서 확인한 동작).</li>
+          <li><strong>떠나는 페이지는 같은 크기·배율이어야 그려진다.</strong> 다르면 새 화면만 그린다. 전환이 도는 동안 포인터가 막히므로 끝나면 앱이 놓아야 풀린다.</li>
         </ol>
       </section>
 

@@ -1,0 +1,1577 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>알림 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — toast_stack_element·info_bar_element·show_notification으로 잠깐 보이고 사라지는 토스트, 닫을 때까지 남는 정보 막대, 운영 체제 알림 센터의 알림을 만들고 눌림을 받는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  /* 성공 글리프(codicon pass, U+EBA4)는 공용 글꼴 부분집합에 없어 이 문서만 한 글자를 더한다 */
+  @font-face { font-family: "codicon"; src: url("data:font/woff2;base64,d09GMgABAAAAAAH4AAsAAAAAA7gAAAGqAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAHCoGYAA0CoEIgREBNgIkAwgLBgAEIAWCCAcgG/gCEVWTPRA/E3gTq5MwvMIRCINQ9WBOnrbE33j4fr//rX3v+aYSxSwJ5on4SviN0pnOEDKlWmOIBMDYto52GVtnNDx6ZoRCq3f1ruKZdQtFX3wjROqH5kfzhlQupEl1obG+B71VdvrDCSd+1fsDiiTiLOI4kECioiwMMMLAbciO8BPBoKYKlBs2KtvaObpS/eHp509aJfj/ByDFRDwW4dsPYNzXH6sdkynKOTl7tf3C92c9GzAqOmJXQgCADBlyNMoFGiW9SJLgZ/3/l7LxDsTzOSTkmMAMoBKQ11VV3X6hKeKvEiKuZDinwlhMbyMaruQ+4flhk2OD2hO99Lg7H0YWXpf0H0T9sP5KgleldX/YSv6q7CldyCKrR1+DVQu0Ldh0sAaI9mgXCN6dP/2Hapb+woqYhMJQg9Txf/0/zExMoVQGgpgEO6BvRohnvIBAFgU1INAq9UouUplQzcqZVHMudEKRVp0oVg3K7VmsVxhWIJjkVx39T+LwLzGbMPaSP+RJXi+ngMcIO8Hp2w1sl/Xkhdl5fkkYJRenc2pI013+TryvTJj8YpAHAAAA") format("woff2"); unicode-range: U+EBA4; font-display: block; }
+
+  /* 고르기 판과 흐름 — lists.html과 같은 모양 */
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+
+  /* 심각도 색 — 팔레트 역할에 가까운 토큰 (secondary_foreground·accent·warning_accent·error_accent) */
+  .sev-info { color: var(--fg-2); }
+  .sev-success { color: var(--accent); }
+  .sev-warning { color: var(--warn); }
+  .sev-error { color: var(--error); }
+  .sev-cell { display: inline-flex; gap: 6px; align-items: center; }
+  .sev-cell .ci { font-size: 16px; }
+
+  /* 실습 공통: 도구·상태판·기록 */
+  .dl-grid { display: grid; gap: 14px; }
+  @media (min-width: 1100px) { .dl-grid { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); align-items: start; } }
+  .dl-side, .dl-panel { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .dl-tools { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .dl-tools label { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; cursor: pointer; }
+  .dl-tools select { font-size: var(--fs-xs); min-height: 26px; }
+  .dl-tools input[type="range"] { width: 120px; }
+  .dl-tools .grp { display: inline-flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .dl-tools .grp-name { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; }
+  .dl-btn { appearance: none; display: inline-flex; gap: 5px; align-items: center; border: 1px solid var(--line-2); background: var(--panel); color: var(--fg); border-radius: var(--r-control); padding: 3px 9px; font: inherit; font-size: var(--fs-xs); cursor: pointer; min-height: 26px; }
+  .dl-btn:hover { background: var(--sunk); }
+  .dl-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .dl-btn .ci { font-size: 14px; }
+  .dl-state { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .dl-state dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .dl-state dd { margin: 0; overflow-wrap: anywhere; }
+  .dl-state code { font-size: 11.5px; background: none; border: 0; padding: 0; }
+  .dl-state .item { display: block; }
+  .dl-state .item.off { color: var(--fg-3); }
+  @media (max-width: 560px) { .dl-state { grid-template-columns: minmax(0, 1fr); gap: 0; } .dl-state dd { margin-bottom: 6px; } }
+  .dl-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 260px; overflow: auto; padding: 4px 0; font-size: 12px; }
+  .dl-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .dl-entry:first-child { background: var(--accent-wash); }
+  .dl-entry .in { font-weight: 600; color: var(--fg); }
+  .dl-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .dl-entry .msg::before { content: "→ "; color: var(--fg-3); }
+  .dl-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
+
+  /* 토스트 실습: 창 재현 (논리 픽셀 = CSS 픽셀, 좁으면 통째로 줄인다). 치수는 toast_element.cpp의 것 */
+  .ts-wrap { position: relative; }
+  .ts-stage { position: absolute; left: 2px; top: 2px; transform-origin: 0 0; border-radius: 10px; background: var(--bg); box-shadow: 0 0 0 1px var(--line-2); overflow: hidden; user-select: none; -webkit-user-select: none; }
+  .ts-behind { position: absolute; inset: 0; padding: 10px 14px; display: grid; align-content: start; gap: 0; font-size: 13px; color: var(--fg-2); }
+  .ts-behind .bar { font-weight: 600; color: var(--fg); padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .ts-behind .row { height: 30px; border-bottom: 1px solid var(--line); display: flex; align-items: center; }
+  .ts-under { position: absolute; }
+  .ts-layer { position: absolute; inset: 0; pointer-events: none; }
+  .ts-toast { position: absolute; pointer-events: auto; border-radius: 6px; cursor: default; }
+  .ts-toast.gone.show-ghost { outline: 1px dashed var(--error); outline-offset: -1px; }
+  .ts-body { position: absolute; inset: 0; border-radius: 6px; background: var(--panel); border: 1px solid var(--line-3); font-size: 12px; color: var(--fg); }
+  .ts-body .g { position: absolute; left: 10px; top: 0; bottom: 0; width: 16px; display: grid; place-items: center; }
+  .ts-body .g .ci { font-size: 14px; }
+  .ts-body .t { position: absolute; left: 34px; top: 0; bottom: 0; display: flex; align-items: center; min-width: 0; }
+  .ts-body .t span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ts-body .a { position: absolute; right: 8px; top: 50%; margin-top: -12px; width: 64px; height: 24px; box-sizing: border-box; border-radius: var(--r-control); border: 1px solid var(--line-2); background: var(--panel-2); color: var(--fg); font: inherit; font-size: 11.5px; padding: 0; cursor: pointer; white-space: nowrap; overflow: hidden; }
+  .ts-body .a:hover { background: var(--sunk); }
+</style>
+</head>
+<body data-page="notifications">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>알림</h1>
+      <p class="summary">luil의 알림은 셋이다. 창 한 모서리에 쌓였다 흐려지는 토스트, 닫을 때까지 화면 안에 남는 정보 막대, 앱 창 밖 운영 체제의 알림 자리에 올리는 OS 알림이다. 토스트 목록과 만료는 앱이 들고 라이브러리는 끝날 무렵 흐려지게만 그린다. OS 알림의 눌림은 delegate 훅으로 UI thread에 온다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>toast_element.h</code>·<code>info_bar_element.h</code>·<code>severity.h</code>·<code>notification.h</code></dd></div>
+          <div><dt>실습</dt><dd>토스트 쌓음 — 흐려짐, 다시 그리기 예고, 만료와 지우기</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="messaging.html">스레드 경계 메시징</a> · <a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="motion.html">애니메이션</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>토스트·정보 막대·OS 알림 가운데 무엇을 쓸지 고른다.</li>
+            <li>토스트 목록과 만료를 앱 상태로 들고 <code>next_tick</code>·<code>tick</code>으로 지운다.</li>
+            <li>정보 막대의 높이·닫기·단추 자리를 앱 쪽에서 다룬다.</li>
+            <li>OS 알림을 올리고, 눌림을 받고, 플랫폼마다 다른 조건을 맞춘다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 것을 쓰나</h2>
+          <p class="lede">고르는 기준은 "얼마나 남아야 하나"다. 잠깐 보이면 되는가, 사용자가 볼 때까지 남아야 하는가, 앱이 뒤에 있어도 알려야 하는가.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB09;</i><code>toast_stack_element</code></h4>
+            <ul>
+              <li>창 안 한 모서리에 쌓이는 한 줄 알림이다.</li>
+              <li><code>duration</code>이 다 되면 300ms 동안 흐려진다. 0이면 계속 남는다.</li>
+              <li>목록·만료·지우기는 앱의 몫이다.</li>
+              <li>동작 단추 하나. 키보드 Tab 자리가 아니다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA74;</i><code>info_bar_element</code></h4>
+            <ul>
+              <li>닫거나 앱이 지울 때까지 화면 안에 남는다.</li>
+              <li>심각도 글리프, 한 줄 제목, 줄이 바뀌는 본문.</li>
+              <li>동작·닫기 단추 둘 다 Tab 자리다.</li>
+              <li>높이는 폭에서 나온다 — <code>add_fit</code>이나 <code>measure</code>.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEAAD;</i><code>show_notification</code></h4>
+            <ul>
+              <li>Windows 알림 센터, Android 알림 창, macOS·iOS 알림 센터에 올린다.</li>
+              <li>앱이 뒤에 있거나 꺼져 있어도 보인다.</li>
+              <li>눌림은 <code>make_notification_message</code>로 온다.</li>
+              <li>어느 thread에서나 부른다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>"저장했습니다"처럼 잠깐 보이고 사라질 말</td><td>토스트, <code>duration</code> &gt; 0</td><td><a class="xref" href="#build-toast">시간 토스트</a></td></tr>
+              <tr><td>지운 것을 되돌릴 "실행 취소" 한 단추</td><td>토스트, <code>duration</code> 0 + <code>action</code></td><td><a class="xref" href="#build-undo">실행 취소 토스트</a></td></tr>
+              <tr><td>"오프라인"처럼 볼 때까지 남아야 하는 상태</td><td>정보 막대</td><td><a class="xref" href="#build-info-bar">정보 막대</a></td></tr>
+              <tr><td>앱이 뒤에 있거나 꺼져 있어도 알릴 일</td><td>OS 알림</td><td><a class="xref" href="#build-os-windows">Windows</a> · <a class="xref" href="#build-os-mobile">Android·iOS</a></td></tr>
+              <tr><td>결정을 받아야 하는 일 (진행을 막아도 된다)</td><td>확인 대화 상자 <code>make_message_box</code></td><td><a class="xref" href="dialogs.html#build-box">대화 상자와 시트</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 목록은 앱이, 흐려짐은 라이브러리가</h2>
+          <p class="lede">토스트 한 장의 설정에는 보이기 시작한 시각과 보일 시간이 있다. 라이브러리는 그리는 순간의 시각으로 불투명도를 셈할 뿐이다. 다 흐려진 토스트도 앱이 목록에서 지우기 전까지 tree에 남는다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>임자</th><th>싣는 자리</th></tr></thead>
+            <tbody>
+              <tr><td>토스트 목록과 순서</td><td>앱</td><td><code>toast_stack_element</code>에 넘기는 <code>toast_config</code> 목록</td></tr>
+              <tr><td>보이기 시작한 시각</td><td>앱 (logic thread에서 <code>steady_clock::now()</code>)</td><td><code>toast_config::shown_at</code></td></tr>
+              <tr><td>보일 시간</td><td>앱</td><td><code>toast_config::duration</code> — 0이면 계속</td></tr>
+              <tr><td>다음 만료 시각과 지우기</td><td>앱</td><td><code>logic_driver::next_tick</code> · <code>logic_driver::tick</code></td></tr>
+              <tr><td>불투명도, 다시 그릴 시각</td><td>라이브러리 (UI thread)</td><td><code>opacity_at</code> · <code>next_update</code></td></tr>
+              <tr><td>정보 막대가 열려 있는가</td><td>앱</td><td>막대를 tree에 담는가</td></tr>
+              <tr><td>OS 알림이 올라가 있는가</td><td>운영 체제</td><td>앱은 id로 올리고 바꾸고 거둔다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>시계 하나: <code>steady_clock</code></h3>
+        <div class="prose">
+          <ul>
+            <li>앱은 logic thread에서 <code>shown_at</code>을 적는다. 그리는 문맥의 <code>now</code>는 UI thread가 frame을 그릴 때의 <code>steady_clock::now()</code>다. 둘은 같은 시계다.</li>
+            <li>남은 시간이 <code>toast_fade</code>(300ms) 아래로 내려가면 불투명도가 남은 시간 / 300으로 준다. 끝나면 0이다. 흐려짐은 동작 단추까지 토스트 전체에 걸린다.</li>
+            <li>토스트는 <code>next_update</code>로 다시 그릴 시각을 예고한다. 흐려지기 시작하는 시각까지는 그리지 않고, 흐려지는 동안은 매 frame, 끝나면 예고가 없다. platform은 tree 전체의 가장 이른 예고에 timer 하나만 건다.</li>
+            <li>앱은 <code>next_tick</code>에 다음 만료 시각을 답한다. 그 시각이 지나면 메시지가 없어도 logic thread에서 <code>tick(now)</code>이 불리고 frame이 다시 게시된다. 앱은 <code>tick</code>에서 목록을 줄인다.</li>
+            <li>마우스를 올려도 멈추지 않는다. 불투명도는 시각만의 함수다. 움직임 줄이기 설정도 보지 않는다.</li>
+          </ul>
+        </div>
+        <h3>심각도</h3>
+        <div class="prose"><p>토스트·정보 막대·확인 대화 상자가 같은 <code>ui_severity</code>를 쓴다. 색과 글리프는 비공개 그림 규칙(<code>severity_paint.h</code>)이 정하고 앱이 바꿀 칸은 없다. 색만으로 뜻을 말하지 않도록 글리프를 늘 함께 그린다.</p></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>글리프 (codicon)</th><th>색 (팔레트 역할)</th><th>접근 낱말</th></tr></thead>
+            <tbody>
+              <tr><td><code>ui_severity::info</code></td><td><span class="sev-cell"><i class="ci sev-info" aria-hidden="true">&#xEA74;</i> info U+EA74</span></td><td><code>secondary_foreground</code> — 강조하지 않는다</td><td>정보</td></tr>
+              <tr><td><code>ui_severity::success</code></td><td><span class="sev-cell"><i class="ci sev-success" aria-hidden="true">&#xEBA4;</i> pass U+EBA4</span></td><td><code>accent</code></td><td>성공</td></tr>
+              <tr><td><code>ui_severity::warning</code></td><td><span class="sev-cell"><i class="ci sev-warning" aria-hidden="true">&#xEA6C;</i> warning U+EA6C</span></td><td><code>warning_accent</code></td><td>경고</td></tr>
+              <tr><td><code>ui_severity::error</code></td><td><span class="sev-cell"><i class="ci sev-error" aria-hidden="true">&#xEA87;</i> error U+EA87</span></td><td><code>error_accent</code></td><td>오류</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>고대비 팔레트는 정보·경고·오류의 색을 같은 창 전경색으로 접는다. 성공만 따로 선다. 그래서 뜻은 글리프가 남긴다. <code>toast_severity</code>는 같은 형식의 옛 이름이다.</p></div>
+        <h3>OS 알림 하나가 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">logic thread</span><span>앱이 <code>notification</code>을 채워 <code>show_notification</code>을 부른다. <code>platform_result</code>가 곧바로 온다. <code>ok</code>는 OS가 받았다는 뜻일 뿐이다.</span></div>
+          <div role="listitem"><span class="who">운영 체제</span><span>알림 센터에 알림이 선다. 같은 id로 다시 올리면 그 알림을 바꾼다.</span></div>
+          <div role="listitem"><span class="who">OS의 thread</span><span>사용자가 누르면 OS가 사건을 낸다. 라이브러리 대기열이 쥐었다가 UI thread로 넘긴다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>delegate의 <code>make_notification_message</code>가 <code>notification_event</code>를 앱 메시지로 싼다. 라이브러리는 보이는 주 창을 앞으로 세운다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱의 <code>handle</code>이 id로 화면을 연다.</span></div>
+        </div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 토스트 쌓음">
+        <header class="sec-head">
+          <h2>실습: 토스트 쌓음</h2>
+          <p class="lede">흐려짐·쌓기·장 수 규칙을 브라우저로 옮겼다. 앱 쪽은 데모와 같이 만료 시각을 예고하고 그 시각에 지운다. 지우기를 끄면 보이지 않는 토스트가 tree에 남아 누름을 막고 새 토스트의 자리를 차지한다.</p>
+        </header>
+        <div class="lw" data-title="토스트 쌓음" data-surface="toast_stack_element · opacity_at · next_update" data-icon="EB09" data-reset id="ts-lab">
+          <div class="lw-body dl-grid">
+            <div class="dl-side">
+              <div class="dl-tools">
+                <span class="grp" data-ts="push-row"><span class="grp-name">올리기</span></span>
+                <label title="toast_config::duration">duration <select data-ts="duration"><option value="1500">1.5초</option><option value="3000" selected>3초</option><option value="6000">6초</option><option value="0">0 — 계속</option></select></label>
+              </div>
+              <div class="dl-tools">
+                <button type="button" class="dl-btn" data-ts="sticky">실행 취소 토스트 (duration 0)</button>
+                <button type="button" class="dl-btn" data-ts="press-action" title="토스트 동작 단추는 Tab 자리가 아니다. 재현은 이 단추로 대신 누른다">맨 앞 동작 누르기</button>
+              </div>
+              <div class="dl-tools">
+                <span class="grp"><span class="grp-name">corner</span><select data-ts="corner" aria-label="toast_stack_config::corner"><option value="bottom_right">bottom_right</option><option value="bottom_left">bottom_left</option><option value="top_right">top_right</option><option value="top_left">top_left</option></select></span>
+                <span class="grp"><span class="grp-name">maximum_count</span><select data-ts="max" aria-label="toast_stack_config::maximum_count"><option>1</option><option>2</option><option>3</option><option selected>4</option><option>5</option></select></span>
+                <label>자리 폭 <input type="range" data-ts="width" min="300" max="720" step="10" value="560" aria-label="자리 폭 (논리 픽셀)"> <span data-ts="width-out">560</span></label>
+              </div>
+              <div class="dl-tools">
+                <label title="logic_driver::next_tick · tick"><input type="checkbox" data-ts="prune" checked> 앱이 만료를 지운다</label>
+                <label><input type="checkbox" data-ts="ghost"> 시간 토스트에도 동작을 단다</label>
+                <label><input type="checkbox" data-ts="outline" checked> 다 흐려진 토스트 자리를 점선으로</label>
+              </div>
+              <div class="ts-wrap" data-ts="wrap"><div class="ts-stage" data-ts="stage"></div></div>
+            </div>
+            <div class="dl-panel">
+              <dl class="dl-state" data-ts="state" aria-label="앱 상태와 다시 그리기 예고"></dl>
+              <div class="dl-log" data-ts="log" aria-live="polite" aria-label="메시지 기록"></div>
+            </div>
+          </div>
+          <div class="lw-foot">불투명도·다시 그리기 예고·장 수·자리는 원본을 함수 단위로 옮긴 <code>assets/toastmodel.js</code>다 — <code>toast_element::opacity_at</code>·<code>next_update</code>, <code>toast_stack_element</code>의 생성자(장 수)와 <code>arrange</code>(자리). 원본 줄을 잘라 그대로 컴파일한 대조기의 무작위 입력 6만 건과 <code>toast_element_tests.cpp</code>의 기대값에 단정밀도까지 같음을 확인했다. 그리기는 예고대로만 한다: 흐려지기 시작할 때까지 쉬고, 흐려지는 동안 매 frame, 끝나면 멈춘다. 앱 쪽 지우기는 위젯 예제처럼 가장 이른 만료 시각에 timer 하나를 걸어 흉내 냈고, 실행 취소의 두 메시지는 데모의 것이다. 움직임 줄이기 설정에서도 300ms 흐려짐을 남긴다 — luil이 그렇다 (자리는 움직이지 않는다). 토스트 안의 치수(글리프 칸 16, 단추 64×24, 글 줄이기)는 그리기 코드를 읽어 옮긴 근사이고 대조하지 않았다. 다 흐려진 토스트의 점선은 luil이 그리지 않는다 — tree에 남은 자리를 보이려는 표시다. 재현의 토스트는 화면 읽기에 따로 알리지 않는다 (기록 창이 polite로 알린다).</div>
+        </div>
+      </section>
+
+      <section class="sec" id="build-toast">
+        <header class="sec-head">
+          <h2>만들기: 시간이 지나면 사라지는 토스트</h2>
+          <p class="lede">위젯 예제다. 앱이 목록과 다음 id를 들고, 요청이 오면 지금 시각을 적어 더하고, frame마다 목록을 설정으로 옮기고, 만료 시각을 예고해 지운다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:158-163" data-path="examples/widgets/app.h" data-start="158"><script type="text/plain">
+    // toasts: 알림 요청.
+    struct toast_intent
+    {
+        std::u8string text {};
+        luil::toast_severity severity { luil::toast_severity::info };
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:186-195" data-path="examples/widgets/app.h" data-start="186"><script type="text/plain">
+        // 토스트 목록이다. 만료 판정도 앱 몫이다 (tick이 지운다).
+        struct toast_entry
+        {
+            std::u8string id {};
+            std::u8string text {};
+            luil::toast_severity severity { luil::toast_severity::info };
+            std::chrono::steady_clock::time_point shown_at {};
+        };
+        std::vector<toast_entry> toasts {};
+        int next_toast_id { 0 };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:152-161" data-path="examples/widgets/app.cpp" data-start="152"><script type="text/plain">
+        if (const auto* const toast { message.get<toast_intent>() }; toast != nullptr)
+        {
+            app_state::toast_entry entry {};
+            entry.id = u8"toast-" + to_u8(++state_.next_toast_id);
+            entry.text = toast->text;
+            entry.severity = toast->severity;
+            entry.shown_at = std::chrono::steady_clock::now();
+            state_.toasts.push_back(std::move(entry));
+            return;
+        }
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/widgets/toasts_section.cpp:57-82" data-path="examples/widgets/toasts_section.cpp" data-start="57"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> build_toast_overlay(const app_state& state)
+    {
+        // 토스트가 없으면 오버레이도 없다 ("없는 것은 두지 않는다").
+        if (state.toasts.empty())
+            return nullptr;
+
+        luil::toast_stack_config config {};
+        config.owner = u8"toasts";
+        config.corner = luil::toast_corner::bottom_right;
+        config.maximum_count = 4;
+
+        std::vector<luil::toast_config> toasts {};
+        for (const app_state::toast_entry& entry : state.toasts)
+        {
+            luil::toast_config toast {};
+            toast.id = entry.id;
+            toast.text = entry.text;
+            toast.severity = entry.severity;
+            // shown_at·duration으로 라이브러리가 끝날 무렵 흐려지게 그린다.
+            // 목록에서 실제로 지우는 것은 driver의 tick이다.
+            toast.shown_at = entry.shown_at;
+            toast.duration = toast_duration;
+            toasts.push_back(std::move(toast));
+        }
+        return std::make_unique<luil::toast_stack_element>(std::move(config), std::move(toasts));
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="59-61" data-title="없으면 짓지 않는다">목록이 비면 쌓음도 없다. tree에 빈 element를 두지 않는다.</li>
+            <li data-lines="63-66" data-title="쌓음 설정">모서리와 장 수다. 넘치는 설정은 element가 되지 않는다 — 목록의 앞에서부터 센다.</li>
+            <li data-lines="68-80" data-title="한 장씩 옮긴다">id·글·심각도와 함께 <code>shown_at</code>·<code>duration</code>을 싣는다. 흐려짐은 라이브러리가, 지우기는 driver의 <code>tick</code>이 한다.</li>
+            <li data-lines="81" data-title="쌓음 하나">설정과 목록을 넘긴다. 자리만 잡는 컨테이너다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:222-227" data-path="examples/widgets/app.cpp" data-start="222"><script type="text/plain">
+        // 토스트 오버레이는 섹션 위가 아니라 창 전체 위에 얹는다.
+        if (auto overlay { build_toast_overlay(state_) }; overlay != nullptr)
+        {
+            overlay->arrange({ { 0.0f, 0.0f, width, height }, scale });
+            root->add(std::move(overlay));
+        }
+</script></div>
+        <div class="prose"><p>쌓음은 창 전체 위에 얹는다. 받은 자리의 한 모서리에서 <code>margin</code>(16)만큼 떨어져 선다. 쌓음 자체는 누름을 흡수하지 않고 토스트 한 장의 몸만 흡수한다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:246-264" data-path="examples/widgets/app.cpp" data-start="246"><script type="text/plain">
+    std::optional<std::chrono::steady_clock::time_point> widgets_driver::next_tick()
+    {
+        // 다음에 만료되는 토스트의 시각을 예고한다.
+        // 예고가 없으면 시간 경로는 완전히 잠잔다 (평소 비용 0).
+        std::optional<std::chrono::steady_clock::time_point> next {};
+        for (const app_state::toast_entry& entry : state_.toasts)
+        {
+            const std::chrono::steady_clock::time_point at { entry.shown_at + toast_duration };
+            if (next.has_value() == false || at < *next)
+                next = at;
+        }
+        return next;
+    }
+
+    void widgets_driver::tick(const std::chrono::steady_clock::time_point now)
+    {
+        // 예고한 시각이 지나면 메시지가 없어도 여기가 불리고 frame이 다시 게시된다.
+        std::erase_if(state_.toasts, [now](const app_state::toast_entry& entry) { return now >= entry.shown_at + toast_duration; });
+    }
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">같은 시간을 두 곳에 적는다</span>흐려짐은 <code>toast_config::duration</code>, 지우기는 앱의 만료 판정이다. 위젯 예제는 3초를 <code>app.cpp</code>와 <code>toasts_section.cpp</code>에 따로 적는다. 둘이 어긋나면 토스트가 흐려진 뒤에도 남거나 흐려지기 전에 사라진다. 데모처럼 항목마다 <code>duration</code>을 들고 두 쪽이 같은 값을 쓰게 한다 (<a class="xref" href="#build-undo">다음 조각</a>).</div></div>
+      </section>
+
+      <section class="sec" id="build-undo">
+        <header class="sec-head">
+          <h2>만들기: 실행 취소가 있는 토스트</h2>
+          <p class="lede">데스크톱 데모다. 어느 페이지에서든 요청 메시지 하나로 토스트를 띄우고, 계속 남는 토스트에만 "실행 취소"를 단다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/common.h:237-245" data-path="examples/demo/common.h" data-start="237"><script type="text/plain">
+    // 토스트를 하나 띄우자는 요청이다.
+    // 어느 페이지에서든 보낼 수 있고 토스트 목록은 토스트 페이지가 소유한다.
+    struct toast_request_intent
+    {
+        std::u8string text {};
+        luil::toast_severity severity { luil::toast_severity::info };
+        // 0이면 계속 남는 토스트다.
+        std::chrono::milliseconds duration { 3000 };
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:343-353" data-path="examples/demo/toasts_page.cpp" data-start="343"><script type="text/plain">
+        // 액션 버튼이 있는 계속 남는 토스트다 (duration 0).
+        page.begin_card(u8"계속 남는 토스트", u8"동작 단추가 있는 토스트는 저절로 사라지지 않습니다.");
+        auto sticky { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_toast_trigger, u8"sticky" }, luil::text_button_config { .text = u8"실행 취소가 있는 토스트" }) };
+        sticky->set_cursor(luil::ui_cursor::hand);
+        sticky->set_action(luil::ui_trigger::left_click, luil::make_message_action(toast_request_intent { u8"항목을 지웠습니다.", luil::toast_severity::info, std::chrono::milliseconds { 0 } }));
+        luil::stack_config sticky_row_config {};
+        sticky_row_config.direction = luil::stack_direction::row;
+        auto sticky_row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"toast-sticky-row" }, sticky_row_config) };
+        sticky_row->add_fit(std::move(sticky));
+        page.add(std::move(sticky_row), luil::text_button_height);
+        page.end_card();
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:257-293" data-path="examples/demo/toasts_page.cpp" data-start="257"><script type="text/plain">
+    void toasts_page::push(std::u8string text, const luil::toast_severity severity, const std::chrono::milliseconds duration)
+    {
+        prune();
+        toast_entry entry {};
+        entry.id = u8"toast-" + to_u8(++next_id_);
+        entry.text = std::move(text);
+        entry.severity = severity;
+        entry.shown_at = std::chrono::steady_clock::now();
+        entry.duration = duration;
+        toasts_.push_back(std::move(entry));
+    }
+
+    void toasts_page::prune()
+    {
+        // 만료된 토스트를 지운다.
+        // 만료 시각은 next_expiry가 driver의 next_tick으로 예고하므로
+        // 메시지가 없어도 그 시각의 tick이 이 함수를 불러 목록이 실제로 준다.
+        const std::chrono::steady_clock::time_point now { std::chrono::steady_clock::now() };
+        std::erase_if(toasts_, [now](const toast_entry& entry) { return entry.duration.count() > 0 && now >= entry.shown_at + entry.duration; });
+    }
+
+    std::optional<std::chrono::steady_clock::time_point> toasts_page::next_expiry() const
+    {
+        // 풍선 상태 label이 이번 frame의 대상 자리와 다르면 지금 한 frame을 더 짓는다.
+        if (tip_relabel_)
+            return std::chrono::steady_clock::now();
+        std::optional<std::chrono::steady_clock::time_point> next {};
+        for (const toast_entry& entry : toasts_)
+        {
+            if (entry.duration.count() == 0)
+                continue;
+            const std::chrono::steady_clock::time_point at { entry.shown_at + entry.duration };
+            if (next.has_value() == false || at < *next)
+                next = at;
+        }
+        return next;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="257-267" data-title="더하기">먼저 지울 것을 지우고 끝에 더한다. 항목마다 <code>duration</code>을 든다.</li>
+            <li data-lines="269-276" data-title="지우기">시간이 다 된 것만 지운다. <code>duration</code> 0인 토스트는 남는다.</li>
+            <li data-lines="278-293" data-title="다음 만료 예고">계속 남는 토스트를 건너뛰고 가장 이른 만료 시각을 답한다. 셸의 <code>next_tick</code>이 이 값을 돌려주고 <code>tick</code>이 지우기를 부른다.</li>
+          </ol>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:555-589" data-path="examples/demo/toasts_page.cpp" data-start="555"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> toasts_page::make_toast_stack() const
+    {
+        if (toasts_.empty())
+            return nullptr;
+
+        luil::toast_stack_config config {};
+        config.owner = u8"toasts";
+        config.corner = luil::toast_corner::bottom_right;
+        config.maximum_count = 4;
+        std::vector<luil::toast_config> toasts {};
+        for (const toast_entry& entry : toasts_)
+        {
+            luil::toast_config toast {};
+            toast.id = entry.id;
+            toast.text = entry.text;
+            toast.severity = entry.severity;
+            toast.shown_at = entry.shown_at;
+            toast.duration = entry.duration;
+            // 계속 남는 토스트만 액션 버튼을 갖는다.
+            //  - 흐려져 보이지 않는 토스트의 버튼이 눌리는 유령을 만들지 않는다.
+            if (entry.duration.count() == 0)
+            {
+                const std::u8string id { entry.id };
+                toast.action_label = u8"실행 취소";
+                toast.action = [id](const luil::ui_action_context&) -> std::vector<luil::input_action> {
+                    return {
+                        luil::make_app_action(toast_undo_intent { id }),
+                        luil::make_app_action(toast_request_intent { u8"되돌렸습니다.", luil::toast_severity::success }),
+                    };
+                };
+            }
+            toasts.push_back(std::move(toast));
+        }
+        return std::make_unique<luil::toast_stack_element>(std::move(config), std::move(toasts));
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="560-563" data-title="쌓음 설정">오른쪽 아래, 넷까지.</li>
+            <li data-lines="573-575" data-title="동작은 계속 남는 토스트에만">흐려져 보이지 않는 토스트의 단추가 눌리는 일을 막는다. 단추는 흐려짐과 무관하게 tree에 남기 때문이다.</li>
+            <li data-lines="576-584" data-title="한 누름, 메시지 둘">되돌리기와 확인 토스트 요청을 함께 낸다. 동작은 input thread에서 불리고 두 메시지가 차례로 logic thread에 간다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:243-253" data-path="examples/demo/toasts_page.cpp" data-start="243"><script type="text/plain">
+        if (const auto* const undo { message.get<toast_undo_intent>() }; undo != nullptr)
+        {
+            for (auto position = toasts_.begin(); position != toasts_.end(); ++position)
+            {
+                if (position->id != undo->id)
+                    continue;
+                toasts_.erase(position);
+                break;
+            }
+            return true;
+        }
+</script></div>
+        <div class="prose"><p>토스트에는 닫기 단추가 없다. 계속 남는 토스트를 닫게 하려면 동작 단추를 "닫기"로 쓴다. 저장소에 이 꼴의 예제가 없어 직접 썼다.</p></div>
+        <div class="code" data-lang="cpp" data-label="닫기 단추처럼 쓰는 동작 (직접 작성)" data-compile="pre-close"><script type="text/plain">
+struct toast_close_intent
+{
+    std::u8string id {};
+};
+
+struct toast_entry
+{
+    std::u8string id {};
+    std::u8string text {};
+    luil::ui_severity severity { luil::ui_severity::info };
+};
+
+struct app_state
+{
+    std::vector<toast_entry> toasts {};
+};
+
+bool handle(app_state& state, const luil::app_message& message)
+{
+    if (const auto* const close { message.get<toast_close_intent>() }; close != nullptr)
+    {
+        std::erase_if(state.toasts, [&close](const toast_entry& entry) { return entry.id == close->id; });
+        return true;
+    }
+    return false;
+}
+
+// 토스트에는 닫기 단추가 없다. 계속 남는 토스트(duration 0)의 동작 단추를 "닫기"로 쓴다.
+[[nodiscard]] std::unique_ptr<luil::ui_element> make_toasts(const app_state& state)
+{
+    if (state.toasts.empty())
+        return nullptr;
+    luil::toast_stack_config config {};
+    config.owner = u8"toasts";
+    config.corner = luil::toast_corner::top_right;
+    std::vector<luil::toast_config> toasts {};
+    for (const toast_entry& entry : state.toasts)
+    {
+        luil::toast_config toast {};
+        toast.id = entry.id;
+        toast.text = entry.text;
+        toast.severity = entry.severity;
+        toast.duration = std::chrono::milliseconds { 0 };
+        toast.action_label = u8"닫기";
+        toast.action = luil::make_message_action(toast_close_intent { entry.id });
+        toasts.push_back(std::move(toast));
+    }
+    return std::make_unique<luil::toast_stack_element>(std::move(config), std::move(toasts));
+}
+</script></div>
+        <script type="text/plain" id="pre-close" data-prelude>
+#include "luil/ui/toast_element.h"
+#include <algorithm>
+#include <chrono>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">키보드로는 누를 수 없다</span>토스트 동작 단추는 Tab 자리가 아니다. 스스로 사라지는 알림에 초점이 얹히면 그 초점이 증발하기 때문이다. 키보드 사용자에게 꼭 필요한 동작은 정보 막대나 화면의 다른 자리에도 둔다. 보조 기술 tree에는 단추로 서서 Invoke로 누를 수 있다.</div></div>
+      </section>
+
+      <section class="sec" id="build-info-bar">
+        <header class="sec-head">
+          <h2>만들기: 정보 막대</h2>
+          <p class="lede">막대는 닫기를 스스로 하지 않는다. <code>close</code>가 낸 메시지로 앱이 닫힘을 적고 다음 frame에 짓지 않는다. 높이는 폭(줄바꿈)에서 나오므로 담는 쪽이 잰다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:154-166" data-path="examples/demo/toasts_page.cpp" data-start="154"><script type="text/plain">
+        [[nodiscard]] luil::info_bar_config make_info_bar(const luil::ui_severity severity)
+        {
+            const bar_text text { bar_text_of(severity) };
+            luil::info_bar_config bar {};
+            bar.owner = std::u8string { text.owner };
+            bar.severity = severity;
+            bar.title = std::u8string { text.title };
+            bar.message = std::u8string { text.message };
+            bar.action_label = std::u8string { text.action };
+            bar.action = luil::make_message_action(info_bar_intent { severity, false });
+            bar.close = luil::make_message_action(info_bar_intent { severity, true });
+            return bar;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:181-189" data-path="examples/demo/toasts_page.cpp" data-start="181"><script type="text/plain">
+        if (const auto* const bar { message.get<info_bar_intent>() }; bar != nullptr)
+        {
+            const bar_text text { bar_text_of(bar->severity) };
+            last_bar_action_ = std::u8string { text.word } + u8" 막대 " + std::u8string { bar->close ? std::u8string_view { u8"닫기" } : text.action };
+            // 닫는 것은 막대가 아니라 앱이다. 다음 frame에 이 막대를 짓지 않는다.
+            if (bar->close)
+                bars_open_[bar_index(bar->severity)] = false;
+            return true;
+        }
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:355-391" data-path="examples/demo/toasts_page.cpp" data-start="355"><script type="text/plain">
+        // 정보 막대다. 토스트와 달리 닫기 전까지 남고, 본문은 폭에서 줄을 바꾼다.
+        // 높이가 폭에 달려 있어 맞춤 항목으로 담는다. 페이지 높이를 세려고 같은 폭에서 한 번 잰다.
+        page.begin_card(u8"정보 막대", u8"닫기 전까지 남습니다. 본문은 폭에서 줄을 바꾸고, 글 폭이 좁으면 동작 단추가 글 아래로 내려갑니다.");
+        const float bar_width { page_layout::card_content_width(width) };
+        for (const luil::ui_severity severity : bar_severities)
+        {
+            if (bars_open_[bar_index(severity)] == false)
+                continue;
+            luil::info_bar_config bar { make_info_bar(severity) };
+            const float bar_height { luil::info_bar_element::measure(bar, luil::measure_context { .scale = scale }, bar_width).height };
+            page.add(std::make_unique<luil::info_bar_element>(std::move(bar)), luil::stack_item { .length = bar_height, .fit = true });
+            page.gap(8.0f);
+        }
+        // 열림과 마지막 동작은 label로도 그려 보조 기술과 자동화가 되읽는다.
+        bool any_closed { false };
+        for (const luil::ui_severity severity : bar_severities)
+        {
+            const bar_text text { bar_text_of(severity) };
+            const bool open { bars_open_[bar_index(severity)] };
+            any_closed = any_closed || open == false;
+            page.add(make_label({ kind_text, u8"info-bar-state-" + std::u8string { text.owner } }, std::u8string { text.word } + u8" 막대: " + (open ? u8"열림" : u8"닫힘"), 12.0f, luil::label_color_role::dim), 22.0f);
+        }
+        page.add(make_label({ kind_text, u8"info-bar-last-action" }, std::u8string { u8"마지막 동작: " } + (last_bar_action_.empty() ? std::u8string { u8"없음" } : last_bar_action_), 12.0f, luil::label_color_role::dim), 22.0f);
+        if (any_closed)
+        {
+            // 닫은 막대는 tree에 없다. 다시 열 길은 앱이 따로 둔다.
+            auto reopen { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_toast_trigger, u8"info-bar-reopen" }, luil::text_button_config { .text = u8"막대 다시 열기" }) };
+            reopen->set_cursor(luil::ui_cursor::hand);
+            reopen->set_action(luil::ui_trigger::left_click, luil::make_message_action(info_bar_reopen_intent {}));
+            luil::stack_config reopen_row_config {};
+            reopen_row_config.direction = luil::stack_direction::row;
+            auto reopen_row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"info-bar-reopen-row" }, reopen_row_config) };
+            reopen_row->add_fit(std::move(reopen));
+            page.gap(8.0f);
+            page.add(std::move(reopen_row), luil::text_button_height);
+        }
+        page.end_card();
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="358-367" data-title="같은 폭에서 잰다">페이지 높이를 세려고 카드의 폭에서 <code>measure</code>로 높이를 잰다. 그 길이를 맞춤 항목으로 담는다.</li>
+            <li data-lines="368-376" data-title="열림은 앱 상태">닫힌 막대는 짓지 않는다. 열림과 마지막 동작은 label로도 그려 보조 기술과 자동화가 되읽는다.</li>
+            <li data-lines="378-390" data-title="다시 여는 길">닫은 막대는 tree에 없다. 다시 열 길은 앱이 따로 둔다.</li>
+          </ol>
+        </div>
+        <div class="prose"><p>세로 stack이면 <code>add_fit</code>으로 담아 높이 셈을 맡겨도 된다. 직접 쓴 예다. 경고 역할은 정하지 않아도 끊고 읽으므로 덜 급한 막대는 <code>polite</code>로 낮춘다.</p></div>
+        <div class="code" data-lang="cpp" data-label="add_fit으로 담는 오프라인 막대 (직접 작성)" data-compile="pre-bar"><script type="text/plain">
+constexpr luil::ui_element_kind kind_layout { luil::application_element_kind(0) };
+
+struct offline_bar_intent
+{
+    bool close { false };
+};
+
+struct app_state
+{
+    bool offline_bar_open { true };
+    int retries { 0 };
+};
+
+bool handle(app_state& state, const luil::app_message& message)
+{
+    if (const auto* const bar { message.get<offline_bar_intent>() }; bar != nullptr)
+    {
+        // 닫기는 막대가 하지 않는다. 앱이 상태를 바꾸고 다음 frame에 짓지 않는다.
+        if (bar->close)
+            state.offline_bar_open = false;
+        else
+            ++state.retries;
+        return true;
+    }
+    return false;
+}
+
+// 세로 stack에 맞춤 항목(add_fit)으로 담는다. 높이는 폭에서 줄바꿈으로 나오므로 길이를 적지 않는다.
+[[nodiscard]] std::unique_ptr<luil::stack_element> make_status_column(const app_state& state)
+{
+    luil::stack_config column_config {};
+    column_config.spacing = 8.0f;
+    auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"status-column" }, column_config) };
+    if (state.offline_bar_open)
+    {
+        luil::info_bar_config config {};
+        config.owner = u8"offline";
+        config.severity = luil::ui_severity::warning;
+        config.title = u8"오프라인";
+        config.message = u8"서버에 닿지 않는다. 바꾼 내용은 연결되면 올린다.";
+        config.action_label = u8"다시 시도";
+        config.action = luil::make_message_action(offline_bar_intent { false });
+        config.close = luil::make_message_action(offline_bar_intent { true });
+        auto bar { std::make_unique<luil::info_bar_element>(std::move(config)) };
+        // 경고(alert)는 정하지 않아도 끊고 읽는다(assertive). 덜 급한 막대는 polite로 낮춘다.
+        bar->set_live_region(luil::access_live::polite);
+        column->add_fit(std::move(bar));
+    }
+    return column;
+}
+</script></div>
+        <script type="text/plain" id="pre-bar" data-prelude>
+#include "luil/ui/info_bar_element.h"
+#include "luil/ui/stack_element.h"
+#include <memory>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose"><p>휴대폰에서는 단추를 손가락 크기로 키운다. 막대의 최소 높이도 <code>max(40, control_size)</code>로 따라 오른다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/toasts_page.cpp:68-82" data-path="examples/mobile_demo/toasts_page.cpp" data-start="68"><script type="text/plain">
+        // 손가락으로 누르므로 단추를 터치 영역으로 키운다. 막대의 최소 높이도 따라 오른다.
+        [[nodiscard]] luil::info_bar_config make_info_bar(const luil::ui_severity severity)
+        {
+            const bar_text text { bar_text_of(severity) };
+            luil::info_bar_config bar {};
+            bar.owner = std::u8string { text.owner };
+            bar.severity = severity;
+            bar.title = std::u8string { text.title };
+            bar.message = std::u8string { text.message };
+            bar.action_label = std::u8string { text.action };
+            bar.action = luil::make_message_action(info_bar_intent { severity, false });
+            bar.close = luil::make_message_action(info_bar_intent { severity, true });
+            bar.control_size = touch_height;
+            return bar;
+        }
+</script></div>
+        <div class="prose"><p>동작 단추는 옆에 두었을 때 글에 남는 폭이 <code>info_bar_side_action_minimum_text</code>(200) 아래면 글 아래 줄로 간다. 시험이 그 경계를 잠근다. 닫기와 64 폭 단추가 있으면 막대 폭 350에서 옆, 349에서 아래다.</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/info_bar_element_tests.cpp:258-287" data-path="tests/info_bar_element_tests.cpp" data-start="258"><script type="text/plain">
+TEST_CASE("The action button goes below the text when the beside text width drops under 200", "[ui][info-bar][measure]")
+{
+    const luil::measure_context context { context_at(1.0f) };
+    // 닫기(24)와 동작 단추(최소 폭 64)가 오른쪽을 가져가면 글 폭은 폭에서 150을 뺀 값이다.
+    //  - 앞 38 + 가장자리 8 + 닫기 24 + 8 + 단추 64 + 글 앞 8.
+    const luil::info_bar_size beside { luil::info_bar_element::measure(actionable(), context, 350.0f) };
+    REQUIRE(beside.action_below == false);
+    REQUIRE(beside.height == Catch::Approx(luil::info_bar_minimum_height));
+
+    // 글 폭이 199이면 아래 줄이다. 글 아래 8과 단추 높이가 더해진다.
+    const luil::info_bar_size below { luil::info_bar_element::measure(actionable(), context, 349.0f) };
+    REQUIRE(below.action_below);
+    REQUIRE(below.height == Catch::Approx(2.0f * top_padding() + line_height() + 8.0f + luil::text_button_height));
+
+    // 닫기가 없으면 단추 몫이 80(8 + 64 + 8)이라 경계가 그만큼 좁은 폭으로 내려온다.
+    luil::info_bar_config sticky { actionable() };
+    sticky.close = nullptr;
+    REQUIRE(luil::info_bar_element::measure(sticky, context, 318.0f).action_below == false);
+    REQUIRE(luil::info_bar_element::measure(sticky, context, 317.0f).action_below);
+
+    // 동작 단추가 없으면 갈릴 것이 없다.
+    REQUIRE(luil::info_bar_element::measure(closable(), context, 120.0f).action_below == false);
+
+    // control_size가 단추를 키우면 아래 줄의 단추 높이도 그만큼이다.
+    luil::info_bar_config touch { actionable() };
+    touch.control_size = 44.0f;
+    const luil::info_bar_size touch_below { luil::info_bar_element::measure(touch, context, 300.0f) };
+    REQUIRE(touch_below.action_below);
+    REQUIRE(touch_below.height == Catch::Approx(2.0f * top_padding(44.0f) + line_height() + 8.0f + 44.0f));
+}
+</script></div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">모자라게 담으면 넘친다</span>폭이 정해지지 않은 자리(가로 stack의 자식)에서는 <code>preferred_size</code>가 답하지 않는다. 막대는 받은 높이보다 내용이 길면 아래로 넘쳐 그리고 자르지 않는다. 높이는 늘 그 폭의 <code>info_bar_element::measure</code>와 같게 준다.</div></div>
+      </section>
+
+      <section class="sec" id="build-os-windows">
+        <header class="sec-head">
+          <h2>만들기: OS 알림 — Windows</h2>
+          <p class="lede">Windows의 알림은 앱 식별(AUMID)로 선다. 창 설정에 식별을 싣고, 올리기는 아무 thread에서나, 눌림은 delegate 훅으로 받는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1765-1769" data-path="examples/demo_main.cpp" data-start="1765"><script type="text/plain">
+    // OS 알림이 쓰는 앱 식별이다. 아이콘은 실행 파일 옆 assets의 PNG다 (IconUri는 실행 파일 리소스를 가리키지 못한다).
+    config.identity.id = std::u8string { demo::demo_app_identity };
+    config.identity.display_name = u8"luil 데모";
+    if (const std::filesystem::path directory { demo::executable_directory() }; directory.empty() == false)
+        config.identity.icon_path = (directory / L"assets" / L"gradient.png").u8string();
+</script></div>
+        <div class="prose"><p>식별이 있으면 <code>run_application_window</code>가 창보다 먼저 프로세스에 AUMID를 걸고 표시 이름·아이콘을 사용자 레지스트리에 쓴다. 설치기 없이 빌드 폴더의 실행 파일이 알림을 올린다. 그 전에 부르면 <code>unsupported</code>다.</p></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:367-402" data-path="examples/demo_main.cpp" data-start="367"><script type="text/plain">
+            // OS 알림 단추 하나를 OS에 옮기고 답과 지금 상태를 토스트 페이지에 넘긴다. logic thread에서 돈다.
+            //  - 보내기와 바꾸기는 같은 id라 바꾸기가 알림 센터의 그 알림을 바꾼다. 보내기만 그림을 싣는다.
+            void run_os_notification(const os_notification_action action)
+            {
+                // 권한을 묻는다. 묻지 않았으면(필요 없음·이미 답함) 지금 상태를 곧바로 보인다. 답은 delegate의 권한 메시지로 온다.
+                if (action == os_notification_action::request_permission)
+                {
+                    luil::win32::app_host* const host { host_.load() };
+                    os_notification_permission_intent permission {};
+                    if (host != nullptr && host->request_permission(luil::app_permission::notifications))
+                        permission.pending = true;
+                    else if (host != nullptr)
+                        permission.state = host->permission(luil::app_permission::notifications);
+                    static_cast<void>(toasts_.handle(luil::app_message { permission }));
+                    return;
+                }
+                luil::platform_result result {};
+                if (action == os_notification_action::close)
+                    result = luil::close_notification(os_notification_id);
+                else
+                {
+                    luil::notification value {};
+                    value.id = std::u8string { os_notification_id };
+                    value.title = u8"luil 데모";
+                    value.body = action == os_notification_action::send ? u8"알림 센터에 올린 알림입니다. 누르면 데모가 앞으로 옵니다." : u8"같은 id로 바꾼 알림입니다. 소리 없이 올렸습니다.";
+                    value.silent = action == os_notification_action::replace;
+                    if (action == os_notification_action::send)
+                    {
+                        luil::image_decode_error error {};
+                        value.image = luil::load_image_file((executable_directory() / L"assets" / L"gradient.png").u8string(), error);
+                    }
+                    result = luil::show_notification(value);
+                }
+                static_cast<void>(toasts_.handle(luil::app_message { os_notification_result_intent { std::move(result) } }));
+                static_cast<void>(toasts_.handle(luil::app_message { os_notification_status_intent { luil::notification_status() } }));
+            }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="371-382" data-title="권한 묻기">Windows는 묻지 않는다 (<code>not_required</code>). 묻지 않았으면 지금 상태를 곧바로 보인다. 답은 delegate의 권한 메시지로 온다.</li>
+            <li data-lines="384-385" data-title="거두기">그 id의 알림을 거둔다. 없는 알림을 거둬도 <code>ok</code>다.</li>
+            <li data-lines="387-398" data-title="올리기·바꾸기">같은 id로 다시 올리면 알림 센터의 그 알림을 바꾼다. 그림은 긴 변 256 px를 넘으면 줄여 보낸다.</li>
+            <li data-lines="400-401" data-title="답과 상태">결과와 <code>notification_status()</code>를 페이지에 넘긴다. 실패의 까닭은 상태가 말한다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:418-430" data-path="examples/demo_main.cpp" data-start="418"><script type="text/plain">
+                // OS 알림은 셸이 부른다. 토스트 페이지는 답과 지금 상태만 받아 그린다.
+                if (const auto* const request { message.get<os_notification_request_intent>() }; request != nullptr)
+                {
+                    run_os_notification(request->action);
+                    return;
+                }
+                // 권한의 답이 왔다. 상태(권한 필요 → 사용 가능)도 함께 다시 읽는다.
+                if (const auto* const permission { message.get<os_notification_permission_intent>() }; permission != nullptr)
+                {
+                    static_cast<void>(toasts_.handle(message));
+                    static_cast<void>(toasts_.handle(luil::app_message { os_notification_status_intent { luil::notification_status() } }));
+                    return;
+                }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1478-1501" data-path="examples/demo_main.cpp" data-start="1478"><script type="text/plain">
+            // 창과 host가 준비된 직후다 (메시지 루프 전).
+            // HTTP client의 배출구가 답을 넣을 곳이 이 host다.
+            void on_started(luil::win32::app_host& host) override
+            {
+                driver_.bind_host(host);
+                // 앱 식별은 창보다 먼저 섰다. 토스트 페이지의 상태 줄이 처음부터 이 값을 보인다.
+                host.post_app_message(luil::app_message { os_notification_status_intent { luil::notification_status() } });
+                // 지역 값은 시작할 때 한 번 읽는다. 데스크톱 데모에는 앞으로 올 때의 lifecycle 메시지가 없어 다시 읽지 않는다.
+                host.post_app_message(luil::app_message { os_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } });
+            }
+
+            // 물은 권한에 사용자가 답했다. 토스트 페이지의 권한 줄과 상태 줄이 바뀐다.
+            [[nodiscard]] luil::app_message make_permission_message(const luil::app_permission permission, const luil::permission_state state) override
+            {
+                if (permission != luil::app_permission::notifications)
+                    return {};
+                return luil::app_message { os_notification_permission_intent { state, false } };
+            }
+
+            // 사용자가 OS 알림을 누르거나 닫았다. 토스트 페이지가 사건 줄로 보인다.
+            [[nodiscard]] luil::app_message make_notification_message(const luil::notification_event& event) override
+            {
+                return luil::app_message { os_notification_event_intent { event } };
+            }
+</script></div>
+        <div class="prose"><p>훅은 UI thread에서 불린다. 메시지만 짓는다 — inbox가 차서 게시하지 못하면 사건을 되돌려 두었다가 다음 frame 게시 때 다시 내므로 같은 사건으로 두 번 이상 불릴 수 있다. 꺼진 앱에서 알림을 누르면 COM이 표식 인자(<code>-luil-notification</code>)를 붙여 앱을 띄운다. 그 인자는 파일로 읽지 않는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1634-1644" data-path="examples/demo_main.cpp" data-start="1634"><script type="text/plain">
+    // 알림 클릭으로 뜬 실행의 표식(`-luil-notification`·`-Embedding`)을 뺀 인자다. `parse_arguments`는 모르는 인자를 거절한다.
+    [[nodiscard]] std::vector<std::u8string> without_notification_flags(const std::vector<std::u8string>& arguments)
+    {
+        std::vector<std::u8string> kept {};
+        for (const std::u8string& argument : arguments)
+        {
+            if (luil::notification_launch(std::span<const std::u8string> { &argument, 1 }) == false)
+                kept.push_back(argument);
+        }
+        return kept;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1577-1583" data-path="examples/demo_main.cpp" data-start="1577"><script type="text/plain">
+            [[nodiscard]] bool on_instance_arguments(luil::win32::app_host& host, const luil::instance_arguments& arguments) override
+            {
+                // 이 데모가 끝나는 중에 COM이 띄운 둘째가 알림 표식을 넘길 수 있다. 파일 인자가 아니라 받기만 하고 보이지 않는다.
+                if (luil::notification_launch(arguments.arguments))
+                    return true;
+                return host.post_app_message_ticketed(luil::app_message { instance_arguments_intent { arguments } }) != 0;
+            }
+</script></div>
+        <div class="prose"><p>라이브러리는 레지스트리 항목을 스스로 지우지 않는다. 앱이 꺼진 뒤에도 알림 센터의 알림이 앱을 가리켜야 해서다. 지우는 것은 앱의 제거 길이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1614-1632" data-path="examples/demo_main.cpp" data-start="1614"><script type="text/plain">
+    // `--unregister-app-identity`가 있으면 데모의 앱 식별을 지우고 종료 코드를 돌려준다. 없으면 빈 값이다.
+    //  - 종료 코드: 지웠으면 0, 지울 항목이 없으면 3, 그 밖의 실패는 4다. 알림 센터에 남은 데모 알림은 거두지 않는다.
+    [[nodiscard]] std::optional<int> unregister_identity(const std::vector<std::u8string>& arguments)
+    {
+        bool requested { false };
+        for (std::size_t index = 1; index < arguments.size(); ++index)
+            requested = requested || arguments[index] == u8"--unregister-app-identity";
+        if (requested == false)
+            return std::nullopt;
+#if defined(_WIN32)
+        const luil::platform_result result { luil::win32::unregister_app_identity(demo::demo_app_identity) };
+#else
+        // 앱 식별은 Windows의 것이다 (AUMID). 다른 플랫폼에는 지울 것이 없다.
+        const luil::platform_result result { luil::platform_status::unsupported, u8"The app identity is a Windows registration.", std::nullopt };
+#endif
+        if (result.ok())
+            return 0;
+        return result.status == luil::platform_status::not_found ? 3 : 4;
+    }
+</script></div>
+      </section>
+
+      <section class="sec" id="build-os-mobile">
+        <header class="sec-head">
+          <h2>만들기: OS 알림 — Android·iOS</h2>
+          <p class="lede">모바일 데모는 페이지가 플랫폼을 부르지 않는다. 단추가 앱 UI 명령을 던지면 UI thread의 delegate가 권한을 묻고 알림을 올린다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/device_page.h:53-70" data-path="examples/mobile_demo/device_page.h" data-start="53"><script type="text/plain">
+    // 알림 권한의 상태다. `local_network_intent`와 같은 규칙이다.
+    struct notification_permission_intent
+    {
+        luil::permission_state state { luil::permission_state::not_required };
+        bool answered { false };
+    };
+
+    // 알림 보내기의 답이다 (`show_notification`).
+    struct notification_send_intent
+    {
+        luil::platform_result result {};
+    };
+
+    // 알림을 눌러 이 Activity가 떴다 (`notification_event::launched`). 살아 있는 앱의 눌림은 Android에서 오지 않는다.
+    struct notification_launch_intent
+    {
+        std::u8string id {};
+    };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/mobile_demo/android_main.cpp:52-82" data-path="examples/mobile_demo/android_main.cpp" data-start="52"><script type="text/plain">
+        // 기기 페이지의 "묻기"와 "알림 보내기", 기본 페이지의 클립보드 그림 붙여넣기다. 묻지 않았으면(필요 없음·이미 받음) 지금
+        // 상태를 그대로 알린다.
+        void execute_app_ui_command(luil::app_host& host, const luil::app_ui_command& command) override
+        {
+            // 답은 `make_clipboard_data_message`로 온다.
+            if (command.command == mobile_demo::command_paste_clipboard_image)
+            {
+                host.post_clipboard_request(luil::clipboard_data_paste_request {});
+                return;
+            }
+            if (command.command == mobile_demo::command_request_local_network)
+            {
+                if (host.request_permission(luil::app_permission::local_network) == false)
+                    host.post_app_message(luil::app_message { mobile_demo::local_network_intent { host.permission(luil::app_permission::local_network) } });
+                return;
+            }
+            if (command.command == mobile_demo::command_request_notifications)
+            {
+                if (host.request_permission(luil::app_permission::notifications) == false)
+                    host.post_app_message(luil::app_message { mobile_demo::notification_permission_intent { host.permission(luil::app_permission::notifications) } });
+                return;
+            }
+            if (command.command == mobile_demo::command_send_notification)
+            {
+                luil::notification value {};
+                value.id = std::u8string { mobile_demo::device_notification_id };
+                value.title = u8"luil 모바일 데모";
+                value.body = u8"알림 창에 올린 알림입니다. 앱을 끈 뒤 누르면 이 id로 앱이 뜹니다.";
+                host.post_app_message(luil::app_message { mobile_demo::notification_send_intent { luil::show_notification(value) } });
+            }
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="68-73" data-title="권한">Android 13 이상에서 targetSdk 33 이상이면 <code>POST_NOTIFICATIONS</code>를 받아야 한다. 묻지 않았으면(필요 없음·이미 받음) 지금 상태를 곧바로 알린다.</li>
+            <li data-lines="74-81" data-title="올리기">UI thread에서 올리고 답을 메시지로 logic thread에 보낸다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/android_main.cpp:95-110" data-path="examples/mobile_demo/android_main.cpp" data-start="95"><script type="text/plain">
+        [[nodiscard]] luil::app_message make_permission_message(const luil::app_permission permission, const luil::permission_state state) override
+        {
+            if (permission == luil::app_permission::notifications)
+                return luil::app_message { mobile_demo::notification_permission_intent { state, true } };
+            if (permission != luil::app_permission::local_network)
+                return {};
+            return luil::app_message { mobile_demo::local_network_intent { state, true } };
+        }
+
+        // Android가 알리는 사건은 콜드 스타트의 눌림 하나뿐이다 (os-notification-design.md 결정 5).
+        [[nodiscard]] luil::app_message make_notification_message(const luil::notification_event& event) override
+        {
+            if (event.kind != luil::notification_event_kind::activated)
+                return {};
+            return luil::app_message { mobile_demo::notification_launch_intent { event.id } };
+        }
+</script></div>
+        <div class="prose"><p>Android가 알리는 사건은 꺼진 앱을 띄운 눌림 하나뿐이다. 살아 있는 앱의 알림을 누르면 앱이 앞으로 오기만 하고 사건은 없다. iOS 진입점의 훅도 같은 꼴이다 (<code>examples/mobile_demo/ios_main.cpp</code>).</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/device_page.cpp:445-480" data-path="examples/mobile_demo/device_page.cpp" data-start="445"><script type="text/plain">
+        // OS 알림이다 (os-notification-design.md). 알림 창에 올리고, 꺼진 앱에서 누르면 그 id로 앱이 뜬다.
+        column.gap(20.0f);
+        column.heading(u8"notification-heading", u8"알림");
+        if (capabilities.notifications == false)
+            column.note(u8"notification-none", u8"이 플랫폼은 OS 알림을 올리지 못한다.");
+        else
+        {
+            switch (notifications_)
+            {
+            case luil::permission_state::not_required:
+                column.note(u8"notification-state", u8"알림 권한: 묻지 않아도 된다.");
+                break;
+            case luil::permission_state::granted:
+                column.note(u8"notification-state", notifications_answered_ ? u8"알림 권한: 받았다 (방금 허락)." : u8"알림 권한: 받았다.");
+                break;
+            case luil::permission_state::denied:
+                column.note(u8"notification-state", notifications_answered_ ? u8"알림 권한: 받지 못했다 (거절)." : u8"알림 권한: 아직 받지 못했다.");
+                column.gap(8.0f);
+                auto ask { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"notification-ask" }, luil::text_button_config { .text = u8"알림 권한 묻기" }) };
+                ask->set_action(luil::ui_trigger::left_click,
+                    [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_request_notifications } } }; });
+                column.add(std::move(ask), touch_height);
+                break;
+            }
+            column.gap(8.0f);
+            // 올리기는 앱 UI 명령으로 delegate에 넘긴다. 페이지는 플랫폼을 부르지 않는다.
+            auto send { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"notification-send" }, luil::text_button_config { .text = u8"알림 보내기" }) };
+            send->set_action(luil::ui_trigger::left_click,
+                [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::input_action { luil::app_ui_command { command_send_notification } } }; });
+            column.add(std::move(send), touch_height);
+            std::u8string sent { u8"알림 결과: 없음" };
+            if (notification_sent_.has_value())
+                sent = notification_sent_->ok() ? std::u8string { u8"알림 결과: ok" } : u8"알림 결과: 실패 · " + notification_sent_->error;
+            column.note(u8"notification-result", std::move(sent));
+            column.note(u8"notification-launch", u8"알림으로 시작: " + (notification_launch_.empty() ? std::u8string { u8"아니오" } : notification_launch_));
+        }
+</script></div>
+        <div class="prose"><p>떼어 쓰면 올리기 한 함수, <code>handle</code> 한 갈래, 훅 하나다. 저장소에 이만큼 줄인 예가 없어 직접 썼다.</p></div>
+        <div class="code" data-lang="cpp" data-label="내려받기 끝 알림 (직접 작성)" data-compile="pre-os"><script type="text/plain">
+struct download_done_intent
+{
+    std::u8string file {};
+};
+
+// 눌린 알림이다. id만 온다 (사용자 글은 OS로 나가지 않는다).
+struct notification_clicked_intent
+{
+    std::u8string id {};
+    bool launched { false };
+};
+
+struct app_state
+{
+    std::u8string opened {};
+    std::u8string last_error {};
+};
+
+// logic thread에서 부른다 (공개 함수는 어느 thread에서나 부른다).
+void on_download_done(app_state& state, const download_done_intent& done)
+{
+    luil::notification value {};
+    // ASCII 글자·숫자와 . _ - 로 1~64자다. 같은 id로 다시 올리면 바꾼다.
+    value.id = u8"download-1";
+    value.title = u8"내려받기 끝";
+    value.body = done.file;
+    const luil::platform_result result { luil::show_notification(value) };
+    if (result.ok() == false)
+        state.last_error = result.error;
+}
+
+// logic thread의 handle 갈래다.
+bool handle(app_state& state, const luil::app_message& message)
+{
+    if (const auto* const clicked { message.get<notification_clicked_intent>() }; clicked != nullptr)
+    {
+        state.opened = clicked->id;
+        return true;
+    }
+    return false;
+}
+
+// UI thread의 훅이다. 메시지만 짓는다 — 같은 사건으로 두 번 이상 불릴 수 있다.
+class notify_delegate final : public luil::app_delegate
+{
+public:
+    [[nodiscard]] luil::app_message make_notification_message(const luil::notification_event& event) override
+    {
+        if (event.kind != luil::notification_event_kind::activated)
+            return {};
+        return luil::app_message { notification_clicked_intent { event.id, event.launched } };
+    }
+};
+</script></div>
+        <script type="text/plain" id="pre-os" data-prelude>
+#include "luil/app/app_delegate.h"
+#include "luil/app/notification.h"
+#include <string>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 아래 표는 자주 묻는 필드만 추렸다. 모든 기호는 <a class="xref" href="api.html#toast-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="toast_config">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/toast_element.h:16-63" data-path="include/luil/ui/toast_element.h" data-start="16"><script type="text/plain">
+    // 토스트 한 장의 설정이다.
+    // 목록 관리와 만료 판정은 앱의 몫이다.
+    //  - 라이브러리는 `now`와 표시 시각으로 남은 시간을 계산해 끝날 무렵 흐려지게만 한다.
+    //    사라진 토스트를 목록에서 지우는 것은 앱이다.
+    struct toast_config
+    {
+        // 같은 화면의 토스트를 구분하는 앱 정의 키다 (ui_element_id::owner 규약).
+        std::u8string id {};
+        std::u8string text {};
+        toast_severity severity { toast_severity::info };
+        // 라벨과 액션이 모두 있어야 버튼을 만든다.
+        //  - 하나만 있으면 "버튼은 있는데 아무 일도 하지 않는" 조합이라 만들지 않는다.
+        std::u8string action_label {};
+        ui_action action {};
+        // 표시를 시작한 시각과 보여 줄 시간이다.
+        // duration이 0이면 흐려지지 않고 계속 남는다 (앱이 직접 지울 때까지).
+        std::chrono::steady_clock::time_point shown_at {};
+        std::chrono::milliseconds duration { 0 };
+    };
+
+    // 토스트를 쌓을 모서리다.
+    enum class toast_corner
+    {
+        top_left,
+        top_right,
+        bottom_left,
+        bottom_right,
+    };
+
+    struct toast_stack_config
+    {
+        // 같은 화면에 stack이 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        toast_corner corner { toast_corner::bottom_right };
+        // 이 개수까지만 만든다.
+        // 넘치는 설정은 element가 되지 않는다.
+        std::size_t maximum_count { 3 };
+        // 토스트 사이 간격과 slot 가장자리 여백, 토스트 한 장의 폭이다 (논리 픽셀).
+        float spacing { 8.0f };
+        float margin { 16.0f };
+        float width { 320.0f };
+    };
+
+    // 토스트 한 장의 높이와 액션 버튼의 폭이다 (논리 픽셀).
+    inline constexpr float toast_height { 40.0f };
+    inline constexpr float toast_action_width { 64.0f };
+    // 끝나기 전 흐려지는 데 쓰는 시간이다.
+    inline constexpr std::chrono::milliseconds toast_fade { 300 };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>빈 글</td><td>같은 화면의 토스트를 가르지 못한다. 토스트와 동작 단추의 id owner다</td></tr>
+                  <tr><td><code>text</code></td><td>빈 글</td><td>한 줄이다. 폭을 넘으면 끝을 <code>…</code>로 줄인다. 접근 이름이 이 글뿐이다</td></tr>
+                  <tr><td><code>action_label</code> · <code>action</code></td><td>없음</td><td>둘이 다 있어야 단추를 만든다. 단추는 64×24, Tab 자리가 아니다</td></tr>
+                  <tr><td><code>shown_at</code></td><td>시계의 0</td><td>그 0에서 센다. 앱이 보이기 시작할 때 <code>steady_clock::now()</code>를 적는다</td></tr>
+                  <tr><td><code>duration</code></td><td>0</td><td>흐려지지 않고 계속 남는다 (앱이 지울 때까지)</td></tr>
+                  <tr><td><code>toast_stack_config::corner</code></td><td><code>bottom_right</code></td><td>위 모서리는 첫 장이 가장 위, 아래 모서리는 첫 장이 가장 아래다</td></tr>
+                  <tr><td><code>toast_stack_config::maximum_count</code></td><td>3</td><td>목록 앞에서부터 이만큼만 element가 된다</td></tr>
+                  <tr><td><code>spacing</code> · <code>margin</code> · <code>width</code></td><td>8 · 16 · 320</td><td>폭은 자리로 줄지 않는다. 336보다 좁은 자리에서는 반대편으로 넘친다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>그리는 치수는 비공개다: 모서리 6, 바탕 <code>raised_background</code>, 1px <code>tooltip_border</code> 테, 글리프 칸 16(글꼴 14)을 왼쪽 10에, 글은 글리프 뒤 8부터, 단추가 있으면 오른쪽 80을 비운다. 글자는 본문 크기(내장 스타일 12)다.</p></div>
+          </section>
+          <section data-tab="info_bar_config">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/info_bar_element.h:12-49" data-path="include/luil/ui/info_bar_element.h" data-start="12"><script type="text/plain">
+    // 정보 막대의 치수다 (논리 픽셀).
+    //  - 최소 높이는 한 줄 막대의 높이이고 `info_bar_config::control_size`가 더 크면 그것을 따라 오른다.
+    inline constexpr float info_bar_minimum_height { 40.0f };
+    inline constexpr float info_bar_close_size { 24.0f };
+    // 동작 단추를 옆에 둘 때 글에 남아야 하는 폭이다. 모자라면 단추가 글 아래로 간다.
+    inline constexpr float info_bar_side_action_minimum_text { 200.0f };
+
+    struct info_bar_config
+    {
+        // 막대와 두 단추의 owner다.
+        std::u8string owner {};
+        ui_severity severity { ui_severity::info };
+        // 한 줄이다. 길면 끝을 줄인다. 비면 줄이 서지 않는다.
+        std::u8string title {};
+        // 폭에서 줄을 바꾼다. 규칙은 label의 `wrap`과 같다.
+        std::u8string message {};
+        // 본문의 최대 줄 수다. 0이면 제한이 없다. 넘치면 마지막 줄의 끝을 줄인다.
+        std::size_t max_lines { 0 };
+        // 글과 액션이 모두 있어야 동작 단추를 만든다.
+        //  - 하나만 있으면 눌러도 아무 일 없는 단추라 만들지 않는다.
+        std::u8string action_label {};
+        ui_action action {};
+        // 있어야 닫기 단추를 만든다. 열려 있는지는 앱 상태다.
+        ui_action close {};
+        // 닫기 단추의 툴팁이자 접근 이름이다. 비면 기본 문구("닫기")다.
+        std::u8string close_tooltip {};
+        // 접근 이름 앞에 붙는 심각도 낱말이다. 비면 기본 문구(정보·성공·경고·오류)다.
+        std::u8string severity_name {};
+        // 닫기 단추의 한 변과 동작 단추의 높이다 (논리 픽셀). 0이면 `info_bar_close_size`와 `text_button_height`다.
+        float control_size { 0.0f };
+    };
+
+    // 그 폭에서 막대가 차지할 크기다.
+    struct info_bar_size
+    {
+        float height { 0.0f };  // 논리 픽셀
+        bool action_below { false };  // 동작 단추가 글 아래 줄에 서는가
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>severity</code></td><td><code>info</code></td><td>테·글리프 색과 접근 이름의 낱말</td></tr>
+                  <tr><td><code>title</code></td><td>빈 글</td><td>제목 줄이 서지 않는다. 길면 끝을 줄인다</td></tr>
+                  <tr><td><code>message</code></td><td>빈 글</td><td>본문 없이 선다. 있으면 폭에서 줄을 바꾼다</td></tr>
+                  <tr><td><code>max_lines</code></td><td>0</td><td>줄 수 제한이 없다</td></tr>
+                  <tr><td><code>action_label</code> · <code>action</code></td><td>없음</td><td>둘이 다 있어야 동작 단추를 만든다</td></tr>
+                  <tr><td><code>close</code></td><td>없음</td><td>닫기 단추가 없다. 열림은 앱 상태다</td></tr>
+                  <tr><td><code>close_tooltip</code></td><td>빈 글</td><td>기본 문구 "닫기"</td></tr>
+                  <tr><td><code>control_size</code></td><td>0</td><td>닫기 24, 동작 단추 28. 최소 높이 40</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>비공개 치수: 가로 여백 12, 글리프 칸 16(글꼴 14), 글리프와 글 사이 10, 부품 사이 8, 위·아래 여백 하한 8, 모서리 6. 몸은 심각도와 무관한 <code>raised_background</code>이고 심각도 색은 1px 테와 글리프가 말한다.</p></div>
+          </section>
+          <section data-tab="ui_severity">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/severity.h:4-13" data-path="include/luil/ui/severity.h" data-start="4"><script type="text/plain">
+    // 알림의 심각도다. 토스트·정보 막대가 같은 낱말을 쓰고 뒤에 오는 대화 상자도 그렇다.
+    //  - 구체 색과 글리프는 이 타입이 아니라 그리는 쪽이 정한다 (비공개 `severity_paint.h`).
+    //    색만으로 뜻을 말하지 않는다. 고대비가 info·warning·error의 색을 같게 접으므로 글리프가 뜻을 남긴다.
+    enum class ui_severity
+    {
+        info,
+        success,
+        warning,
+        error,
+    };
+</script></div>
+            <div class="prose small"><p>색과 글리프의 짝은 <a class="xref" href="#concepts">개념</a>의 표에 있다. 정보 막대와 확인 대화 상자는 접근 이름 앞에 심각도 낱말을 붙이고 <code>severity_name</code>으로 바꿀 수 있다. 토스트의 접근 이름은 글뿐이다.</p></div>
+          </section>
+          <section data-tab="notification">
+            <div class="code" data-lang="cpp" data-src="include/luil/app/notification.h:16-81" data-path="include/luil/app/notification.h" data-start="16"><script type="text/plain">
+    // 올릴 알림 하나다.
+    struct notification
+    {
+        // 앱이 정한 키다. ASCII 글자·숫자와 `.` `_` `-`로 1~64자다. 같은 id로 다시 올리면 그 알림을 바꾼다.
+        //  - OS의 활성화 인자로 나가고 눌림 사건이 이것만 돌려준다. 사용자 글을 담지 않는다.
+        std::u8string id {};
+        // 제목과 본문이다. 제목은 256, 본문은 1024 코드 포인트를 넘으면 그 길이에 맞춰 자르고 끝을 `…`로 바꾼다.
+        std::u8string title {};
+        std::u8string body {}; // 비어도 된다
+        // 알림 옆 그림이다. 비면 없다. 긴 변이 256 px를 넘으면 줄여 보낸다.
+        ui_image image {};
+        // 소리 없이 올린다.
+        bool silent { false };
+    };
+
+    enum class notification_event_kind
+    {
+        activated, // 사용자가 눌렀다
+        dismissed, // 사용자가 닫았다 (Windows·macOS)
+        failed,    // 올린 뒤 OS가 거절했다 (Windows만)
+    };
+
+    // 알림에 일어난 일이다. 앱이 거둔 알림(`close_notification`)과 시간이 지나 알림 센터로 옮겨 간 알림은 사건이 없다.
+    struct notification_event
+    {
+        notification_event_kind kind { notification_event_kind::activated };
+        std::u8string id {};
+        // activated: 이 클릭이 꺼져 있던 앱을 띄웠다.
+        bool launched { false };
+        // failed: 개발자가 읽을 진단 영문이다.
+        std::u8string error {};
+        // 이 사건 앞에서 버린 사건 수다. 앱이 받지 못한 사건이 64개를 넘으면 가장 오래된 것부터 버린다.
+        std::uint32_t lost_before { 0 };
+
+        [[nodiscard]] bool operator==(const notification_event&) const = default;
+    };
+
+    enum class notification_availability
+    {
+        available,
+        // 사용자·정책이 이 앱의 알림을 껐다.
+        blocked,
+        // `app_permission::notifications`를 받아야 한다.
+        permission_needed,
+        // 이 플랫폼·구성에는 길이 없다 (Windows 앱 식별이 없거나 서지 않았다, macOS 앱 번들이 아니다).
+        unsupported,
+    };
+
+    // 모두 어느 thread에서나 부른다.
+    //  - Windows는 앱 식별(`win32::window_config::identity`)이 선 뒤에야 쓸 수 있다. `run_application_window` 전에는 `unsupported`다.
+    //  - macOS는 번들 식별자가 있는 앱 번들(`.app`)에서만 쓸 수 있다. 맨 실행 파일은 `unsupported`다.
+    [[nodiscard]] notification_availability notification_status();
+    // 알림을 올린다. 같은 id가 있으면 바꾼다.
+    //  - id가 규칙 밖이거나 글이 잘못된 UTF-8이면 OS를 부르지 않고 `failed`다.
+    //  - 알림이 꺼졌거나(`blocked`) 권한이 없으면(`permission_needed`) `failed`, 길이 없으면 `unsupported`다. 까닭은 `notification_status`가 말한다.
+    //  - `ok`는 OS가 받았다는 뜻이다. 배너가 실제로 떴는지는 알 수 없다 (Windows 집중 지원은 알림 센터로만 보낸다).
+    [[nodiscard]] platform_result show_notification(const notification& value);
+    // 그 id의 알림을 거둔다. 없는 알림을 거둬도 `ok`다.
+    [[nodiscard]] platform_result close_notification(std::u8string_view id);
+    // 이 앱이 올린 알림을 모두 거둔다.
+    [[nodiscard]] platform_result close_all_notifications();
+    // 이 실행이 알림 클릭으로 뜬 것인가다 (Windows 활성화기의 표식 `-luil-notification`과 COM이 덧붙이는 `-Embedding`).
+    //  - 앱은 이때 인자를 파일로 읽지 않는다. 첫째가 끝나는 중에 COM이 띄운 둘째는 이 표식을 첫째에 넘길 수 있어
+    //    (`single_instance::send_to_primary`) 받은 인자(`instance_arguments`)를 거를 때도 쓴다.
+    //  - Android와 macOS는 늘 거짓이다. 콜드 스타트 눌림은 `notification_event::launched`로 온다.
+    [[nodiscard]] bool notification_launch(std::span<const std::u8string> arguments) noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>빈 글</td><td>규칙(ASCII 글자·숫자·<code>.</code> <code>_</code> <code>-</code>, 1~64자) 밖이라 OS를 부르지 않고 <code>failed</code>다</td></tr>
+                  <tr><td><code>title</code> · <code>body</code></td><td>빈 글</td><td>본문은 비어도 된다. 256·1024 코드 포인트를 넘으면 잘라 끝을 <code>…</code>로 바꾼다</td></tr>
+                  <tr><td><code>image</code></td><td>없음</td><td>그림 없이 올린다</td></tr>
+                  <tr><td><code>silent</code></td><td>거짓</td><td>소리를 낸다 (Android는 API 31부터 끌 수 있다)</td></tr>
+                  <tr><td><code>make_notification_message</code></td><td>빈 메시지</td><td><strong>눌림이 앱에 오지 않는다</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="win32::app_identity">
+            <div class="code" data-lang="cpp" data-src="include/luil/win32/win32_window.h:267-293" data-path="include/luil/win32/win32_window.h" data-start="267"><script type="text/plain">
+    // 앱 식별(AUMID)이다 (docs/os-notification-design.md). OS 알림(`show_notification`)이 이것으로 선다.
+    //  - id가 있으면 `run_application_window`가 창보다 먼저 프로세스에 AUMID를 걸고(`SetCurrentProcessExplicitAppUserModelID`)
+    //    `HKCU\Software\Classes\AppUserModelId\<id>`에 표시 이름·아이콘을 쓴다. 바로가기와 설치기가 없어도 빌드 폴더의
+    //    실행 파일이 알림을 올린다.
+    //  - 이 프로세스의 창은 모두 이 id로 작업 표시줄에 묶인다. 식별 없이 고정한 옛 단추와는 갈려 사용자가 다시 고정한다.
+    //  - 라이브러리는 항목을 스스로 지우지 않는다. 앱이 꺼진 뒤에도 알림 센터의 알림이 앱을 가리켜야 해서다.
+    //    지우는 것은 앱의 제거 길이다 (`unregister_app_identity`).
+    struct app_identity
+    {
+        // AUMID다. 비면 앱 식별을 세우지 않는다. 128자(UTF-16) 이하, 공백·제어 문자·백슬래시 없음, `회사.제품` 꼴을 권한다.
+        //  - 규칙 밖이면 창이 시작하지 않는다 (시작 실패로 알린다).
+        std::u8string id {};
+        // 알림에 보이는 앱 이름이다. 비면 `caption.title`이다.
+        std::u8string display_name {};
+        // 앱 아이콘 파일(.png·.ico)의 절대 경로다. 비면 적지 않는다. 실행 파일 리소스는 가리킬 수 없다.
+        std::u8string icon_path {};
+        // 꺼진 앱도 알림 클릭으로 띄운다 (COM 활성화기, 결정 4).
+        //  - 참이면 `CustomActivator`와 `HKCU\Software\Classes\CLSID\{clsid}\LocalServer32`(`"<실행 파일>" -luil-notification`)를
+        //    쓰고, 주 창이 서면 그 CLSID의 클래스 개체를 건다. CLSID는 id에서 이름 기반 UUID(v5)로 짓는다.
+        //  - 꺼진 앱의 알림을 누르면 COM이 그 명령 줄로 앱을 띄운다. 앱은 `notification_launch`로 그 실행을 알아본다.
+        //  - 거짓이면 떠 있는 동안의 눌림만 받고, 창을 거둘 때 이 앱의 알림을 거둔다.
+        bool activator { true };
+    };
+
+    // 앱 식별의 레지스트리 항목을 지운다. 앱의 제거 길에서 부른다. 없으면 `not_found`, id가 규칙 밖이면 `failed`다.
+    //  - 알림 센터에 남은 알림은 거두지 않는다. 먼저 `close_all_notifications`를 부른다.
+    [[nodiscard]] platform_result unregister_app_identity(std::u8string_view id);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>빈 글</td><td>식별을 세우지 않는다 — 알림이 <code>unsupported</code>다. 규칙 밖이면 창이 시작하지 않는다</td></tr>
+                  <tr><td><code>display_name</code></td><td>빈 글</td><td>창 캡션의 제목</td></tr>
+                  <tr><td><code>icon_path</code></td><td>빈 글</td><td>아이콘을 적지 않는다. 실행 파일 리소스는 가리킬 수 없다</td></tr>
+                  <tr><td><code>activator</code></td><td>참</td><td>거짓이면 떠 있는 동안의 눌림만 받고, 창을 거둘 때 이 앱의 알림을 거둔다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">토스트와 정보 막대의 단추 액션은 input thread에서 불리고 그 메시지는 logic thread의 <code>handle</code>로 간다. 흐려짐과 만료에는 메시지가 없다. OS 알림의 사건은 UI thread의 훅으로 온다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="토스트·정보 막대">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>사건</th><th>나가는 메시지</th><th>앱이 할 일</th></tr></thead>
+                <tbody>
+                  <tr><td>토스트 동작 단추 누름 (포인터·터치, 보조 기술 Invoke)</td><td><code>toast_config::action</code>이 낸 동작들</td><td>목록에서 지우거나 되돌린다</td></tr>
+                  <tr><td>토스트 몸 누름</td><td>없음 — 흡수만 한다</td><td>—</td></tr>
+                  <tr><td>흐려지기 시작 · 흐려지는 중</td><td>없음 — UI thread가 다시 그리기만 한다</td><td>—</td></tr>
+                  <tr><td>시간이 다 됐다</td><td>없음. 앱이 예고한 <code>next_tick</code>이 지나면 <code>tick(now)</code>이 불리고 frame이 다시 게시된다</td><td><code>tick</code>에서 목록을 줄인다</td></tr>
+                  <tr><td>정보 막대 동작 단추</td><td><code>info_bar_config::action</code></td><td>그 일을 한다</td></tr>
+                  <tr><td>정보 막대 닫기 단추</td><td><code>info_bar_config::close</code></td><td>닫힘을 적고 다음 frame에 짓지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="OS 알림">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>사건</th><th>나가는 것</th><th>앱이 할 일</th></tr></thead>
+                <tbody>
+                  <tr><td><code>show_notification</code> 호출</td><td><code>platform_result</code>를 곧바로 돌려준다 (부른 thread)</td><td>실패면 <code>notification_status()</code>로 까닭을 본다</td></tr>
+                  <tr><td>사용자가 눌렀다</td><td><code>notification_event</code> (<code>activated</code>, id, <code>launched</code>) → 훅 → app inbox</td><td>id로 화면을 연다</td></tr>
+                  <tr><td>사용자가 닫았다</td><td><code>dismissed</code> — Windows(사용자 취소만)·macOS·iOS. Android는 없다</td><td>—</td></tr>
+                  <tr><td>올린 뒤 OS가 거절했다</td><td><code>failed</code> — Windows만, <code>error</code>에 진단 영문</td><td>알린다</td></tr>
+                  <tr><td>앱이 거뒀다 · 시간이 지나 알림 센터로 옮겨 갔다</td><td>사건 없음</td><td>—</td></tr>
+                  <tr><td>앱이 받지 못한 사건이 64개를 넘었다</td><td>가장 오래된 것부터 버리고 다음 사건의 <code>lost_before</code>에 센다</td><td>필요하면 상태를 다시 읽는다</td></tr>
+                  <tr><td>권한을 물은 답</td><td><code>make_permission_message(app_permission::notifications, state)</code></td><td>상태를 다시 읽는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>눌림이 오는 길은 플랫폼마다 다르다. Windows는 COM 활성화기(기본) 또는 알림 개체의 사건이 thread 풀에서 오고, Android는 꺼진 앱을 띄운 눌림을 첫 초점 사건에서 intent로 읽고, macOS·iOS는 delegate 응답을 메인 thread로 옮긴다. 어느 쪽이든 앱에는 같은 훅으로 온다. 눌림을 낸 뒤 라이브러리는 보이는 주 창을 앞으로 세운다. 숨은 주 창은 그대로다.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">토스트는 키보드 자리가 아니고 정보 막대는 자리다. 둘 다 경고(<code>alert</code>) 역할이라 정하지 않아도 끊고 읽는 live region이다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="키보드">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>요소</th><th>키보드</th></tr></thead>
+                <tbody>
+                  <tr><td>토스트 동작 단추</td><td>Tab 자리가 아니다. 키보드로 누를 수 없다</td></tr>
+                  <tr><td>정보 막대 동작·닫기</td><td>둘 다 Tab 자리다. Enter·Space가 누른다. 손 모양 커서</td></tr>
+                  <tr><td>쌓음</td><td>자리가 아니다. 액션이 없는 element다</td></tr>
+                  <tr><td>OS 알림</td><td>운영 체제의 몫이다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>요소</th><th>역할</th><th>이름</th><th>읽기</th></tr></thead>
+                <tbody>
+                  <tr><td>토스트</td><td><code>alert</code></td><td><code>text</code>만 (심각도 낱말 없음)</td><td><code>assertive</code>. 글을 가진 채 새로 서면 알린다</td></tr>
+                  <tr><td>토스트 동작 단추</td><td><code>button</code> (Invoke)</td><td>단추 글</td><td>—</td></tr>
+                  <tr><td>정보 막대</td><td><code>alert</code></td><td>심각도 낱말 + 제목 + 본문 (빈 것은 건너뛴다, 줄인 것과 무관한 전체 글)</td><td><code>assertive</code>. <code>set_live_region</code>으로 낮춘다</td></tr>
+                  <tr><td>정보 막대 단추</td><td><code>button</code></td><td>동작 글 · <code>close_tooltip</code></td><td>—</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li>live region 규칙: 이전 접근 발행본에 없던 요소가 글을 가진 채 나타나면, 그 요소나 가장 가까운 live 조상이 한 frame에 한 번 알린다.</li>
+                <li>Windows UIA: <code>alert</code>는 Text 컨트롤이고 LiveSetting(Assertive)을 답하며 변화 때 LiveRegionChanged를 쏜다. macOS: AXGroup + AXApplicationAlert, live 변화는 알림(높은 우선순위). iOS는 dialog·alert를 의미 묶음 컨테이너로 두고 같은 알림 표를 쓴다.</li>
+                <li>Android host에는 접근성 다리가 없다 (<a class="xref" href="platforms.html">플랫폼과 host</a>).</li>
+                <li>색만으로 뜻을 말하지 않는다. 글리프를 늘 그리고, 몸은 심각도와 무관한 중립 바탕이다.</li>
+                <li>토스트의 300ms 흐려짐은 움직임 줄이기 설정(<code>update_context::reduce_motion</code>)을 보지 않는다. 자리는 움직이지 않고 불투명도만 준다.</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">토스트와 정보 막대는 core element라 모든 host에서 같은 코드다. OS 알림은 플랫폼마다 서는 조건과 오는 사건이 다르다.</p>
+        </header>
+        <div class="prose">
+          <ul>
+            <li><strong>터치</strong>: 정보 막대는 <code>control_size</code>(데모 44)로 단추를 키운다. 토스트에는 크기 칸이 없어 동작 단추가 늘 64×24다.</li>
+            <li><strong>자리</strong>: 휴대폰 데모도 오른쪽 아래에 쌓는다. 쌓음의 폭은 자리로 줄지 않으므로 아주 좁은 화면에서는 <code>width</code>를 앱이 줄인다.</li>
+          </ul>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>OS 알림</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td>서는 조건</td><td><code>window_config::identity</code>가 섰다</td><td>앱 context가 있다</td><td>번들 식별자가 있는 <code>.app</code></td><td>같은 구현 (UserNotifications)</td></tr>
+              <tr><td>권한</td><td>묻지 않는다 (<code>not_required</code>)</td><td>API·targetSdk 33 이상이면 <code>POST_NOTIFICATIONS</code></td><td>앱이 <code>request_permission</code>으로 먼저 묻는다</td><td>같다</td></tr>
+              <tr><td>눌림 사건</td><td>떠 있을 때·꺼져 있을 때 모두 (활성화기)</td><td>꺼진 앱을 띄운 눌림만</td><td>떠 있을 때와 꺼진 앱을 띄운 눌림</td><td>같다</td></tr>
+              <tr><td>닫음 사건</td><td>사용자 취소만</td><td>없음</td><td>닫음 동작</td><td>같다</td></tr>
+              <tr><td>실패 사건</td><td>있음</td><td>없음</td><td>없음 (거절은 올리기의 답)</td><td>없음</td></tr>
+              <tr><td>그림을 못 붙이면</td><td>올리기 자체가 <code>failed</code></td><td>그림 없이 올린다</td><td>그림 없이 올린다</td><td>같다</td></tr>
+              <tr><td>메인 thread에서 올리기</td><td>—</td><td>—</td><td>답을 기다리지 않고 <code>ok</code></td><td>같다</td></tr>
+              <tr><td><code>notification_launch</code></td><td>표식이 있으면 참</td><td>늘 거짓</td><td>늘 거짓</td><td>늘 거짓</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>Windows 집중 지원이 켜져 있으면 <code>ok</code>인데 배너 없이 알림 센터로만 간다. Android는 채널 하나(<code>luil.default</code>, 기본 중요도)를 첫 올리기에서 만든다. 실제 기기와 알림 센터에서 돌려 확인하지는 않았다 — 위 표는 코드와 설계 문서에서 읽은 것이다.</p></div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다. 설계 문서와 코드가 다른 곳은 코드를 따랐다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>지우지 않은 토스트는 보이지 않아도 남는다.</strong> 다 흐려지면 그리기만 건너뛰고 tree·hit test·접근 tree에는 그대로다. 몸이 누름을 흡수하므로 보이지 않는 토스트가 그 자리의 클릭을 막는다. 앱은 <code>next_tick</code>·<code>tick</code>으로 지운다 (<a class="xref" href="#lab">실습</a>에서 지우기를 끄면 보인다).</li>
+          <li><strong>흐려짐과 지우기의 시간이 따로 적힌다.</strong> 한쪽만 바꾸면 흐려진 뒤에도 남거나 흐려지기 전에 사라진다. 항목마다 <code>duration</code>을 들고 두 쪽에 같은 값을 쓴다.</li>
+          <li><strong><code>maximum_count</code>는 목록의 앞에서부터 센다.</strong> 새 토스트를 끝에 더하는 앱에서는 넘친 새 토스트가 옛 것이 지워질 때까지 보이지 않는다. 그동안에도 그 토스트의 시계는 간다.</li>
+          <li><strong>쌓음의 폭은 줄지 않는다.</strong> <code>width</code>(320)와 <code>margin</code>(16)으로 자리를 잡고 자리 폭으로 자르지 않는다. 336 논리 픽셀보다 좁은 자리에서는 반대편으로 넘친다.</li>
+          <li><strong>흐려지는 토스트의 단추도 눌린다.</strong> 다 흐려진 뒤에도 지우기 전까지는 보이지 않는 단추가 눌린다. 데모는 그래서 계속 남는 토스트에만 동작을 단다.</li>
+          <li><strong>마우스를 올려도 멈추지 않는다.</strong> 불투명도는 시각만의 함수다. 읽는 중에 사라지면 곤란한 글은 계속 남는 토스트나 정보 막대로 띄운다.</li>
+          <li><strong>흐려짐은 움직임 줄이기 설정을 보지 않는다.</strong> <code>next_update</code>·<code>opacity_at</code>에 그 갈래가 없다. 자리는 움직이지 않고 300ms 동안 불투명도만 준다.</li>
+          <li><strong>토스트에는 닫기 단추·밀어 닫기가 없다.</strong> 동작 단추를 닫기로 쓰거나 만료를 기다린다.</li>
+          <li><strong>토스트 동작은 키보드로 누를 수 없다.</strong> Tab 자리가 아니다. 꼭 필요한 동작은 다른 자리에도 둔다.</li>
+          <li><strong>토스트의 접근 이름에 심각도가 없다.</strong> 이름은 글뿐이다. 오류 토스트는 글에 "실패" 같은 낱말을 넣는다.</li>
+          <li><strong>modal 위의 토스트는 눌린다.</strong> 데모처럼 대화 상자 뒤(위)에 쌓음을 담으면 scrim 위에 서서 포인터를 받는다. 키보드 가둠에는 들지 않는다 (<a class="xref" href="dialogs.html#pitfalls">대화 상자와 시트</a>).</li>
+          <li><strong>경고 역할은 끊고 읽는다.</strong> 토스트·정보 막대는 정하지 않으면 <code>assertive</code>라 여럿이 한꺼번에 서면 화면 읽기의 말을 끊는다. 정보 막대는 <code>set_live_region</code>으로 낮출 수 있지만 토스트 element는 쌓음이 안에서 지어 앱이 손댈 자리가 없다.</li>
+          <li><strong>정보 막대의 높이는 담는 쪽이 정한다.</strong> 모자라게 담으면 아래로 넘쳐 그리고 자르지 않는다. 가로 stack 안에서는 높이를 답하지 않는다.</li>
+          <li><strong>정보 막대 닫기는 막대가 하지 않는다.</strong> 앱 상태로 닫고, 다시 여는 길도 앱이 둔다.</li>
+          <li><strong>Windows: 식별 없이는 <code>unsupported</code>다.</strong> <code>window_config::identity</code>를 싣고 <code>run_application_window</code> 뒤에 부른다. id가 규칙 밖이면 창이 시작하지 않는다.</li>
+          <li><strong>Windows: 레지스트리 항목이 남는다.</strong> 제거 길에서 <code>close_all_notifications</code> 뒤 <code>unregister_app_identity</code>를 부른다.</li>
+          <li><strong>Windows: 알림 클릭으로 뜬 실행의 인자를 파일로 읽지 않는다.</strong> <code>notification_launch</code>로 거른다. 둘째 인스턴스가 넘긴 인자도 거른다. 둘째 인스턴스는 활성화기를 걸지 않는다.</li>
+          <li><strong>Windows: <code>activator</code>를 끄면 창을 거둘 때 이 앱의 알림이 모두 사라진다.</strong></li>
+          <li><strong><code>ok</code>는 배너가 떴다는 뜻이 아니다.</strong> OS가 받았다는 뜻이다.</li>
+          <li><strong>id는 ASCII 1~64자다.</strong> 한글·공백·65자 id는 OS를 부르지 않고 <code>failed</code>다. 사용자 글은 id에 담지 않는다 — OS 활성화 인자로 나간다.</li>
+          <li><strong>Android: 살아 있는 앱의 눌림은 사건이 없다.</strong> 앞으로 오기만 한다. 최근 앱 목록에서 다시 연 것도 눌림이 아니다.</li>
+          <li><strong>macOS·iOS: 앱이 먼저 묻는다.</strong> 묻지 않은 앱의 올리기는 <code>failed</code>다. 맨 실행 파일(번들이 아님)은 <code>unsupported</code>다. 메인 thread의 <code>ok</code>는 넘겼다는 뜻일 뿐이다.</li>
+          <li><strong>훅은 메시지만 짓는다.</strong> <code>make_notification_message</code>는 같은 사건으로 두 번 이상 불릴 수 있고, 던지면 그 사건을 버린다.</li>
+          <li><strong>OS 알림에는 단추·답장·진행률·예약이 없다.</strong></li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>토스트는 누가 지우나?</summary><div class="faq-a"><p class="faq-short">앱이다. 라이브러리는 끝날 무렵 흐려지게만 그린다.</p><p>앱이 <code>next_tick</code>에 다음 만료 시각을 답하고 <code>tick</code>에서 목록을 줄인다 (<a class="xref" href="#build-toast">시간 토스트</a>).</p></div></details>
+          <details class="faq"><summary>3초 뒤 사라지게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>shown_at = now</code>, <code>duration = 3000ms</code>로 싣고 <code>shown_at + duration</code>에 지운다.</p><p>2.7초부터 흐려지기 시작해 3초에 0이 된다. 지우는 시각도 같은 값으로 셈한다.</p></div></details>
+          <details class="faq"><summary>사라지지 않는 토스트는?</summary><div class="faq-a"><p class="faq-short"><code>duration</code>을 0으로 둔다.</p><p>흐려지지 않고 앱이 지울 때까지 남는다. 다시 그리기 예고도 없다.</p></div></details>
+          <details class="faq"><summary>"실행 취소" 단추는?</summary><div class="faq-a"><p class="faq-short"><code>action_label</code>과 <code>action</code>을 함께 준다.</p><p>둘 중 하나만 있으면 단추를 만들지 않는다. 데모는 계속 남는 토스트에만 단다 (<a class="xref" href="#build-undo">실행 취소 토스트</a>).</p></div></details>
+          <details class="faq"><summary>토스트를 닫는 × 단추는?</summary><div class="faq-a"><p class="faq-short">없다. 동작 단추를 "닫기"로 쓴다.</p><p>동작이 앱 메시지를 내고 앱이 그 id를 목록에서 지운다. 밀어 닫는 몸짓도 없다.</p></div></details>
+          <details class="faq"><summary>어느 모서리에, 몇 장까지 쌓나?</summary><div class="faq-a"><p class="faq-short"><code>corner</code>(기본 오른쪽 아래)와 <code>maximum_count</code>(기본 3)다.</p><p>장 수는 목록의 앞에서부터 센다. 아래 모서리는 첫 장이 모서리 쪽에 선다.</p></div></details>
+          <details class="faq"><summary>마우스를 올리면 멈추나?</summary><div class="faq-a"><p class="faq-short">멈추지 않는다.</p><p>불투명도는 시각만의 함수이고 멈춤 칸이 없다. 읽는 중에 사라지면 곤란한 글은 계속 남는 토스트(<code>duration</code> 0)나 정보 막대로 띄운다.</p></div></details>
+          <details class="faq"><summary>키보드로 토스트 단추를 누를 수 있나?</summary><div class="faq-a"><p class="faq-short">없다. Tab 자리가 아니다.</p><p>보조 기술 tree에는 단추로 서서 Invoke로 누를 수 있다. 키보드 사용자에게 꼭 필요한 동작은 다른 자리에도 둔다.</p></div></details>
+          <details class="faq"><summary>화면 읽기가 토스트를 읽나?</summary><div class="faq-a"><p class="faq-short">읽는다. 경고 역할이라 <code>assertive</code> live region이고 새로 서면 알린다.</p><p>Windows·macOS·iOS에 번역이 있고 Android host에는 접근성 다리가 없다. 이름에 심각도 낱말은 없다.</p></div></details>
+          <details class="faq"><summary>정보 막대의 닫기를 누르면?</summary><div class="faq-a"><p class="faq-short"><code>close</code>가 낸 메시지만 온다.</p><p>앱이 닫힘을 적고 다음 frame에 짓지 않는다. 다시 여는 길도 앱이 둔다.</p></div></details>
+          <details class="faq"><summary>정보 막대의 높이는?</summary><div class="faq-a"><p class="faq-short">세로 stack이면 <code>add_fit</code>, 아니면 <code>info_bar_element::measure(config, context, width).height</code>다.</p><p>폭이 줄면 줄바꿈이 늘고 단추가 글 아래로 내려가 높이가 는다.</p></div></details>
+          <details class="faq"><summary>정보 막대의 동작 단추가 글 아래로 내려가는 때는?</summary><div class="faq-a"><p class="faq-short">옆에 두었을 때 글에 남는 폭이 200 아래일 때다.</p><p>닫기와 최소 폭 단추가 있으면 막대 폭 350이 경계다. 닫기가 없으면 318이다.</p></div></details>
+          <details class="faq"><summary>심각도 색을 바꿀 수 있나?</summary><div class="faq-a"><p class="faq-short">설정 칸은 없다. 팔레트 역할을 테마로 바꾼다.</p><p><code>accent</code>·<code>warning_accent</code>·<code>error_accent</code>·<code>secondary_foreground</code>다 (<a class="xref" href="theming.html">테마와 스타일</a>).</p></div></details>
+          <details class="faq"><summary>Windows에서 OS 알림이 뜨지 않는다.</summary><div class="faq-a"><p class="faq-short"><code>notification_status()</code>를 본다.</p><p>식별이 없거나 서지 않았으면 <code>unsupported</code>, 사용자·정책이 껐으면 <code>blocked</code>다. <code>ok</code>인데 배너가 없으면 집중 지원일 수 있다.</p></div></details>
+          <details class="faq"><summary>알림을 누르면 무엇이 오나?</summary><div class="faq-a"><p class="faq-short">UI thread의 <code>make_notification_message</code>에 <code>activated</code>와 id가 온다.</p><p>꺼진 앱을 띄운 눌림이면 <code>launched</code>가 참이다. 훅이 앱 메시지로 싸서 logic thread에 보낸다.</p></div></details>
+          <details class="faq"><summary>같은 알림을 고치거나 지우려면?</summary><div class="faq-a"><p class="faq-short">같은 id로 다시 <code>show_notification</code>, 지우려면 <code>close_notification(id)</code>다.</p><p>없는 알림을 거둬도 <code>ok</code>다. 이 앱의 알림을 모두 거두려면 <code>close_all_notifications()</code>다.</p></div></details>
+          <details class="faq"><summary>Android 13의 알림 권한은?</summary><div class="faq-a"><p class="faq-short"><code>app_host::request_permission(app_permission::notifications)</code>로 묻고 답은 <code>make_permission_message</code>로 온다.</p><p><code>request_permission</code>이 거짓이면 묻지 않은 것이다 — 필요 없거나 이미 받았거나 묻는 길이 없다. 그때는 메시지가 오지 않으므로 <code>permission</code>으로 지금 상태를 곧바로 읽는다 (<a class="xref" href="#build-os-mobile">Android·iOS</a>).</p></div></details>
+          <details class="faq"><summary>OS 알림 함수는 어느 thread에서 부르나?</summary><div class="faq-a"><p class="faq-short">어느 thread에서나 된다.</p><p>데스크톱 데모는 logic thread에서, 모바일 데모는 UI thread의 <code>execute_app_ui_command</code>에서 부른다. macOS·iOS의 메인 thread에서는 답을 기다리지 않는다.</p></div></details>
+          <details class="faq"><summary>OS 알림에 단추를 달 수 있나?</summary><div class="faq-a"><p class="faq-short">없다.</p><p>단추·답장·진행률·예약은 범위 밖이다. 눌림 하나와 id로 앱 안의 화면을 연다.</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/notification.h" target="_blank" rel="noopener">include/luil/app/notification.h</a><span class="n">최상위 기호 9</span></div>
+            <p class="hdr-desc">앱 창 밖, 운영 체제의 알림 자리(Windows 토스트와 알림 센터, Android 알림 창, macOS 알림 센터)에 알림을 올리고 바꾸고 거둔다 (docs/os-notification-design.md). 창 안에 그리는 `toast_stack_element`와는 다른 기능이다. - 선언은 여기, 정의는 플랫폼 층에 있다 (`platform_services.h`와 같다). - 사용자가 누른 알림은 `app_delegate::make_notification_message`로 UI thread에 온다.</p>
+            <div class="hdr-syms"><a href="api.html#notification" title="구조체"><span class="kb t">S</span>notification</a><a href="api.html#notification-event-kind" title="열거형"><span class="kb e">E</span>notification_event_kind</a><a href="api.html#notification-event" title="구조체"><span class="kb t">S</span>notification_event</a><a href="api.html#notification-availability" title="열거형"><span class="kb e">E</span>notification_availability</a><a href="api.html#notification-status" title="함수"><span class="kb f">f</span>notification_status</a><a href="api.html#show-notification" title="함수"><span class="kb f">f</span>show_notification</a><a href="api.html#close-notification" title="함수"><span class="kb f">f</span>close_notification</a><a href="api.html#close-all-notifications" title="함수"><span class="kb f">f</span>close_all_notifications</a><a href="api.html#notification-launch" title="함수"><span class="kb f">f</span>notification_launch</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/info_bar_element.h" target="_blank" rel="noopener">include/luil/ui/info_bar_element.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#info-bar-minimum-height" title="상수"><span class="kb ">k</span>info_bar_minimum_height</a><a href="api.html#info-bar-close-size" title="상수"><span class="kb ">k</span>info_bar_close_size</a><a href="api.html#info-bar-side-action-minimum-text" title="상수"><span class="kb ">k</span>info_bar_side_action_minimum_text</a><a href="api.html#info-bar-config" title="구조체"><span class="kb t">S</span>info_bar_config</a><a href="api.html#info-bar-size" title="구조체"><span class="kb t">S</span>info_bar_size</a><a href="api.html#info-bar-element" title="클래스"><span class="kb t">C</span>info_bar_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/severity.h" target="_blank" rel="noopener">include/luil/ui/severity.h</a><span class="n">최상위 기호 1</span></div>
+            <div class="hdr-syms"><a href="api.html#ui-severity" title="열거형"><span class="kb e">E</span>ui_severity</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/toast_element.h" target="_blank" rel="noopener">include/luil/ui/toast_element.h</a><span class="n">최상위 기호 9</span></div>
+            <div class="hdr-syms"><a href="api.html#toast-severity" title="별칭"><span class="kb t">=</span>toast_severity</a><a href="api.html#toast-config" title="구조체"><span class="kb t">S</span>toast_config</a><a href="api.html#toast-corner" title="열거형"><span class="kb e">E</span>toast_corner</a><a href="api.html#toast-stack-config" title="구조체"><span class="kb t">S</span>toast_stack_config</a><a href="api.html#toast-height" title="상수"><span class="kb ">k</span>toast_height</a><a href="api.html#toast-action-width" title="상수"><span class="kb ">k</span>toast_action_width</a><a href="api.html#toast-fade" title="상수"><span class="kb ">k</span>toast_fade</a><a href="api.html#toast-element" title="클래스"><span class="kb t">C</span>toast_element</a><a href="api.html#toast-stack-element" title="클래스"><span class="kb t">C</span>toast_stack_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<script src="assets/toastmodel.js"></script>
+<script src="assets/notifications-lab.js"></script>
+<script>
+  LuilNotificationsLab.setup(document.getElementById("ts-lab"));
+</script>
+</body>
+</html>

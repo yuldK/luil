@@ -1,0 +1,2021 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>스크롤과 확대 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — scroll_area_element·scroll_view_element·scrollbar_element·zoom_view_element로 긴 내용을 흘리고, 휠·터치·초점 되살리기를 라우팅하고, 지도·도면을 확대·이동·회전하는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+/*LAB-CSS*/
+</style>
+</head>
+<body data-page="scrolling">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>스크롤과 확대</h1>
+      <p class="summary">luil에서 스크롤 위치와 확대 배율은 앱 상태다. 요소는 받은 값을 범위 안으로 다듬어 그리고, 휠·끌기·키·보조 기술의 몸짓을 "이만큼 흘리자", "이 비율로 키우자"는 메시지로 바꿔 돌려준다. 흘리는 영역, 원시 창과 막대, 확대 보기를 다룬다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>scroll_area_element.h</code>·<code>scroll_view_element.h</code>·<code>scrollbar_element.h</code>·<code>zoom_view_element.h</code>·<code>layout_metrics.h</code></dd></div>
+<!--LAB-META-->
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="layout.html">배치</a> · <a class="xref" href="input.html">입력과 초점</a> · <a class="xref" href="ui-tree.html">불변 UI tree</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>흘리는 영역·원시 창·막대·확대 보기 가운데 무엇을 쓸지 고른다.</li>
+            <li>스크롤 위치를 앱 상태로 들고 <code>scroll</code>·<code>scroll_to</code>·<code>scroll_to_percent</code>를 처리한다.</li>
+            <li>휠·터치·초점 되살리기가 어느 창으로 가는지 알고, 정책에서 잇는다.</li>
+            <li>확대 보기의 배율·위치·회전을 도우미 함수로 다룬다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 것을 쓰나</h2>
+          <p class="lede">긴 내용을 세로로 흘리면 흘리는 영역이 보통의 선택이다. 막대 자리나 임자를 손으로 정해야 할 때만 원시 창과 막대를 따로 쓴다. 확대·이동이 필요한 캔버스는 확대 보기다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB7F;</i><code>scroll_area_element</code></h4>
+            <ul>
+              <li>세로 창, 오른쪽 막대, 치수 보고, 휠, 초점 되살리기를 한 자리에 묶는다.</li>
+              <li>설정 판, 글 미리보기, 그림 묶음처럼 목록이 아닌 긴 내용.</li>
+              <li>위치 메시지 하나(<code>scroll</code>)로 휠·막대·되살리기가 함께 선다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB4C;</i><code>scroll_view_element</code> + <code>scrollbar_element</code></h4>
+            <ul>
+              <li>자르고 흘리기만 하는 원시 창과, 위치를 바꾸자는 메시지를 내는 막대.</li>
+              <li>막대를 왼쪽에 두거나, 창 여럿이 막대 하나를 나눠 쓰거나, 휠의 임자를 표로 가를 때.</li>
+              <li>창 높이와 임자(<code>scroll_source</code>)를 앱이 맞춰야 한다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA6D;</i><code>zoom_view_element</code></h4>
+            <ul>
+              <li>지도·도면·노드 그래프·큰 그림을 배율과 위치로 보인다. 회전은 알림만 한다.</li>
+              <li>휠·핀치·끌기·키·두 번 탭·경계 쓸기. 옆에 <code>zoom_controls_element</code> 단추.</li>
+              <li>배율·원점·각도가 앱 상태이고, 도우미 함수가 다음 값을 계산한다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="prose">
+          <p>목록과 표는 자기 막대와 흘리는 영역을 안에 품는다 (<a class="xref" href="lists.html">목록과 트리 뷰</a>, <a class="xref" href="table.html">표</a>). 가로로 흘리는 띠는 <code>strip_element</code>다 (<a class="xref" href="containers.html">배치 요소</a>). 어떤 컨테이너가 자르고 어떤 것이 흘리는지는 <a class="xref" href="layout.html#s8">배치: 컨테이너 지도</a>에 있다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>설정 판·페이지 본문을 세로로 흘리기</td><td><code>scroll_area_element</code></td><td><a class="xref" href="#build-area">흘리는 영역</a></td></tr>
+              <tr><td>정책에서 휠과 Tab 되살리기를 잇기</td><td><code>route_wheel</code> · <code>route_reveal</code></td><td><a class="xref" href="#build-policy">정책</a></td></tr>
+              <tr><td>위·아래 가장자리에 그림자나 구분선</td><td><code>scroll_edges</code></td><td><a class="xref" href="#build-edges">가장자리</a></td></tr>
+              <tr><td>로그처럼 새 줄이 오면 끝을 따라가기</td><td><code>scroll_to_percent</code> + <code>metrics()</code></td><td><a class="xref" href="#build-follow">끝에 붙어 있기</a></td></tr>
+              <tr><td>막대 없이 창만, 또는 휠의 임자를 표로 가르기</td><td><code>scroll_view_element</code> + <code>scroll_source</code> · <code>scroll_route</code></td><td><a class="xref" href="#build-view">원시 창</a></td></tr>
+              <tr><td>막대를 왼쪽에 두기</td><td><code>scroll_view_element</code> + <code>scrollbar_element</code></td><td><a class="xref" href="#build-pair">창과 막대를 손으로</a></td></tr>
+              <tr><td>폭에 따라 높이가 정해지는 내용</td><td><code>set_content_height</code></td><td><a class="xref" href="#build-measured">배치에서 재는 높이</a></td></tr>
+              <tr><td>도면을 휠·핀치로 확대하고 끌어 옮기기</td><td><code>zoom_view_element</code> + <code>zoom_about</code> · <code>pan_by</code></td><td><a class="xref" href="#build-zoom">확대 보기</a></td></tr>
+              <tr><td>축소·확대·맞춤 단추, 폭 맞춤</td><td><code>zoom_controls_element</code> · <code>zoom_fit_actions</code></td><td><a class="xref" href="#build-zoom-buttons">확대 단추</a></td></tr>
+              <tr><td>두 손가락이나 키로 돌리기</td><td><code>rotate_by</code> · <code>rotated_bounds</code></td><td><a class="xref" href="#build-rotate">회전</a></td></tr>
+              <tr><td>쪽 보기: 맞춤, 두 번 탭, 쓸어서 쪽 넘기기</td><td><code>zoom_bounds::contain</code> · <code>double_tap</code> · <code>edge_swipe</code></td><td><a class="xref" href="#build-pages">쪽 보기</a></td></tr>
+              <tr><td>큰 그래프에서 보이는 것만 짓기</td><td>창의 내용 좌표 사각형</td><td><a class="xref" href="#build-visible">보이는 것만</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 위치는 앱이, 다듬기는 배치가</h2>
+          <p class="lede">요소는 흘러간 양을 기억하지 않는다. 앱이 준 값을 <code>arrange</code>에서 범위 안으로 다듬어 그리고, 사용자의 몸짓은 변화량 메시지로 돌려준다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>임자</th><th>싣는 자리</th></tr></thead>
+            <tbody>
+              <tr><td>내용 전체 높이</td><td>앱 — 측정 단계가 없어서 담는 쪽이 알려 준다</td><td><code>content_height</code></td></tr>
+              <tr><td>흘러간 양</td><td>앱 (범위 밖 값은 <code>arrange</code>가 다듬는다)</td><td><code>scroll_offset</code></td></tr>
+              <tr><td>창 높이·최대치·다듬은 위치</td><td>영역의 배치 결과</td><td>— (<code>arrange</code> 뒤의 <code>metrics()</code>)</td></tr>
+              <tr><td>확대 배율·원점·각도</td><td>앱 (보기는 다듬어 배치하고 <code>state()</code>로 알린다)</td><td><code>zoom</code> · <code>origin</code> · <code>rotation</code></td></tr>
+              <tr><td>휠·끌기·관성·두 번 탭의 진행</td><td>input thread의 <code>interaction_controller</code></td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><strong>한 식.</strong> 다듬기는 <code>clamp_scroll(content, viewport, offset)</code> — <code>[0, max(0, content − viewport)]</code>이고 영역·창·막대가 같은 식을 쓴다. 앱도 tree를 짓기 전에 이 함수로 상태를 다듬으면 모두가 같은 값을 본다.</li>
+            <li><strong>부호.</strong> 변화량이 양수면 offset이 늘고 내용이 위로(가로면 왼쪽으로) 간다. 휠·막대·되살리기·끌기 자동 스크롤이 모두 같다.</li>
+            <li><strong>걸음.</strong> 휠 한 눈금(120)은 48 논리 픽셀이다. 막대의 화살표 키 한 번도 48, Page는 창 길이 하나다.</li>
+            <li><strong>변화량과 절대 자리.</strong> 휠·끌기·키·되살리기는 변화량(<code>scroll</code>)만 낸다. 절대 자리(<code>scroll_to</code>)는 보조 기술의 값 정하기만 낸다. 앱은 받은 변화량을 <strong>지금 상태에 더한다</strong> — 절대 자리를 변화량으로 바꾸면 오래된 발행본 기준의 변화량이 겹쳐 쌓인다.</li>
+          </ul>
+        </div>
+        <h3>휠 한 눈금이 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>설정 판 위에서 휠을 한 눈금 아래로 굴린다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>OS 메시지가 <code>mouse_wheel_event</code>가 된다 (좌표·눈금·수식 키·가로 여부).</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller가 눈금을 논리 픽셀로 바꾼다 (한 눈금 48). 정책이 있으면 <code>on_wheel</code>에, 없으면 바로 <code>route_wheel</code>에 넘긴다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span><code>route_wheel</code>이 좌표를 덮는 가장 안쪽 흘리는 컨테이너를 찾아 그 <code>scroll_source</code>의 <code>scroll(48)</code>을 부른다. 앱의 factory가 메시지를 짓는다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱의 <code>handle</code>이 offset에 48을 더한다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>다음 <code>make_frame()</code>이 새 offset으로 영역을 짓고, <code>arrange</code>가 범위 안으로 다듬어 내용을 민다.</span></div>
+        </div>
+        <h3>누가 휠을 받나</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>물음</th><th>규칙</th></tr></thead>
+            <tbody>
+              <tr><td>세로 휠</td><td>좌표를 덮는 가장 안쪽·가장 위의 흘리는 컨테이너(<code>scroll_source</code>를 세운 것) 또는 확대 보기. <strong>축을 묻지 않는다</strong> — 가로 띠 위의 세로 휠은 그 띠를 흘린다. <code>hit_opaque</code> 방벽이 먼저 걸리면 아무 일도 없다</td></tr>
+              <tr><td>가로 휠 (틸트·터치패드 가로)</td><td>가로 축의 창과 확대 보기만 받는다. 세로 창은 지나친다. 없으면 아무 일도 없다</td></tr>
+              <tr><td>터치 끌기</td><td>손가락이 움직인 축과 같은 축의 창만. 빠르게 쓸고 놓으면 관성으로 잇는다</td></tr>
+              <tr><td>초점 되살리기</td><td>키보드로 옮긴 초점을 <strong>품은</strong> 흘리는 조상 전부를 안쪽부터. 겹마다 메시지 하나, 이미 보이면 없다</td></tr>
+              <tr><td>표 있는 짝 (<code>scroll_route</code>)</td><td>앱이 id와 factory를 표로 준다. 처음 맞는 한 줄에서 끝난다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p><code>scroll_area_element</code>는 <code>scroll_source</code>를 <strong><code>arrange</code>에서, 흘릴 것이 있을 때만</strong> 세운다. 흘릴 수 없는 창이 휠을 삼키면 그 위에서 바깥 판이 굴러가지 않기 때문이다. 설계 문서는 "생성 시점에 세운다"고 적었지만 코드는 배치 때다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="src/ui/ui_interaction.cpp:403-408,508-514" data-path="src/ui/ui_interaction.cpp" data-start="403"><script type="text/plain">
+                    const ui_element* const owner { tree->root() != nullptr ? wheel_owner_at(*tree->root(), value.x, value.y) : nullptr };
+                    // 보기 안의 스크롤도 공통 라우팅을 탄다. 텍스트 정책만 가진 앱이
+                    // 빈 on_wheel 기본값 때문에 안쪽 창의 휠을 잃으면 안 된다.
+                    if (owner != nullptr && within_zoom_view(*tree->root(), owner->id()))
+                        return route_wheel(*tree, value, delta);
+                    return policy_ != nullptr ? policy_->on_wheel(*tree, value, delta) : route_wheel(*tree, value, delta);
+⋯@508
+        // **키보드로** 옮겨진 초점만 되살린다. 누른 자리는 이미 보인다 —
+        // 마우스와 키보드를 가르는 값이 `focus_visible`로 이미 서 있어
+        // 새 상태를 세우지 않는다 (keyboard-focus-design.md).
+        if (policy_ != nullptr && snapshot_.focus_visible && snapshot_.focused != focused_before && snapshot_.focused != ui_element_id {})
+            if (const ui_tree* const tree { surface_tree(snapshot_.focused_surface) }; tree != nullptr)
+                for (input_action& action : policy_->on_focus_moved(*tree, snapshot_.focused))
+                    actions.push_back(std::move(action));
+</script></div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">정책을 둔 앱은 휠과 되살리기를 직접 잇는다</span><code>interaction_policy</code>의 <code>on_wheel</code>·<code>on_focus_moved</code> 기본 구현은 빈 목록이다. 정책이 있으면 휠은 <code>on_wheel</code>로만 가므로 <code>return luil::route_wheel(tree, event, scroll_delta);</code>가 있어야 영역·목록·표가 휠에 움직인다 (확대 보기 <strong>안</strong>의 휠만 예외로 공통 길을 탄다). 정책이 없으면 controller가 휠을 직접 <code>route_wheel</code>로 보낸다 — 헤더 주석은 "휠 라우팅이 꺼진다"고 적었지만 코드는 그렇지 않다. 반면 초점 되살리기는 정책이 있어야만 일어난다. 정책이 없으면 Tab으로 창 밖의 컨트롤에 가도 화면이 따라오지 않는다.</div></div>
+        <h3>확대 보기의 좌표</h3>
+        <div class="prose">
+          <ul>
+            <li>원점(<code>origin</code>)·기준점(<code>anchor</code>)·이동량은 <strong>창 가운데 기준 논리 픽셀</strong>이다. 내용 경계(<code>content_bounds</code>)만 내용 좌표다.</li>
+            <li>내용 좌표 <code>p</code>는 창 가운데에서 <code>origin + zoom × R(rotation) p</code>에 선다. 배치는 내용 slot을 그 자리에 세우고 자식의 배율을 <code>배율 × zoom</code>으로 준다. 캔버스를 늘리지 않으므로 글자가 그 배율로 다시 그려지고 눌리는 자리가 그림과 같다.</li>
+            <li><strong>회전은 알림뿐이다.</strong> 보기는 내용을 돌리지 않는다. 돌려 그리기는 내용 요소가, 돌린 경계는 앱이 <code>rotated_bounds</code>로 준다.</li>
+            <li>앱은 변화 메시지(<code>zoom_by</code>·<code>pan_by</code>·<code>rotate_by</code>)를 받으면 <strong>지금 상태</strong>에 같은 이름의 도우미(<code>zoom_about</code>·<code>pan_by</code>·<code>rotate_about</code>)를 적용한다. <code>zoom_to</code>만 절대 목표다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-area">
+        <header class="sec-head">
+          <h2>만들기: 흘리는 영역</h2>
+          <p class="lede">데모의 창 페이지다. 내용 높이를 재고, 위치를 다듬고, 변화량과 절대 자리 두 메시지를 단다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/windows_page.h:137-147" data-path="examples/demo/windows_page.h" data-start="137"><script type="text/plain">
+    // 페이지 본문을 흘린다 (논리 픽셀, 양수면 내용이 위로 간다). 휠·막대·초점 되살리기가 같은 메시지를 낸다.
+    struct windows_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    // 페이지 본문을 이 자리로 옮긴다 (논리 픽셀). 보조 기술이 자리를 정할 때 온다.
+    struct windows_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/windows_page.cpp:833-855" data-path="examples/demo/windows_page.cpp" data-start="833"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> windows_page::make_scroll_page(std::unique_ptr<luil::stack_element> content, const float width, const float height, const float scale)
+    {
+        // 내용 높이는 담긴 줄에서 읽는다. 구역이 줄을 더해도 손으로 센 합이 어긋날 일이 없다.
+        //  - 줄은 모두 고정 길이라 글 측정기는 이 높이에 닿지 않는다. 맞춤 줄을 더해도 같은 식이 센다.
+        const luil::measure_context measure { .scale = scale };
+        const float content_height { content->preferred_size(measure, std::max(0.0f, width - luil::scroll_area_bar_width)).value_or(luil::size_f {}).height };
+        const float viewport_height { std::max(0.0f, height - scroll_status_height) };
+        // 창이 커져 흘릴 것이 줄었으면 쌓인 위치도 되돌린다. 그대로 두면 끝에서 돌린 휠이 보이지 않는 곳에 쌓여
+        // 되돌릴 때 아무 일도 없는 것처럼 보인다.
+        scroll_ = luil::clamp_scroll(content_height, viewport_height, scroll_);
+
+        luil::scroll_area_config area_config {};
+        area_config.owner = u8"windows";
+        area_config.content_height = content_height;
+        area_config.scroll_offset = scroll_;
+        area_config.scroll = [](const float delta) { return luil::make_app_action(windows_scroll_intent { delta }); };
+        area_config.scroll_to = [](const float offset) { return luil::make_app_action(windows_scroll_to_intent { offset }); };
+        // 막대 자리를 늘 지킨다. 구역이 늘고 줄어도 글의 폭이 흔들리지 않는다.
+        area_config.bar = luil::scrollbar_visibility::always;
+        auto area { std::make_unique<luil::scroll_area_element>(std::move(area_config)) };
+        // 막대는 영역의 이름을 물려받는다. 이름이 없으면 막대가 이름 없이 읽혀 보조 기술이 owner로 찾아야 한다.
+        area->set_access_name(u8"창 페이지 본문");
+        area->set_content(std::move(content));
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="835-838" data-title="내용 높이">측정 단계가 없으므로 앱이 잰다. 고정 높이 줄로 쌓은 내용이라 <code>preferred_size</code>로 읽는다. 폭은 막대 칸(<code>scroll_area_bar_width</code>, 16 논리 픽셀)을 뺀 폭이다.</li>
+            <li data-lines="839-842" data-title="상태 다듬기">창이 커져 흘릴 것이 줄었으면 쌓인 위치를 <code>clamp_scroll</code>로 되돌린다. 그대로 두면 끝에서 굴린 휠이 보이지 않는 곳에 쌓여, 되돌릴 때 아무 일도 없는 것처럼 보인다.</li>
+            <li data-lines="844-849" data-title="설정">owner, 내용 높이, 위치, 변화량 메시지, 보조 기술의 절대 자리 메시지.</li>
+            <li data-lines="850-851" data-title="막대 자리">막대 자리를 늘 지킨다(<code>always</code>). 내용이 늘고 줄어도 글 폭이 흔들리지 않는다.</li>
+            <li data-lines="852-855" data-title="이름과 내용">막대는 영역의 이름을 물려받는다. 내용은 하나다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/windows_page.cpp:495-506" data-path="examples/demo/windows_page.cpp" data-start="495"><script type="text/plain">
+        // 위치는 0 아래로 내려가지 않는다. 위쪽 끝은 여기서, 아래쪽 끝은 페이지를 지을 때 다듬는다
+        // (창 높이를 아는 것이 그때뿐이다).
+        if (const auto* const scroll { message.get<windows_scroll_intent>() }; scroll != nullptr)
+        {
+            scroll_ = std::max(0.0f, scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll_to { message.get<windows_scroll_to_intent>() }; scroll_to != nullptr)
+        {
+            scroll_ = std::max(0.0f, scroll_to->offset);
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p><code>handle</code>은 0 아래만 막는다. 위쪽 끝(최대치)은 창 높이를 아는 짓기에서 다듬는다. <code>scroll</code> 하나가 넷을 함께 켠다 — 휠의 임자, 막대의 끌기·누름·키, 키보드 초점 되살리기, 끌기 중 가장자리 자동 스크롤. <code>scroll</code>이 없으면 흘리지 않는 창이다 (막대도 휠도 되살리기도 없고 치수만 답한다).</p>
+        </div>
+        <h3>여러 페이지가 쓰는 영역</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/common.cpp:194-215" data-path="examples/demo/common.cpp" data-start="194"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> page_layout::finish(const float offset, std::function<luil::input_action(float)> scroll)
+    {
+        end_card();
+        // 본문을 최대 폭에 묶어 왼쪽에 둔다. 남는 자리는 비워 둔다.
+        luil::stack_config row_config {};
+        row_config.direction = luil::stack_direction::row;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, owner_ + u8"/frame" }, row_config) };
+        row->add(std::move(column_), luil::stack_item { .weight = 1.0f, .maximum = max_width_ + page_padding.left + page_padding.right });
+
+        luil::scroll_area_config config {};
+        config.owner = owner_;
+        config.content_height = height_;
+        config.scroll_offset = offset;
+        config.scroll = std::move(scroll);
+        config.bar = luil::scrollbar_visibility::always;
+        auto area { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+        // 막대는 영역이 세우는 부품이라 영역의 이름을 물려받는다 (`scroll_area_element::arrange`).
+        if (first_heading_.empty() == false)
+            area->set_access_name(std::move(first_heading_));
+        area->set_content(std::move(row));
+        return area;
+    }
+</script></div>
+        <div class="prose">
+          <p>데모 페이지 공용 틀이다. 첫 제목을 영역의 이름으로 준다. 막대는 영역이 세우는 부품이라 앱이 손댈 수 없고, 영역의 이름을 물려받는다 — 이름이 없으면 막대가 빈 이름으로 읽힌다. owner는 표면 안에서 유일해야 한다. 영역의 창(<code>scroll_area_view</code>)과 막대(<code>scroll_area_bar</code>)가 같은 owner를 쓰기 때문이다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-policy">
+        <header class="sec-head">
+          <h2>만들기: 정책에서 휠과 되살리기 잇기</h2>
+          <p class="lede">정책을 둔 앱은 <code>on_wheel</code>과 <code>on_focus_moved</code>를 재정의한다. 몸통은 각각 한 줄이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:287-296" data-path="examples/widgets/app.cpp" data-start="287"><script type="text/plain">
+    std::vector<luil::input_action> widgets_policy::on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused)
+    {
+        // 섹션 창이 자기 스크롤 메시지를 들고 있어(`scroll_source`) 표가 필요 없다.
+        return luil::route_reveal(tree, focused);
+    }
+
+    std::vector<luil::input_action> widgets_policy::on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta)
+    {
+        return luil::route_wheel(tree, event, scroll_delta);
+    }
+</script></div>
+        <div class="prose">
+          <p>표 없는 짝(<code>route_wheel(tree, event, delta)</code>·<code>route_reveal(tree, focused)</code>)은 자기 메시지를 든 컨테이너(<code>scroll_source</code>)를 찾는다. 영역·목록·표는 스스로 원천을 세우므로 이 두 줄이면 된다. 휠의 임자와 되살리기의 임자가 진짜로 갈리는 자리(탭 막대 따위)는 앱이 id와 factory를 표로 준다 — 표 있는 짝이다.</p>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1414-1449" data-path="examples/demo_main.cpp" data-start="1414"><script type="text/plain">
+            [[nodiscard]] std::vector<luil::input_action> on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta) override
+            {
+                // **표를 든 페이지가 먼저다.**
+                //
+                // 표는 특정 id를 이름 대므로 그 자리에서만 답하고, 아래의 표 없는
+                // 짝은 좌표를 덮는 **아무** 흘리는 컨테이너나 답한다. 순서를 뒤집으면
+                // 표가 이름 댄 것을 감싼 영역이 휠을 먼저 삼켜, 그 표는 영영 불리지
+                // 않는다 — 탭 막대처럼 휠과 되살리기의 임자가 진짜로 갈리는 자리가
+                // 그때 조용히 망가진다.
+                //  - 지금 tree에 없는 페이지의 대상은 find가 걸러 준다.
+                if (auto actions { lists_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
+                    return actions;
+                if (auto actions { tabs_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
+                    return actions;
+                if (auto actions { network_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
+                    return actions;
+                // 표에 없는 것은 자기 메시지를 든 컨테이너다 (`scroll_source`).
+                // 네트워크 페이지의 결과 칸과 목록 페이지의 가상 목록이 여기서 잡힌다 —
+                // 페이지가 늘어도 이 줄은 그대로다.
+                return luil::route_wheel(tree, event, scroll_delta);
+            }
+
+            [[nodiscard]] std::vector<luil::input_action> on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused) override
+            {
+                // 휠과 같은 순서다 — 이름 댄 표가 먼저고 표 없는 짝이 나중이다.
+                // 지금 tree에 없는 페이지의 창은 `route_reveal`이 걸러 준다.
+                if (auto actions { lists_page::route_reveal(tree, focused) }; actions.empty() == false)
+                    return actions;
+                if (auto actions { tabs_page::route_reveal(tree, focused) }; actions.empty() == false)
+                    return actions;
+                // 네트워크 페이지에는 되살리기 표가 **아예 없었다.** 결과 칸을
+                // `scroll_area_element`로 바꾼 것만으로 이 한 줄이 그 페이지의
+                // 되살리기까지 세운다 — 표를 새로 적지 않아도, 자기 메시지를 든
+                // 컨테이너면 여기서 찾는다. 이것이 표 없는 짝의 값이다.
+                return luil::route_reveal(tree, focused);
+            }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1416-1427" data-title="표 있는 짝이 먼저">표는 특정 id를 이름 대므로 그 자리에서만 답한다. 표 없는 짝은 좌표를 덮는 아무 흘리는 컨테이너나 답하므로, 순서를 뒤집으면 표가 이름 댄 것을 감싼 영역이 휠을 먼저 삼킨다.</li>
+            <li data-lines="1428-1433" data-title="표 없는 짝이 나중">표에 없는 것은 자기 메시지를 든 컨테이너다. 페이지가 늘어도 이 줄은 그대로다.</li>
+            <li data-lines="1436-1449" data-title="되살리기도 같은 순서">이름 댄 표가 먼저, 표 없는 짝이 나중이다. 결과 칸을 <code>scroll_area_element</code>로 바꾼 것만으로 그 페이지의 되살리기가 선다.</li>
+          </ol>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">한 컨테이너는 한 길에만 올린다</span>같은 창을 표와 <code>scroll_source</code> 둘 다에 올리면 같은 메시지가 두 번 나간다. 포인터로 잡은 초점과 가둠의 진입·복귀는 되살리지 않는다 — 누른 자리는 이미 보이고, 진입점과 복귀점은 앱이 보이는 곳에 둔다.</div></div>
+      </section>
+
+      <section class="sec" id="build-edges">
+        <header class="sec-head">
+          <h2>만들기: 가장자리 그림자와 구분선</h2>
+          <p class="lede"><code>edges</code>에 <code>scroll_edges</code>를 주면 창의 위·아래에 그림자나 1 논리 픽셀 구분선이 선다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/raster_draw_tests.cpp:627-639" data-path="tests/raster_draw_tests.cpp" data-start="627"><script type="text/plain">
+    // 창은 100 논리 픽셀이고 내용은 그 네 배다 (최대치 300).
+    const auto build = [](const float offset, const luil::scroll_edges edges) {
+        luil::scroll_area_config config {};
+        config.owner = u8"page";
+        config.content_height = 400.0f;
+        config.scroll_offset = offset;
+        config.bar = luil::scrollbar_visibility::never;
+        config.edges = edges;
+        config.scroll = [](const float) { return luil::input_action {}; };
+        auto area { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+        area->set_content(std::make_unique<raster_group>(luil::ui_element_id { luil::application_element_kind(1), u8"content" }));
+        return luil::make_arranged_tree(std::move(area), { 0.0f, 0.0f, 200.0f, 200.0f }, raster_scale);
+    };
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>shadows</code>는 가린 내용이 있는 쪽에만 그림자를 드리운다 (위로 흘려 위가 가렸으면 위, 아래에 남은 내용이 있으면 아래). 깊이 10 논리 픽셀(창이 얕으면 절반까지), 짙기는 끝에서 떨어진 거리 24 논리 픽셀 동안 부드럽게 오른다.</li>
+            <li><code>top_rule</code>·<code>bottom_rule</code>은 흘린 양과 무관하게 1 논리 픽셀 <code>divider</code> 선이다.</li>
+            <li>영역은 <strong>자기가 다듬은</strong> offset으로 그린다. 앱 값이 범위 밖이어도 그림자가 맞다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-follow">
+        <header class="sec-head">
+          <h2>만들기: 끝에 붙어 있기</h2>
+          <p class="lede">로그처럼 줄이 늘어나는 창이다. 보조 기술의 "끝으로"는 <code>scroll_to_percent(100)</code>으로 오고, 앱은 그것을 "끝에 붙어 있으라"로 읽는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1938-1977" data-path="tests/accessibility_tests.cpp" data-start="1938"><script type="text/plain">
+TEST_CASE("A scroll area with a percent factory exposes its scroll position", "[ui][access]")
+{
+    std::optional<float> requested {};
+    luil::scroll_area_config config {};
+    config.owner = u8"log";
+    config.content_height = 400.0f;
+    config.scroll_offset = 150.0f;
+    config.scroll = [](const float) { return luil::input_action {}; };
+    config.scroll_to_percent = [&requested](const float percent) {
+        requested = percent;
+        return luil::input_action {};
+    };
+    luil::scroll_area_element area { std::move(config) };
+    area.arrange({ { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f });
+
+    // 창 100 / 내용 400이라 흘릴 범위는 300이고, 150은 그 절반이다.
+    const luil::access_info info { area.accessibility() };
+    REQUIRE(info.role == luil::access_role::pane);
+    REQUIRE(info.scroll.has_value());
+    REQUIRE(info.scroll->vertical_percent == 50.0f);
+    REQUIRE(info.scroll->vertical_view_size == 25.0f);
+    REQUIRE(info.scroll->horizontal_percent < 0.0f);
+
+    // 100은 끝이다 — 픽셀로 바꾸지 않고 백분율 그대로 앱에 간다.
+    luil::access_request end { luil::access_command::set_scroll_percent };
+    end.vertical_percent = 100.0f;
+    const auto planned { luil::plan_access_request(area, end) };
+    REQUIRE(planned.has_value());
+    REQUIRE(planned->size() == 1u);
+    REQUIRE(requested == 100.0f);
+
+    // 백분율 factory가 없는 영역은 지금처럼 구조로 접힌다.
+    luil::scroll_area_config plain {};
+    plain.content_height = 400.0f;
+    plain.scroll = [](const float) { return luil::input_action {}; };
+    luil::scroll_area_element folded { std::move(plain) };
+    folded.arrange({ { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f });
+    REQUIRE(folded.accessibility().scroll.has_value() == false);
+    REQUIRE(luil::plan_access_request(folded, end).has_value() == false);
+}
+</script></div>
+        <div class="prose">
+          <p><code>scroll_to_percent</code>를 주면 영역이 보조 기술에 흘리는 창(UIA Pane + Scroll 패턴)으로 서고, 세로 백분율과 창 크기 백분율을 알린다. 늘어나는 목록에서 "끝"은 offset으로 정확히 말할 수 없어 백분율이 그대로 앱에 간다. 없으면 영역은 접근 tree에서 접히고 막대(RangeValue)만 선다.</p>
+        </div>
+<div class="code tall" data-lang="cpp" data-label="로그 창: 끝 따라가기와 치수 되돌리기 (직접 작성)" data-compile="pre-follow"><script type="text/plain">
+constexpr luil::ui_element_kind kind_log { luil::application_element_kind(20) };
+constexpr float log_line_height { 18.0f };
+
+struct log_scroll_intent
+{
+    float delta { 0.0f };
+};
+struct log_scroll_to_intent
+{
+    float offset { 0.0f };
+};
+struct log_scroll_percent_intent
+{
+    float percent { 0.0f };
+};
+
+struct log_state
+{
+    std::vector<std::u8string> lines {};
+    float offset { 0.0f };
+    // 보조 기술이 100%를 청했다 — "끝에 붙어 있으라"로 읽는다. 줄이 늘어도 끝을 따라간다.
+    bool follow_end { false };
+    // 지난 배치에서 영역이 잰 치수다 (metrics()). 백분율을 offset으로 옮길 때 쓴다.
+    luil::scroll_metrics metrics {};
+};
+
+// make_frame 안에서 짓고 배치한다. 배치 뒤 영역이 다듬은 치수를 앱 상태에 되돌린다.
+[[nodiscard]] luil::ui_tree arrange_log(log_state& state, const luil::rect_f& slot, const float scale)
+{
+    const float content_height { static_cast<float>(state.lines.size()) * log_line_height };
+    if (state.follow_end)
+        state.offset = std::max(0.0f, content_height - state.metrics.viewport_height);
+
+    luil::scroll_area_config config {};
+    config.owner = u8"log";
+    config.content_height = content_height;
+    config.scroll_offset = state.offset;
+    config.scroll = [](const float delta) { return luil::make_app_action(log_scroll_intent { delta }); };
+    config.scroll_to = [](const float offset) { return luil::make_app_action(log_scroll_to_intent { offset }); };
+    // 있으면 영역이 보조 기술에 흘리는 창(Pane + Scroll 패턴)으로 선다.
+    config.scroll_to_percent = [](const float percent) { return luil::make_app_action(log_scroll_percent_intent { percent }); };
+    config.edges = luil::scroll_edges { .shadows = true };
+    auto area { std::make_unique<luil::scroll_area_element>(std::move(config)) };
+    area->set_access_name(u8"로그");
+
+    auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_log, u8"lines" }, luil::stack_config {}) };
+    for (std::size_t index = 0; index < state.lines.size(); ++index)
+    {
+        // 줄마다 자리표가 유일해야 한다. 같은 글의 줄이 있어도 겹치지 않게 색인을 담는다.
+        const std::string number { std::to_string(index) };
+        column->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_log, u8"line-" + std::u8string { number.begin(), number.end() } },
+                        luil::label_config { .text = state.lines[index] }),
+            log_line_height);
+    }
+    area->set_content(std::move(column));
+
+    const luil::scroll_area_element* const placed { area.get() };
+    luil::ui_tree tree { luil::make_arranged_tree(std::move(area), slot, scale) };
+    // arrange가 다듬은 값이 정본이다. 되돌려 두면 끝을 지나 쌓인 몫이 남지 않는다.
+    state.metrics = placed->metrics();
+    state.offset = state.metrics.scroll_offset;
+    return tree;
+}
+
+bool handle(log_state& state, const luil::app_message& message)
+{
+    if (const auto* const scroll { message.get<log_scroll_intent>() }; scroll != nullptr)
+    {
+        state.follow_end = false;
+        state.offset = luil::clamp_scroll(state.metrics.content_height, state.metrics.viewport_height, state.offset + scroll->delta);
+        return true;
+    }
+    if (const auto* const target { message.get<log_scroll_to_intent>() }; target != nullptr)
+    {
+        state.follow_end = false;
+        state.offset = std::max(0.0f, target->offset);
+        return true;
+    }
+    if (const auto* const percent { message.get<log_scroll_percent_intent>() }; percent != nullptr)
+    {
+        // 100은 끝이다 — 메시지가 오는 사이 줄이 늘어도 끝이어야 한다.
+        state.follow_end = percent->percent >= 100.0f;
+        state.offset = state.metrics.maximum_scroll * percent->percent / 100.0f;
+        return true;
+    }
+    return false;
+}
+</script></div>
+<script type="text/plain" id="pre-follow" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/label_element.h"
+#include "luil/ui/layout_metrics.h"
+#include "luil/ui/scroll_area_element.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/ui_tree.h"
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><strong>치수 되돌리기.</strong> <code>make_frame</code> 안에서 배치한 뒤 <code>metrics()</code>를 상태에 쓴다. <code>arrange</code>가 다듬은 값이 정본이라 끝을 지나 쌓인 몫이 남지 않는다. 치수는 <code>arrange</code> 뒤에만 맞다.</li>
+            <li><strong>백분율에서 자리로.</strong> 지난 배치의 <code>maximum_scroll</code>로 옮긴다. 100이면 다음 짓기에서 새 끝으로 간다.</li>
+            <li><strong>휠이나 막대가 오면</strong> 따라가기를 끈다. 사용자가 위로 올라가 읽는 중에 끝으로 끌려가지 않는다.</li>
+            <li>줄마다 자리표가 유일해야 한다. 같은 글의 줄이 있어도 겹치지 않게 색인을 담는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-view">
+        <header class="sec-head">
+          <h2>만들기: 원시 창</h2>
+          <p class="lede"><code>scroll_view_element</code>는 자르고 흘리기만 한다. 막대도 메시지도 없다. 휠·터치·되살리기의 임자가 되려면 앱이 <code>scroll_source</code>를 달거나 표에 이름을 댄다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:212-220" data-path="examples/widgets/app.cpp" data-start="212"><script type="text/plain">
+        // 섹션이 창보다 길면(낮은 창, 가로로 돌린 휴대폰) 흘려 본다. 휠과 터치 쓸기가
+        // 같은 `scroll_source`를 찾는다.
+        const float viewport_height { (height - caption_height) / scale };
+        state_.scroll = luil::clamp_scroll(content_height, viewport_height, state_.scroll);
+        auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { kind_layout, u8"shell-view" }, luil::scroll_view_config { content_height, state_.scroll }) };
+        view->set_content(std::move(column));
+        view->set_scroll_source(luil::scroll_source { .scroll = [](const float delta) { return luil::make_app_action(shell_scroll_intent { delta }); }, .scale = scale });
+        view->arrange({ { 0.0f, caption_height, width, height - caption_height }, scale });
+        root->add(std::move(view));
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:114-118" data-path="examples/widgets/app.cpp" data-start="114"><script type="text/plain">
+        if (const auto* const scroll { message.get<shell_scroll_intent>() }; scroll != nullptr)
+        {
+            state_.scroll += scroll->delta;
+            return;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><strong>id는 앱이 정한다.</strong> 라이브러리에 원시 창의 kind가 없다 — 앱 kind(<code>application_element_kind</code>)를 쓴다. 설계 문서의 예가 쓰는 <code class="free">ui_element_kind::scroll_view</code>는 없는 이름이다.</li>
+            <li><strong>짓기 전에 다듬는다.</strong> widgets 셸은 <code>handle</code>에서 더하기만 하고, 짓기에서 <code>clamp_scroll</code>로 다듬는다.</li>
+            <li><strong>원천을 단다.</strong> <code>set_scroll_source</code>에 변화량 factory와 배율을 준다. 배율은 겹친 창의 되살리기가 쓴다.</li>
+            <li>내용 slot의 높이는 <code>max(내용, 창)</code>이고, 다듬은 offset이 내용의 배치 문맥으로 전해진다 (붙는 머리행이 쓴다). 그리기와 hit test가 창 밖에서 함께 잘린다.</li>
+          </ul>
+        </div>
+        <h3>표로 임자를 가르기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:554-558" data-path="examples/demo/lists_page.cpp" data-start="554"><script type="text/plain">
+        const float content_height { list->content_height() };
+        grouped_scroll_ = luil::clamp_scroll(content_height, viewport_height, grouped_scroll_);
+
+        auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { kind_grouped_list }, luil::scroll_view_config { content_height, grouped_scroll_ }) };
+        view->set_content(std::move(list));
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:568-598" data-path="examples/demo/lists_page.cpp" data-start="568"><script type="text/plain">
+    std::vector<luil::input_action> lists_page::route_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float delta)
+    {
+        // 어느 목록을 어떤 메시지로 스크롤할지(표)만 적는다.
+        // 좌표 판정은 라이브러리의 route_wheel이 한다.
+        //  - **가상 목록은 이 표에 없다.** 그쪽은 자기 메시지를 든 흘리는 영역을
+        //    안에 품고 있어(`scroll_source`) 셸의 표 없는 짝이 찾는다. 여기 한 줄을
+        //    더 적으면 같은 factory가 두 곳에 살고 언젠가 한쪽만 고쳐진다.
+        static const luil::scroll_route routes[] {
+            { { luil::ui_element_kind::list, u8"items" }, [](const float value) { return luil::make_app_action(list_scroll_intent { value }); } },
+            { { luil::ui_element_kind::list, u8"tree" }, [](const float value) { return luil::make_app_action(tree_scroll_intent { value }); } },
+            { { kind_grouped_list }, [](const float value) { return luil::make_app_action(grouped_scroll_intent { value }); } },
+        };
+        return luil::route_wheel(tree, event.x, event.y, delta, routes);
+    }
+
+    std::vector<luil::input_action> lists_page::route_reveal(const luil::ui_tree& tree, const luil::ui_element_id& focused)
+    {
+        // **창의 id를 이름 댄다.** 목록 바깥(`kind_layout` 패널)은 스크롤 막대 칸까지
+        // 품어 창이 아니고, 그것을 대면 마지막 행이 막대 밑에 남는다.
+        //  - 휠의 표와 줄이 겹치지만 같은 표가 아니다. 휠은 포인터가 덮는 것을
+        //    묻고 되살리기는 초점을 품는 것을 묻는다.
+        //  - 가상 목록은 여기에도 없다. 커서는 초점이 아니라 앱 상태라 되살리기의
+        //    계기 자체가 오지 않고, 얼마나 흘릴지는 목록이 커서 메시지와 함께 낸다.
+        static const luil::scroll_route routes[] {
+            { { luil::ui_element_kind::list_scroll, u8"items" }, [](const float value) { return luil::make_app_action(list_scroll_intent { value }); } },
+            { { luil::ui_element_kind::list_scroll, u8"tree" }, [](const float value) { return luil::make_app_action(tree_scroll_intent { value }); } },
+            // 그룹 목록의 머리행이 묶음의 자리다 — 창은 그것을 감싼 흘리는 창이다.
+            { { kind_grouped_list }, [](const float value) { return luil::make_app_action(grouped_scroll_intent { value }); } },
+        };
+        return luil::route_reveal(tree, focused, routes);
+    }
+</script></div>
+        <div class="prose">
+          <p>그룹 목록의 창은 원천을 달지 않고, 목록 페이지가 휠 표와 되살리기 표에 그 창의 id를 이름 댄다. 휠은 포인터가 덮는 것을 묻고 되살리기는 초점을 품는 것을 물으므로 두 표는 같은 표가 아니다. 영역 바깥(막대 칸까지 품은 판)을 이름 대면 마지막 행이 막대 밑에 남는다 — <strong>창의 id</strong>를 댄다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-pair">
+        <header class="sec-head">
+          <h2>만들기: 창과 막대를 손으로 나란히</h2>
+          <p class="lede">막대를 왼쪽에 두는 것처럼 영역의 조립(세로 창 + 오른쪽 막대)이 맞지 않을 때다. 창 높이를 앱이 알아 막대에 줘야 하고, 창과 막대에 같은 factory를 준다.</p>
+        </header>
+<div class="code" data-lang="cpp" data-label="막대를 왼쪽에 둔 미리보기 (직접 작성)" data-compile="pre-pair"><script type="text/plain">
+constexpr luil::ui_element_kind kind_preview { luil::application_element_kind(30) };
+
+struct preview_scroll_intent
+{
+    float delta { 0.0f };
+};
+struct preview_scroll_to_intent
+{
+    float offset { 0.0f };
+};
+
+// 원시 도구 둘을 손으로 나란히 놓는다 (막대를 왼쪽에 두는 배치처럼 scroll_area_element의 조립이 맞지 않을 때).
+//  - 창 높이(viewport_height)는 앱이 배치 상수에서 구해 막대에 준다. 틀리면 thumb와 흘릴 양이 어긋난다 —
+//    그래서 보통은 scroll_area_element를 쓴다.
+//  - 휠·초점 되살리기의 임자는 창(scroll_view)이고, 막대는 끌기·누름·키·보조 기술의 자리다. 두 곳에 같은 factory다.
+[[nodiscard]] std::unique_ptr<luil::ui_element> build_preview(std::unique_ptr<luil::ui_element> content, const float content_height, float& scroll_offset,
+    const float viewport_height, const float scale)
+{
+    // tree를 짓기 전에 같은 식으로 다듬는다 — 창·막대·앱이 같은 값을 본다.
+    scroll_offset = luil::clamp_scroll(content_height, viewport_height, scroll_offset);
+    const auto scroll = [](const float delta) { return luil::make_app_action(preview_scroll_intent { delta }); };
+
+    auto view { std::make_unique<luil::scroll_view_element>(luil::ui_element_id { kind_preview, u8"view" }, luil::scroll_view_config { content_height, scroll_offset }) };
+    view->set_content(std::move(content));
+    // 흘릴 것이 있을 때만 휠의 임자가 되게 한다 (scroll_area_element와 같은 판정). 배율은 중첩 되살리기가 쓴다.
+    if (content_height > viewport_height)
+        view->set_scroll_source(luil::scroll_source { .scroll = scroll, .scale = scale, .at_start = scroll_offset <= 0.0f, .at_end = scroll_offset >= content_height - viewport_height });
+
+    luil::scrollbar_config bar_config {};
+    bar_config.scroll = scroll;
+    bar_config.scroll_to = [](const float offset) { return luil::make_app_action(preview_scroll_to_intent { offset }); };
+    bar_config.content_height = content_height;
+    bar_config.viewport_height = viewport_height;
+    bar_config.scroll_offset = scroll_offset;
+    auto bar { std::make_unique<luil::scrollbar_element>(luil::ui_element_id { kind_preview, u8"bar" }, std::move(bar_config)) };
+    // 막대는 factory가 있으면 스스로 Tab 자리가 된다. 흘릴 것이 없는 frame에서는 자리를 거둔다 — 끌 수도 누를 수도
+    // 없는 막대에 초점이 서면 키가 조용히 사라진다 (scroll_area_element가 하는 판정과 같다).
+    bar->set_tab_stop(content_height > viewport_height);
+
+    luil::stack_config row_config {};
+    row_config.direction = luil::stack_direction::row;
+    auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_preview, u8"row" }, row_config) };
+    // 막대를 왼쪽에 둔다. 막대 칸 폭은 영역과 같은 값을 쓴다 (보이는 막대 8 + 여백 8).
+    row->add(std::move(bar), luil::scroll_area_bar_width);
+    row->add_flexible(std::move(view));
+    return row;
+}
+</script></div>
+<script type="text/plain" id="pre-pair" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/layout_metrics.h"
+#include "luil/ui/scroll_area_element.h"
+#include "luil/ui/scroll_view_element.h"
+#include "luil/ui/scrollbar_element.h"
+#include "luil/ui/stack_element.h"
+#include <memory>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><strong>창 높이</strong>는 앱이 배치 상수에서 구해 막대에 준다. 틀리면 thumb 길이와 흘릴 양이 어긋난다 — 영역이 생긴 까닭이 이것이다. 막대를 <strong>안에 담는</strong> 컨테이너를 직접 짓는다면 자기 <code>arrange</code>에서 막대를 배치하기 전에 <code>set_metrics</code>를 부른다.</li>
+            <li><strong>임자.</strong> 휠·되살리기의 임자는 창이고, 막대는 끌기·누름·키·보조 기술의 자리다. 흘릴 것이 있을 때만 원천을 단다 (영역과 같은 판정).</li>
+            <li><strong>Tab 자리.</strong> factory가 있는 막대는 스스로 Tab 자리가 된다. 흘릴 것이 없는 frame에서는 앱이 <code>set_tab_stop(false)</code>로 거둔다 — 끌 수도 누를 수도 없는 막대에 초점이 서면 키가 조용히 삼켜진다. 영역은 이 판정을 스스로 한다.</li>
+            <li><strong>막대 칸 폭</strong>은 영역과 같은 <code>scroll_area_bar_width</code>(보이는 막대 8 + 여백 8)를 쓴다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-measured">
+        <header class="sec-head">
+          <h2>만들기: 배치에서 재는 높이</h2>
+          <p class="lede">폭으로 줄을 접는 글처럼 높이가 배치에서 정해지는 내용은, 담는 쪽이 자기 <code>arrange</code>에서 영역을 배치하기 <strong>전에</strong> <code>set_content_height</code>를 부른다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="src/ui/text_area_element.cpp:636-655" data-path="src/ui/text_area_element.cpp" data-start="636"><script type="text/plain">
+        const float bar { config_.scroll != nullptr ? std::min(scroll_area_bar_width * scale_, context.slot.width) : 0.0f };
+        wrap_width_ = config_.wrap ? context.slot.width - bar - (2.0f * text_area_padding_x + gutter_width_) * scale_ : 0.0f;
+        content_width_ = 0.0f;
+        lines_ = wrap_displayed(measure);
+        logical_lines_.clear();
+        std::size_t logical { 0 };
+        for (const auto& row : lines_)
+        {
+            logical_lines_.push_back(logical);
+            if (row.wrapped == false)
+                ++logical;
+        }
+        content_width_ += 2.0f * text_area_padding_x;
+        area_->set_content_height(static_cast<float>(lines_.size()) * line_height_logical() + 2.0f * text_area_padding_y);
+        const float horizontal_height { horizontal_bar_ != nullptr ? std::min(scrollbar_visual_width * scale_ + 8.0f * scale_, context.slot.height) : 0.0f };
+        rect_f area_slot { context.slot };
+        area_slot.height -= horizontal_height;
+        // 막대는 칸 안의 부품이라 앱이 손댈 수 없다. 칸이 읽히는 이름을 물려준다 (`list_element`와 같은 줄).
+        area_->set_access_name(field_name());
+        area_->arrange(context.for_child(area_slot));
+</script></div>
+        <div class="prose">
+          <p>여러 줄 텍스트 칸이 안에 품은 영역을 이렇게 쓴다. 막대 폭을 뺀 폭으로 줄을 접고, 줄 수로 높이를 정한 뒤 영역을 배치한다. 같은 tree에서 영역을 두 번 배치하지 않는다 — 영역은 창을 한 번만 배치하고, 그 안의 가상 목록은 높이가 있는 첫 배치에서만 행을 짓는다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-zoom">
+        <header class="sec-head">
+          <h2>만들기: 확대 보기</h2>
+          <p class="lede">데모의 도면 페이지다. 상태 하나(<code>zoom_view_state</code>)와 메시지 넷을 두고, 메시지마다 도우미를 지금 상태에 적용한다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/zoom_page.h:7-43" data-path="examples/demo/zoom_page.h" data-start="7"><script type="text/plain">
+    struct zoom_intent
+    {
+        float factor { 1.0f };
+        luil::zoom_point anchor {};
+    };
+    struct pan_intent
+    {
+        luil::zoom_point delta {};
+    };
+    struct zoom_to_intent
+    {
+        float value { 1.0f };
+    };
+    // 도면을 `degrees`만큼 돌리자는 메시지다. 두 손가락, Shift+←/→/Home, 단추가 같은 것을 보낸다.
+    struct rotate_intent
+    {
+        float degrees { 0.0f };
+        luil::zoom_point anchor {};
+    };
+    // 줌 단추의 글을 영어로 쓸지다. 누른 때의 반대 언어를 절대 값으로 담아 거듭 와도 결과가 같다.
+    struct zoom_labels_intent
+    {
+        bool english { false };
+    };
+    class zoom_page
+    {
+    public:
+        bool handle(const luil::app_message& message);
+        [[nodiscard]] std::unique_ptr<luil::ui_element> build(float width, float height, float scale);
+
+    private:
+        [[nodiscard]] luil::zoom_view_config config() const;
+        luil::zoom_view_state state_ { 1.0f, {} };
+        luil::zoom_point viewport_ {};
+        // 줌 단추의 글을 영어로 주는가. 거짓이면 config 칸을 비워 기본 문구가 서게 한다.
+        bool english_labels_ { false };
+    };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/zoom_page.cpp:81-120" data-path="examples/demo/zoom_page.cpp" data-start="81"><script type="text/plain">
+    luil::zoom_view_config zoom_page::config() const
+    {
+        return {
+            .owner = u8"diagram",
+            .zoom = state_.zoom,
+            .origin = state_.origin,
+            .minimum_zoom = 0.1f,
+            .maximum_zoom = 5.0f,
+            .content_bounds = luil::rotated_bounds(page_bounds, state_.rotation),
+            .zoom_by = [](const float factor, const luil::zoom_point anchor) { return luil::make_app_action(zoom_intent { factor, anchor }); },
+            .pan_by = [](const luil::zoom_point delta) { return luil::make_app_action(pan_intent { delta }); },
+            .zoom_to = [](const float value) { return luil::make_app_action(zoom_to_intent { value }); },
+            .rotate_by = [](const float degrees, const luil::zoom_point anchor) { return luil::make_app_action(rotate_intent { degrees, anchor }); },
+            .rotation = state_.rotation,
+        };
+    }
+
+    bool zoom_page::handle(const luil::app_message& message)
+    {
+        if (const auto* const zoom { message.get<zoom_intent>() }; zoom != nullptr)
+            state_ = luil::zoom_about(config(), viewport_, zoom->factor, zoom->anchor);
+        else if (const auto* const pan { message.get<pan_intent>() }; pan != nullptr)
+            state_ = luil::pan_by(config(), viewport_, pan->delta);
+        else if (const auto* const target { message.get<zoom_to_intent>() }; target != nullptr)
+            state_ = luil::zoom_about(config(), viewport_, target->value / state_.zoom, {});
+        else if (const auto* const rotate { message.get<rotate_intent>() }; rotate != nullptr)
+            state_ = luil::rotate_about(config(), viewport_, rotate->degrees, rotate->anchor);
+        else if (const auto* const labels { message.get<zoom_labels_intent>() }; labels != nullptr)
+            english_labels_ = labels->english;
+        else
+            return false;
+        return true;
+    }
+
+    std::unique_ptr<luil::ui_element> zoom_page::build(const float width, const float height, const float scale)
+    {
+        static_cast<void>(scale);
+        // 위아래 여백 32, 설명 28, 단추 줄 둘, 사이 간격 셋이다.
+        viewport_ = { std::max(0.0f, width - 32.0f), std::max(0.0f, height - (32.0f + 28.0f + 2.0f * controls_height + 3.0f * row_spacing)) };
+        state_ = luil::zoom_about(config(), viewport_, 1.0f, {});
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="81-96" data-title="설정은 상태에서">배율·원점·각도는 앱 상태에서, 경계는 지금 각도로 돌린 도면 경계(<code>rotated_bounds</code>)에서 온다. 범위는 0.1~5배다. factory 넷이 메시지만 짓는다.</li>
+            <li data-lines="98-107" data-title="지금 상태에 적용">변화 메시지는 같은 이름의 도우미를 <strong>지금 상태</strong>에 적용한다. <code>zoom_to</code>(보조 기술의 절대 배율)는 <code>value / zoom</code>을 가운데 기준 <code>zoom_about</code>에 준다.</li>
+            <li data-lines="115-120" data-title="창 크기와 다듬기">보기의 논리 크기를 앱이 계산해 둔다 — 다듬기와 맞춤이 같은 창을 보게 한다. 짓기 전에 <code>zoom_about(…, 1.0f, {})</code>로 지금 상태를 다듬는다. 회전 뒤 새 경계로 다듬는 일도 이 한 줄이 한다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/zoom_page.cpp:179-185" data-path="examples/demo/zoom_page.cpp" data-start="179"><script type="text/plain">
+        auto view { std::make_unique<luil::zoom_view_element>(config()) };
+        view->set_access_name(u8"도면 확대 보기");
+        // 그림 위에서 포인터가 1.5초 멈추면 커서를 감춘다. 움직이거나 누르면 곧바로 돌아온다.
+        view->set_cursor_idle_hide(std::chrono::milliseconds { 1500 });
+        view->set_content(std::make_unique<diagram>(state_.rotation));
+        column->add_flexible(std::move(view));
+        return column;
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>zoom_about</code>은 배율을 범위로 다듬고 <strong>실제 비율</strong>(다음 배율 ÷ 지금 배율)로 원점을 옮긴다: <code>origin' = anchor − (anchor − origin) × ratio</code>. 그래서 상한에서 더 키우려 해도 기준점 아래의 내용이 미끄러지지 않는다.</li>
+            <li>두 메시지가 한 번에 오면(핀치의 이동과 확대, 맞춤의 확대와 이동) <strong>온 순서대로</strong> 지금 상태에 적용한다.</li>
+            <li>설정이 잘못되면 생성자가 <code>std::invalid_argument</code>를 던진다 (<a class="xref" href="#config">설정</a>). 범위 밖의 양수 배율·원점은 배치가 다듬는다.</li>
+            <li>내용은 하나다. 둘째 <code>set_content</code>는 <code>std::logic_error</code>를 던진다. 보기 자신이 Tab 자리이고, 키는 보기에 초점이 있을 때만 온다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-zoom-buttons">
+        <header class="sec-head">
+          <h2>만들기: 확대 단추와 축 맞춤</h2>
+          <p class="lede"><code>zoom_controls_element</code>는 축소·배율 글·확대·맞춤 단추를 짓는다. 폭 맞춤·높이 맞춤은 <code>zoom_fit_actions</code>로 앱이 단추를 단다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/zoom_page.cpp:126-150" data-path="examples/demo/zoom_page.cpp" data-start="126"><script type="text/plain">
+        // 축 맞춤 단추 둘이다 (image-frames-scaling-design.md). 계산은 라이브러리의 `zoom_fit_actions`이고 단추 글은 앱이 단다.
+        //  - 맞추지 않는 축은 지금 창 가운데에 있는 도면 자리를 지킨다.
+        luil::stack_config controls_config {};
+        controls_config.direction = luil::stack_direction::row;
+        controls_config.spacing = 8.0f;
+        auto controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-controls" }, controls_config) };
+        // 영어 앱은 세 칸을 채운다. 비워 두면 단추 이름이 기본 문구(축소·확대·맞춤)다.
+        // 단추 폭이 56dp로 정해져 있어 "Zoom out"은 잘린다. 모바일 데모와 같이 세 글자 안팎으로 짧게 쓴다.
+        luil::zoom_controls_config zoom_buttons { .view = config(), .viewport = viewport_ };
+        if (english_labels_)
+        {
+            zoom_buttons.decrease_label = u8"Out";
+            zoom_buttons.increase_label = u8"In";
+            zoom_buttons.fit_label = u8"Fit";
+        }
+
+        controls->add(std::make_unique<luil::zoom_controls_element>(std::move(zoom_buttons)), 244.0f);
+        const auto fit_button = [this](std::u8string owner, std::u8string text, const luil::zoom_fit axis) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, std::move(owner) }, luil::text_button_config { .text = std::move(text) }) };
+            button->set_action(
+                luil::ui_trigger::left_click, [view = config(), viewport = viewport_, axis](const luil::ui_action_context&) { return luil::zoom_fit_actions(view, viewport, 16.0f, 5.0f, axis); });
+            return button;
+        };
+        controls->add(fit_button(u8"zoom-fit-width", u8"폭 맞춤", luil::zoom_fit::width), 72.0f);
+        controls->add(fit_button(u8"zoom-fit-height", u8"높이 맞춤", luil::zoom_fit::height), 80.0f);
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>zoom_controls_config::viewport</code>는 <strong>보기의 논리 크기</strong>다. 단추 줄의 폭이 아니다. 맞춤 메시지가 이 창으로 계산된다.</li>
+            <li>축소·확대는 가운데 기준 <code>zoom_by(1 / 1.2)</code>·<code>zoom_by(1.2)</code>이고, 범위 끝이면 그 단추가 비활성이다. 배율 글은 반올림한 백분율이다.</li>
+            <li>맞춤 단추는 내용 경계가 있을 때만 서고, <code>zoom_by</code> 다음 <code>pan_by</code> 두 메시지를 낸다. 이미 맞춘 상태면 빈 목록이다.</li>
+            <li>단추의 글이 곧 접근 이름이다. 칸이 비면 기본 문구(축소·확대·맞춤)다. 자연 폭은 단추 56·글 64·간격 4 논리 픽셀이라 네 칸이면 244다 — 데모가 그 폭을 준다.</li>
+            <li>축 맞춤(<code>zoom_fit::width</code>·<code>zoom_fit::height</code>)은 맞추지 않는 축에서 지금 창 가운데의 내용 자리를 지킨다. 데모는 상한 5배로 부른다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-rotate">
+        <header class="sec-head">
+          <h2>만들기: 회전</h2>
+          <p class="lede">보기는 "이만큼 돌리자"(<code>rotate_by</code>)만 알린다. 앱이 각도를 들고, 돌린 경계를 주고, 내용 요소가 스스로 돌려 그린다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/zoom_page.cpp:15-16,39-54" data-path="examples/demo/zoom_page.cpp" data-start="15"><script type="text/plain">
+        // 도면 전체의 경계다 (내용 좌표, 가운데가 원점). 돌리면 앱이 이것의 `rotated_bounds`를 보기에 준다.
+        const luil::rect_f page_bounds { -500.0f, -350.0f, 1000.0f, 700.0f };
+⋯@39
+            void arrange(const luil::arrange_context& context) override
+            {
+                set_bounds(context.slot);
+                scale_ = context.scale;
+                // slot은 돌린 경계의 자리다. 내용 원점의 화면 자리는 거기서 돌린 경계의 왼쪽 위를 뺀 곳이다.
+                const luil::rect_f turned { luil::rotated_bounds(page_bounds, rotation_) };
+                origin_ = { context.slot.x - turned.x * scale_, context.slot.y - turned.y * scale_ };
+                int index { 0 };
+                for (const auto& child : children())
+                {
+                    // 가운데만 돌리고 글자는 세운 채 둔다. 회전한 자리의 축 정렬 slot이라 hit test와 접근성 bounds가 그대로 맞는다.
+                    const luil::zoom_point center { luil::rotate_point({ -240.0f + index * 160.0f, index % 2 == 0 ? -70.0f : 60.0f }, rotation_) };
+                    child->arrange(context.for_child({ origin_.x + center.x * scale_ - 60.0f * scale_, origin_.y + center.y * scale_ - 30.0f * scale_, 120.0f * scale_, 60.0f * scale_ }));
+                    ++index;
+                }
+            }
+</script></div>
+        <div class="prose">
+          <p>도면 요소의 배치다. slot은 돌린 경계(<code>rotated_bounds</code>)의 자리라, 내용 원점의 화면 자리는 거기서 돌린 경계의 왼쪽 위를 뺀 곳이다. 노드는 가운데만 <code>rotate_point</code>로 돌리고 글자는 세운 채 둔다 — 회전한 자리의 축 정렬 slot이라 hit test와 접근성 bounds가 그대로 맞는다. 격자는 그리기에서 캔버스를 돌려 긋는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/zoom_page.cpp:157-178" data-path="examples/demo/zoom_page.cpp" data-start="157"><script type="text/plain">
+        // 회전 단추 셋과 지금 각도다. 단추는 키(Shift+←/→/Home)와 같은 `rotate_by` 메시지를 보내 UIA가 Invoke로 되풀이한다.
+        //  - 0도 복귀는 지금 각도를 되돌리는 상대 각도다. 이미 0도면 할 일이 없으므로 단추를 끈다. 켜 둔 채 빈 동작을 내면
+        //    보조 기술의 Invoke가 오류로 끝난다.
+        luil::stack_config rotation_controls_config {};
+        rotation_controls_config.direction = luil::stack_direction::row;
+        rotation_controls_config.spacing = 8.0f;
+        auto rotation_controls { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"zoom-rotation-controls" }, rotation_controls_config) };
+        const luil::zoom_view_config settings { config() };
+        const auto rotate_button = [&settings](std::u8string owner, std::u8string text, const float degrees) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, std::move(owner) }, luil::text_button_config { .text = std::move(text) }) };
+            button->set_action(luil::ui_trigger::left_click, [view = settings, degrees](const luil::ui_action_context&) {
+                return std::vector<luil::input_action> { view.rotate_by(degrees, {}) };
+            });
+            button->set_enabled(degrees != 0.0f);
+            return button;
+        };
+        rotation_controls->add(rotate_button(u8"zoom-rotate-left", u8"-15°", -settings.rotation_step), 56.0f);
+        rotation_controls->add(rotate_button(u8"zoom-rotate-right", u8"+15°", settings.rotation_step), 56.0f);
+        rotation_controls->add(rotate_button(u8"zoom-rotate-reset", u8"0°", -state_.rotation), 48.0f);
+        rotation_controls->add(
+            make_label({ kind_text, u8"zoom-rotation" }, u8"회전 " + to_u8(static_cast<int>(std::lround(state_.rotation))) + u8"°", 13.0f, luil::label_color_role::primary), 120.0f);
+        column->add(std::move(rotation_controls), controls_height);
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>단추는 키(Shift+←/→/Home)와 같은 <code>rotate_by</code>를 보낸다. 0도 복귀는 지금 각도를 되돌리는 상대 각도라, 이미 0도면 단추를 끈다 — 켜 둔 채 빈 동작을 내면 보조 기술의 Invoke가 오류로 끝난다.</li>
+            <li><code>rotate_about</code>은 기준점 아래의 내용을 두고 돌린다. <strong>경계를 다듬지 않는다</strong> — 각도가 바뀌면 돌린 경계도 바뀌므로, 새 각도의 설정으로 <code>zoom_about(config, viewport, 1.0f, {})</code>을 다시 불러 다듬는다 (데모는 짓기 전의 그 한 줄로 한다).</li>
+            <li>두 손가락 회전은 핀치와 함께 온다. 문턱은 6°(<code>minimum_rotation_angle</code>)이고, <code>rotate_by</code>가 없으면 회전이 없다 (Shift+화살표는 이동으로 남는다).</li>
+            <li><code>rotation</code>은 (−180, 180]으로 접힌다. 보기는 이 값을 배치·그리기에 쓰지 않고 <code>state()</code>와 Shift+Home(0도 복귀)이 읽는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-pages">
+        <header class="sec-head">
+          <h2>만들기: 쪽 보기</h2>
+          <p class="lede">모바일 데모의 쪽 보기다. 맞춤 상태에서는 쓸기가 전부 경계에 막히므로, 막힌 쓸기(<code>edge_swipe</code>)로 쪽을 넘긴다. 두 번 탭은 맞춤과 확대를 오간다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/zoom_page.cpp:103-164" data-path="examples/mobile_demo/zoom_page.cpp" data-start="103"><script type="text/plain">
+    luil::zoom_view_config zoom_page::config() const
+    {
+        return {
+            .owner = u8"diagram",
+            .zoom = state_.zoom,
+            .origin = state_.origin,
+            .minimum_zoom = 0.1f,
+            .maximum_zoom = 5.0f,
+            .content_bounds = luil::rotated_bounds(page_bounds, state_.rotation),
+            .zoom_by = [](const float factor, const luil::zoom_point anchor) { return luil::make_app_action(zoom_intent { factor, anchor }); },
+            .pan_by = [](const luil::zoom_point delta) { return luil::make_app_action(pan_intent { delta }); },
+            .zoom_to = [](const float value) { return luil::make_app_action(zoom_to_intent { value }); },
+            // 쪽 보기라 맞춤 상태에서는 옮길 여지가 없다. 그래서 쓸기가 전부 경계에 막혀 쪽 넘기기가 된다.
+            .bounds = luil::zoom_bounds::contain,
+            .edge_swipe = [](const luil::zoom_edge_swipe& swipe) { return luil::make_app_action(edge_swipe_intent { swipe }); },
+            // 도면에는 탭 동작이 없어 두 번 탭을 확대에 쓴다.
+            .double_tap = { .enabled = true },
+            .rotate_by = [](const float degrees, const luil::zoom_point anchor) { return luil::make_app_action(rotate_intent { degrees, anchor }); },
+            .rotation = state_.rotation,
+        };
+    }
+
+    bool zoom_page::handle(const luil::app_message& message)
+    {
+        if (const auto* const zoom { message.get<zoom_intent>() }; zoom != nullptr)
+            state_ = luil::zoom_about(config(), viewport_, zoom->factor, zoom->anchor);
+        else if (const auto* const pan { message.get<pan_intent>() }; pan != nullptr)
+            state_ = luil::pan_by(config(), viewport_, pan->delta);
+        else if (const auto* const target { message.get<zoom_to_intent>() }; target != nullptr)
+            state_ = luil::zoom_about(config(), viewport_, target->value / state_.zoom, {});
+        else if (const auto* const rotate { message.get<rotate_intent>() }; rotate != nullptr)
+            state_ = luil::rotate_about(config(), viewport_, rotate->degrees, rotate->anchor);
+        else if (const auto* const labels { message.get<zoom_labels_intent>() }; labels != nullptr)
+            english_labels_ = labels->english;
+        else if (const auto* const edge { message.get<edge_swipe_intent>() }; edge != nullptr)
+        {
+            last_swipe_ = edge->swipe;
+            // 왼쪽으로 쓸면 다음 쪽, 오른쪽이면 앞 쪽이다. 넘긴 쪽은 곧게 세워 맞춤으로 연다.
+            const int next { std::clamp(page_ - edge->swipe.horizontal, 1, page_count) };
+            if (next != page_)
+            {
+                page_ = next;
+                state_.rotation = 0.0f;
+                state_ = luil::zoom_to_fit(config(), viewport_);
+            }
+        }
+        else
+            return false;
+        return true;
+    }
+
+    std::unique_ptr<luil::ui_element> zoom_page::build(const float width, const float height, const float scale)
+    {
+        static_cast<void>(scale);
+        const float header { 2.0f * note_line_height + body_line_height + 3.0f * controls_height + 6.0f * row_spacing };
+        viewport_ = { std::max(0.0f, width - 2.0f * page_padding), std::max(0.0f, height - (2.0f * page_padding + header)) };
+        if (fitted_ == false && viewport_.x > 0.0f && viewport_.y > 0.0f)
+        {
+            fitted_ = true;
+            state_ = luil::zoom_to_fit(config(), viewport_);
+        }
+        state_ = luil::zoom_about(config(), viewport_, 1.0f, {});
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><strong><code>bounds = zoom_bounds::contain</code></strong>: 창보다 작은 축은 가운데에 고정하고, 큰 축은 빈 곳이 보이지 않게 한다. 기본 <code>overlap</code>은 축마다 겹침을 1 논리 픽셀만 남겨, 큰 도면의 가장자리를 창 가운데로 옮길 수 있다.</li>
+            <li><strong><code>edge_swipe</code></strong>: 터치·펜 접촉이 끝날 때, 경계에 막힌 쓸기를 한 번 알린다. 기준은 막힌 거리 32 이상·옮겨진 거리 32 미만·막힌 쪽 속도 초당 300 이상(<code>zoom_edge_swipe_config</code>)이다. 핀치가 섞인 접촉과 마우스 끌기는 알리지 않는다. 확대한 채 끝까지 끈 접촉도 쓸기가 아니다 — 끝에 닿은 뒤 한 번 더 쓸어야 한다.</li>
+            <li><strong><code>double_tap = { .enabled = true }</code></strong>: 기준 배율(경계가 있으면 맞춤, 없으면 100%)과 1% 안이면 탭한 점을 기준으로 <code>factor</code>(기본 2)배로 키우고, 아니면 기준으로 돌아간다. <code>zoom_by</code>와 <code>pan_by</code>가 <strong>둘 다 있어야</strong> 선다. 첫 탭을 늦추지 않으므로 내용에 탭 동작이 있으면 그것도 실행된다 — 탭 동작이 없는 보기에서만 켠다.</li>
+            <li><strong>처음 맞춤</strong>: 창 크기를 처음 안 짓기에서 한 번 <code>zoom_to_fit</code>으로 맞춘다. 쪽을 넘기면 각도를 0으로 세우고 다시 맞춘다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-visible">
+        <header class="sec-head">
+          <h2>만들기: 보이는 것만 짓기</h2>
+          <p class="lede">배율·위치가 바뀔 때마다 앱은 tree를 다시 짓는다. 항목이 많으면 창에 걸치는 것만 짓는다.</p>
+        </header>
+<div class="code" data-lang="cpp" data-label="창에 보이는 내용 좌표 사각형 (직접 작성)" data-compile="pre-visible"><script type="text/plain">
+// 창에 보이는 내용 좌표의 사각형이다 (회전 0도일 때). 걸치는 항목만 지으면 큰 노드 그래프도 frame마다 가볍다.
+//  - 내용 좌표 p는 창 가운데 기준 논리 픽셀 `origin + zoom × p`에 선다 (zoom_view_element.h의 좌표 규칙).
+//  - 창의 논리 범위는 가운데 기준 [-w/2, w/2] × [-h/2, h/2]다. 그것을 되돌리면 아래 식이다.
+[[nodiscard]] luil::rect_f visible_content(const luil::zoom_view_state& state, const luil::zoom_point viewport) noexcept
+{
+    const float left { (-viewport.x / 2.0f - state.origin.x) / state.zoom };
+    const float top { (-viewport.y / 2.0f - state.origin.y) / state.zoom };
+    return { left, top, viewport.x / state.zoom, viewport.y / state.zoom };
+}
+
+// 한 항목(내용 좌표의 사각형)이 창에 걸치는가다.
+[[nodiscard]] bool intersects(const luil::rect_f& a, const luil::rect_f& b) noexcept
+{
+    return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height;
+}
+</script></div>
+<script type="text/plain" id="pre-visible" data-prelude>
+#include "luil/ui/zoom_view_element.h"
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p>창의 논리 범위는 가운데 기준 <code>[−w/2, w/2] × [−h/2, h/2]</code>이고, 내용 좌표 <code>p</code>는 <code>origin + zoom × p</code>에 선다 (회전 0도). 그것을 되돌린 것이 위 식이다. 회전한 보기라면 창의 네 꼭짓점에서 원점을 빼고 배율로 나눈 뒤 <code>rotate_point(…, −rotation)</code>으로 되돌려 경계 상자를 잡는다 (헤더의 좌표 규칙 <code>origin + zoom × R(rotation) p</code>를 거꾸로 푼 것이다). 핀치 동안 낡은 그림만 늘리는 모드는 없다 — 큰 그래프는 이렇게 짓는 양을 줄인다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 표는 자주 묻는 필드만 추렸다. 모든 필드는 <a class="xref" href="api.html#scroll-area-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="scroll_area_element">
+            <div class="walk side">
+              <div class="code tall" data-lang="cpp" data-src="include/luil/ui/scroll_area_element.h:13-98" data-path="include/luil/ui/scroll_area_element.h" data-start="13"><script type="text/plain">
+    // 스크롤 막대를 언제 세우는가.
+    enum class scrollbar_visibility
+    {
+        // 흘릴 것이 있을 때만 세운다.
+        // 짧은 내용에서는 칸을 통째로 내주므로 글이 넓게 선다.
+        automatic,
+        // 흘릴 것이 없어도 자리를 지킨다.
+        // 내용이 늘고 주는 창에서 글의 폭이 흔들리지 않는다 — 흔들리면 한 줄
+        // 늘어난 것만으로 문단 전체가 다시 접힌다.
+        always,
+        // 세우지 않는다 (휠과 키만 쓰는 창).
+        //  - `scroll` factory가 없는 것과 다르다. 그쪽은 흘리는 것 자체를 하지
+        //    않겠다는 뜻이고, 이쪽은 흘리되 막대를 보이지 않겠다는 뜻이다.
+        never,
+    };
+
+    // 흘리는 창 하나의 치수다 (전부 논리 픽셀).
+    // `arrange` 뒤에 유효하며, 앱이 스크롤 상태를 다듬고 화면에 표시할 때 읽는다.
+    //  - 네 값을 한 자리에서 내주는 것이 요점이다. 앱이 내용 높이는 자기 식에서,
+    //    창 높이는 배치 상수에서, 최대치는 `clamp_scroll`에서 따로 구하면 그 셋이
+    //    어긋나는 frame이 반드시 생긴다 (`layout_metrics.h`가 경고한 "식이 두 벌").
+    struct scroll_metrics
+    {
+        float content_height { 0.0f };
+        float viewport_height { 0.0f };
+        // `arrange`가 범위 안으로 다듬은 값이다.
+        float scroll_offset { 0.0f };
+        float maximum_scroll { 0.0f };
+
+        // 흘릴 것이 있는가 (내용이 창보다 긴가).
+        [[nodiscard]] bool overflowing() const noexcept
+        {
+            return maximum_scroll > 0.0f;
+        }
+
+        [[nodiscard]] bool operator==(const scroll_metrics&) const noexcept = default;
+    };
+
+    struct scroll_area_config
+    {
+        // 같은 화면에 흘리는 창이 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        // 내용 전체 높이다 (논리 픽셀).
+        // 측정 단계가 없으므로 담는 쪽이 알려 준다.
+        float content_height { 0.0f };
+        // 지금 흘러간 양이다 (논리 픽셀, 앱 상태).
+        // 범위 밖 값은 `arrange`가 다듬고 `metrics()`가 다듬은 값을 되돌려 준다.
+        float scroll_offset { 0.0f };
+        // 스크롤 위치를 옮기자는 메시지다 (delta는 논리 픽셀).
+        //
+        // **이 하나가 넷을 함께 켠다** — 휠, 막대의 끌기와 키, 그리고 초점
+        // 되살리기다. 지금까지 앱은 같은 factory를 휠 표와 되살리기 표에 두 번
+        // 적어야 했고, 두 표가 서로 다른 id를 이름 대야 했다 (한쪽은 막대까지
+        // 품은 바깥, 다른 쪽은 실제로 자르는 안쪽). 여기 한 줄이 그 넷의 임자다.
+        //  - 없으면 흘리지 않는 창이다. 막대도 만들지 않고 휠도 받지 않는다
+        //    ("없는 것은 두지 않는다").
+        std::function<input_action(float delta)> scroll {};
+        // 스크롤 위치를 **이 자리로** 하라는 절대 메시지다 (offset은 논리 픽셀).
+        // 없으면 보조 기술이 자리를 정할 수 없다 (UIA `SetValue`가 읽기 전용으로
+        // 선다). 델타로 환산해 보내면 오래된 발행본 기준의 변화량이 겹쳐 쌓인다.
+        std::function<input_action(float offset)> scroll_to {};
+        // 스크롤 위치를 **이 백분율로** 하라는 절대 메시지다 (0~100, **100은 끝**).
+        // 있으면 영역이 보조 기술에 흘리는 창(UIA Pane + Scroll 패턴 — `SetScrollPercent`·`VerticalScrollPercent`)으로
+        // 선다. 없으면 지금처럼 접근 tree에서 접히고 막대(RangeValue)만 선다.
+        //  - offset(`scroll_to`)과 따로인 이유: 내용이 계속 늘어나는 목록에서 "끝까지"는 어느 offset으로도 정확히
+        //    말할 수 없다. 메시지가 앱에 닿는 사이 내용이 늘면 그 offset은 끝이 아니다. 100을 받은 앱은 "끝에 붙어
+        //    있으라"로 읽는다.
+        //  - 지금 자리는 영역이 `arrange`가 다듬은 offset에서 잰다 (흘릴 것이 없으면 세로로 흘리지 않는 창이다).
+        std::function<input_action(float percent)> scroll_to_percent {};
+        scrollbar_visibility bar { scrollbar_visibility::automatic };
+        // 막대가 Tab의 자리인가.
+        //
+        // 홀로 서는 흘리는 창에서는 참이 옳다 — 막대가 자리를 가져야 키보드만으로
+        // 긴 글을 훑을 수 있고, 그것이 `scrollbar_element`가 스스로 세우는 기본값이다.
+        // 거짓으로 두는 것은 **담는 쪽이 이미 세로 키를 가진 자리**다 (목록·가상
+        // 목록). 그러지 않으면 같은 목록에 Tab의 자리가 둘 서고, 사용자는 아무것도
+        // 하지 않는 자리를 한 번 더 지나야 한다 (list-view-design.md).
+        //  - 흘릴 것이 없는 frame에서는 이 값과 무관하게 자리가 아니다. 끌 수도
+        //    누를 수도 없는 막대에 초점이 서면 키가 조용히 사라진다.
+        bool bar_tab_stop { true };
+        // 창의 위·아래 가장자리 표시다 (구분선과 흘린 쪽의 그림자).
+        // 영역이 자기 치수로 그리므로 앱이 offset을 따로 읽어 겹쳐 그리지 않는다 —
+        // 그 offset은 `arrange`가 다듬은 뒤에야 맞고, 앱이 앞서 든 값은 한 frame 낡다.
+        // 기본값은 전부 거짓이라 지금까지의 영역이 그대로다.
+        scroll_edges edges {};
+    };
+</script></div>
+              <ol class="walk-steps-src">
+                <li data-lines="13-27" data-title="막대를 세울 때"><code>automatic</code>은 흘릴 것이 있을 때만 세우고 없으면 칸을 내준다. <code>always</code>는 늘 자리를 지킨다. <code>never</code>는 짓지 않는다 — 휠과 되살리기는 흘릴 것이 있으면 산다.</li>
+                <li data-lines="29-49" data-title="치수">앱이 채우지 않고 <code>metrics()</code>로 읽는다. 전부 논리 픽셀이고 <code>arrange</code> 뒤에 맞다. 창 높이는 창이 실제로 받은 높이다.</li>
+                <li data-lines="51-60" data-title="내용과 위치">owner(표면 안에서 유일), 내용 전체 높이(앱이 준다), 흘러간 양(앱 상태).</li>
+                <li data-lines="61-81" data-title="세 메시지">변화량 <code>scroll</code>이 휠·막대·되살리기를 함께 켠다. 절대 자리 <code>scroll_to</code>는 막대의 값 정하기, <code>scroll_to_percent</code>는 영역의 백분율 정하기다.</li>
+                <li data-lines="82-97" data-title="막대와 가장자리">막대 보이기, 막대가 Tab 자리인가(흘릴 것이 없으면 이 값과 무관하게 아니다), 가장자리 그림자·구분선.</li>
+              </ol>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>같은 표면의 영역끼리 창·막대 자리표가 겹친다</td></tr>
+                  <tr><td><code>content_height</code></td><td>0</td><td>흘릴 것이 없다. 측정 단계가 없으니 앱이 준다 (배치에서 정해지면 <code>set_content_height</code>)</td></tr>
+                  <tr><td><code>scroll</code></td><td>없음</td><td>흘리지 않는 창이다. 막대·휠·되살리기가 모두 없고 치수만 답한다</td></tr>
+                  <tr><td><code>scroll_to</code></td><td>없음</td><td>막대 값이 보조 기술에 읽기 전용이다</td></tr>
+                  <tr><td><code>scroll_to_percent</code></td><td>없음</td><td>영역이 접근 tree에서 접히고 막대(RangeValue)만 선다</td></tr>
+                  <tr><td><code>bar</code></td><td><code>scrollbar_visibility::automatic</code></td><td>— (<code>always</code>는 글 폭이 흔들리지 않는다)</td></tr>
+                  <tr><td><code>bar_tab_stop</code></td><td>참</td><td>— (담는 쪽이 이미 세로 키를 가지면 거짓)</td></tr>
+                  <tr><td><code>edges</code></td><td>전부 거짓</td><td>가장자리 그림자·구분선이 없다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>멤버</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>set_content</code></td><td>내용 하나</td></tr>
+                  <tr><td><code>set_content_height</code></td><td>배치에서 높이가 정해지는 담는 쪽이 영역을 배치하기 전에 부른다</td></tr>
+                  <tr><td><code>metrics()</code></td><td>내용 높이·창 높이·다듬은 위치·최대치 (논리 픽셀, <code>arrange</code> 뒤)</td></tr>
+                  <tr><td><code>viewport()</code></td><td>내용이 보이는 자리 (<strong>물리</strong> 픽셀, <code>arrange</code> 뒤)</td></tr>
+                  <tr><td><code>scroll_delta_to_reveal</code></td><td>안쪽 창이 답한다. 영역(막대 칸까지 품은 바깥)을 이름 대도 마지막 행이 막대 밑에 남지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p><code>scroll_area_bar_width</code>는 보이는 막대 8 + 여백 8 = 16 논리 픽셀이다 (<code>list_scrollbar_width</code>와 같다). 칸이 그보다 좁으면 막대 폭을 칸 폭으로 깎는다.</p></div>
+          </section>
+          <section data-tab="scroll_view_element">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/scroll_view_element.h:9-64" data-path="include/luil/ui/scroll_view_element.h" data-start="9"><script type="text/plain">
+    struct scroll_view_config
+    {
+        // 내용 전체 높이다 (논리 픽셀).
+        // 측정 단계가 없으므로 담는 쪽이 알려 준다.
+        float content_height { 0.0f };
+        // 지금 흘러간 양이다 (논리 픽셀).
+        // 범위 밖 값은 arrange가 다듬는다.
+        float scroll_offset { 0.0f };
+    };
+
+    // 내용을 세로로 흘려 보여 주는 창이다.
+    //
+    // 내용은 한 덩어리로 받아 흘러간 만큼 위로 올린 자리에 배치한다.
+    // 자기 bounds 밖은 그리기도 hit test도 잘라 내므로 넘치는 내용이 새지 않는다.
+    // 스크롤 막대는 담지 않는다.
+    //  - 막대를 둘지와 어디에 둘지는 배치의 문제라 담는 쪽이 정한다
+    //    (`scrollbar_element`를 옆에 놓는다).
+    //
+    // 아주 긴 목록은 내용 컨테이너가 받은 slot으로 보이는 범위를 계산해
+    // 걸치는 것만 자식으로 만들면 된다 (가상화는 내용의 몫이다).
+    class scroll_view_element final : public ui_element
+    {
+    public:
+        scroll_view_element(ui_element_id id, scroll_view_config config);
+
+        void set_content(std::unique_ptr<ui_element> content);
+        // 내용 높이를 다시 정한다 (논리 픽셀). 배치에서 높이가 정해지는 내용(폭으로 줄을 접는 글)이
+        // 자기 `arrange`에서, 이 창을 배치하기 전에 부른다.
+        void set_content_height(float content_height) noexcept;
+
+        // 내용이 보이는 자리다 (물리 픽셀).
+        // arrange 뒤에 유효하다.
+        [[nodiscard]] const rect_f& viewport() const noexcept;
+        // 이 창에서 흘릴 수 있는 최대치다 (논리 픽셀).
+        // arrange 뒤에 유효하며 스크롤 값을 다듬을 때 쓴다.
+        [[nodiscard]] float maximum_scroll() const noexcept;
+        // arrange가 범위 안으로 다듬은 스크롤 값이다 (논리 픽셀).
+        [[nodiscard]] float scroll_offset() const noexcept;
+
+        // 그 자리를 창 안으로 들이는 스크롤 변화량이다 (논리 픽셀).
+        // 세로 창이라 y·height만 본다. arrange 뒤에 유효하다
+        // (배율을 `arrange`가 보관한다).
+        [[nodiscard]] float scroll_delta_to_reveal(const rect_f& target) const override;
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+
+    private:
+        scroll_view_config config_ {};
+        ui_element* content_ { nullptr };
+        rect_f viewport_ {};
+        float maximum_scroll_ { 0.0f };
+        // 물리 bounds를 논리 델타로 옮길 때 쓴다.
+        // `arrange`가 채우므로 그 전에는 1이다.
+        float scale_ { 1.0f };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드 · 멤버</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>content_height</code> · <code>scroll_offset</code></td><td>내용 높이(논리)와 흘러간 양. 범위 밖 offset은 <code>arrange</code>가 다듬는다</td></tr>
+                  <tr><td>생성자의 id</td><td>앱이 준다. 원시 창의 라이브러리 kind는 없다</td></tr>
+                  <tr><td><code>set_content</code></td><td>내용 하나. 내용 slot 높이는 <code>max(내용, 창)</code></td></tr>
+                  <tr><td><code>viewport()</code> · <code>maximum_scroll()</code> · <code>scroll_offset()</code></td><td>창(물리)·최대치(논리)·다듬은 위치. <code>arrange</code> 뒤</td></tr>
+                  <tr><td><code>scroll_delta_to_reveal</code></td><td>세로만 본다. 물리 차이를 배율로 나눈 논리 변화량</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>키 처리도 메시지도 막대도 없다. 휠·터치·되살리기의 임자가 되려면 앱이 <code>set_scroll_source</code>를 달거나 <code>scroll_route</code> 표에 이름을 댄다.</p></div>
+          </section>
+          <section data-tab="scrollbar_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/scrollbar_element.h:10-90" data-path="include/luil/ui/scrollbar_element.h" data-start="10"><script type="text/plain">
+    // 보이는 막대의 폭과 thumb의 최소 높이다 (논리 픽셀).
+    // hit 영역 폭·배치 여백은 tree를 조립하는 쪽의 몫이다.
+    inline constexpr float scrollbar_visual_width { 8.0f };
+    inline constexpr float scrollbar_minimum_thumb { 24.0f };
+
+    // 화살표 한 번이 흘리는 양이다 (논리 픽셀).
+    // 휠 한 눈금(`input_wheel_scroll_step`)과 같은 값이라 두 입력이 같은 걸음으로
+    // 걷는다. Page는 창 높이 하나라 상수가 없다.
+    inline constexpr float scrollbar_key_line_step { 48.0f };
+
+    // 스크롤 막대의 설정이다.
+    // 길이는 전부 논리 픽셀이고 배율은 arrange가 곱한다 (다른 element와 같은 규약).
+    enum class scrollbar_axis { vertical, horizontal };
+
+    struct scrollbar_config
+    {
+        // 스크롤 위치를 바꾸자는 메시지를 만든다 (delta는 논리 픽셀).
+        // 통상 앱 스크롤 intent를 app_message에 담아 돌려준다.
+        std::function<input_action(float delta)> scroll {};
+        // 스크롤 위치를 **이 자리로** 하라는 절대 메시지다 (offset은 논리 픽셀).
+        // 없으면 보조 기술이 자리를 정할 수 없다 (UIA `SetValue`가 읽기 전용으로
+        // 선다). 델타로 환산해 보내면 오래된 발행본 기준의 변화량이 겹쳐 쌓인다 —
+        // 막대의 `change_to`와 같은 이유·같은 갈래다 (끌기와 키는 여전히 델타다).
+        std::function<input_action(float offset)> scroll_to {};
+        // 내용 전체 높이·보이는 창 높이·현재 스크롤 위치다.
+        float content_height { 0.0f };
+        float viewport_height { 0.0f };
+        float scroll_offset { 0.0f };
+        // 가로 축에서는 content_height와 viewport_height를 폭으로 읽는다.
+        scrollbar_axis axis { scrollbar_axis::vertical };
+    };
+
+    // 세로 스크롤 막대다.
+    // 표시뿐 아니라 클릭·끌기로 스크롤 위치를 바꾼다.
+    // 좌표 변화량만 메시지로 바꾸므로(상대 이동) tree가 다시 빌드되어도 끌기가 이어진다.
+    // 어느 대상을 스크롤할지는 id와 config.scroll이 정한다.
+    class scrollbar_element final : public ui_element
+    {
+    public:
+        using scroll_message_factory = std::function<input_action(float delta)>;
+
+        scrollbar_element(ui_element_id id, scrollbar_config config);
+
+        // 내용·창 높이와 스크롤 값을 배치 시점에 다시 알려 준다 (전부 논리 픽셀).
+        // 창 높이는 slot이 정해져야 알 수 있어, 막대를 **안에 담는** 컨테이너가
+        // 자기 `arrange`에서 채운다 — 밖에 두는 조립은 지금처럼 설정으로 준다.
+        //  - `arrange` 전에 부르는 것이 계약이다. tree가 게시된 뒤에는 부르지 않는다
+        //    (`tab_bar_element`가 넘침 버튼의 보임을 자기 arrange에서 정하는 것과
+        //    같은 걸음이다).
+        void set_metrics(float content_height, float viewport_height, float scroll_offset) noexcept;
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] access_info accessibility() const override;
+        // 막대와 같은 자리다 — 목표 자리를 절대 메시지(`scroll_to`)로 내보낸다.
+        [[nodiscard]] std::optional<std::vector<input_action>> access_actions(const access_request& request) const override;
+
+        // arrange 뒤에 유효한 thumb의 세로 범위다 (물리 픽셀).
+        // 배치 계산을 test가 고정하고, 겹쳐 그리는 앱이 읽는다.
+        [[nodiscard]] float thumb_top() const noexcept;
+        [[nodiscard]] float thumb_height() const noexcept;
+        // 축과 무관한 시작점과 길이다. 옛 세로 접근자도 같은 값을 돌려준다.
+        [[nodiscard]] float thumb_start() const noexcept;
+        [[nodiscard]] float thumb_length() const noexcept;
+
+        // 끌 수 있는 여유가 없으면(내용이 화면보다 짧거나 thumb가
+        // track을 다 채우면) 클릭과 끌기가 아무 일도 하지 않는다.
+        [[nodiscard]] bool draggable() const noexcept;
+
+    private:
+        // thumb를 pixels(물리)만큼 움직이는 스크롤 변화량이다 (논리 픽셀).
+        [[nodiscard]] float scroll_delta_for(float pixels) const noexcept;
+
+        scrollbar_config config_ {};
+        float scale_ { 1.0f };
+        // arrange가 정하는 track과 thumb의 세로 범위다 (물리 픽셀).
+        float track_top_ { 0.0f };
+        float track_height_ { 0.0f };
+        float thumb_top_ { 0.0f };
+        float thumb_height_ { 0.0f };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드 · 상수</th><th>기본값</th><th>뜻 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>scroll</code></td><td>없음</td><td>없으면 끌기·키·Tab 자리가 없는 <strong>표시 전용</strong> 막대다</td></tr>
+                  <tr><td><code>scroll_to</code></td><td>없음</td><td>보조 기술의 값 정하기. 없으면 읽기 전용</td></tr>
+                  <tr><td><code>content_height</code> · <code>viewport_height</code> · <code>scroll_offset</code></td><td>0</td><td>가로 막대(<code>scrollbar_axis::horizontal</code>)면 폭으로 읽는다</td></tr>
+                  <tr><td><code>scrollbar_visual_width</code></td><td>8</td><td>보이는 막대 폭. 칸 안에서 오른쪽(가로면 아래)에 붙여 그린다</td></tr>
+                  <tr><td><code>scrollbar_minimum_thumb</code></td><td>24</td><td>thumb 최소 길이 (논리 픽셀)</td></tr>
+                  <tr><td><code>scrollbar_key_line_step</code></td><td>48</td><td>화살표 키 한 번 (휠 한 눈금과 같다)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li>thumb 길이 = track × 창 ÷ 내용 (최소 24 × 배율, track보다 길지 않다). 위치 = track 시작 + (track − thumb) × (offset ÷ 흘릴 양). 흘릴 것이 없으면 thumb가 track 전체다 — <code>always</code> 막대가 짧은 내용에서 꽉 찬 thumb로 그려진다.</li>
+                <li><code>draggable()</code>은 내용이 창보다 길고 thumb가 track을 다 채우지 않을 때만 참이다. 거짓이면 누름·끌기·키·값 정하기가 아무 일도 하지 않는다.</li>
+                <li><code>set_metrics</code>는 막대를 <strong>안에 담는</strong> 컨테이너가 자기 <code>arrange</code>에서, 막대를 배치하기 전에 부른다. 게시 뒤에는 부르지 않는다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="공용 함수 · 원천 · 라우팅">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/layout_metrics.h:94-145" data-path="include/luil/ui/layout_metrics.h" data-start="94"><script type="text/plain">
+    // 흘리는 창의 위·아래 가장자리 표시다.
+    //
+    // 흘린 내용이 위로 지나갔으면 위에, 아래에 더 있으면 아래에 그림자를 드리워
+    // 잘린 줄이 경계 밖으로 이어진다는 것을 말한다. 구분선은 머리글이나 단추와
+    // 맞닿는 쪽에 긋는다 — 그것이 없으면 흘러가는 행이 그 위의 머리글과 섞인다.
+    //  - 여기 있는 이유는 두 컨테이너(`scroll_area_element`·`list_element`)가 같은
+    //    설정을 받고 같은 함수(`draw_scroll_edges`)로 그려야 해서다. 판정이 두 벌이면
+    //    한쪽만 고친 변경이 남는다.
+    //  - 기본값은 전부 거짓이다. 지금까지의 창이 이 설정의 특수 경우다.
+    struct scroll_edges
+    {
+        // 흘린 만큼 위에, 더 흘릴 만큼 아래에 그림자를 드리운다.
+        bool shadows { false };
+        // 위·아래 가장자리에 늘 1px 구분선을 긋는다.
+        bool top_rule { false };
+        bool bottom_rule { false };
+    };
+
+    // 스크롤 값을 [0, content - viewport]로 다듬는다 (전부 논리 픽셀).
+    // 흘리는 컨테이너의 `arrange`가 같은 식으로 다듬으므로, tree를 만들기
+    // **전에** 앱 상태를 이 함수로 다듬으면 창·스크롤 막대·내용 가상화가 전부
+    // 같은 값을 본다 — 앱이 식을 다시 쓰면 둘이 어긋난다.
+    //  - 이름에 축을 넣지 않는다. 식이 축과 무관해서다 — 세로 창과 가로 띠가
+    //    같은 함수를 쓰고, 축마다 함수를 두면 같은 식이 다시 둘이 된다.
+    [[nodiscard]] constexpr float clamp_scroll(const float content_length, const float viewport_length, const float offset) noexcept
+    {
+        const float maximum { content_length > viewport_length ? content_length - viewport_length : 0.0f };
+        if (offset < 0.0f)
+            return 0.0f;
+        return offset > maximum ? maximum : offset;
+    }
+
+    // 대상을 창 안으로 들이는 데 필요한 스크롤 **변화량**이다 (전부 논리 픽셀).
+    // 이미 안이면 0이라, 부르는 쪽이 "움직일 것이 없다"를 따로 세지 않는다.
+    //  - 이름에 축을 넣지 않는다. `clamp_scroll`과 같은 이유다 — 세로 창과 가로
+    //    띠가 같은 식을 쓴다.
+    //  - 부호는 휠과 같다: 양수 = offset 증가 = 내용이 위(왼쪽)로. 뒤집으면
+    //    목록이 초점에서 **달아나고**, `clamp_scroll`이 0에 붙여 화면에는
+    //    "아무 일도 안 일어남"으로 보인다.
+    //  - **대상이 창보다 길면 앞쪽 끝을 맞춘다.** 뒤를 맞추면 첫 줄이 잘린 채
+    //    서서 어디에 초점이 있는지 보이지 않는다.
+    //  - 변화량인 것이 요점이다. 절대 offset을 답하면 앱이 `scroll_ = value`로
+    //    받게 되어, `scroll_ += delta`인 휠·막대·목록과 길이 두 갈래가 된다
+    //    (focus-reveal-design.md).
+    [[nodiscard]] constexpr float scroll_delta_to_reveal(const float target_begin, const float target_length, const float viewport_begin, const float viewport_length) noexcept
+    {
+        if (target_begin < viewport_begin || target_length > viewport_length)
+            return target_begin - viewport_begin;
+        const float target_end { target_begin + target_length };
+        const float viewport_end { viewport_begin + viewport_length };
+        return target_end > viewport_end ? target_end - viewport_end : 0.0f;
+    }
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element.h:614-655" data-path="include/luil/ui/ui_element.h" data-start="614"><script type="text/plain">
+    struct scroll_source
+    {
+        // 스크롤 위치를 이만큼 옮기자는 메시지다 (delta는 논리 픽셀).
+        // 부호는 휠과 같다: 양수 = offset 증가 = 내용이 위로(가로면 왼쪽으로) 간다.
+        std::function<input_action(float delta)> scroll {};
+        // 논리 스크롤 변화량을 배치의 물리 좌표로 옮기는 배율이다.
+        // arrange에서 실제 배율을 넣는다. 중첩 reveal이 이동 후 위치를 계산한다.
+        float scale { 1.0f };
+        // 기존 초기화가 세로를 뜻하도록 뒤에 둔다.
+        // 세로 휠은 축을 묻지 않는다 — 가로 띠 위에서 굴린 휠이 그 띠를 흘리는 것이
+        // 앱이 표로 지어 오던 동작이다. 가로 휠은 가로 창만 받는다 (`route_wheel`의 이벤트 짝).
+        scroll_axis axis { scroll_axis::vertical };
+        // 내용이 처음(맨 위·맨 왼쪽)에 있다. 앱이 위치를 들고 있으므로 앱이 싣는다.
+        //  - 바깥의 `pan_handoff_target`(시트)이 이 값을 보고, 처음에 있는 창을 처음 쪽으로 끄는 터치를 넘겨받는다.
+        //    기본은 거짓이라 넘겨받지 않는다 — 지금까지의 창이 그 경우다.
+        bool at_start { false };
+        // 내용이 끝(맨 아래·맨 오른쪽)에 있다. 관성 스크롤이 이 방향에서 멈춘다.
+        bool at_end { false };
+        // 휠을 칸 단위로 넘기는 메시지다 (`steps`는 넘길 칸 수, 양수 = 앞으로). 비어 있으면 휠은 `scroll`로 양만큼 흘린다.
+        //  - 휠 한 칸(120)마다 한 칸이다. 터치패드처럼 잘게 오는 휠은 controller가 쌓아 두었다가 한 칸이 차면 낸다 —
+        //    tree는 frame마다 새로 서므로 쌓는 자리는 element가 아니라 controller다.
+        //  - 칸을 항목 경계에 맞춘 변화량으로 바꾸는 것은 이 메시지를 지은 쪽이다 (탭 막대는 다음 탭이 온전히 드러나는
+        //    자리로 옮긴다). 그래서 `scroll`과 따로다 — 터치 끌기와 초점 되살리기는 지금처럼 양으로 흘린다.
+        std::function<input_action(int steps)> step {};
+        // 창의 시작 쪽(위·왼쪽)에서 내용이 흐르지 않는 몫이다 (논리 픽셀, 기본 0). 고정 열을 세운 표가 그 폭을 싣는다.
+        //  - 끌기 자동 스크롤만 읽는다. 시작 쪽 띠가 이만큼 안쪽, 흐르는 내용이 실제로 시작하는 자리에 선다 — 고정 열
+        //    위에 띠가 있으면 고정 칸을 지나 끌고 갈 때 엉뚱한 자리에서 흐른다. 그 위는 창 밖과 같아 더 빠르다.
+        //  - 휠·팬·초점 되살리기는 창 전체를 받으므로 보지 않는다. 끝 쪽은 `trailing_inset`이 맡는다.
+        float leading_inset { 0.0f };
+        // 창의 끝 쪽(아래·오른쪽)에서 내용이 보이지 않는 몫이다 (논리 픽셀, 기본 0). 세로 막대가 선 표가 그 폭을 싣는다.
+        //  - 표의 가로 창은 표 전체 폭이지만 세로 막대 밑으로는 열이 보이지 않는다. 띠가 창 가장자리에 서면 일부가 막대
+        //    위에 놓여 내용이 실제로 끝나는 자리보다 늦게 흐른다. 이만큼 안쪽에 서고, 그 위는 창 밖과 같아 더 빠르다.
+        //  - 읽는 자리와 다듬기는 `leading_inset`과 같다. 두 여백의 합이 창보다 넓으면 어느 쪽으로도 흐르지 않는다.
+        float trailing_inset { 0.0f };
+        // 손을 뗄 때 페이지 경계에 정착하는 컨테이너다. 있으면 일반 관성 대신 한 번 부른다.
+        // final_delta는 아직 적용하지 않은 마지막 이동, velocity는 초당 논리 픽셀이다 (scroll과 같은 부호).
+        std::function<input_action(float final_delta, float velocity)> settle {};
+        // 절대 자리(`scroll_to`)는 여기 두지 않는다. 휠도 되살리기도 변화량으로만
+        // 말하고, 절대 자리를 읽는 것은 보조 기술뿐이라 그 값은 그것을 실제로
+        // 내주는 자리(`scrollbar_config::scroll_to`)에 있다 — 아무도 읽지 않는
+        // 칸을 두면 채운 앱이 켜졌다고 믿는다.
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>이름</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>clamp_scroll</code></td><td><code>[0, max(0, 내용 − 창)]</code>로 다듬는다. 앱이 짓기 전에 같은 식을 쓴다</td></tr>
+                  <tr><td><code>scroll_delta_to_reveal</code> (함수)</td><td>앞이 창 밖이거나 대상이 창보다 길면 앞 맞춤(<code>target_begin − viewport_begin</code>), 끝이 넘치면 넘친 만큼, 아니면 0</td></tr>
+                  <tr><td><code>scroll_source::scroll</code></td><td>휠·터치·되살리기·끌기 자동 스크롤의 변화량 메시지. 절대 자리 칸은 없다 — 그것은 막대의 것이다</td></tr>
+                  <tr><td><code>scroll_source::axis</code></td><td>가로 휠과 터치는 축이 맞는 창만 받는다. 세로 휠은 축을 묻지 않는다</td></tr>
+                  <tr><td><code>scroll_source::at_start</code> · <code>at_end</code></td><td>앱이 싣는 끝 표시. 끌기 넘겨받기·관성 멈춤·끌기 자동 스크롤 멈춤이 읽는다</td></tr>
+                  <tr><td><code>leading_inset</code> · <code>trailing_inset</code></td><td>끌기 자동 스크롤의 띠를 안쪽으로 미는 몫 (표의 고정 열·세로 막대)</td></tr>
+                  <tr><td><code>scroll_route</code></td><td>표 있는 짝의 한 줄: id와 변화량 factory</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_interaction.h:88-141" data-path="include/luil/ui/ui_interaction.h" data-start="88"><script type="text/plain">
+    struct scroll_route
+    {
+        ui_element_id id {};
+        std::function<input_action(float delta)> scroll {};
+    };
+
+    // 표에서 (x, y)를 덮는 첫 일치가 임자다.
+    // policy::on_wheel의 몸통이 이 한 줄이 된다 — 어느 목록을 어떤 메시지로
+    // 스크롤할지(표)는 앱 정책으로 남고, 좌표 판정은 라이브러리가 한다.
+    // 덮는 것이 없으면 빈 목록이다.
+    [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, float x, float y, float delta, std::span<const scroll_route> routes);
+
+    // 표에서 `target`을 **품은** 첫 일치가 임자다.
+    // policy::on_focus_moved의 몸통이 이 한 줄이 된다 — 어느 창을 어떤 메시지로
+    // 흘릴지(표)는 앱 정책으로 남고, 얼마나 흘릴지는 그 창이 답한다
+    // (`ui_element::scroll_delta_to_reveal`).
+    //  - **이미 보이면 빈 목록이다.** 이것이 방벽이다 — 없으면 화살표를 누를
+    //    때마다 0짜리 스크롤 메시지가 logic을 깨워 tree를 다시 짓는다.
+    [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target, std::span<const scroll_route> routes);
+
+    // 표 없는 짝이다 — 임자를 `ui_element::scroll()`에서 찾는다.
+    //
+    // 앱이 표를 짓지 않는다. 흘리는 컨테이너가 자기 메시지를 들고 있으므로
+    // (`scroll_source`), policy의 몸통이 `return route_wheel(tree, event.x, event.y, delta);`
+    // 한 줄이 된다 — 화면에 창이 몇이든, 어느 페이지가 떠 있든 같은 줄이다.
+    //  - **표를 지우지 않는다.** 위의 표 있는 짝은 그대로 남는다. `scroll_source`를
+    //    세우지 않은 컨테이너(앱이 만든 것, 넘침 버튼이 있는 탭 막대처럼 휠과
+    //    되살리기의 임자가 갈리는 것)는 여전히 표로 이름 댄다.
+    //  - **휠은 하나가 가진다.** 그리기 순서를 거슬러 가장 안쪽·가장 위의 흘리는
+    //    컨테이너가 임자이고, 거기서 끝난다. 흘리지 않지만 포인터를 막는 것
+    //    (modal scrim 같은 `hit_opaque`)이 먼저 걸리면 아무 일도 하지 않는다 —
+    //    포인터를 막는 것이 modal의 몫이라면 휠도 포인터다.
+    //  - **되살리기는 겹겹이 이어진다.** 안쪽 창이 초점을 들인 다음에는 그 안쪽
+    //    창 자체가 바깥 창의 대상이 된다. 한 겹만 보고 끝내면 행은 안쪽 목록
+    //    안에서 보이는데 그 목록이 바깥 판에서 밀려 나가 있는 경우를 놓친다.
+    //    **표 있는 짝과 답의 모양이 여기서 갈린다** — 그쪽은 표에서 처음 맞은
+    //    한 줄로 끝난다.
+    //  - 전부 이미 보이면 빈 목록이다 (delta 0의 방벽과 같은 자리).
+    [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, float x, float y, float delta);
+    // 이벤트를 받는 짝이다. 좌표만 받는 위의 짝에 두 가지를 더한다.
+    //  - 확대 보기(`zoom_source`)의 확대·이동.
+    //  - **휠의 축.** 가로 휠(`mouse_wheel_event::horizontal`)은 가로 창(`scroll_axis::horizontal`)과 확대 보기만
+    //    받는다. 축이 다른 세로 창은 지나쳐 그것을 감싼 가로 창으로 가고, 없으면 아무 일도 없다. 가로 휠의 양수
+    //    (오른쪽)는 offset을 늘린다. 세로 휠은 위의 짝처럼 축을 묻지 않는다.
+    //  policy의 몸통은 이 짝을 부르는 것이 낫다 — 위의 짝은 축을 모르므로 가로 휠을 세로 창에 보낸다.
+    [[nodiscard]] std::vector<input_action> route_wheel(const ui_tree& tree, const mouse_wheel_event& event, float scroll_delta);
+    [[nodiscard]] const ui_element* zoom_owner_at(const ui_tree& tree, float x, float y);
+    // 이 자리의 세로 휠을 tree 안의 창이 받아 쓰는가다. 표면이 내용을 통째로 흘리는 popup이 자기보다 안쪽을 먼저 묻는다.
+    //  - 확대 보기는 언제나 받는다. 흘리는 창은 `rolling_up`(위로 굴림) 쪽 끝(`scroll_source::at_start`·`at_end`)에 닿지 않았을 때 받는다.
+    //  - 휠의 창 찾기는 `route_wheel`과 같다. 삼키기만 하는 방벽은 받아 쓰지 않는다.
+    [[nodiscard]] bool wheel_taken_inside(const ui_tree& tree, float x, float y, bool rolling_up);
+    // `revealed_bounds`에는 안쪽부터 스크롤한 뒤 대상이 보일 구간을 쓴다 (tree 좌표).
+    // 표면 자체도 흐르면 그 구간을 이어서 들인다 — 큰 내부 컨테이너 전체를 들이면 대상이 다시 가려진다.
+    [[nodiscard]] std::vector<input_action> route_reveal(const ui_tree& tree, const ui_element_id& target, rect_f* revealed_bounds = nullptr);
+</script></div>
+          </section>
+          <section data-tab="zoom_view_config">
+            <div class="walk side">
+              <div class="code tall" data-lang="cpp" data-src="include/luil/ui/zoom_view_element.h:6-78" data-path="include/luil/ui/zoom_view_element.h" data-start="6"><script type="text/plain">
+    struct zoom_view_state
+    {
+        float zoom { 1.0f };
+        zoom_point origin {};
+        // 도다. 시계 방향이 양수이고 (-180, 180]로 접는다. 앞 두 필드만 채운 기존 초기화는 0도다.
+        float rotation { 0.0f };
+    };
+
+    // 내용 경계(`content_bounds`)로 위치를 다듬는 방식이다.
+    enum class zoom_bounds
+    {
+        // 내용과 창의 겹침을 축마다 최소 1 논리 픽셀 남긴다. 큰 도면의 가장자리를 창 가운데로 옮길 수 있다.
+        overlap,
+        // 창보다 작은 축은 가운데에 고정하고, 큰 축은 빈 곳이 보이지 않게 한다. 쪽·사진 한 장 보기의 방식이다 —
+        // 맞춤 상태에서는 옮길 여지가 없어 쓸기가 전부 경계에 막힌다.
+        contain,
+    };
+
+    // 맞춤의 축이다 (image-frames-scaling-design.md의 축 맞춤).
+    enum class zoom_fit
+    {
+        // 내용 전체가 여백 뺀 창에 든다. 지금까지의 맞춤이다.
+        whole,
+        // 내용 폭을 창 폭에 맞춘다. 세로는 지금 창 가운데에 있는 내용 자리를 지킨다 (읽던 자리가 그대로다).
+        width,
+        // 내용 높이를 창 높이에 맞춘다. 가로는 지금 창 가운데에 있는 내용 자리를 지킨다.
+        height,
+    };
+
+    // 두 번 탭 확대다 (zoom-view-design.md의 두 번 탭). 기본은 끈다.
+    //  - 내용에 두 번 탭 동작이 없는 보기(그림 한 장 등)에서 켠다. 첫 탭은 늦추지 않고 그대로 나가므로, 내용의
+    //    탭 동작이 있으면 두 번 탭의 첫 탭이 그것도 실행한다.
+    //  - 기준 배율(내용 경계가 있으면 맞춤, 없으면 100%)이면 탭한 점을 기준으로 `factor`배로 키우고, 아니면 기준으로
+    //    돌아간다. 메시지는 `zoom_by`·`pan_by`다.
+    struct zoom_double_tap
+    {
+        bool enabled { false };
+        float factor { 2.0f };
+        // 맞춤의 여백과 상한이다 (`zoom_controls_config`와 같은 뜻).
+        float fit_margin { 16.0f };
+        float maximum_fit_zoom { 1.0f };
+    };
+
+    // 원점·기준점·이동량은 창 가운데 기준 논리 픽셀이다. 내용 경계만 내용 좌표다.
+    //  - 내용 좌표 `p`의 위치는 `origin + zoom × R(rotation) p`다. `R`은 화면(아래가 +y)에서 양수가 시계 방향인 회전이고, 중심은
+    //    내용 좌표의 원점이다 (rotate-gesture-design.md).
+    struct zoom_view_config
+    {
+        std::u8string owner {};
+        float zoom { 1.0f };
+        zoom_point origin {};
+        float minimum_zoom { 0.1f };
+        float maximum_zoom { 10.0f };
+        std::optional<rect_f> content_bounds {};
+        std::function<input_action(float factor, zoom_point anchor)> zoom_by {};
+        std::function<input_action(zoom_point delta)> pan_by {};
+        std::function<input_action(float value)> zoom_to {};
+        zoom_wheel_mode wheel { zoom_wheel_mode::zoom };
+        zoom_bounds bounds { zoom_bounds::overlap };
+        // 터치·펜 접촉이 끝날 때 경계에 막힌 쓸기를 알리는 메시지다 (`zoom_edge_swipe`). 비어 있으면 끈다.
+        //  - 핀치가 섞인 접촉과 마우스 끌기는 알리지 않는다.
+        std::function<input_action(const zoom_edge_swipe&)> edge_swipe {};
+        zoom_edge_swipe_config edge_swipe_config {};
+        // 터치의 두 번 탭으로 기준 배율과 확대를 오간다. 기본은 끈다.
+        zoom_double_tap double_tap {};
+        // 두 손가락과 키(Shift+←/→/Home)가 내용을 돌리자는 메시지다 (`zoom_source::rotate_by`와 같다). 비어 있으면 회전이 없고
+        // 핀치와 Shift+화살표(이동)는 지금과 같다. 보기는 내용을 돌려 주지 않는다. 돌려 그리는 것은 내용 요소의 몫이다.
+        std::function<input_action(float degrees, zoom_point anchor)> rotate_by {};
+        // 앱이 든 지금 각도다 (도). 보기는 배치·그리기에 쓰지 않고 `state()`와 키의 0도 복귀가 읽는다.
+        float rotation { 0.0f };
+        // 키 한 번의 각도다 (도). 유한한 양수이고 180 이하여야 한다.
+        float rotation_step { 15.0f };
+    };
+</script></div>
+              <ol class="walk-steps-src">
+                <li data-lines="6-12" data-title="상태">앱이 드는 상태의 모양이자 도우미의 반환값. 각도는 시계 방향 +, (−180, 180]으로 접힌다.</li>
+                <li data-lines="14-22" data-title="경계 방식"><code>overlap</code>은 겹침을 1 논리 픽셀만 남긴다. <code>contain</code>은 작은 축을 가운데에 고정하고 큰 축의 빈 곳을 막는다.</li>
+                <li data-lines="24-33" data-title="맞춤의 축">전체, 폭, 높이. 축 맞춤은 맞추지 않는 축의 창 가운데 내용 자리를 지킨다.</li>
+                <li data-lines="35-47" data-title="두 번 탭">기본은 끈다. 기준 배율과 <code>factor</code>배를 오간다. 맞춤의 여백·상한은 단추와 같은 뜻이다.</li>
+                <li data-lines="49-64" data-title="배율과 메시지">좌표 규칙, 배율 범위, 내용 경계, 세 메시지, 휠 방식, 경계 방식.</li>
+                <li data-lines="65-78" data-title="경계 쓸기와 회전">막힌 쓸기 알림과 판정 기준, 두 번 탭, 회전 메시지, 지금 각도, 키 한 번의 각도.</li>
+              </ol>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>뜻 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>보기 키. 단추(<code>zoom_controls_element</code>)도 같은 owner로 kind만 다르다</td></tr>
+                  <tr><td><code>zoom</code> · <code>origin</code></td><td>1 · {0, 0}</td><td>앱 상태. 원점은 창 가운데 기준 논리 픽셀</td></tr>
+                  <tr><td><code>minimum_zoom</code> · <code>maximum_zoom</code></td><td>0.1 · 10</td><td>유한한 양수, 최대 ≥ 최소</td></tr>
+                  <tr><td><code>content_bounds</code></td><td>없음</td><td>있으면 위치를 <code>bounds</code> 방식으로 다듬고 맞춤·맞춤 단추·두 번 탭의 기준이 선다. 폭·높이 &gt; 0</td></tr>
+                  <tr><td><code>zoom_by</code> · <code>pan_by</code></td><td>없음</td><td>없으면 그 몸짓이 메시지를 내지 않는다. 두 번 탭은 둘 다 있어야 선다</td></tr>
+                  <tr><td><code>zoom_to</code></td><td>없음</td><td>보조 기술의 절대 배율. 없으면 값이 읽기 전용</td></tr>
+                  <tr><td><code>wheel</code></td><td><code>zoom_wheel_mode::zoom</code></td><td><code>pan</code>이면 세로 휠이 이동이다. Ctrl+휠은 어느 쪽이든 확대다</td></tr>
+                  <tr><td><code>bounds</code></td><td><code>zoom_bounds::overlap</code></td><td>쪽·사진 한 장 보기는 <code>contain</code></td></tr>
+                  <tr><td><code>edge_swipe</code></td><td>없음</td><td>비면 막힌 쓸기를 재지도 않는다</td></tr>
+                  <tr><td><code>rotate_by</code> · <code>rotation</code></td><td>없음 · 0</td><td>비면 회전이 없고 Shift+화살표는 이동이다</td></tr>
+                  <tr><td><code>rotation_step</code></td><td>15</td><td>(0, 180] 안이어야 한다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>잘못된 설정이면 <strong>생성자가 <code>std::invalid_argument</code>를 던진다</strong>: 유한하지 않은 수, 0 이하의 <code>zoom</code>·<code>minimum_zoom</code>, 최소보다 작은 최대, 유한하지 않은 <code>rotation</code>, (0, 180] 밖의 <code>rotation_step</code>, 켠 두 번 탭의 잘못된 <code>factor</code>·<code>fit_margin</code>·<code>maximum_fit_zoom</code>, 비었거나 유한하지 않은 <code>content_bounds</code>. 설계 문서는 이 가운데 셋만 적었다.</p></div>
+          </section>
+          <section data-tab="확대 도우미 · 단추">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/zoom_view_element.h:80-103,126-146" data-path="include/luil/ui/zoom_view_element.h" data-start="80"><script type="text/plain">
+    [[nodiscard]] zoom_view_state zoom_about(const zoom_view_config& config, zoom_point viewport, float factor, zoom_point anchor) noexcept;
+    [[nodiscard]] zoom_view_state pan_by(const zoom_view_config& config, zoom_point viewport, zoom_point delta) noexcept;
+    // 맞춘 상태다. 맞춘 축의 배율은 `maximum_fit_zoom`과 `minimum_zoom`·`maximum_zoom`으로 자르고, 위치는 `zoom_bounds`로 다듬는다.
+    //  - 맞출 축의 창이 여백 두 배 이하이거나 내용 경계가 없으면 지금 상태 그대로다.
+    [[nodiscard]] zoom_view_state zoom_to_fit(const zoom_view_config& config, zoom_point viewport, float margin = 16.0f, float maximum_fit_zoom = 1.0f, zoom_fit axis = zoom_fit::whole) noexcept;
+    // 지금 상태에서 `zoom_to_fit`의 상태로 가는 메시지다 (`zoom_by` 다음 `pan_by`). 맞춤 단추와 두 번 탭이 쓰는 그 계산이다.
+    //  - 내용 경계나 두 메시지가 없으면 빈 목록이다. 이미 그 상태면 빈 목록이다.
+    [[nodiscard]] std::vector<input_action> zoom_fit_actions(const zoom_view_config& config, zoom_point viewport, float margin = 16.0f, float maximum_fit_zoom = 1.0f, zoom_fit axis = zoom_fit::whole);
+    // 기준점 아래의 내용을 두고 `degrees`만큼 돌린 상태다. 원점은 `origin' = anchor - R(degrees)(anchor - origin)`로 움직이고
+    // `rotation`은 접은 합이다. 배율과 지금 각도에 상관없이 기준점 아래의 내용은 제자리다.
+    //  - 0도(360의 배수)와 유한하지 않은 각도·기준점은 지금 상태다.
+    //  - 경계를 다듬지 않는다. 각도가 바뀌면 `rotated_bounds`도 바뀌므로, 다듬기는 새 각도의 경계를 담은 config로
+    //    `zoom_about(config, viewport, 1.0f, {})`를 불러 한다.
+    [[nodiscard]] zoom_view_state rotate_about(const zoom_view_config& config, zoom_point viewport, float degrees, zoom_point anchor) noexcept;
+    // 원점 둘레로 `degrees`만큼 돌린 점이다. 누른 점을 내용 쪽으로 되돌릴 때는 `-degrees`를 준다. 유한하지 않은 각도는 점 그대로다.
+    [[nodiscard]] zoom_point rotate_point(zoom_point point, float degrees) noexcept;
+    // 네 꼭짓점을 원점 둘레로 돌린 경계 상자다. 0도면 그대로다. 앱이 이것을 `content_bounds`에 준다.
+    [[nodiscard]] rect_f rotated_bounds(const rect_f& bounds, float degrees) noexcept;
+    // `pan_by`가 경계 다듬기로 버리는 몫이다 (`delta` − 실제로 옮겨진 몫). 축마다 따로다.
+    [[nodiscard]] zoom_point pan_blocked(const zoom_view_config& config, zoom_point viewport, zoom_point delta) noexcept;
+    // 접촉 하나의 옮겨진 몫·막힌 몫·뗄 때의 속도로 경계 쓸기를 판정한다 (`zoom_edge_swipe_config`의 세 기준).
+    [[nodiscard]] zoom_edge_swipe judge_edge_swipe(const zoom_edge_swipe_config& config, zoom_point moved, zoom_point blocked, zoom_point velocity) noexcept;
+    // 두 번 탭의 메시지다 (`zoom_double_tap`). 기준 배율이면 `anchor`를 기준으로 키우고, 아니면 기준으로 돌아간다.
+    [[nodiscard]] std::vector<input_action> double_tap_zoom(const zoom_view_config& config, zoom_point viewport, zoom_point anchor);
+⋯@126
+    struct zoom_controls_config
+    {
+        zoom_view_config view {};
+        // 보기의 논리 크기다. 맞춤 식과 본문이 같은 창을 보게 담는 쪽이 준다.
+        zoom_point viewport {};
+        float fit_margin { 16.0f };
+        float maximum_fit_zoom { 1.0f };
+        // 단추의 글이자 접근 이름이다. 칸마다 비면 기본 문구(축소·확대·맞춤)다.
+        std::u8string decrease_label {};
+        std::u8string increase_label {};
+        std::u8string fit_label {};
+    };
+
+    // 축소·배율·확대·맞춤 단추다. 맞춤은 내용 경계를 받은 때만 선다.
+    class zoom_controls_element final : public ui_element
+    {
+    public:
+        explicit zoom_controls_element(zoom_controls_config config);
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>함수</th><th>하는 일</th></tr></thead>
+                <tbody>
+                  <tr><td><code>zoom_about</code></td><td>배율을 범위로 다듬고 실제 비율로 원점을 옮긴다. <code>factor = 1, anchor = {}</code>이면 "지금 상태 다듬기"다</td></tr>
+                  <tr><td><code>pan_by</code></td><td>원점 + 이동량을 경계로 다듬는다</td></tr>
+                  <tr><td><code>zoom_to_fit</code></td><td>여백 뺀 창에 맞춘 상태. 다섯째 인자가 축(<code>zoom_fit</code>)이다 — 설계 문서의 서명에는 없다. 경계가 없거나 맞출 축의 창이 여백 두 배 이하이면 지금 상태</td></tr>
+                  <tr><td><code>zoom_fit_actions</code></td><td>지금에서 맞춤으로 가는 메시지 (<code>zoom_by</code> 다음 <code>pan_by</code>). 경계·두 factory가 없거나 이미 그 상태면 빈 목록</td></tr>
+                  <tr><td><code>rotate_about</code></td><td>기준점 아래의 내용을 두고 돌린다. 경계를 다듬지 않는다</td></tr>
+                  <tr><td><code>rotate_point</code> · <code>rotated_bounds</code></td><td>원점 둘레 회전(90°의 배수는 정확한 값) · 네 꼭짓점을 돌린 경계 상자</td></tr>
+                  <tr><td><code>pan_blocked</code> · <code>judge_edge_swipe</code></td><td><code>pan_by</code>가 다듬어 버리는 몫 · 경계 쓸기 판정</td></tr>
+                  <tr><td><code>double_tap_zoom</code></td><td>기준이면 키우고, 아니면 기준으로 돌아가는 메시지</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>모든 도우미는 잘못된 설정이나 숫자가 아닌 값에서 지금 상태로 물러선다 — 숫자가 아닌 값을 만들지 않는다. <code>zoom_controls_config::viewport</code>는 보기의 논리 크기이고, <code>fit_margin</code>·<code>maximum_fit_zoom</code>(16·1)이 맞춤 단추에 쓰인다.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">요소는 콜백을 부르지 않는다. 앱이 준 factory가 메시지를 만들고, 메시지는 logic thread의 <code>handle</code>로 간다.</p>
+        </header>
+        <div class="prose small"><p><span class="thread-chip in">input</span>은 controller가 포인터·키·휠·터치를 처리하며 factory를 부르는 자리, <span class="thread-chip ui">UI</span>는 보조 기술의 명령을 계획하는 자리(Win32에서는 창 thread의 UIA provider)다. factory는 어느 쪽에서 불려도 메시지만 지어야 한다.</p></div>
+        <h3>흘리는 영역 · 원시 창 · 막대</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>메시지</th><th>조건 · 앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>세로 휠<br><span class="thread-chip in">input</span></td><td><code>scroll(±48 × 눈금)</code></td><td>영역이 넘칠 때(원천이 섰을 때). 정책이 있으면 <code>on_wheel</code>이 <code>route_wheel</code>을 돌려줄 때. <code>offset += Δ</code></td></tr>
+              <tr><td>터치 세로 쓸기 · 관성<br><span class="thread-chip in">input</span></td><td><code>scroll(Δ)</code></td><td>축이 같은 창. 같다</td></tr>
+              <tr><td>막대 끌기<br><span class="thread-chip in">input</span></td><td><code>scroll(Δ)</code>가 이어서 (픽셀을 논리 비율로 바꾼 값)</td><td><code>draggable()</code>일 때. <strong>범위를 보지 않는다</strong> — 앱이 다듬는다</td></tr>
+              <tr><td>막대 트랙 누름 (thumb 밖)<br><span class="thread-chip in">input</span></td><td><code>scroll(Δ)</code> 한 번 — thumb 가운데를 누른 자리로. 이어서 끌기</td><td>같다. thumb 안을 누르면 잡기만 한다</td></tr>
+              <tr><td>막대 키<br><span class="thread-chip in">input</span></td><td><code>scroll(±48)</code> · <code>scroll(±창)</code> · <code>scroll(−offset)</code> · <code>scroll(최대 − offset)</code></td><td>막대에 초점이 있고 흘릴 것이 있을 때 (<a class="xref" href="#keyboard">키</a>)</td></tr>
+              <tr><td>키보드 초점 이동 (Tab·묶음 화살표·글자 탐색·보조 기술 초점)<br><span class="thread-chip in">input</span></td><td>초점을 품은 흘리는 조상마다 <code>scroll(Δ)</code> 하나씩</td><td>정책의 <code>on_focus_moved</code>가 <code>route_reveal</code>을 돌려줄 때만. 포인터로 잡은 초점은 되살리지 않는다</td></tr>
+              <tr><td>끌기 중 가장자리 띠 (손잡이 끌기·끌어 놓기)<br><span class="thread-chip in">input</span></td><td><code>scroll(Δ = 속도 × 경과)</code>가 시간마다</td><td>끝에 닿지 않았을 때 (<code>at_start</code>·<code>at_end</code>)</td></tr>
+              <tr><td>보조 기술: 막대 값 정하기 (UIA <code>SetValue</code>)<br><span class="thread-chip ui">UI</span></td><td><code>scroll_to(offset)</code> — 범위로 다듬고, 같은 값이면 내지 않는다</td><td><code>scroll_to</code>가 있고 흘릴 것이 있을 때. <code>offset = value</code></td></tr>
+              <tr><td>보조 기술: 백분율 정하기 (UIA <code>SetScrollPercent</code>, iOS VoiceOver 세 손가락 스크롤)<br><span class="thread-chip ui">UI</span></td><td><code>scroll_to_percent(0~100)</code></td><td><code>scroll_to_percent</code>가 있을 때. 100이면 끝에 붙는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p><code>scroll_view_element</code> 자체는 메시지를 내지 않는다. 앱이 단 <code>scroll_source</code>나 표의 <code>scroll_route</code>가 메시지를 만든다.</p></div>
+        <h3>확대 보기</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>메시지</th><th>비고</th></tr></thead>
+            <tbody>
+              <tr><td>세로 휠 (<code>wheel = zoom</code>)<br><span class="thread-chip in">input</span></td><td><code>zoom_by(1.2^눈금, 포인터 기준점)</code></td><td>기준점 = (포인터 − 보기 가운데) ÷ 배율. 눈금은 ±64로 자른다</td></tr>
+              <tr><td>Ctrl+휠 (어느 방식이든)<br><span class="thread-chip in">input</span></td><td>위와 같은 확대·축소</td><td>macOS는 Command나 Control을 <code>control</code>로 싣는다</td></tr>
+              <tr><td>Shift+세로 휠<br><span class="thread-chip in">input</span></td><td><code>zoom</code> 방식: 확대 (Shift를 보지 않는다) · <code>pan</code> 방식: <code>pan_by({ 가로 })</code></td><td>Shift가 가로 이동인 것은 <code>pan</code> 방식에서만이다</td></tr>
+              <tr><td>세로 휠 (<code>wheel = pan</code>)<br><span class="thread-chip in">input</span></td><td><code>pan_by({ 0, −Δ })</code></td><td>위로 굴리면 내용이 아래로 간다</td></tr>
+              <tr><td>가로 휠 (Ctrl 없이)<br><span class="thread-chip in">input</span></td><td><code>pan_by({ Δ, 0 })</code> — <strong>두 방식 모두</strong></td><td>오른쪽으로 기울이면 내용이 왼쪽으로 간다. <code>zoom</code> 방식에서도 가로 휠은 이동이다 (test는 <code>pan</code> 방식만 잠갔고, 코드의 조건에서 확인한 동작)</td></tr>
+              <tr><td>보기 안 흘리는 창 위의 휠<br><span class="thread-chip in">input</span></td><td>안쪽 창의 <code>scroll(Δ)</code></td><td>가장 안쪽 하나가 받는다. 정책이 있어도 이 길은 공통이다</td></tr>
+              <tr><td>마우스·펜으로 빈 곳 끌기<br><span class="thread-chip in">input</span></td><td><code>pan_by(Δ)</code>가 곧바로</td><td>단추 위 끌기는 이동이 아니다</td></tr>
+              <tr><td>터치 이동<br><span class="thread-chip in">input</span></td><td><code>pan_by(Δ)</code> — 시간 창·거리 문턱 없이</td><td>클릭 대상 위면 허용치를 넘는 순간 클릭을 거둔다. 손잡이·끌기 원천은 그쪽이 먼저다</td></tr>
+              <tr><td>같은 보기의 두 접촉 (핀치)<br><span class="thread-chip in">input</span></td><td>이동마다 <code>pan_by</code> → <code>zoom_by(거리 비, 가운데)</code> → (있으면) <code>rotate_by</code></td><td>간격이 24 논리 픽셀 미만이면 비율 없이 이동만. 회전 문턱 6°</td></tr>
+              <tr><td>두 번 탭 (터치)<br><span class="thread-chip in">input</span></td><td>기준이면 <code>zoom_by</code>, 아니면 맞춤(<code>zoom_by</code> → <code>pan_by</code>) 또는 <code>zoom_by(1 / zoom)</code></td><td><code>double_tap.enabled</code>와 두 factory가 있을 때</td></tr>
+              <tr><td>막힌 쓸기를 빠르게 떼기 (터치·펜)<br><span class="thread-chip in">input</span></td><td><code>edge_swipe(zoom_edge_swipe { blocked, velocity, horizontal, vertical })</code> 한 번</td><td>접촉이 끝날 때. 앱이 쪽을 넘긴다</td></tr>
+              <tr><td>키<br><span class="thread-chip in">input</span></td><td><code>zoom_by</code> · <code>pan_by</code> · <code>rotate_by</code> · 맞춤</td><td>아래 <a class="xref" href="#keyboard">키</a></td></tr>
+              <tr><td>단추<br><span class="thread-chip in">input</span></td><td>축소·확대 <code>zoom_by(1 / 1.2 · 1.2, {})</code>, 맞춤 <code>zoom_by</code> → <code>pan_by</code></td><td>보조 기술의 Invoke로 누르면 계획은 UI thread에서 한다</td></tr>
+              <tr><td>보조 기술: 값 정하기<br><span class="thread-chip ui">UI</span></td><td><code>zoom_to(범위로 다듬은 값)</code></td><td>절대 배율. 앱은 <code>zoom_about(…, value / zoom, {})</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>앱 쪽 규칙은 하나다: <code>zoom_by</code> → <code>zoom_about</code>, <code>pan_by</code> → <code>pan_by</code>, <code>rotate_by</code> → <code>rotate_about</code>을 <strong>지금 상태</strong>에 적용한다. 메시지가 둘 오면 온 순서대로다. factory에 발행본의 원점을 잡아 절대 메시지로 바꾸면 한 frame 전에 온 연속 이동이 서로 덮어쓴다.</p></div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">흘리는 영역의 키는 막대의 것이고, 확대 보기의 키는 보기 자신의 것이다. 원시 창에는 키가 없다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="막대 키">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키 (막대에 초점)</th><th>세로 막대</th><th>가로 막대</th></tr></thead>
+                <tbody>
+                  <tr><td>↑ · ↓</td><td><code>scroll(−48)</code> · <code>scroll(+48)</code></td><td>받지 않는다</td></tr>
+                  <tr><td>← · →</td><td>받지 않는다</td><td><code>scroll(−48)</code> · <code>scroll(+48)</code></td></tr>
+                  <tr><td>PageUp · PageDown</td><td><code>scroll(∓창 높이)</code></td><td><code>scroll(∓창 폭)</code></td></tr>
+                  <tr><td>Home · End</td><td colspan="2"><code>scroll(−offset)</code> · <code>scroll(최대 − offset)</code></td></tr>
+                  <tr><td>Ctrl · Alt · Meta와 함께</td><td colspan="2">막대가 받지 않는다 (앱 단축키)</td></tr>
+                  <tr><td>흘릴 것이 없을 때</td><td colspan="2">키를 삼키고 메시지를 내지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li><strong>Tab 자리.</strong> 홀로 선 막대는 <code>scroll</code>이 있으면 스스로 자리다 (흘릴 것이 없어도). 영역 안 막대는 <code>bar_tab_stop</code>이 참이고 흘릴 것이 있을 때만 자리다. 영역·창 자신은 자리가 아니고, 내용 안의 컨트롤은 자기 자리를 그대로 가진다.</li>
+                <li><strong>원시 창에는 키가 없다.</strong> 키 처리기도 단계 키도 세우지 않는다. 내용 안 컨트롤 사이를 Tab으로 옮길 때 화면이 따라오는 것은 되살리기의 몫이다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="확대 보기 키">
+            <div class="walk side">
+              <div class="code" data-lang="cpp" data-src="src/ui/zoom_view_element.cpp:372-419" data-path="src/ui/zoom_view_element.cpp" data-start="372"><script type="text/plain">
+    std::optional<std::vector<input_action>> zoom_view_element::keys(const key_pressed_event& event) const
+    {
+        if (event.shortcut_modifier_down())
+            return std::nullopt;
+        // Shift+←/→는 한 걸음씩, Shift+Home은 0도 복귀다. 회전을 켠 보기만 쓰고, 아니면 Shift+화살표는 이동으로 남는다.
+        // 이미 0도면 키만 소비하고 메시지는 없다.
+        if (config_.rotate_by && event.shift && (event.key == key_code::arrow_left || event.key == key_code::arrow_right || event.key == key_code::home))
+        {
+            const float degrees { event.key == key_code::home ? -config_.rotation : (event.key == key_code::arrow_right ? config_.rotation_step : -config_.rotation_step) };
+            if (degrees == 0.0f)
+                return std::vector<input_action> {};
+            return std::vector<input_action> { config_.rotate_by(degrees, {}) };
+        }
+        if (event.key == key_code::zoom_in || event.key == key_code::zoom_out)
+            return config_.zoom_by ? std::vector<input_action> { config_.zoom_by(event.key == key_code::zoom_in ? 1.2f : 1.0f / 1.2f, {}) } : std::vector<input_action> {};
+        const zoom_point viewport { bounds().width / scale_, bounds().height / scale_ };
+        if (event.key == key_code::key_0)
+        {
+            if (config_.content_bounds.has_value())
+                return fit_actions(config_, viewport);
+            return config_.zoom_by ? std::vector<input_action> { config_.zoom_by(1.0f / config_.zoom, {}) } : std::vector<input_action> {};
+        }
+        zoom_point delta {};
+        switch (event.key)
+        {
+        case key_code::arrow_left:
+            delta.x = 32.0f;
+            break;
+        case key_code::arrow_right:
+            delta.x = -32.0f;
+            break;
+        case key_code::arrow_up:
+            delta.y = 32.0f;
+            break;
+        case key_code::arrow_down:
+            delta.y = -32.0f;
+            break;
+        case key_code::page_up:
+            delta.y = viewport.y * 0.9f;
+            break;
+        case key_code::page_down:
+            delta.y = -viewport.y * 0.9f;
+            break;
+        default:
+            return std::nullopt;
+        }
+        return config_.pan_by ? std::vector<input_action> { config_.pan_by(delta) } : std::vector<input_action> {};
+    }
+</script></div>
+              <ol class="walk-steps-src">
+                <li data-lines="374-375" data-title="수식 키">Ctrl·Alt·Meta와 함께면 보기가 받지 않는다 (앱 단축키).</li>
+                <li data-lines="376-384" data-title="회전 키">회전을 켠 보기(<code>rotate_by</code>)에서 Shift+←/→는 한 걸음(<code>rotation_step</code>), Shift+Home은 0도 복귀다. 이미 0도면 키만 삼킨다.</li>
+                <li data-lines="385-386" data-title="+ · −">가운데 기준 1.2배 확대·축소. 글자 <code>+</code>·<code>=</code>·<code>-</code>가 이 키로 바뀌어 온다.</li>
+                <li data-lines="387-393" data-title="0">경계가 있으면 맞춤(여백 16·상한 1), 없으면 100%.</li>
+                <li data-lines="394-418" data-title="이동">화살표는 32 논리 픽셀, Page는 창 높이의 0.9배. 내용이 화살표 반대로 가서 그쪽을 보게 된다. 그 밖의 키는 보기의 것이 아니다.</li>
+              </ol>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li>보기 자신이 Tab 자리다. 키는 <strong>보기에 초점이 있을 때만</strong> 온다 — 보기 안 단추에 초점이 있으면 <code>+</code>·<code>-</code>·<code>0</code>·화살표는 보기의 것이 아니다. 텍스트 칸에 초점이 있으면 글자는 칸이 먼저다.</li>
+                <li><code>rotate_by</code>가 없으면 Shift+화살표는 Shift를 보지 않는 이동이다. Shift+↑↓도 이동이다.</li>
+                <li><code>0</code>의 맞춤은 기본 여백·상한(16·1)이다. 앱의 맞춤 단추가 다른 상한을 써도 키는 기본값이다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>요소</th><th>역할</th><th>이름 · 값 · 동작</th></tr></thead>
+                <tbody>
+                  <tr><td><code>scrollbar_element</code></td><td><code>scroll_bar</code> (가로·세로)</td><td>이름 = <code>set_access_name</code>. 영역·목록·표 안의 막대는 담는 쪽 이름을 물려받는다. 범위 <code>{ 0, max(0, 내용 − 창), 다듬은 offset }</code>. 값 정하기 → <code>scroll_to</code> (흘릴 것이 있고 factory가 있을 때만)</td></tr>
+                  <tr><td><code>scroll_area_element</code> (기본)</td><td>구조 (접힌다)</td><td>막대가 흘림을 맡는다</td></tr>
+                  <tr><td><code>scroll_area_element</code> + <code>scroll_to_percent</code></td><td><code>pane</code> + 흘림 정보</td><td>세로 %·창 크기 % (넘칠 때만, 아니면 −1). 백분율 정하기 → <code>scroll_to_percent</code></td></tr>
+                  <tr><td><code>scroll_view_element</code></td><td>구조</td><td>—</td></tr>
+                  <tr><td><code>zoom_view_element</code></td><td><code>pane</code></td><td>이름 = <code>set_access_name</code>. 범위 <code>{ minimum_zoom, maximum_zoom, zoom }</code>. 값 정하기 → <code>zoom_to</code> (없으면 읽기 전용). 이동·회전은 내걸지 않는다</td></tr>
+                  <tr><td><code>zoom_controls_element</code> 단추</td><td><code>button</code></td><td>이름 = 단추 글 (기본 축소·확대·맞춤). Invoke = 클릭</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li><strong>Windows UIA</strong>: 범위가 있으면 RangeValue, 흘림 정보가 있으면 Scroll 패턴을 내건다. <code>scroll_bar</code> → ScrollBar, <code>pane</code> → Pane.</li>
+                <li><strong>macOS</strong>: <code>scroll_bar</code> → AXScrollBar, <code>pane</code>은 흘림 정보가 있으면 AXScrollArea, 아니면 AXGroup. 올리기·내리기는 범위의 1/20 걸음을 값 정하기로 보낸다. <strong>iOS</strong> VoiceOver도 조절(위·아래 쓸기)이 1/20 걸음이고, 세 손가락 스크롤이 백분율 정하기다.</li>
+                <li>보조 기술의 명령은 UI thread에서 계획된다. 그때 불리는 <code>scroll_to</code>·<code>scroll_to_percent</code>·<code>zoom_to</code>도 메시지만 지어야 한다.</li>
+                <li><strong>Android에는 접근성 다리가 없다.</strong> 막대·영역·보기가 보조 기술에 보이지 않는다 (<a class="xref" href="accessibility.html#platforms">접근성: 플랫폼</a>).</li>
+                <li>확대 보기 안의 초점은 자동으로 들여지지 않는다. 보기가 흘리는 원천도 들이기 답도 두지 않아 <code>route_reveal</code>의 대상이 아니다 (코드에서 확인한 동작).</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">네 요소의 구현에는 플랫폼 분기가 없다. 차이는 각 플랫폼이 만드는 입력 사건과 보조 기술 번역에서 난다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>항목</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td>휠</td><td>세로·가로 휠 메시지. Ctrl·Shift를 싣는다</td><td>스크롤 사건 (한 눈금 = 1). Ctrl·Shift를 싣는다</td><td>정밀 스크롤(트랙패드)은 40점이 한 눈금, 휠은 줄 단위. <strong>Command나 Control이 <code>control</code></strong>. 시스템의 스크롤 방향 그대로</td><td>트랙패드 두 손가락 팬이 휠이 된다. <strong>수식 키를 싣지 않는다</strong></td></tr>
+              <tr><td>확대 보기의 Ctrl+휠</td><td>Ctrl+휠</td><td>Ctrl+휠 (마우스)</td><td>Command+스크롤 또는 Control+스크롤</td><td>없다 (수식 키가 오지 않는다 — 코드에서 확인한 동작)</td></tr>
+              <tr><td>트랙패드 핀치</td><td>정밀 터치패드의 핀치는 Ctrl+휠로 와서 같은 길을 탄다 (설계 문서의 기록, 이 문서에서 돌려 보지 않았다)</td><td>—</td><td><strong>확대 보기에 오지 않는다.</strong> 플랫폼 계층에 트랙패드 확대 사건을 받는 코드가 없다 (웹뷰의 확대 설정뿐 — 코드에서 확인한 동작)</td><td>트랙패드 핀치를 받는 코드도 웹뷰의 것뿐이다 (코드에서 확인한 동작)</td></tr>
+              <tr><td>터치 스크롤·핀치·두 번 탭</td><td>터치·펜 포인터</td><td>터치</td><td>터치가 없다</td><td>터치·Pencil</td></tr>
+              <tr><td>터치 슬롭·길게 누르기 시간</td><td>기본값 (12 논리 픽셀, 600ms)</td><td><strong>시스템 값</strong>을 쓴다</td><td>—</td><td>기본값</td></tr>
+              <tr><td>두 번 탭 시간</td><td><code>GetDoubleClickTime()</code></td><td>시스템 두 번 탭 시간</td><td>시스템 더블 클릭 간격</td><td>350ms</td></tr>
+              <tr><td>펜</td><td>빈 곳 끌기 = 이동, 경계 쓸기도 잰다. 두 번 접촉은 더블 클릭이다 (확대가 아니다)</td><td>—</td><td>—</td><td>같다 (Pencil)</td></tr>
+              <tr><td>보조 기술</td><td>UIA</td><td><strong>없다</strong></td><td>AX</td><td>VoiceOver</td></tr>
+              <tr><td>데모</td><td>도면 확대 보기, 창·네트워크 페이지의 흘리는 영역</td><td>모바일 데모의 쪽 보기 (다섯 장, <code>contain</code>·경계 쓸기·두 번 탭)</td><td>—</td><td>모바일 데모와 같다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>두 번 탭의 첫 탭을 늦추지 않는 것은 의도다. 늦추면 모든 한 번 탭이 Android의 두 번 탭 시간이나 Windows의 더블 클릭 시간만큼 늦어진다. 터치 몸짓의 공통 규칙(쓸기 시작 400ms·12 논리 픽셀, 관성)은 <a class="xref" href="input.html#s8">입력과 초점: 터치</a>에 있다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리다. 설계 문서·주석과 코드가 다른 곳은 코드를 따랐다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>정책을 둔 앱은 휠과 초점 되살리기를 직접 잇는다.</strong> <code>on_wheel</code>·<code>on_focus_moved</code>의 기본 구현은 빈 목록이다. 재정의하지 않으면 영역·목록·표가 휠에도 Tab에도 꿈쩍하지 않는다 (확대 보기 <strong>안</strong>의 휠만 예외). 몸통은 <code>return luil::route_wheel(tree, event, scroll_delta);</code>와 <code>return luil::route_reveal(tree, focused);</code>다.</li>
+          <li><strong>정책이 없으면 휠은 되지만 초점 되살리기는 없다.</strong> controller가 휠은 직접 라우팅하지만 되살리기는 정책이 있어야만 부른다. 헤더 주석의 "정책이 없으면 휠 라우팅이 꺼진다"는 코드와 다르다.</li>
+          <li><strong><code>scroll</code>이 없으면 흘리지 않는 창이다.</strong> 막대·휠·되살리기가 모두 없고 치수만 답한다. 막대만 없애려면 <code>bar = never</code>다.</li>
+          <li><strong>흘릴 것이 없는 영역은 휠의 임자가 아니다.</strong> 휠은 바깥 판으로 간다. 의도한 동작이지만 "내 영역이 휠을 안 받는다"로 보일 수 있다. <code>never</code>에서도 휠은 흘릴 것이 있을 때만 산다.</li>
+          <li><strong>막대 끌기와 트랙 누름은 범위를 보지 않는 변화량을 낸다.</strong> 영역의 휠 원천도 앱 factory를 그대로 쓴다. 앱이 0 아래만 다듬으면 끝을 지나 쌓인 값 때문에 되돌아오는 휠이 한동안 아무 일도 하지 않는다. 짓기 전에 <code>clamp_scroll</code>로 상태를 되돌리거나, 배치 뒤 <code>metrics().scroll_offset</code>을 되돌려 쓴다.</li>
+          <li><strong><code>content_height</code>는 앱이 맞게 줘야 한다.</strong> 측정 단계가 없다. 내용의 실제 높이와 다르면 thumb·최대치·마지막 줄이 어긋난다. 배치에서 높이가 정해지는 담는 쪽은 영역을 배치하기 <strong>전에</strong> <code>set_content_height</code>를 부른다.</li>
+          <li><strong>한 frame에 한 번만 배치한다.</strong> 영역을 두 번 배치하는 담는 쪽 안에 두면, 그 안의 가상 목록은 첫 배치의 높이로 행이 굳는다.</li>
+          <li><strong>owner는 표면 안에서 유일해야 한다.</strong> 영역의 창과 막대가 owner를 물려받는다. 겹치면 <code>duplicate_ids()</code>에 나타나고 hover·초점이 첫 id에 간다. 가상 목록·표의 본문 영역도 그 owner를 쓴다.</li>
+          <li><strong>치수는 <code>arrange</code> 뒤에만 맞다.</strong> <code>metrics()</code>·<code>viewport()</code>·<code>maximum_scroll()</code>·<code>thumb_top()</code> 따위는 배치 전에 0이다. <code>viewport()</code>는 물리 픽셀, <code>metrics()</code>는 논리 픽셀이다.</li>
+          <li><strong>손으로 놓은 막대는 창 높이를 앱이 알아야 하고, Tab 자리도 앱이 거둔다.</strong> factory가 있는 막대는 흘릴 것이 없어도 Tab 자리이고, 거기서 누른 키는 조용히 삼켜진다. 영역은 둘 다 스스로 한다.</li>
+          <li><strong>factory 없는 막대는 표시 전용이다.</strong> 끌기·키·Tab 자리·값 정하기가 없다.</li>
+          <li><strong>원시 창의 id는 앱이 정한다.</strong> 라이브러리에 그 kind가 없다 — 설계 문서의 예(<code class="free">ui_element_kind::scroll_view</code>)는 컴파일되지 않는다. 내용도 하나다. 둘째 <code>set_content</code>는 앞의 것을 배치하지 않은 채 남긴다 (코드에서 확인한 동작). 확대 보기는 둘째 내용에서 <code>std::logic_error</code>를 던진다.</li>
+          <li><strong>한 컨테이너는 표와 <code>scroll_source</code> 가운데 하나에만 올린다.</strong> 둘 다면 같은 메시지가 두 번 나간다. 표 있는 짝을 표 없는 짝보다 <strong>먼저</strong> 부른다.</li>
+          <li><strong>세로 휠은 축을 묻지 않고, 가로 휠은 가로 창만 받는다.</strong> 가로 창뿐인 자리의 세로 휠은 그 가로 창을 흘린다. <code>hit_opaque</code> 방벽(scrim·메뉴)은 휠을 삼키지만, 방벽을 감싼 흘리는 창은 받는다.</li>
+          <li><strong>보조 기술의 명령은 UI thread에서 계획된다.</strong> <code>scroll_to</code>·<code>scroll_to_percent</code>·<code>zoom_to</code> factory는 앱 상태를 고치지 말고 메시지만 짓는다.</li>
+          <li><strong>확대 보기 설정이 잘못되면 생성자가 던진다.</strong> 범위 밖의 양수 배율·원점은 배치가 다듬지만, 숫자가 아닌 값·0 이하 배율·뒤집힌 범위·빈 경계·(0, 180] 밖의 회전 걸음은 <code>std::invalid_argument</code>다. 앱 상태를 <code>zoom_about(config, viewport, 1, {})</code>로 다듬어 두어도 이것은 막지 못한다.</li>
+          <li><strong>메시지는 지금 상태에 적용한다.</strong> factory에 발행본의 원점을 잡아 절대 메시지로 바꾸면 한 frame 전에 온 연속 이동이 서로 덮어쓴다.</li>
+          <li><strong>앱의 <code>viewport</code>가 보기의 실제 논리 크기와 같아야 한다.</strong> 다듬기·맞춤·<code>zoom_controls_config::viewport</code>가 그 값을 쓴다. 보기는 배치 때 자기 크기로 다시 다듬지만, 맞춤 메시지는 앱이 준 창으로 계산된다.</li>
+          <li><strong><code>zoom</code> 방식에서 Shift+세로 휠은 확대다.</strong> Shift가 가로 이동인 것은 <code>pan</code> 방식뿐이다. 가로 휠은 두 방식 모두 가로 이동이다. 설계 문서의 휠 표는 이 둘을 다르게 읽히게 적었다.</li>
+          <li><strong>macOS·iOS의 트랙패드 핀치는 확대 보기에 오지 않는다.</strong> 플랫폼 계층에 그 사건을 받는 코드가 없다 (웹뷰의 확대뿐 — 코드에서 확인한 동작). iOS 트랙패드 휠에는 수식 키가 없어 Ctrl+휠 확대도 없다. 확대 단추나 키를 함께 둔다.</li>
+          <li><strong>두 번 탭은 두 factory가 다 있어야 서고, 첫 탭을 늦추지 않는다.</strong> 내용에 탭 동작이 있으면 그것도 실행된다. 탭 동작이 있는 내용에는 켜지 않는다.</li>
+          <li><strong>회전은 보기가 하지 않는다.</strong> 앱이 <code>rotated_bounds</code>를 <code>content_bounds</code>에 주고 내용 요소가 돌려 그린다. <code>rotate_about</code>은 경계를 다듬지 않으므로 새 각도의 설정으로 <code>zoom_about(…, 1, {})</code>을 다시 부른다.</li>
+          <li><strong>확대 보기의 키는 보기 자신에 초점이 있을 때만 온다.</strong> <code>0</code> 키의 맞춤은 기본 여백·상한(16·1)이다. 마우스·펜은 빈 곳에서만 끌어 옮긴다.</li>
+          <li><strong>확대 보기는 경계에서도 휠을 넘기지 않는다.</strong> 보기는 방벽이라 그 위의 휠은 늘 보기(또는 그 안의 창)의 것이다. 보기 안의 초점은 자동으로 들여지지 않는다 (코드에서 확인한 동작).</li>
+          <li><strong>배율·위치가 바뀔 때마다 tree 전체를 다시 짓는다.</strong> 큰 그래프는 보이는 항목만 짓는다. 경계 쓸기는 마우스 끌기와 핀치가 섞인 접촉에서는 나지 않는다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>스크롤 위치는 누가 들고 있나?</summary><div class="faq-a"><p class="faq-short">앱이다. 영역은 받은 값을 다듬어 쓰고 <code>scroll(Δ)</code>만 낸다.</p><p>앱이 <code>offset += Δ</code>를 하고 다음 frame에 넘긴다. 범위 밖 값은 배치가 다듬는다. 다듬은 값은 <code>metrics()</code>로 읽는다 (<a class="xref" href="#build-area">흘리는 영역</a>).</p></div></details>
+          <details class="faq"><summary>휠이 안 먹는다.</summary><div class="faq-a"><p class="faq-short">네 가지를 본다: 정책의 <code>on_wheel</code>, <code>scroll</code> factory, 흘릴 것이 있는지, 위를 덮은 방벽.</p><p>정책이 있으면 <code>on_wheel</code>이 <code>route_wheel(tree, event, delta)</code>를 돌려줘야 한다. <code>scroll</code>이 없거나 내용이 창보다 짧으면 영역이 휠의 임자가 아니다. scrim·메뉴 같은 <code>hit_opaque</code> 방벽이 덮으면 휠이 거기서 멈춘다.</p></div></details>
+          <details class="faq"><summary>Tab으로 옮겨도 화면이 따라오지 않는다.</summary><div class="faq-a"><p class="faq-short">정책의 <code>on_focus_moved</code>에서 <code>return luil::route_reveal(tree, focused);</code>를 한다.</p><p>정책이 없으면 되살리기가 아예 없다. 포인터로 잡은 초점은 원래 되살리지 않는다 (<a class="xref" href="#build-policy">정책</a>).</p></div></details>
+          <details class="faq"><summary>막대를 늘 보이게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>bar = scrollbar_visibility::always</code>다.</p><p>글 폭이 흔들리지 않는다. 흘릴 것이 없으면 막대는 꽉 찬 thumb로 그려지고 Tab 자리가 아니다.</p></div></details>
+          <details class="faq"><summary>막대 없이 휠만 쓰려면?</summary><div class="faq-a"><p class="faq-short"><code>bar = scrollbar_visibility::never</code>다.</p><p><code>scroll</code>을 비우는 것과 다르다 — 그쪽은 흘리지 않는 창이다. <code>never</code>에서도 휠과 되살리기는 흘릴 것이 있을 때 산다.</p></div></details>
+          <details class="faq"><summary>내용 높이는 어떻게 아나?</summary><div class="faq-a"><p class="faq-short">측정 단계가 없어 앱이 준다.</p><p>줄 높이의 합, 고정 높이 줄이면 <code>preferred_size</code>, 폭에 따라 높이가 정해지면 배치에서 <code>set_content_height</code>다 (<a class="xref" href="#build-measured">배치에서 재는 높이</a>).</p></div></details>
+          <details class="faq"><summary>새 줄이 오면 맨 아래를 따라가게 하려면?</summary><div class="faq-a"><p class="faq-short">앱 상태에 "끝에 붙음"을 두고, 짓기 전에 offset을 최대로 둔다.</p><p>보조 기술의 100%(<code>scroll_to_percent</code>)도 같은 뜻으로 읽는다. 휠이나 막대가 오면 따라가기를 끈다 (<a class="xref" href="#build-follow">끝에 붙어 있기</a>).</p></div></details>
+          <details class="faq"><summary>위·아래에 그림자를 넣으려면?</summary><div class="faq-a"><p class="faq-short"><code>edges = { .shadows = true }</code>다.</p><p>가린 내용이 있는 쪽에만 선다. 늘 서는 구분선은 <code>top_rule</code>·<code>bottom_rule</code>이다.</p></div></details>
+          <details class="faq"><summary><code>scroll</code>과 <code>scroll_to</code>는 어떻게 다른가?</summary><div class="faq-a"><p class="faq-short">앞은 변화량(휠·끌기·키·되살리기), 뒤는 보조 기술이 정하는 절대 자리다.</p><p>절대 자리를 변화량으로 바꾸면 오래된 발행본 기준의 변화량이 겹쳐 쌓인다. 그래서 둘이 따로다.</p></div></details>
+          <details class="faq"><summary>막대를 왼쪽에 두려면?</summary><div class="faq-a"><p class="faq-short">영역은 오른쪽 고정이다. <code>scroll_view_element</code>와 <code>scrollbar_element</code>를 손으로 나란히 둔다.</p><p>창 높이를 막대에 주고, 두 곳에 같은 factory를 주고, 흘릴 것이 없을 때 막대의 Tab 자리를 거둔다 (<a class="xref" href="#build-pair">창과 막대를 손으로</a>).</p></div></details>
+          <details class="faq"><summary>가로로 흘리려면?</summary><div class="faq-a"><p class="faq-short">띠는 <code>strip_element</code>, 표는 <code>table_config::scroll_horizontal</code>이다.</p><p>막대만 필요하면 <code>scrollbar_axis::horizontal</code>이다. 가로 휠은 가로 축의 원천을 세운 창만 받는다 (<a class="xref" href="table.html#build-hscroll">표: 가로 스크롤</a>).</p></div></details>
+          <details class="faq"><summary>확대 배율과 위치는 누가 들고 있나?</summary><div class="faq-a"><p class="faq-short">앱이다.</p><p><code>zoom_by</code>·<code>pan_by</code>·<code>zoom_to</code>·<code>rotate_by</code>를 받아 <code>zoom_about</code>·<code>pan_by</code>·<code>rotate_about</code>을 지금 상태에 적용한다 (<a class="xref" href="#build-zoom">확대 보기</a>).</p></div></details>
+          <details class="faq"><summary>휠로 확대하지 않고 옮기게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>wheel = zoom_wheel_mode::pan</code>이다.</p><p>그래도 Ctrl+휠은 확대다. Shift+휠은 가로 이동이 된다. 가로 휠은 어느 방식이든 가로 이동이다.</p></div></details>
+          <details class="faq"><summary>"화면에 맞춤" 단추는?</summary><div class="faq-a"><p class="faq-short"><code>zoom_controls_element</code>가 맞춤 단추를 짓는다. 축 맞춤은 <code>zoom_fit_actions</code>다.</p><p>맞춤 단추는 내용 경계가 있을 때만 선다. 키 <code>0</code>도 맞춤이다 (<a class="xref" href="#build-zoom-buttons">확대 단추</a>).</p></div></details>
+          <details class="faq"><summary>핀치가 안 된다.</summary><div class="faq-a"><p class="faq-short">두 접촉이 같은 보기에 있어야 하고, <code>zoom_by</code>·<code>pan_by</code>가 있어야 하고, <code>pinch_enabled</code>가 켜져 있어야 한다.</p><p>두 손가락 간격이 24 논리 픽셀보다 좁으면 이동만 한다. macOS·iOS의 트랙패드 핀치는 확대 보기에 오지 않는다 (코드에서 확인한 동작) — <a class="xref" href="#platforms">플랫폼 차이</a>.</p></div></details>
+          <details class="faq"><summary>두 번 탭으로 확대하려면?</summary><div class="faq-a"><p class="faq-short"><code>double_tap = { .enabled = true }</code>와 <code>zoom_by</code>·<code>pan_by</code>다.</p><p>기준(맞춤 또는 100%)과 <code>factor</code>배를 오간다. 내용에 탭 동작이 없는 보기에서만 켠다 (<a class="xref" href="#build-pages">쪽 보기</a>).</p></div></details>
+          <details class="faq"><summary>맞춘 쪽을 쓸어서 넘기려면?</summary><div class="faq-a"><p class="faq-short"><code>bounds = zoom_bounds::contain</code>과 <code>edge_swipe</code>다.</p><p>맞춘 상태에서는 쓸기가 전부 경계에 막혀 접촉이 끝날 때 한 번 알림이 온다. 앱이 <code>horizontal</code> 방향으로 쪽을 바꾸고 다시 맞춘다.</p></div></details>
+          <details class="faq"><summary>도면을 돌리려면?</summary><div class="faq-a"><p class="faq-short"><code>rotate_by</code>와 <code>rotation</code>을 주고, 내용이 스스로 돌려 그린다.</p><p>경계는 <code>rotated_bounds</code>로 준다. 키는 Shift+←/→(걸음)·Shift+Home(0도), 터치는 두 손가락 회전이다 (<a class="xref" href="#build-rotate">회전</a>).</p></div></details>
+          <details class="faq"><summary>스크린 리더는 확대 보기를 어떻게 읽나?</summary><div class="faq-a"><p class="faq-short">Pane이고 값이 배율이다 (범위는 최소~최대 배율).</p><p><code>zoom_to</code>가 있으면 값을 정할 수 있다. 이동·회전은 내걸지 않는다. Android에는 접근성 다리가 없다.</p></div></details>
+          <details class="faq"><summary>보기에 큰 그래프를 넣으면 느리다.</summary><div class="faq-a"><p class="faq-short">배율·위치마다 tree를 다시 짓는다. 창에 걸치는 항목만 짓는다.</p><p>창의 내용 좌표 사각형은 <code>(창 가장자리 − origin) ÷ zoom</code>이다 (<a class="xref" href="#build-visible">보이는 것만</a>).</p></div></details>
+        </div>
+      </section>
+
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/scroll_area_element.h" target="_blank" rel="noopener">include/luil/ui/scroll_area_element.h</a><span class="n">최상위 기호 5</span></div>
+            <div class="hdr-syms"><a href="api.html#scrollbar-visibility" title="열거형"><span class="kb e">E</span>scrollbar_visibility</a><a href="api.html#scroll-metrics" title="구조체"><span class="kb t">S</span>scroll_metrics</a><a href="api.html#scroll-area-config" title="구조체"><span class="kb t">S</span>scroll_area_config</a><a href="api.html#scroll-area-bar-width" title="상수"><span class="kb ">k</span>scroll_area_bar_width</a><a href="api.html#scroll-area-element" title="클래스"><span class="kb t">C</span>scroll_area_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/scroll_view_element.h" target="_blank" rel="noopener">include/luil/ui/scroll_view_element.h</a><span class="n">최상위 기호 2</span></div>
+            <div class="hdr-syms"><a href="api.html#scroll-view-config" title="구조체"><span class="kb t">S</span>scroll_view_config</a><a href="api.html#scroll-view-element" title="클래스"><span class="kb t">C</span>scroll_view_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/scrollbar_element.h" target="_blank" rel="noopener">include/luil/ui/scrollbar_element.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#scrollbar-visual-width" title="상수"><span class="kb ">k</span>scrollbar_visual_width</a><a href="api.html#scrollbar-minimum-thumb" title="상수"><span class="kb ">k</span>scrollbar_minimum_thumb</a><a href="api.html#scrollbar-key-line-step" title="상수"><span class="kb ">k</span>scrollbar_key_line_step</a><a href="api.html#scrollbar-axis" title="열거형"><span class="kb e">E</span>scrollbar_axis</a><a href="api.html#scrollbar-config" title="구조체"><span class="kb t">S</span>scrollbar_config</a><a href="api.html#scrollbar-element" title="클래스"><span class="kb t">C</span>scrollbar_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/zoom_view_element.h" target="_blank" rel="noopener">include/luil/ui/zoom_view_element.h</a><span class="n">최상위 기호 18</span></div>
+            <div class="hdr-syms"><a href="api.html#zoom-view-state" title="구조체"><span class="kb t">S</span>zoom_view_state</a><a href="api.html#zoom-bounds" title="열거형"><span class="kb e">E</span>zoom_bounds</a><a href="api.html#zoom-fit" title="열거형"><span class="kb e">E</span>zoom_fit</a><a href="api.html#zoom-double-tap" title="구조체"><span class="kb t">S</span>zoom_double_tap</a><a href="api.html#zoom-view-config" title="구조체"><span class="kb t">S</span>zoom_view_config</a><a href="api.html#zoom-about" title="함수"><span class="kb f">f</span>zoom_about</a><a href="api.html#pan-by" title="함수"><span class="kb f">f</span>pan_by</a><a href="api.html#zoom-to-fit" title="함수"><span class="kb f">f</span>zoom_to_fit</a><a href="api.html#zoom-fit-actions" title="함수"><span class="kb f">f</span>zoom_fit_actions</a><a href="api.html#rotate-about" title="함수"><span class="kb f">f</span>rotate_about</a><a href="api.html#rotate-point" title="함수"><span class="kb f">f</span>rotate_point</a><a href="api.html#rotated-bounds" title="함수"><span class="kb f">f</span>rotated_bounds</a><a href="api.html#pan-blocked" title="함수"><span class="kb f">f</span>pan_blocked</a><a href="api.html#judge-edge-swipe" title="함수"><span class="kb f">f</span>judge_edge_swipe</a><a href="api.html#double-tap-zoom" title="함수"><span class="kb f">f</span>double_tap_zoom</a><a href="api.html#zoom-view-element" title="클래스"><span class="kb t">C</span>zoom_view_element</a><a href="api.html#zoom-controls-config" title="구조체"><span class="kb t">S</span>zoom_controls_config</a><a href="api.html#zoom-controls-element" title="클래스"><span class="kb t">C</span>zoom_controls_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<!--LAB-SCRIPTS-->
+</body>
+</html>

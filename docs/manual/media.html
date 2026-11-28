@@ -32,7 +32,11 @@
   .t td.yes { color: var(--accent-ink); }
   .t td.no { color: var(--fg-3); }
   .t tr.grp th { background: var(--sunk); color: var(--fg); font-weight: 600; text-align: left; }
-  .t.plat td:first-child { min-width: 8em; }
+  .t.plat { min-width: 780px; }
+  .t.plat td:first-child { min-width: 7em; }
+  .t.wide { min-width: 640px; }
+  /* 실습 제목은 줄이지 않는다 — 좁으면 대응 형식 쪽이 줄어든다 */
+  #ink-lab .lw-cap .lw-title, #srt-lab .lw-cap .lw-title { flex-shrink: 0; }
   .ink-panel .log .m { overflow-wrap: anywhere; }
   /* 잉크 실습 */
   .ink-grid { display: grid; gap: 14px; }
@@ -219,7 +223,7 @@
 
         <h3>메모리와 상한</h3>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t wide">
             <thead><tr><th>상한</th><th>값</th><th>앱이 바꾸나</th><th>넘으면</th></tr></thead>
             <tbody>
               <tr><td>인코딩 바이트 (파일·바이트)</td><td>256 MiB</td><td>못 바꾼다</td><td>코덱에 물리기 전에 <code>input_too_large</code></td></tr>
@@ -360,7 +364,7 @@
               <div class="log" data-ink="log" aria-live="polite" aria-label="메시지 기록"></div>
             </div>
           </div>
-          <div class="lw-foot">판정은 원본을 옮긴 함수다 — 폭(<code>ink_width_at</code>), 원과 사다리꼴 짓기와 경계(<code>make_ink_stroke</code>), 단순화(<code>simplify_ink_points</code>), 지우개 판정(<code>ink_strokes_hit</code>). 원본 <code>src/ui/ink.cpp</code>를 작은 Skia 흉내 위에 그대로 컴파일한 대조기에 무작위 입력 10만여 건(경계값과 유한하지 않은 폭·비율·압력 포함)을 넣어 float 비트까지 같음을 확인했다. 대조는 곱셈·덧셈을 합치지 않는 빌드(FMA 없음) 기준이다. 앱의 몫은 <code>examples/demo/ink_sketch.h</code>를 옮겼다: 점을 모으다 떼면 오차 0.25·0.05로 줄여 굳히고, 획 모양은 폭 4·비율 0.25, 지우개 반지름은 10, 견본 획은 그 파일의 물결 획이다. 브라우저의 펜 압력·묶인 표본·지우개 끝 해석은 OS 호스트와 다를 수 있다. 그림은 같은 원·사다리꼴 목록을 브라우저 canvas의 nonzero 채우기로 그린 재현이지 luil의 Skia 렌더링이 아니다.</div>
+          <div class="lw-foot">판정은 원본을 옮긴 함수다 — 폭(<code>ink_width_at</code>), 원과 사다리꼴 짓기와 경계(<code>make_ink_stroke</code>), 단순화(<code>simplify_ink_points</code>), 지우개 판정(<code>ink_strokes_hit</code>). 원본 <code>src/ui/ink.cpp</code>를 작은 Skia 흉내 위에 그대로 컴파일한 대조기에 무작위 입력 10만여 건(경계값과 유한하지 않은 폭·비율·압력 포함)을 넣어 float 비트까지 같음을 확인했다. 대조는 곱셈·덧셈을 합치지 않는 빌드(FMA 없음) 기준이다. 앱의 몫은 <code>examples/demo/ink_sketch.h</code>를 옮겼다: 점을 모으다 떼면 오차 0.25·0.05로 줄여 굳히고, 획 모양은 폭 4·비율 0.25, 지우개 반지름은 10, 견본 획은 그 파일의 물결 획이다. 실습에만 있는 것도 있다. 캔버스는 데모의 마우스·손가락 토글을 켠 상태로 돈다 — 라이브러리와 데모의 기본은 펜만이다. "마우스를 압력 있는 펜으로"는 마우스 표본을 정한 압력의 펜 표본으로 바꾸는 실습용 손잡이이고 luil에는 없다. 배율 단추는 표면 배율을 흉내 낸다 — 점은 내용 논리 픽셀로 남고 그릴 때만 배율을 곱한다. 브라우저의 펜 압력·묶인 표본·지우개 끝 해석은 OS 호스트와 다를 수 있다. 그림은 같은 원·사다리꼴 목록을 브라우저 canvas의 nonzero 채우기로 그린 재현이지 luil의 Skia 렌더링이 아니다.</div>
         </div>
       </section>
 
@@ -2697,7 +2701,7 @@ namespace sample {
           <p>모든 사건은 <strong>이미 내린 결정의 통지</strong>다. <code>on_event</code>는 UI thread의 호스트가 부르고, 돌려준 메시지는 logic thread로 간다. 갈래는 <code>webview_event_kind</code>다.</p>
         </div>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t wide">
             <thead><tr><th>갈래</th><th>언제</th><th>실리는 것</th><th>앱이 할 일</th></tr></thead>
             <tbody>
               <tr><td><code>navigation_started</code></td><td>허용된 항해가 시작했다</td><td><code>url</code></td><td>진행 표시</td></tr>
@@ -2717,7 +2721,7 @@ namespace sample {
         </div>
         <div class="prose">
           <ul>
-            <li>초당 상한은 항해·권한·내려받기·메시지 사건이 나눠 쓴다. 창은 첫 사건부터 1초다. 크기 검사가 먼저이고, 크기로 버린 것은 받은 수에 세지 않는다. 상한에 걸린 항해 사건은 알림 없이 사라질 수 있다. 실패·<code>events_dropped</code>·<code>presentation_changed</code>는 상한을 거치지 않는다.</li>
+            <li>초당 상한은 항해·권한·내려받기·메시지 사건이 나눠 쓴다. 창은 첫 사건부터 1초다. 크기 검사가 먼저이고, 크기로 버린 것은 받은 수에 세지 않는다. 상한에 걸린 항해 사건은 알림 없이 사라질 수 있다. 프로세스 실패 둘(<code>render_process_failed</code>·<code>browser_process_failed</code>)과 <code>creation_failed</code>·<code>events_dropped</code>·<code>presentation_changed</code>는 상한을 거치지 않는다. <code>navigation_failed</code>는 거친다.</li>
             <li>세우지 못한 갈래(<code>webview_creation_failure</code>)는 아래와 같다. <code>hresult</code>가 0이면 HRESULT가 없는 실패다.</li>
           </ul>
         </div>
@@ -2819,7 +2823,7 @@ namespace sample {
           <p class="lede">그림·영상·잉크 캔버스는 Tab 자리가 아니다 — 누를 것이 없기 때문이다. 웹뷰 자리표만 Tab 자리이고, 초점이 닿는 순간 페이지로 넘긴다.</p>
         </header>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t wide">
             <thead><tr><th>대상</th><th>역할</th><th>이름 · 값</th><th>Tab 자리</th><th>키</th></tr></thead>
             <tbody>
               <tr><td><code>image_element</code></td><td><code>image</code></td><td>이름 = <code>description</code>. 비면 장식이라 접근 tree에서 접힌다 (HTML의 빈 <code>alt</code>와 같은 관례)</td><td>아니다</td><td>없다. 누르는 그림은 <code>set_action</code>을 걸면 "누를 수 있으면 자리" 규칙을 탄다</td></tr>

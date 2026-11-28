@@ -27,6 +27,7 @@
   .t td.no { color: var(--fg-3); }
   /* 칸이 넷 이상인 표는 좁은 화면에서 줄이지 않고 표 상자 안에서 옆으로 흘린다 */
   .t.matrix { min-width: 720px; }
+  .t.matrix td:first-child code { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
   /* 실습: 응답 몸의 갈래 (assets/services-lab.js) */
   .bk-grid { display: grid; gap: 14px; }
   @media (min-width: 1180px) { .bk-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
@@ -325,6 +326,35 @@
         <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">버려진 답은 다시 오지 않는다</span>app inbox는 1024칸이고 넘치면 새 메시지를 버린다(<code>reject_newest</code>). <code>post_app_message</code>는 버린 것을 알리지 않는다. <code>post_app_message_ticketed</code>는 버렸으면 0을 돌려준다. 파일 감시의 <code>deliver</code>만 <code>bool</code>을 돌려주어, 거짓이면 감시자가 그 묶음을 다음 변경과 합쳐 다시 낸다. HTTP·SMB·WebSocket의 <code>deliver</code>는 <code>void</code>라 inbox가 버린 답은 그것으로 끝이다. 표를 기다리던 화면이 영원히 "보내는 중"에 남는다 — 대책은 <a class="xref" href="#build-http-drop">답을 잃지 않기</a>.</div></div>
         <div class="prose">
           <p>유실된 수는 <code>app_inbox_statistics()</code>의 <code>rejected</code>가 센다. 넘칠 때의 정책은 <a class="xref" href="messaging.html#s4">스레드 경계 메시징</a>에 있다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 응답 몸의 갈래">
+        <header class="sec-head">
+          <h2>실습: 응답 몸의 갈래</h2>
+          <p class="lede">Content-Type 한 줄과 몸의 바이트를 바꿔 가며 <code>decode_http_body</code>가 고르는 갈래와 그 출처를 본다. 판정은 원본 C++을 옮기고 원본과 견준 함수가 한다.</p>
+        </header>
+        <div class="lw" data-title="응답 몸의 갈래" data-surface="parse_media_type · decode_http_body · http_body" data-reset id="bk-lab">
+          <div class="lw-body bk-grid">
+            <div class="bk-side">
+              <label class="bk-field"><span>Content-Type</span><input type="text" data-bk="ct" spellcheck="false" autocomplete="off"></label>
+              <div class="bk-chips" data-bk="ct-chips" role="group" aria-label="Content-Type 보기"></div>
+              <label class="bk-field"><span>몸</span><select data-bk="body-preset"></select></label>
+              <label class="bk-field"><span>몸 바이트 (16진)</span><textarea data-bk="hex" spellcheck="false" rows="3"></textarea></label>
+              <div class="bk-note" data-bk="hex-note" aria-live="polite"></div>
+              <label class="bk-field"><span>parse.assume_kind</span><select data-bk="assume"></select></label>
+              <div class="bk-row">
+                <label><input type="checkbox" data-bk="html"> <code>parse.html_as_text</code></label>
+              </div>
+            </div>
+            <div class="bk-out">
+              <dl class="bk-mt" data-bk="mt" aria-label="parse_media_type의 결과"></dl>
+              <ol class="bk-steps" data-bk="steps" aria-label="갈래를 정하는 차례"></ol>
+              <div class="bk-verdict" data-bk="verdict" aria-live="polite"></div>
+              <div class="bk-slots" data-bk="slots" aria-label="http_body의 슬롯"></div>
+            </div>
+          </div>
+          <div class="lw-foot">판정은 원본을 옮긴 함수다 — <code>parse_media_type</code>·<code>classify_media_type</code>·<code>media_type_invites_sniffing</code>·<code>sniff_body_kind</code>(<code>http_media_type.cpp</code>), 갈래를 정하는 차례와 UTF-8 글·JSON 크기·깊이 검사(<code>http_body.cpp</code>), <code>utf8_is_valid</code>·<code>utf8_replace_invalid</code>(<code>utf8_text.cpp</code>). 옮긴 함수는 <code>assets/httpbodymodel.js</code>에 따로 있다. 원본 <code>http_media_type.cpp</code>·<code>http_body.cpp</code>·<code>http_message.cpp</code>·<code>utf8_text.cpp</code>를 그대로 컴파일해 링크한 대조기에 무작위·경계 입력 6만 건(<code>http_media_type_tests.cpp</code>의 입력 포함)을 넣어, essence·charset·갈래·출처·글·<code>parse_error</code>가 모두 같음을 확인했다. 대조기에서는 그림 디코더와 nlohmann 본체만 흉내로 채웠다. 옮기지 않은 것: JSON 파싱의 성패, 그림 디코딩의 성패, charset 갈고리(<code>codepage_text_transcoder</code>)의 변환 결과 — 이 셋은 무엇을 부르는가까지만 보인다. 전송 쪽 규칙(전송 오류면 몸을 풀지 않는다, 몸을 읽지 않는 응답을 가른다, macOS는 같은 이름의 헤더를 쉼표로 잇는다)도 이 함수 밖이다.</div>
         </div>
       </section>
 
@@ -3127,5 +3157,10 @@ namespace luil {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="assets/manual.js"></script>
+<script src="assets/httpbodymodel.js"></script>
+<script src="assets/services-lab.js"></script>
+<script>
+  LuilServicesLab.setup(document.getElementById("bk-lab"));
+</script>
 </body>
 </html>

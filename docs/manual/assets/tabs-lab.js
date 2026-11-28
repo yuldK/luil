@@ -351,19 +351,25 @@
     const fmt = (v) => (Math.round(v * 100) / 100).toString();
 
     function renderMenu() {
+      // 항목을 누르면 menu를 먼저 비우므로 키는 여기서 잡아 둔다.
+      const key = menu.key;
       const items =
         menu.kind === "overflow"
           ? s.keys.map((k) => ({ label: name(k) + (k === s.selected ? " (고름)" : ""), run: () => selectKey(k, "넘침 메뉴에서 " + name(k)) }))
           : [
-              { label: "닫기", run: () => command("close", menu.key) },
-              { label: "왼쪽으로 이동", run: () => command("move-left", menu.key), disabled: s.keys.indexOf(menu.key) <= 0 },
-              { label: "오른쪽으로 이동", run: () => command("move-right", menu.key), disabled: s.keys.indexOf(menu.key) + 1 >= s.keys.length },
+              { label: "닫기", run: () => command("close", key) },
+              { label: "왼쪽으로 이동", run: () => command("move-left", key), disabled: s.keys.indexOf(key) <= 0 },
+              { label: "오른쪽으로 이동", run: () => command("move-right", key), disabled: s.keys.indexOf(key) + 1 >= s.keys.length },
             ];
       const box = el("div", { class: "tb-menu", role: "menu", style: { left: Math.max(0, Math.min(menu.x, s.barWidth - 150)) + "px", top: HEIGHT + 4 + "px" } });
       items.forEach((it) => {
         box.append(el("button", { type: "button", role: "menuitem", disabled: !!it.disabled, text: it.label, onclick: () => { menu = null; it.run(); } }));
       });
-      queueMicrotask(() => { const first = box.querySelector("button:not([disabled])"); if (first) first.focus(); });
+      // 처음 열 때만 첫 항목에 초점을 준다 (다시 그릴 때마다 초점을 빼앗지 않는다).
+      if (!menu.focused) {
+        menu.focused = true;
+        queueMicrotask(() => { const first = box.querySelector("button:not([disabled])"); if (first) first.focus(); });
+      }
       return box;
     }
 
@@ -431,7 +437,8 @@
     stage.addEventListener("pointermove", (ev) => {
       if (!drag || drag.middle) return;
       const p = barPoint(ev);
-      if (!drag.live) {
+      const starting = !drag.live;
+      if (starting) {
         if (drag.closer || Math.hypot(p.x - drag.start.x, p.y - drag.start.y) <= DRAG_START_DISTANCE) return;
         drag.live = true;
       }
@@ -441,7 +448,7 @@
       status.textContent = hit
         ? `${name(drag.key)} → ${hit.kind === "end" ? "마지막 탭 뒤의 빈 곳" : name(s.keys[hit.index])}` + (drag.moving ? (hit.side === "before" ? "의 앞" : "의 뒤") : " 자리")
         : `${name(drag.key)} 끄는 중 — 이 자리는 받지 않는다` + (drag.moving ? " (순서가 그대로이거나 막대 밖)" : " (자기 자신이거나 막대 밖)");
-      if (changed || true) render();
+      if (changed || starting) render();
     });
 
     function finish(ev) {

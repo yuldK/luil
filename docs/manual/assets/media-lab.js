@@ -460,23 +460,39 @@
       const svg = window.LU.svg;
       // 막대는 상자의 실제 폭으로 그린다 — 좁은 화면에서 눈금 글이 줄어들지 않게 한다.
       const W = Math.max(240, Math.round(bar.getBoundingClientRect().width) || 600);
+      // 겹치는 cue는 아래 줄에 놓는다 (여덟 줄까지, 넘치면 마지막 줄에 겹친다).
       const lanes = [];
       const placed = parsed.cues.map((c) => {
         let lane = lanes.findIndex((end) => end <= c.start_ms);
         if (lane < 0) {
-          lane = lanes.length;
-          lanes.push(0);
+          lane = Math.min(lanes.length, 7);
+          if (lane === lanes.length) lanes.push(0);
         }
-        lanes[lane] = c.end_ms;
+        lanes[lane] = Math.max(lanes[lane], c.end_ms);
         return { c, lane };
       });
       const H = 20 + Math.max(1, lanes.length) * 16;
       const x = (ms) => 4 + (ms / span) * (W - 8);
       const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img", "aria-label": `cue ${parsed.cues.length}개의 시간 막대, 지금 ${at} ms` });
-      const labelEvery = Math.max(1, Math.ceil(30 / ((W - 8) / (span / 1000))));
-      for (let s = 0; s <= span; s += 1000) {
-        g.append(svg("line", { x1: x(s), x2: x(s), y1: 0, y2: H - 12, class: "srt-grid" }));
-        if ((s / 1000) % labelEvery === 0 && x(s) + 22 <= W) g.append(svg("text", { x: x(s) + 2, y: H - 2, class: "srt-tick", text: `${s / 1000}s` }));
+      // 눈금은 보기 좋은 간격으로 성기게 — 긴 자막 파일에서도 선이 수십 개를 넘지 않는다.
+      const perSecond = (W - 8) / (span / 1000);
+      const steps = [1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800, 3600, 7200, 18000, 36000, 86400, 172800, 360000];
+      const gridStep = steps.find((n) => n * perSecond >= 10) || steps[steps.length - 1];
+      const label = (sec) => {
+        if (span < 60000) return `${sec}s`;
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const ss = String(sec % 60).padStart(2, "0");
+        return h ? `${h}:${String(m).padStart(2, "0")}:${ss}` : `${m}:${ss}`;
+      };
+      // 글 사이가 가장 긴 눈금 글보다 넓게
+      const room = label(Math.floor(span / 1000)).length * 6.2 + 10;
+      const labelStep = steps.find((n) => n >= gridStep && n % gridStep === 0 && n * perSecond >= room) || steps[steps.length - 1];
+      for (let sec = 0; sec * 1000 <= span; sec += gridStep) {
+        const px = x(sec * 1000);
+        g.append(svg("line", { x1: px, x2: px, y1: 0, y2: H - 12, class: "srt-grid" }));
+        const text = label(sec);
+        if (sec % labelStep === 0 && px + 2 + text.length * 6.2 <= W) g.append(svg("text", { x: px + 2, y: H - 2, class: "srt-tick", text }));
       }
       for (const { c, lane } of placed) {
         const active = at >= c.start_ms && at < c.end_ms;

@@ -28,7 +28,7 @@
   .fp-side, .fp-panel { display: grid; gap: 10px; min-width: 0; align-content: start; }
   .fp-tools { display: grid; gap: 8px 14px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); font-size: var(--fs-xs); color: var(--fg-2); }
   .fp-tools label { display: grid; gap: 3px; min-width: 0; }
-  .fp-tools label.inline { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .fp-tools label.inline { display: flex; gap: 6px; align-items: center; cursor: pointer; grid-column: 1 / -1; }
   .fp-tools select, .fp-tools input[type="range"] { width: 100%; min-width: 0; }
   .fp-tools select { font-size: var(--fs-xs); min-height: 26px; }
   .fp-tools output { font-family: var(--font-code); color: var(--fg); }
@@ -226,7 +226,7 @@
           <div role="listitem"><span class="who">자리</span><span>앱은 build 때 필드 포인터를 남기고, frame을 다 지은 뒤 <code>bounds()</code>를 읽어 <code>place_field_popup</code>에 넣는다. 그 포인터는 그 frame이 게시되기 전까지만 유효하다.</span></div>
           <div role="listitem"><span class="who">다시 누름</span><span>열린 필드를 다시 누르면 바깥 누름 닫힘과 클릭이 함께 온다. controller는 누를 때 펼쳐 있던 요소의 클릭을 누를 때의 tree에서 꺼내므로, 다시 열리지 않고 <code>set_open(false)</code>가 나간다.</span></div>
         </div>
-        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">드롭다운은 규약의 일부만 갖는다</span><code>dropdown_element</code>는 여는 키 처리기(<code>field_popup_key_handler</code>)도, 초점 떠남 닫기(<code>set_focus_leave_action</code>)도 달지 않는다. 그래서 라이브러리 드롭다운은 Alt+↓·F4로 열리지 않고, Tab으로 떠나도 목록이 닫히지 않는다. 설계 문서도 이것을 범위 밖에 둔다. 앱이 달 수 있다 — <a class="xref" href="#build-keys">여는 키</a>.</div></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">드롭다운은 규약의 일부만 갖는다</span><code>dropdown_element</code>는 여는 키 처리기(<code>field_popup_key_handler</code>)도, 초점 떠남 닫기(<code>set_focus_leave_action</code>)도 달지 않는다. 그래서 라이브러리 드롭다운은 Alt+↓·F4로 열리지 않고, Tab으로 떠나도 목록이 닫히지 않는다 — 코드에서 확인한 동작이다. 설계 문서도 이것을 범위 밖에 둔다. 앱이 달 수 있다 — <a class="xref" href="#build-keys">여는 키</a>.</div></div>
 
         <h3>열린 popup과 키</h3>
         <div class="prose">
@@ -327,7 +327,7 @@
               <div class="fp-log" data-fp="log" aria-live="polite" aria-label="호출 기록"></div>
             </div>
           </div>
-          <div class="lw-foot">자리와 키 판정은 원본을 옮긴 함수다 — <code>place_field_popup</code>·<code>place_field_popup_at_side</code>·<code>field_popup_key_handler</code>(<code>src/ui/field_popup.cpp</code>). float 연산을 단계마다 32비트로 반올림해 옮겼고, 원본 C++을 컴파일·링크한 대조기의 무작위·경계 입력 6만 건(숫자가 아닌 값·무한·0·음수의 배율과 간격, 아래에 딱 맞는 높이 포함)과 키 조합 768가지에서 결과가 비트 단위로 같음을 확인했다. 필드와 limit은 물리 픽셀(논리 × 배율)로 넘기고, 답은 <code>ui_popup::x</code>·<code>y</code>에 넣는 논리 픽셀이다. 여닫기(클릭·Space·Enter = <code>set_open(!open)</code>)와 바깥 누름·Esc에 닫는 것은 이 실습의 앱이 정한 정책이다. limit 크기(480×300)는 실습이 정한 값이고, host가 작업 영역 안으로 미는 일과 실제 그림은 옮기지 않았다.</div>
+          <div class="lw-foot">자리와 키 판정은 원본을 옮긴 함수다 — <code>place_field_popup</code>·<code>place_field_popup_at_side</code>·<code>field_popup_key_handler</code>(<code>src/ui/field_popup.cpp</code>). float 연산을 단계마다 32비트로 반올림해 옮겼고, 원본 C++을 컴파일·링크한 대조기의 무작위·경계 입력 6만 건(숫자가 아닌 값·무한·0·음수의 배율과 간격, 아래에 딱 맞는 높이 포함)과 키 조합 768가지에서 결과가 비트 단위로 같음을 확인했다. 필드와 limit은 물리 픽셀(논리 × 배율)로 넘기고, 답은 <code>ui_popup::x</code>·<code>y</code>에 넣는 논리 픽셀이다. 필드의 클릭·Space·Enter가 <code>set_open(!open)</code>인 것은 <code>dropdown_element</code>와 controller의 규칙을 코드에서 따라 옮긴 것이고 대조기로 견주지는 않았다. 바깥 누름·Esc에 닫는 것은 이 실습의 앱이 정한 정책이다. 이식은 <code>tests/field_popup_tests.cpp</code>의 자리 단언 넷(82, 위로 448, 딱 맞는 582, 둘 다 모자란 332)도 그대로 통과한다. limit 크기(480×300)는 실습이 정한 값이고, host가 작업 영역 안으로 미는 일과 실제 그림은 옮기지 않았다.</div>
         </div>
       </section>
 
@@ -2136,12 +2136,12 @@ namespace sample {
         </header>
         <ol class="recap">
           <li><strong>드롭다운의 접근 이름은 <code>placeholder</code>다.</strong> <code>set_access_name</code>을 불러도 드롭다운의 접근 정보에 들지 않는다 (코드에서 확인한 동작). 데모도 <code>set_access_name</code>만 불러 이름 없는 콤보 상자가 된다. 콤보도 root의 <code>set_access_name</code>이 아니라 안쪽 글 칸의 <code>placeholder</code>가 이름이다.</li>
-          <li><strong>드롭다운은 Alt+↓·F4로 열리지 않고, Tab으로 떠나도 닫히지 않는다.</strong> 라이브러리 드롭다운은 여는 키 처리기와 초점 떠남 액션을 달지 않는다. 앱이 단다 (<a class="xref" href="#build-keys">여는 키</a>).</li>
+          <li><strong>드롭다운은 Alt+↓·F4로 열리지 않고, Tab으로 떠나도 닫히지 않는다</strong> (코드에서 확인한 동작). 라이브러리 드롭다운은 여는 키 처리기와 초점 떠남 액션을 달지 않는다. 앱이 단다 (<a class="xref" href="#build-keys">여는 키</a>).</li>
           <li><strong>콤보 후보 popup은 모든 닫힘 계기에 닫힌다</strong> — Alt+Tab(<code>activation_changed</code>)·창 이동 포함 (코드에서 확인한 동작). <code>suggestion_popup()</code>의 <code>dismiss</code>가 계기를 가리지 않는다. 설계 문서의 "창 비활성에는 남는다"는 초점 떠남 훅만의 이야기다. 남기려면 돌려받은 popup의 <code>dismiss</code>를 앱이 바꿔 싣는다.</li>
           <li><strong>콤보 후보 popup은 위로 뒤집지 않는다.</strong> 자리는 언제나 글 칸 아래다. 창 아래쪽 콤보는 host가 작업 영역 안으로 밀어 칸을 덮을 수 있다 (코드에서 확인한 동작).</li>
           <li><strong>받는 중에도 앞 후보가 남고, 콤보는 그것을 칸의 글로 다시 거른다.</strong> 원천의 일치 규칙과 기본 거르기(대소문자 구분 부분 일치)가 다르면 답이 올 때 목록이 바뀐다. 규칙을 맞추거나 <code>matches</code>를 준다.</li>
           <li><strong>옛 token의 답은 <code>accept_combo_suggestions</code>가 버린다.</strong> 버렸는지는 반환값(거짓)으로 안다. 강조 키가 새 후보에 없으면 앱이 지운다.</li>
-          <li><strong>popup을 남기는 빈 액션은 <code>luil::input_action {}</code>이다.</strong> <code>luil::app_message {}</code>는 메시지 하나로 나가 그 popup을 그 frame에 "닫자고 했다"로 표시하고, Esc라면 키를 삼킨다. <code>examples/tool_window/main.cpp</code>의 미리보기 카드가 "남기기"에 <code>luil::app_message {}</code>를 돌려준다.</li>
+          <li><strong>popup을 남기는 빈 액션은 <code>luil::input_action {}</code>이다.</strong> <code>luil::app_message {}</code>는 메시지 하나로 나가 그 popup을 그 frame에 "닫자고 했다"로 표시하고, Esc라면 키를 삼킨다 (코드에서 확인한 동작). <code>examples/tool_window/main.cpp</code>의 미리보기 카드가 "남기기"에 <code>luil::app_message {}</code>를 돌려준다.</li>
           <li><strong>검색 칸이 있는 popup은 닫히면 초점이 사라진다.</strong> 초점이 popup 안의 칸에 있었기 때문이다. 앱이 돌려놓지 않으면 다음 Tab이 처음부터다.</li>
           <li><strong>목록 항목을 마우스로 고르면 칸의 초점도 지워진다</strong> (코드에서 확인한 동작). 메뉴 항목이 누름에 초점을 지키지 않기 때문이다. 콤보 후보는 이 문제가 없다.</li>
           <li><strong>필드 포인터를 frame 밖으로 들고 다니지 않는다.</strong> build가 남긴 <code>const ui_element*</code>는 그 frame이 게시되기 전까지만 자리 재기에 쓴다. 데모는 다음 build 시작에서 지운다.</li>
@@ -2151,7 +2151,7 @@ namespace sample {
           <li><strong>안내 풍선의 대상은 앱이 준다.</strong> 같은 frame에 먼저 배치한 가지에서 <code>teaching_tip_target</code>으로 찾는다. 한 번에 배치하는 앱은 한 frame 늦은 자리를 준다.</li>
           <li><strong>행동 단추는 풍선을 닫지 않는다.</strong> 앱이 닫는다. 비modal 풍선의 Esc는 요소가 받지 않으니, 닫으려면 정책의 <code>on_key</code>에서 닫는다.</li>
           <li><strong>tooltip은 hover로만 선다.</strong> 키보드 초점과 터치로는 서지 않는다 (코드에서 확인한 동작). 설명이 꼭 필요하면 tooltip에만 두지 않는다.</li>
-          <li><strong>키로 거둬지는 것은 커스텀 내용 tooltip뿐이다.</strong> 문자열 tooltip은 키를 눌러도 떠 있다. 설계 문서의 "다른 키 입력이 오면 닫는다"는 커스텀 내용의 규칙이다.</li>
+          <li><strong>키로 거둬지는 것은 커스텀 내용 tooltip뿐이다.</strong> 문자열 tooltip은 키를 눌러도 떠 있다 (코드에서 확인한 동작). 설계 문서의 "다른 키 입력이 오면 닫는다"는 커스텀 내용의 규칙이다.</li>
           <li><strong>tooltip은 표면 밖으로 나가지 않는다.</strong> 좁은 창·popup 끝에서는 안쪽으로 밀리고 큰 내용은 잘려 휠로 읽는다. 창 밖 카드는 popup으로 짓는다.</li>
           <li><strong>문자열 tooltip의 지연은 바꿀 수 없다 (500ms).</strong> 지연을 바꾸려면 커스텀 내용의 <code>tooltip_config::delay</code>다.</li>
           <li><strong>tooltip이나 머무름을 달면 요소가 hit 대상이 된다.</strong> 비활성 요소도 tooltip 표시를 위해 hit는 된다. 머무름만 단 판도 hit 대상이어야 시계가 찬다.</li>

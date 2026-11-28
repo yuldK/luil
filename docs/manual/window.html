@@ -33,7 +33,6 @@
   .ch-tools fieldset { border: 0; margin: 0; padding: 0; display: inline-flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
   .ch-tools legend { float: left; padding: 0 6px 0 0; color: var(--fg-3); }
   .ch-map { position: relative; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--panel); outline: none; user-select: none; -webkit-user-select: none; touch-action: none; }
-  .ch-map.kbd:focus { box-shadow: 0 0 0 2px var(--accent); }
   .ch-map svg { display: block; width: 100%; height: auto; }
   .ch-legend { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 11.5px; color: var(--fg-2); }
   .ch-legend span { display: inline-flex; gap: 5px; align-items: center; }
@@ -52,7 +51,33 @@
   .ch-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
   .ch-keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--fg-3); }
   .ch-keys kbd { font-family: var(--font-code); font-size: 10.5px; border: 1px solid var(--line-2); border-radius: 3px; padding: 0 4px; color: var(--fg-2); background: var(--panel); }
+  .ch-map:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .ch-win { fill: var(--bg); stroke: var(--line-3); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+  .ch-cap { fill: var(--panel-2); }
+  .ch-title { fill: var(--fg-2); font-family: var(--font-body); }
+  .ch-glyph { fill: none; stroke: var(--fg-2); stroke-width: 1.2px; vector-effect: non-scaling-stroke; }
+  .ch-appglyph { fill: var(--fg-2); font-family: "codicon"; }
+  .ch-search { fill: var(--panel); stroke: var(--line-2); stroke-width: 1px; vector-effect: non-scaling-stroke; }
+  .ch-h { stroke-width: 1px; vector-effect: non-scaling-stroke; }
+  .ch-h-drag { fill: var(--accent); fill-opacity: 0.16; }
+  .ch-h-sys { fill: var(--t-lg); fill-opacity: 0.32; }
+  .ch-h-btn { fill: var(--t-ui); fill-opacity: 0.30; stroke: var(--t-ui); stroke-opacity: 0.5; }
+  .ch-h-close { fill: var(--error); fill-opacity: 0.30; stroke: var(--error); stroke-opacity: 0.5; }
+  .ch-h-edge { fill: var(--warn); fill-opacity: 0.55; }
+  .ch-h-flip { fill: var(--t-in); fill-opacity: 0.30; stroke: var(--t-in); stroke-opacity: 0.6; stroke-dasharray: 4 3; }
+  .ch-probe { stroke: var(--fg); stroke-opacity: 0.35; stroke-width: 1px; vector-effect: non-scaling-stroke; }
+  .ch-probe-dot { fill: none; stroke: var(--fg); stroke-width: 1.5px; vector-effect: non-scaling-stroke; }
+  .ch-sw-drag { background: var(--accent-wash-2); }
+  .ch-sw-sys { background: var(--t-lg-wash); border-color: var(--t-lg) !important; }
+  .ch-sw-btn { background: var(--t-ui-wash); border-color: var(--t-ui) !important; }
+  .ch-sw-close { background: var(--error-wash); border-color: var(--error) !important; }
+  .ch-sw-edge { background: var(--warn-wash); border-color: var(--warn) !important; }
+  .ch-sw-flip { background: var(--t-in-wash); border-color: var(--t-in) !important; border-style: dashed !important; }
+  .ch-sw-client { background: var(--bg); }
   .ch-ref { font-size: 12px; }
+  .ch-refbox > summary { cursor: pointer; font-size: var(--fs-sm); color: var(--fg-2); }
+  .ch-refbox > summary code { font-size: 11.5px; }
+  .ch-refbox[open] > summary { margin-bottom: 8px; }
   .ch-ref td.ok { color: var(--accent-ink); }
   .ch-ref td.bad { color: var(--error); font-weight: 600; }
 </style>
@@ -246,6 +271,80 @@
           </table>
         </div>
         <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">주 창은 같은 caption 설정을 두 곳에 준다</span><code>window_config::caption</code>(판정·창 스타일·OS 제목)과 tree의 <code>caption_element</code>(그리기·tooltip)가 같은 값이어야 버튼 자리가 맞물린다. 설정을 짓는 함수 하나를 두 곳에서 부른다. 앞쪽은 창을 만들 때 한 번만 읽으므로, 실행 중에 tree 쪽 버튼이나 제목만 바꾸면 그림과 판정이 갈라진다.</div></div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: caption 판정 지도">
+        <header class="sec-head">
+          <h2>실습: caption 판정 지도</h2>
+          <p class="lede">OS가 창의 한 점을 물으면(<code>WM_NCHITTEST</code>) luil이 무엇을 답하는지를 자리마다 칠했다. 창 크기·배율·모드·caption의 자리·버튼을 바꾸고, 지도를 누르면 그 누름이 어디로 가는지 오른쪽에 쌓인다.</p>
+        </header>
+        <div class="lw" data-title="caption 판정 지도" data-surface="caption_band_in · hit_test_window · caption_client_at" data-reset id="ch-lab">
+          <div class="lw-body">
+          <div class="ch-grid">
+            <div class="ch-main">
+              <div class="ch-tools">
+                <label title="창 폭 (물리 픽셀)">폭 <input type="range" data-ch="w" min="480" max="1600" step="10" aria-label="창 폭 (물리 픽셀)"></label>
+                <label title="창 높이 (물리 픽셀)">높이 <input type="range" data-ch="h" min="300" max="900" step="10" aria-label="창 높이 (물리 픽셀)"></label>
+                <span class="ch-keys" data-ch="wv"></span>
+                <select data-ch="dpi" aria-label="배율 (DPI)">
+                  <option value="96">100% (96 DPI)</option>
+                  <option value="120">125% (120 DPI)</option>
+                  <option value="144">150% (144 DPI)</option>
+                  <option value="168">175% (168 DPI)</option>
+                  <option value="192">200% (192 DPI)</option>
+                </select>
+                <select data-ch="mode" aria-label="창의 모습 (window_display_mode)">
+                  <option value="normal">보통 창</option>
+                  <option value="maximized">최대화</option>
+                  <option value="fullscreen">전체 화면</option>
+                </select>
+                <select data-ch="place" aria-label="caption의 자리 (앱의 배치)">
+                  <option value="top">caption: 위</option>
+                  <option value="bottom">caption: 아래</option>
+                  <option value="part">caption: 창 일부</option>
+                  <option value="hidden">caption: 숨김</option>
+                  <option value="none">caption: 없음</option>
+                </select>
+                <fieldset><legend>창 버튼</legend>
+                  <label><input type="checkbox" data-ch="min"> 최소화</label>
+                  <label><input type="checkbox" data-ch="max"> 최대화</label>
+                  <label><input type="checkbox" data-ch="close"> 닫기</label>
+                </fieldset>
+                <select data-ch="apps" aria-label="caption 앱 단추 수">
+                  <option value="0">앱 단추 0</option>
+                  <option value="1">앱 단추 1</option>
+                  <option value="2">앱 단추 2</option>
+                </select>
+                <label title="caption 위에 겹친 client 칸 (명령 팔레트 입구)"><input type="checkbox" data-ch="search"> 검색 칸</label>
+              </div>
+              <div class="ch-map" data-ch="map" tabindex="0" role="application" aria-label="판정 지도 (luil 재현). 화살표로 점을 옮기고 Enter로 누른다"></div>
+              <div class="ch-legend">
+                <span><i class="ch-sw-client"></i>client</span>
+                <span><i class="ch-sw-drag"></i>끌기 띠 (HTCAPTION)</span>
+                <span><i class="ch-sw-sys"></i>시스템 메뉴 칸</span>
+                <span><i class="ch-sw-btn"></i>최소화·최대화</span>
+                <span><i class="ch-sw-close"></i>닫기</span>
+                <span><i class="ch-sw-flip"></i>끌기 → client로 뒤집힌 칸</span>
+                <span><i class="ch-sw-edge"></i>크기 조절</span>
+              </div>
+              <div class="ch-keys"><span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> 점 옮기기 (<kbd>Shift</kbd> 10px)</span><span><kbd>Enter</kbd> 왼쪽 누르고 떼기</span><span><kbd>Shift</kbd>+<kbd>F10</kbd> 오른쪽 떼기</span><span>누른 자리와 뗀 자리가 다르면 그대로 적는다</span></div>
+            </div>
+            <div class="ch-side">
+              <dl class="ch-read" data-ch="read" aria-label="이 점의 판정"></dl>
+              <div class="ch-acts">
+                <button type="button" class="btn" data-ch="left">왼쪽 누르고 떼기</button>
+                <button type="button" class="btn" data-ch="right">오른쪽 떼기</button>
+              </div>
+              <div class="ch-log" data-ch="log" aria-live="polite" aria-label="누름이 간 곳"></div>
+            </div>
+          </div>
+          <details class="ch-refbox">
+            <summary>시험 기준값을 옮긴 함수로 다시 잰 결과 (<code>tests/caption_layout_tests.cpp</code>)</summary>
+            <div class="table-wrap ch-ref"><table class="t" data-ch="ref"></table></div>
+          </details>
+          </div>
+          <div class="lw-foot">판정은 전부 원본을 옮긴 함수(<code>assets/captionhit.js</code>)이고 지도는 그 답을 칠할 뿐이다. <code>make_caption_layout</code>·<code>hit_test_caption</code>·<code>hit_test_window</code>·<code>default_caption_band</code>는 <code>caption_layout.cpp</code>·<code>window_mode.cpp</code>를 손대지 않고 컴파일한 대조기에 무작위 입력 40만 건을 넣어 같음을 확인했다. 띠의 반올림(<code>caption_band_in</code>), client 칸(<code>ui_tree::caption_client_at</code>), 그린 단추의 자리(<code>caption_element::arrange</code>), 누름과 뗌의 짝(<code>caption_click_executes</code>)은 원본을 읽어 옮겼고 실습 안 표의 시험 기준값에만 맞추었다. OS가 먼저 답할 수 있는 자리(<code>DwmDefWindowProc</code>)는 코드로 알 수 없어 뺐고, 끌기·크기 조절·시스템 메뉴 칸의 왼쪽 누름 뒤는 OS의 기본 처리라 옮기지 않았다. 창 크기·caption의 자리·검색 칸의 배치는 데모를 본뜬 앱 쪽 선택이다. macOS borderless 창은 규칙이 다르다 — 가장자리와 시스템 메뉴 칸이 없고 caption이 없으면 끌 자리가 없다. 그림은 같은 치수로 그린 재현이지 luil의 실제 렌더링이 아니다.</div>
+        </div>
       </section>
 
       <section class="sec" id="build-windows">
@@ -2908,7 +3007,6 @@ namespace sample {
           <details class="faq"><summary>창을 하나 더 열려면?</summary><div class="faq-a"><p class="faq-short"><code>ui_frame::windows</code>에 <code>ui_window</code>를 싣는다. 빼면 사라진다.</p><p>tree 맨 위에 <code>caption_element</code>를 앱이 담는다. 작업 표시줄에 따로 서는 창이면 <code>independent = true</code>다 — 만들 때 정하므로 바꾸려면 id를 빼고 다시 싣는다 (<a class="xref" href="#build-windows">보조 창</a>).</p></div></details>
           <details class="faq"><summary>보조 창의 닫기 단추를 누르면 누가 닫나?</summary><div class="faq-a"><p class="faq-short">앱이다. <code>close</code>의 동작이 메시지를 내고, 앱이 다음 frame에서 그 창을 목록에서 뺀다.</p><p><code>close</code>가 비어 있으면 닫기 단추와 Alt+F4가 아무 일도 하지 않는다. 동작은 게시된 frame당 한 번 나간다.</p></div></details>
           <details class="faq"><summary>창 크기·위치를 다음 실행에 되돌리려면?</summary><div class="faq-a"><p class="faq-short">주 창은 <code>make_window_placement_message</code>, 보조 창은 <code>ui_window::placement</code>로 받은 값을 저장했다가 <code>initial_placement</code>에 그대로 넣는다.</p><p>저장 배치의 x·y를 <code>initial_position</code>에 넣지 않는다 — 단위가 다르다 (<a class="xref" href="#build-windows">배치 저장과 복원</a>의 예제).</p></div></details>
-          <details class="faq"><summary>저장한 배치가 화면 밖이면?</summary><div class="faq-a"><p class="faq-short"><code>initial_placement</code>는 통째로 무시되고 기본 배치로 열린다.</p><p>모니터를 뺐거나 해상도가 바뀐 경우다. 실행 중의 배치 요청은 달라서 화면 밖이면 크기만 적용한다.</p></div></details>
           <details class="faq"><summary>caption에 설정 단추를 넣으려면?</summary><div class="faq-a"><p class="faq-short"><code>caption_config::app_buttons</code>에 <code>caption_app_button</code>{<code>key</code>, <code>glyph</code>, <code>tooltip</code>, <code>action</code>}을 넣는다.</p><p>창 버튼 바로 왼쪽에 서고, 끌기가 아니라 client로 판정되며, Tab의 자리다. 주 창이면 같은 설정을 <code>window_config::caption</code>에도 준다.</p></div></details>
           <details class="faq"><summary>제목 표시줄 가운데에 검색 칸을 두고 싶다.</summary><div class="faq-a"><p class="faq-short">caption 다음에 담아 위에 겹치고 그 element에 <code>set_caption_client(true)</code>를 단다.</p><p>명령 팔레트 입구(<code>make_command_palette_entry</code>)는 스스로 단다. 데모가 그렇게 caption 가운데에 둔다 (<a class="xref" href="#build-caption">caption 위에 겹치기</a>).</p></div></details>
           <details class="faq"><summary>최대화 단추를 없애면 더블클릭 최대화도 막히나?</summary><div class="faq-a"><p class="faq-short">막힌다. 빠진 버튼은 그 창 스타일도 빠져 caption 더블클릭·Win+↑·시스템 메뉴의 최대화가 함께 멎는다.</p><p>크기 조절 테두리와 시스템 메뉴는 버튼 집합과 상관없이 남는다. 주 창이면 이 집합도 창을 만들 때 한 번 읽는다.</p></div></details>
@@ -2983,5 +3081,10 @@ namespace sample {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="assets/manual.js"></script>
+<script src="assets/captionhit.js"></script>
+<script src="assets/window-lab.js"></script>
+<script>
+  LuilWindowLab.setup(document.getElementById("ch-lab"));
+</script>
 </body>
 </html>

@@ -25,7 +25,48 @@
   .t kbd, .prose kbd { font-family: var(--font-code); font-size: 0.86em; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--fg-2); background: var(--panel); white-space: nowrap; }
   .t td.k { white-space: nowrap; }
   @media (max-width: 560px) { .t td.k { white-space: normal; } }
-/*LAB-CSS*/
+  /* 실습 — 숫자 칸, 주소 찾기 (assets/text-input-lab.js) */
+  .ti-cols { display: grid; gap: 14px; }
+  @media (min-width: 1100px) { .ti-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .ti-side, .ti-panel { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .ti-row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; min-width: 0; }
+  .ti-row select { min-width: 0; max-width: 100%; }
+  .ti-k { font-size: var(--fs-xs); color: var(--fg-3); }
+  .ti-range { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 6px 8px; }
+  .ti-rf { display: grid; gap: 2px; font-family: var(--font-code); font-size: 11px; color: var(--fg-3); min-width: 0; }
+  .ti-rf input { width: 100%; min-width: 0; font-family: var(--font-code); font-size: 12px; }
+  .ti-fieldwrap { display: grid; gap: 4px; min-width: 0; }
+  .ti-field { position: relative; max-width: 260px; }
+  .ti-input { width: 100%; box-sizing: border-box; height: 28px; padding-right: 28px; }
+  .ti-field.invalid .ti-input, .ti-field.invalid .ti-input:focus { border-color: var(--error); }
+  .ti-field.invalid .ti-input:focus { box-shadow: 0 0 0 1px var(--error); }
+  .ti-spin { position: absolute; right: 3px; top: 3px; bottom: 3px; width: 18px; display: grid; grid-template-rows: 1fr 1fr; gap: 1px; }
+  .ti-spin button { border: 0; padding: 0; margin: 0; background: var(--sunk); color: var(--fg-2); border-radius: 2px; display: grid; place-items: center; cursor: pointer; font-size: 9px; line-height: 1; }
+  .ti-spin button:hover { color: var(--fg); background: var(--line); }
+  .ti-spin button:first-child .ci { transform: rotate(-90deg); }
+  .ti-spin button:last-child .ci { transform: rotate(90deg); }
+  .ti-error { min-height: 16px; font-size: 11px; line-height: 16px; color: var(--error); overflow-wrap: anywhere; }
+  .ti-tries { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .ti-state { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .ti-state dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .ti-state dd { margin: 0; overflow-wrap: anywhere; }
+  .ti-state code { font-size: 11.5px; background: none; padding: 0; }
+  @media (max-width: 560px) { .ti-state { grid-template-columns: minmax(0, 1fr); } .ti-state dd { margin-bottom: 4px; } }
+  .ti-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 240px; overflow: auto; padding: 4px 0; font-size: 12px; }
+  .ti-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .ti-entry:first-child { background: var(--accent-wash); }
+  .ti-entry .in { font-weight: 600; color: var(--fg); overflow-wrap: anywhere; }
+  .ti-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .ti-entry .msg::before { content: "\2192  "; color: var(--fg-3); }
+  .ti-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
+  .ti-empty { padding: 10px 12px; color: var(--fg-3); }
+  .ti-text { width: 100%; box-sizing: border-box; min-width: 0; font-size: 13px; line-height: 1.6; resize: vertical; }
+  .ti-view { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); padding: 8px 10px; min-width: 0; }
+  .ti-link { color: var(--link); text-decoration: underline; text-underline-offset: 2px; background: var(--accent-wash); border-radius: 2px; }
+  .ti-count { font-family: var(--font-code); font-size: 11px; color: var(--fg-3); }
+  .ti-links td.ti-num { font-family: var(--font-code); font-size: 12px; white-space: nowrap; }
+  .ti-links code { overflow-wrap: anywhere; }
+  .ti-none { color: var(--fg-3); }
 </style>
 </head>
 <body data-page="text-input">
@@ -58,18 +99,319 @@
 
     <div class="doc-body">
 
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 것을 쓰나</h2>
+          <p class="lede">element는 둘뿐이다. 한 줄이냐 여러 줄이냐로 고르고, 코드 칸과 서식 글은 여러 줄 칸에 앱이 도우미를 얹어 만든다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB3B;</i><code>text_input_element</code></h4>
+            <ul>
+              <li>한 줄 글. Enter·Esc·↑↓를 쓰지 않아서 폼과 대화 상자의 키가 그대로 지나간다.</li>
+              <li>암호(<code>secret</code>)·숫자(<code>number</code>)·검색 꼴(돋보기·지우기 단추)·링크·안내 글은 설정 필드다.</li>
+              <li>검증 결과는 칸 아래 오류 줄(<code>invalid</code>·<code>error</code>)로 보인다.</li>
+              <li>읽기 전용이 없다. 글자 크기 설정도 없다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB84;</i><code>text_area_element</code></h4>
+            <ul>
+              <li>여러 줄 글. Enter가 줄을 바꾸고, ↑↓·Page·Home·End가 화면 줄 단위로 움직인다.</li>
+              <li>세로 스크롤과 자동 접기. 스크롤 위치와 접은 자리 cache는 앱이 쥔다.</li>
+              <li>읽기 전용(<code>read_only</code>)으로 문서 보기·로그를 만든다.</li>
+              <li>줄 번호(<code>gutters</code>)·줄 바탕(<code>lines</code>)·찾은 곳(<code>highlights</code>)으로 차이 보기를 짓는다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEAC4;</i>코드 칸</h4>
+            <ul>
+              <li>여러 줄 칸에 <code>face = text_face::code</code>. 긴 줄을 접지 않으려면 <code>wrap = false</code>.</li>
+              <li>색은 앱이 쓴 렉서를 받는 <code>syntax_highlighter</code>가 구간(<code>spans</code>)으로 만든다.</li>
+              <li>큰 글은 시간 예산으로 나눠 칠한다 (<code>update</code> · <code>advance</code>).</li>
+              <li>Tab을 글로 받으려면 <code>set_takes_tab(true)</code>.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB2A;</i>서식 글</h4>
+            <ul>
+              <li>여러 줄 칸 + 초안 곁의 서식 <code>text_format</code>.</li>
+              <li>굵게·기울임·밑줄·코드 네 표시와 링크. 글자 크기를 바꾸는 서식은 없다.</li>
+              <li>명령은 <code>apply_rich_text_command</code>, 단축키는 <code>make_rich_text_key_handler</code>, 그릴 구간은 <code>rich_text_presenter</code>.</li>
+              <li>서식을 실은 복사·붙여넣기와 HTML 주고받기가 있다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>이름·제목처럼 한 줄</td><td><code>text_input_element</code> + <code>text_input_config</code></td><td><a class="xref" href="#build-single">한 줄 칸과 폼</a></td></tr>
+              <tr><td>돋보기·지우기 단추가 든 검색 칸</td><td>같은 칸의 <code>leading_glyph</code>·<code>clear</code> (밖에서 감싸지 않는다)</td><td><a class="xref" href="#build-single">한 줄 칸과 폼</a></td></tr>
+              <tr><td>Enter로 확정, Esc로 되돌리기</td><td>칸의 <code>set_key_handler</code> + <code>set_focus_leave_action</code></td><td><a class="xref" href="#build-single">한 줄 칸과 폼</a></td></tr>
+              <tr><td>암호, 휴대폰 키보드 종류</td><td><code>secret</code>·<code>reveal</code> · <code>text_input_options</code></td><td><a class="xref" href="#build-single">한 줄 칸과 폼</a></td></tr>
+              <tr><td>메모·본문 (줄 바꿈, 세로 스크롤)</td><td><code>text_area_element</code> + <code>text_area_config</code></td><td><a class="xref" href="#build-area">여러 줄 칸</a></td></tr>
+              <tr><td>문서 보기·로그·차이 보기</td><td><code>read_only</code> · <code>gutters</code>·<code>lines</code>·<code>highlights</code></td><td><a class="xref" href="#build-area">여러 줄 칸</a></td></tr>
+              <tr><td>들어오는 글 거르기, 길이 제한</td><td><code>apply_text_edit</code>의 <code>text_insert_filter</code></td><td><a class="xref" href="#build-validate">거르기·검증·숫자</a></td></tr>
+              <tr><td>숫자 (범위·증감·오류 줄)</td><td><code>text_input_number</code> + <code>number_input_filter</code>·<code>check_number_input</code>·<code>stepped_number_input</code></td><td><a class="xref" href="#build-validate">거르기·검증·숫자</a></td></tr>
+              <tr><td>글 속 주소를 링크로</td><td><code>detect_text_links</code> + <code>links</code>·<code>activate_link</code></td><td><a class="xref" href="#build-links">링크</a></td></tr>
+              <tr><td>코드 편집기</td><td><code>text_face::code</code> + <code>syntax_highlighter</code></td><td><a class="xref" href="#build-code">코드 칸과 구문 강조</a></td></tr>
+              <tr><td>굵게·기울임·링크를 고치는 편집기</td><td><code>text_format</code> + <code>rich_text_presenter</code> + <code>make_rich_text_key_handler</code></td><td><a class="xref" href="#build-rich">서식 글</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>한 줄 칸의 글자는 11 논리 픽셀에 배율을 곱한 크기로 고정이다. 여러 줄 칸은 <code>font_size</code>를 받는다. 칸 안의 글자 하나·caret 자리·줄 나눔 같은 바탕 규칙은 <a class="xref" href="text.html">텍스트 처리</a>가 다루고, 보여 주기만 하는 글(라벨·마크다운)은 <a class="xref" href="text-display.html">글 표시와 글꼴</a>에 있다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 글은 앱이, 키는 controller가</h2>
+          <p class="lede">칸은 아무것도 기억하지 않는다. 앱이 준 초안의 사본으로 그리고, 사용자의 키·IME·붙여넣기를 편집 요청으로 바꿔 돌려줄 뿐이다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>임자</th><th>칸에 싣는 자리</th></tr></thead>
+            <tbody>
+              <tr><td>확정 글·caret·선택·칸의 실행 취소 기록·서식·다음 글자 서식·IME 편집 번호</td><td>앱의 <code>text_edit_state</code> (칸 하나에 하나, logic thread)</td><td><code>make_text_input_view</code>가 지은 <code>text_input_view</code></td></tr>
+              <tr><td>IME 조합 표시 (조합 중 글 전체, 조합 caret, 밑줄 구간)</td><td>앱이 쥐는 <code>std::optional&lt;text_composition_event&gt;</code> (보통 화면에 하나, <code>target</code>으로 가른다)</td><td>같은 view (<code>make_text_input_view</code>의 둘째 인자)</td></tr>
+              <tr><td>여러 줄 칸의 세로·가로 스크롤 위치</td><td>앱</td><td><code>scroll_offset</code> · <code>scroll_x</code></td></tr>
+              <tr><td>접은 자리 cache</td><td>앱이 쥐는 <code>std::shared_ptr&lt;text_area_wrap_cache&gt;</code> (칸 하나에 하나)</td><td><code>wrap_cache</code></td></tr>
+              <tr><td>구문 색 구간</td><td>앱이 쥐는 <code>syntax_highlighter</code> (thread-safe가 아니다)</td><td><code>spans</code></td></tr>
+              <tr><td>서식 → 그릴 구간·링크</td><td>앱이 쥐는 <code>rich_text_presenter</code> (칸 하나에 하나)</td><td><code>spans</code> · <code>links</code></td></tr>
+              <tr><td>초점 (<code>focused_input</code>·<code>focus_visible</code>·caret 깜빡임의 기준 시각)</td><td>input thread의 <code>interaction_controller</code></td><td>— (<code>interaction_snapshot</code>)</td></tr>
+              <tr><td>bounds·한 줄 칸의 가로 스크롤·픽셀과 offset의 변환</td><td>element</td><td>— (배치 때 계산한다)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>글자 하나가 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>초점이 선 칸에서 글자를 친다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller가 <code>character_typed_event</code>를 받아 초점 칸(<code>focused_input</code>)의 <code>text_edit_request</code>를 짓는다. 명령 <code>insert</code>, 글, 칸의 <code>target</code>.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>정책의 <code>make_text_edit_action</code>이 요청을 앱 메시지로 싼다. 보통 <code>make_app_action(edit_intent { request })</code>다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱의 <code>handle</code>이 <code>apply_text_edit(state, request, filter)</code>를 부른다. 글·caret·칸의 기록이 바뀐다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>다음 <code>make_frame()</code>이 <code>make_text_input_view(state, composition, target)</code>로 사본을 짓고 칸을 <strong>처음부터 다시 짓는다</strong>.</span></div>
+          <div role="listitem"><span class="who">input · UI</span><span>controller가 새 tree를 받고 UI thread가 그린다. 여러 줄 칸이면 caret 줄을 창 안으로 들이는 <code>scroll</code> 메시지가 뒤따른다.</span></div>
+        </div>
+        <div class="prose">
+          <p>붙여넣기는 길이 다르다. controller는 <code>clipboard_paste_request</code>만 내고, <strong>UI thread</strong>가 클립보드를 읽어 <code>insert</code> 요청을 지은 뒤 같은 <code>make_text_edit_action</code>을 부른다. IME 확정과 UIA의 <code>SetValue</code>도 UI thread에서 이 함수를 부른다. 그래서 이 factory는 앱 상태를 건드리지 않는 순수 변환이어야 한다. 복사는 앱을 거치지 않는다. controller가 snapshot의 확정 글에서 고른 구간을 잘라 <code>clipboard_copy_request</code>를 바로 낸다.</p>
+          <p><code>apply_text_edit</code>가 명령 19개를 <code>text_edit_*</code> 함수에 하나씩 잇는 일, 글자소 단위 이동과 Backspace의 예외는 <a class="xref" href="text.html#s10">텍스트 처리 — 편집 상태</a>가 줄 단위로 푼다.</p>
+        </div>
+        <h3>kind와 target</h3>
+        <div class="prose">
+          <ul>
+            <li>칸의 kind는 앱 kind(<code>application_element_kind(n)</code>)다. 라이브러리에 "텍스트 칸" kind가 따로 없다.</li>
+            <li>정책의 <code>text_target_of(kind)</code>가 그 kind를 앱이 정한 불투명한 값 <code>text_input_target</code>으로 옮긴다. <strong>답하지 않으면 죽은 칸이다.</strong> 눌러도 초점이 서지 않고 caret·IME·클립보드가 모두 끊긴다. UIA의 Value도 읽기 전용으로 답한다.</li>
+            <li>편집 메시지는 칸마다 둘 필요가 없다. 데모는 모든 칸의 요청을 한 타입 <code>edit_intent</code>로 나르고 요청의 <code>target</code>으로 가른다.</li>
+            <li>popup 안의 칸도 같은 표에 등록한다.</li>
+          </ul>
+        </div>
+        <h3>초점</h3>
+        <div class="prose">
+          <ul>
+            <li>칸을 누르면 초점이 선다. Tab 자리가 아니어도 텍스트 칸이면 초점을 준다. 눌러서 잡은 초점은 초점 테를 그리지 않고, Tab으로 옮긴 초점만 그린다. caret은 반주기 530ms(<code>caret_blink_interval</code>)로 깜빡인다.</li>
+            <li>빈 곳이나 비활성 element를 누르거나 창이 키보드 초점을 잃으면 텍스트 초점이 풀린다. 칸 안의 부품(지우기 단추)을 누르는 것은 떠남이 아니다.</li>
+            <li>도구 막대 단추처럼 칸의 초점을 지켜야 하는 element는 <code>set_preserve_pointer_focus(true)</code>를 단다.</li>
+            <li>칸을 떠날 때 할 일은 <code>set_focus_leave_action</code>에 단다. 창 비활성화와 tree 교체는 떠남이 아니다.</li>
+            <li>화면을 열면서 칸에 초점을 주려면 frame의 <code>ui_frame::focus</code>에 <code>focus_request</code>를 싣는다. 번호(<code>id</code>)가 바뀔 때만 새 요청이다. 초점 규칙 전체는 <a class="xref" href="input.html#s7">입력과 초점 — 초점의 규칙</a>에 있다.</li>
+          </ul>
+        </div>
+        <h3>IME 조합: 앱이 할 일만</h3>
+        <div class="prose">
+          <ul>
+            <li>조합 중의 글은 초안에 들어가지 않는다. 앱은 <code>text_composition_event</code>를 표시용으로만 쥐고, <code>composing</code>이 거짓인 이벤트가 오면 버린다. 확정 글은 따로 편집 요청으로 온다.</li>
+            <li>점진 검색처럼 화면에 보이는 글로 걸러야 하면 <code>text_input_view::displayed_text()</code>나 <code>search_query</code>를 쓴다.</li>
+            <li>확정이 어떤 명령으로 오는지(Windows·Android·iOS는 <code>replace_all</code>, macOS는 <code>insert</code>), 그림자 문서와 조합 caret은 <a class="xref" href="text.html#s11">텍스트 처리 — IME 조합</a>이 다룬다.</li>
+          </ul>
+        </div>
+        <h3>편집 번호: Android·iOS</h3>
+        <div class="prose">
+          <p>Android·iOS의 IME 편집(<code>replace_all</code>)에는 <code>sequence</code> 번호가 실린다. <code>apply_text_edit</code>가 0이 아닌 번호를 <code>applied_sequence</code>로 옮기고, <code>make_text_input_view</code>가 그것을 view에 싣는다. IME 쪽은 그 번호가 돌아오기 전까지 앱의 글을 IME에 다시 넘기지 않는다. 빠른 타자가 되돌아가지 않게 하는 장치다. 그래서 <strong>앱은 편집 요청을 그냥 버리면 안 된다.</strong> 거절하더라도 번호는 옮긴다 (<a class="xref" href="#build-validate">길이 제한</a>).</p>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">칸은 frame마다 새로 지어진다</span>frame 사이에 남아야 하는 것(접은 자리 cache, 구문 색, 서식 구간)은 앱이 쥐고 설정으로 넘긴다. 설정에 넘긴 <code>std::shared_ptr&lt;const std::vector&lt;…&gt;&gt;</code>는 게시한 뒤 고치지 않는다. 바꿀 때는 새 vector를 짓는다. 구간과 링크의 offset은 확정 글 기준의 UTF-8 byte이고, 조합 중에는 칸이 조합 글만큼 옮겨 그린다.</div></div>
+        <h3>두 개의 실행 취소</h3>
+        <div class="prose">
+          <p>칸의 기록(<code>text_edit_state</code>의 <code>undo</code>·<code>redo</code>)은 칸 하나의 글과 서식이다. 편집 칸에 초점이 있으면 주+Z·주+Y·주+Shift+Z(주 수정자는 Windows의 Ctrl, macOS의 Command)는 칸이 먹는다. <strong>칸 기록이 비어도 앱으로 넘어가지 않는다.</strong> 읽기 전용 칸만 넘긴다. 앱의 실행 취소 stack과 어떻게 나누는지는 <a class="xref" href="undo.html#s1">앱 수준 실행 취소 — 두 개의 되돌리기</a>에 있다.</p>
+        </div>
+      </section>
+
       <section class="sec" id="build-single">
         <header class="sec-head">
           <h2>만들기: 한 줄 칸과 폼</h2>
-          <p class="lede">smoke</p>
+          <p class="lede">kind와 target, 편집·조합 메시지, 초안, 정책, <code>handle</code>, view. 이 여섯 조각이면 칸이 선다. 검색 칸·암호 칸·확정하는 칸은 그 위에 얹는 설정이다.</p>
         </header>
-        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:172-175" data-path="examples/widgets/app.h" data-start="172"><script type="text/plain">
+        <h3>가장 작은 칸</h3>
+        <div class="prose"><p><code>examples/widgets</code>의 메모 칸이다. 먼저 kind와 target, 편집·조합 메시지, 앱 상태를 정한다. target은 편집 요청이 어느 초안의 것인지 가르는 앱의 값이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:34,46-49,74-83,172-175" data-path="examples/widgets/app.h" data-start="34"><script type="text/plain">
+    constexpr luil::ui_element_kind kind_note_input { luil::application_element_kind(4) };
+⋯@46
+    // --- 텍스트 입력 대상 ---
+    // 텍스트 박스마다 대상 id를 하나 정한다.
+    // policy가 "이 kind는 이 대상"이라고 등록해야 초점·IME·클립보드가 이어진다.
+    constexpr luil::text_input_target target_note { static_cast<luil::text_input_target>(1) };
+⋯@74
+    // inputs: 편집·조합 메시지. policy가 라이브러리 요청을 이 봉투에 담는다.
+    struct edit_intent
+    {
+        luil::text_edit_request request {};
+    };
+
+    struct composition_intent
+    {
+        luil::text_composition_event event {};
+    };
+⋯@172
         // 텍스트 초안과 IME 조합 표시 상태다.
         // 확정 글의 진실은 언제나 이 초안이고, 조합 글은 표시 상태일 뿐이다.
         luil::text::text_edit_state note {};
         std::optional<luil::text_composition_event> composition {};
 </script></div>
-        <div class="code" data-lang="cpp" data-label="Enter로 확정, Esc로 되돌리기 (직접 작성)" data-compile="pre-commit"><script type="text/plain">
+        <div class="prose"><p>정책은 kind를 등록하고 요청을 봉투에 싼다. 이 함수들은 input thread와 UI thread에서 불린다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:266-285" data-path="examples/widgets/app.cpp" data-start="266"><script type="text/plain">
+    std::optional<luil::text_input_target> widgets_policy::text_target_of(const luil::ui_element_kind kind) const
+    {
+        // 텍스트 박스가 늘면 여기 한 줄씩 는다.
+        // 이 표에서 빠지면 그 박스는 클릭해도 초점을 받지 못한다.
+        if (kind == kind_note_input)
+            return target_note;
+        return std::nullopt;
+    }
+
+    luil::input_action widgets_policy::make_text_edit_action(const luil::text_edit_request& request) const
+    {
+        // 라이브러리의 편집 요청을 앱 메시지 봉투에 담는다.
+        // 실제 적용은 logic thread의 handle이 한다 — 여기는 순수 변환이다.
+        return luil::make_app_action(edit_intent { request });
+    }
+
+    luil::input_action widgets_policy::make_text_composition_action(const luil::text_composition_event& event) const
+    {
+        return luil::make_app_action(composition_intent { event });
+    }
+</script></div>
+        <div class="prose"><p>logic thread의 <code>handle</code> 갈래다. 편집은 <code>apply_text_edit</code> 한 줄이고, 조합은 표시 상태만 바꾼다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:50-66" data-path="examples/widgets/app.cpp" data-start="50"><script type="text/plain">
+        if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
+        {
+            // 편집 적용은 라이브러리 도우미가 한다.
+            // 명령(insert·backspace·이동·undo …)의 해석을 앱이 다시 쓸 필요가 없다.
+            luil::apply_text_edit(state_.note, edit->request);
+            return;
+        }
+        if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
+        {
+            // 조합이 끝나면 표시 상태를 버린다.
+            // 확정된 글은 별도의 편집 요청으로 이미 들어왔다.
+            if (composition->event.composing == false)
+                state_.composition.reset();
+            else
+                state_.composition = composition->event;
+            return;
+        }
+</script></div>
+        <div class="prose"><p>frame을 지을 때 초안과 조합 표시를 합친 view로 칸을 세운다. 이 칸은 돋보기와 지우기 단추가 든 검색 꼴이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/inputs_section.cpp:37-57" data-path="examples/widgets/inputs_section.cpp" data-start="37"><script type="text/plain">
+        // view는 확정 글(초안)과 IME 조합 표시를 합친 값이다.
+        // 조합이 이 target의 것이 아니면 확정 글만 보인다.
+        luil::text_input_view view { luil::make_text_input_view(state.note, state.composition, target_note) };
+
+        // 검색 칸: 돋보기와 지우기 버튼이 **칸 안에** 선다.
+        // 밖에서 가로 stack으로 감싸면 글이 보이는 안쪽 폭이 두 벌이 되어
+        // caret과 글자가 어긋난다 — 그래서 element가 둘을 갖는다.
+        luil::text_input_config input_config {};
+        input_config.placeholder = u8"여기에 입력한다";
+        input_config.leading_glyph = luil::codicons::icon_search;
+        input_config.clear_tooltip = u8"글을 비운다";
+        // 지우는 것은 앱이다 — element는 액션을 실행할 뿐이다.
+        // clear 명령은 라이브러리에 이미 있으므로 그 요청을 봉투에 담아 돌려준다.
+        input_config.clear = [](const luil::ui_action_context&) -> std::vector<luil::input_action> {
+            luil::text_edit_request request {};
+            request.target = target_note;
+            request.command = luil::text::text_edit_command::clear;
+            return { luil::make_app_action(edit_intent { request }) };
+        };
+        auto input { std::make_unique<luil::text_input_element>(luil::ui_element_id { kind_note_input }, std::move(view), std::move(input_config)) };
+        column->add(std::move(input), 28.0f);
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>칸의 높이는 담는 쪽이 정한다 (여기서는 28 논리 픽셀). 측정 단계가 없어서 아이콘이 먹는 폭은 <code>leading_width_for</code>·<code>trailing_width_for</code>로 잰다.</li>
+            <li>지우기 단추는 칸 안의 부품이라 Tab 자리가 아니고, 누른 뒤에도 초점이 칸에 남는다. 지우는 명령 <code>text_edit_command::clear</code>는 <strong>칸의 실행 취소 기록까지 비운다</strong>.</li>
+            <li>안내 글(<code>placeholder</code>)은 글이 비고 초점이 없을 때만 50% 투명도로 그린다.</li>
+          </ul>
+        </div>
+
+        <h3>검색 칸과 점진 검색</h3>
+        <div class="prose">
+          <p>검색 칸은 따로 있는 kind가 아니다. 위의 <code>leading_glyph</code>(돋보기)와 <code>clear</code>에, 휴대폰 키보드의 확정 단추를 <code>input.action = text_input_action::search</code>로 고르면 끝이다. 목록을 좁히는 일은 앱이 한다. 조합 중인 한글("토ㅅ")이 아무것도 맞히지 못하면 확정 글("토")로 물러서는 규칙은 <code>search_query</code>가 정한다. 데모의 메뉴 검색이다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/common.cpp:242-270" data-path="examples/demo/common.cpp" data-start="242"><script type="text/plain">
+    std::vector<luil::menu_item_config> narrow_menu_items(std::vector<luil::menu_item_config> items, const luil::text_input_view& search)
+    {
+        // 이 앱의 매칭 정책이다: 이름에 그 글이 들어 있으면 맞다.
+        // 빈 질의는 전부 통과시킨다.
+        const auto matches = [](const std::u8string_view label, const std::u8string_view query) { return query.empty() || label.find(query) != std::u8string_view::npos; };
+        // 그 질의로 맞는 것이 하나라도 있는지만 답한다.
+        // 조합 중인 글자를 어떻게 다룰지는 라이브러리가 이 답으로 정한다.
+        const auto any_match = [&items, &matches](const std::u8string_view candidate) {
+            for (const luil::menu_item_config& item : items)
+                if (matches(item.label, candidate))
+                    return true;
+            return false;
+        };
+        const std::u8string_view query { luil::search_query(search, any_match) };
+
+        std::vector<luil::menu_item_config> narrowed {};
+        for (luil::menu_item_config& item : items)
+            if (matches(item.label, query))
+                narrowed.push_back(std::move(item));
+        if (narrowed.empty())
+        {
+            luil::menu_item_config empty {};
+            empty.key = u8"none";
+            empty.label = u8"일치하는 항목 없음";
+            empty.enabled = false;
+            narrowed.push_back(std::move(empty));
+        }
+        return narrowed;
+    }
+</script></div>
+
+        <h3>Enter로 확정하고 Esc로 되돌리기</h3>
+        <div class="prose"><p>한 줄 칸은 Enter와 Esc를 쓰지 않는다. 칸이 놓친 키는 칸과 조상의 key handler → 가둠의 Esc → 기본 버튼의 Enter → 정책 <code>on_key</code> 차례로 흐른다 (<a class="xref" href="#keyboard">키보드</a>). 그래서 길이 셋이다.</p></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>길</th><th>다는 것</th><th>언제 쓰나</th></tr></thead>
+            <tbody>
+              <tr><td>기본 버튼</td><td><code>text_button_config::default_button = true</code></td><td>대화 상자·폼. 칸에서 친 Enter가 그 단추의 클릭이 된다. Ctrl·Alt·Meta와 함께인 Enter는 가지 않는다</td></tr>
+              <tr><td>칸의 key handler</td><td><code>set_key_handler</code> (+ <code>set_focus_leave_action</code>)</td><td>칸마다 뜻이 다를 때 — 찾기 칸의 "다음", 제목 칸의 확정. 기본 버튼과 가둠의 Esc보다 먼저 받는다</td></tr>
+              <tr><td>휴대폰 확정 단추</td><td><code>submit</code>, 없으면 <code>input.action</code></td><td>Android·iOS만. <code>submit</code>이 없으면 done·search·go·send는 Enter를, next·previous는 Tab·Shift+Tab을 낸다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose"><p>라이브러리도 색 고르기의 16진 칸을 이렇게 짓는다. 휴대폰 확정 단추, 칸 떠남, 수정자 없는 Enter가 모두 같은 확정 액션이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="src/ui/color_picker_element.cpp:329-345" data-path="src/ui/color_picker_element.cpp" data-start="329"><script type="text/plain">
+            text_input_config input {};
+            input.invalid = hex.invalid;
+            // Android 키보드의 확정 단추도 확정이다. 비어 있으면 Enter로 흐른다.
+            input.submit = hex.commit;
+            auto field { std::make_unique<text_input_element>(hex.id, hex.value, std::move(input)) };
+            field->set_access_name(std::u8string { default_text::text_or_default(hex.name, default_text::color_picker_hex_name()) });
+            if (hex.commit != nullptr)
+            {
+                // 같은 표면 안에서 칸을 떠나면 확정한다. 다른 표면(popup 밖)으로 옮긴 초점은 떠남이 아니다.
+                field->set_focus_leave_action(hex.commit);
+                // 한 줄 칸이 쓰지 않은 Enter가 조상 전파로 이 칸에 먼저 온다. 수식 키를 든 Enter는 앱 단축키다.
+                field->set_key_handler([commit = hex.commit, id = hex.id](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
+                    if (event.key != key_code::enter || event.shortcut_modifier_down())
+                        return std::nullopt;
+                    const ui_action_context context { id };
+                    return commit(context);
+                });
+</script></div>
+        <div class="prose"><p>세 길을 한 칸에 모은 견본이다. 확정 값과 초안을 따로 들고, Esc는 초안을 확정 값으로 되돌린다.</p></div>
+        <div class="code" data-lang="cpp" data-label="Enter·칸 떠남·확정 단추로 확정, Esc로 되돌리기 (직접 작성)" data-compile="pre-commit"><script type="text/plain">
 constexpr luil::ui_element_kind kind_title_input { luil::application_element_kind(0) };
 constexpr luil::text_input_target target_title { static_cast<luil::text_input_target>(1) };
 
@@ -166,6 +508,2375 @@ namespace sample {
 /*SAMPLE*/
 }
 </script>
+        <div class="prose">
+          <ul>
+            <li>칸의 key handler는 가둠의 Esc보다 앞이다. 대화 상자 안의 이 칸에서 Esc는 대화를 닫지 않고 되돌리기만 한다. 닫기까지 바라면 처리기가 <code>std::nullopt</code>를 돌려 위로 흘린다.</li>
+            <li>되돌리기에 <code>text_edit_set_text</code>를 쓰면 칸의 기록이 비워진다. 기록을 남기려면 아래 표처럼 <code>replace_all</code> 요청을 지어 <code>apply_text_edit</code>에 넘긴다.</li>
+            <li>데스크톱 host는 <code>submit</code>을 읽지 않는다. 데스크톱의 Enter는 key handler나 기본 버튼이 받아야 한다.</li>
+            <li>IME 조합 중의 Enter가 앱의 키로 오는지는 IME마다 다르다. 코드로는 정할 수 없다.</li>
+          </ul>
+        </div>
+
+        <h3>암호 칸</h3>
+        <div class="prose"><p>암호는 <code>secret</code>, 보이기는 <code>reveal</code>이다. 보이기 단추는 지우기 단추 자리(<code>clear</code>)를 빌리고 글리프만 바꾼다. 보일지 말지는 앱 상태(<code>secret_reveal_</code>)이고, 단추는 그 반대 값을 실은 메시지를 낸다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/common.cpp:54-64" data-path="examples/mobile_demo/common.cpp" data-start="54"><script type="text/plain">
+    luil::text_input_config make_secret_input_config(std::u8string placeholder, const bool reveal, luil::ui_action toggle)
+    {
+        // 단추의 글리프는 누르면 무엇이 되는지를 말한다 — 보이는 중이면 감은 눈이다.
+        luil::text_input_config config { .placeholder = std::move(placeholder) };
+        config.secret = true;
+        config.reveal = reveal;
+        config.clear = std::move(toggle);
+        config.clear_glyph = reveal ? luil::codicons::icon_eye_closed : luil::codicons::icon_eye;
+        config.clear_tooltip = reveal ? u8"암호 가리기" : u8"암호 보이기";
+        return config;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/basics_page.cpp:419-423" data-path="examples/mobile_demo/basics_page.cpp" data-start="419"><script type="text/plain">
+        // 암호 칸이다. 점으로 그리고 복사하지 않으며, 키보드가 배우지 않는다. 눈 단추로 보인다.
+        const luil::ui_action reveal { luil::make_message_action(secret_reveal_intent { secret_reveal_ == false }) };
+        column.add(make_labeled_input(
+                       u8"secret", u8"암호 칸 (가림·복사 막기·암호 키보드)", kind_secret_input, make_input_view(secret_, target_secret), make_secret_input_config(u8"암호", secret_reveal_, reveal)),
+            input_block_height());
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>글은 앱 초안에 가리지 않은 채 있다. 점(U+25CF)으로 그리는 것은 element다. 코드포인트마다 점 하나라서 결합 문자가 있으면 점이 보이는 글자보다 많다.</li>
+            <li>복사·잘라내기는 보이기를 켜도 하지 않는다. 클립보드는 다른 앱과 클립보드 기록이 읽기 때문이다. 붙여넣기는 된다.</li>
+            <li>낱말 단위 이동·지우기는 칸 끝까지 가고, 두 번 누름은 칸 전체를 고른다. 낱말 경계가 공백 자리를 알리기 때문이다.</li>
+            <li>보이기는 그리기와 보조 기술의 값만 바꾼다. 휴대폰 키보드를 다시 세우지 않는다. 암호 칸은 링크도 세우지 않는다.</li>
+          </ul>
+        </div>
+
+        <h3>휴대폰 키보드 종류와 확정 단추</h3>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/basics_page.cpp:410-417" data-path="examples/mobile_demo/basics_page.cpp" data-start="410"><script type="text/plain">
+        // 텍스트 칸 셋이다. 휴대폰은 좁아 위아래로 쌓는다.
+        column.add(make_labeled_input(u8"number", u8"숫자만 받는 칸", kind_number_input, make_input_view(number_, target_number),
+                       { .placeholder = u8"0-9", .input = { .kind = luil::text_input_kind::number, .action = luil::text_input_action::next } }),
+            input_block_height());
+        column.gap(12.0f);
+        column.add(make_labeled_input(u8"note", u8"아무 글이나 받는 칸 (IME·붙여넣기)", kind_note_input, make_input_view(note_, target_note),
+                       { .placeholder = u8"메모", .input = { .action = luil::text_input_action::next } }),
+            input_block_height());
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>kind</code>·<code>signed_number</code>·<code>action</code>은 소프트 키보드에 주는 힌트일 뿐이다. 값 검사는 앱이 한다.</li>
+            <li>확정 단추 <code>next</code>는 Tab을 내어 다음 칸으로 간다. 그래서 위 두 칸은 휴대폰에서 "다음"으로 이어진다.</li>
+            <li>Windows·macOS의 키와 IME는 이 값으로 바뀌지 않는다. 플랫폼별 대응은 <a class="xref" href="#platforms">플랫폼 차이</a>에 있다.</li>
+          </ul>
+        </div>
+
+        <h3>앱이 칸의 글을 바꾸기</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>칸의 실행 취소 기록</th></tr></thead>
+            <tbody>
+              <tr><td>통째로 바꾸되 Ctrl+Z로 되돌리게</td><td><code>replace_all</code> 요청을 지어 <code>apply_text_edit</code></td><td>한 걸음 남는다. 글이 같으면 caret만 놓고 기록하지 않는다</td></tr>
+              <tr><td>고른 뒤 넣기 (끌어 놓기·자동 완성)</td><td><code>select_all</code> 다음 <code>insert</code></td><td>한 걸음 남는다</td></tr>
+              <tr><td>다른 문서를 열기, 확정 값으로 되돌리기</td><td><code>text_edit_set_text</code> (서식 글은 <code>text_edit_set_formatted_text</code>)</td><td>비운다. 서식과 다음 글자 서식도 새로 선다</td></tr>
+              <tr><td>지우기 단추</td><td><code>text_edit_command::clear</code></td><td>비운다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose"><p>OS에서 끌어 온 파일을 놓으면 첫 경로를 칸의 글로 삼는 데모다. 편집 명령 둘로 적어서 Ctrl+Z가 그대로 선다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:554-560,231-243" data-path="examples/demo/basics_page.cpp" data-start="554"><script type="text/plain">
+        // OS에서 끌어 온 파일을 받는 칸이다 (os-dragdrop-design.md).
+        // 수락은 "밖에서 온 끌기인가" 한 줄이고, 놓이면 첫 경로가 칸의 글이 된다.
+        luil::drop_target note_drop {};
+        note_drop.accepts = [](const luil::drag_payload& payload) { return payload.files.empty() == false; };
+        note_drop.on_drop = [](const luil::drag_payload& payload, const luil::ui_action_context&) -> std::vector<luil::input_action> {
+            return { luil::make_app_action(note_file_intent { payload.files.front() }) };
+        };
+⋯@231
+        if (const auto* const file { message.get<note_file_intent>() }; file != nullptr)
+        {
+            // 드롭은 칸의 글을 통째로 바꾼다.
+            // 편집 명령 둘(모두 고르고 넣기)로 적어 실행 취소가 그대로 성립한다.
+            luil::text_edit_request request {};
+            request.target = target_note;
+            request.command = luil::text::text_edit_command::select_all;
+            luil::apply_text_edit(note_, request);
+            request.command = luil::text::text_edit_command::insert;
+            request.text = file->path;
+            luil::apply_text_edit(note_, request);
+            return true;
+        }
+</script></div>
+        <div class="prose small"><p><code>insert</code>와 <code>replace_all</code>은 앱이 직접 지은 요청이어도 <code>apply_text_edit</code>에 넘긴 거르기를 지난다.</p></div>
+      </section>
+
+      <section class="sec" id="build-area">
+        <header class="sec-head">
+          <h2>만들기: 여러 줄 칸</h2>
+          <p class="lede">편집은 한 줄 칸과 같은 길이다. 더해지는 것은 앱이 쥐는 스크롤 위치와 접은 자리 cache, 그리고 읽기 전용·줄 장식 같은 보기용 설정이다.</p>
+        </header>
+        <h3>메모: 세로 스크롤과 접기 cache</h3>
+        <div class="prose"><p>스크롤 위치는 앱 상태다. 휠·막대·caret 따라가기가 모두 같은 두 메시지로 옮긴다. 접은 자리 cache는 칸 하나에 하나를 frame 사이에 쥔다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.h:97-106,203-207" data-path="examples/demo/basics_page.h" data-start="97"><script type="text/plain">
+    // 여러 줄 메모 칸의 세로 스크롤이다 (논리 픽셀). 위치는 앱 상태다.
+    struct memo_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    struct memo_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+⋯@203
+        // 여러 줄 메모의 글과 세로 스크롤이다. 스크롤은 휠·막대·caret 따라가기가 같은 메시지로 옮긴다.
+        luil::text::text_edit_state memo_ {};
+        float memo_scroll_ { 0.0f };
+        // 메모 칸이 접은 자리를 frame 사이에 쥔다. 바뀐 문단만 다시 잰다 (`text_area_wrap_cache`).
+        std::shared_ptr<luil::text_area_wrap_cache> memo_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:138-148" data-path="examples/demo/basics_page.cpp" data-start="138"><script type="text/plain">
+        if (const auto* const scroll { message.get<memo_scroll_intent>() }; scroll != nullptr)
+        {
+            // 범위 다듬기는 칸이 한다 — 다음 frame의 칸이 내용 높이로 다시 다듬는다. 아래로 넘친 값만 0으로 막는다.
+            memo_scroll_ = std::max(0.0f, memo_scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll_to { message.get<memo_scroll_to_intent>() }; scroll_to != nullptr)
+        {
+            memo_scroll_ = std::max(0.0f, scroll_to->offset);
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:575-596" data-path="examples/demo/basics_page.cpp" data-start="575"><script type="text/plain">
+    std::unique_ptr<luil::stack_element> basics_page::make_memo() const
+    {
+        // 줄 바꿈·세로 스크롤·여러 줄 붙여넣기를 받는 칸이다. 글과 스크롤은 앱 상태이고 편집은 한 줄 칸과 같은 길이다.
+        luil::stack_config config {};
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"input-memo" }, config) };
+        column->add(
+            make_label(luil::ui_element_id { kind_text, u8"memo" }, u8"여러 줄 메모 (Enter 줄 바꿈 · ↑↓ 줄 이동 · 휠 스크롤 · 주소는 Ctrl+클릭으로 연다)", 11.0f, luil::label_color_role::primary),
+            18.0f);
+        column->add_gap(4.0f);
+        luil::text_area_config memo {};
+        memo.placeholder = u8"여러 줄 메모";
+        memo.scroll_offset = memo_scroll_;
+        memo.scroll = [](const float delta) { return luil::make_app_action(memo_scroll_intent { delta }); };
+        memo.scroll_to = [](const float offset) { return luil::make_app_action(memo_scroll_to_intent { offset }); };
+        memo.wrap_cache = memo_wrap_;
+        // 친 글에서 주소를 찾아 링크로 보인다. 메모 정도의 글이라 frame마다 찾아도 된다.
+        memo.links = std::make_shared<const std::vector<luil::text_link>>(luil::detect_text_links(memo_.text));
+        memo.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(open_link_intent { std::u8string { destination } }); };
+        memo.link_hint = u8"Ctrl+클릭하여 열기";
+        column->add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_memo_input }, make_input_view(memo_, target_memo), std::move(memo)), 96.0f);
+        return column;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>kind를 <code>text_target_of</code>에 등록하고 같은 <code>edit_intent</code>로 <code>apply_text_edit</code>한다. 한 줄 칸과 다르지 않다.</li>
+            <li>범위 다듬기는 칸이 한다. 다음 frame의 칸이 내용 높이로 값을 다시 다듬으므로, 앱은 아래로 넘친 값만 0으로 막는다.</li>
+            <li><code>scroll</code>이 없으면 흘리지 않는 칸이다. 넘친 줄은 잘리고 caret 따라가기도 하지 않는다. 흘리는 칸은 막대 자리를 늘 뺀 폭으로 접는다.</li>
+            <li><code>wrap_cache</code>가 없어도 결과는 같다. 수십만 바이트 글에서 frame마다 다시 접는 비용만 문제다. 다른 문서를 열면 cache도 새로 짓는다.</li>
+            <li>붙여넣기는 줄 바꿈과 탭을 지킨다. 줄을 어디서 접는지(UAX #14 후보)는 <a class="xref" href="text.html#s5">텍스트 처리 — 줄은 어디서 바꿀 수 있나</a>에 있다.</li>
+          </ul>
+        </div>
+
+        <h3>문서 보기: 읽기 전용</h3>
+        <div class="prose"><p><code>read_only</code>를 켜면 글이 고정되고 caret·선택·복사만 남는다. 링크는 그냥 클릭으로 열린다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:669-675" data-path="examples/demo/basics_page.cpp" data-start="669"><script type="text/plain">
+        luil::text_area_config view {};
+        view.read_only = true;
+        view.links = std::make_shared<const std::vector<luil::text_link>>(luil::detect_text_links(link_view_.text));
+        view.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(open_link_intent { std::u8string { destination } }); };
+        auto area { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_link_view_input }, make_input_view(link_view_, target_link_view), std::move(view)) };
+        area->set_access_name(u8"읽기 전용 안내 칸");
+        column->add(std::move(area), 44.0f);
+</script></div>
+        <div class="prose"><p>읽기 전용 칸은 되돌릴 글이 없어서 주+Z·주+Y를 삼키지 않고 넘긴다. 넘긴 키는 조상의 key handler를 거쳐 정책 <code>on_key</code>에 닿는다. 데모는 초점이 그 칸에 있는지를 snapshot으로 확인하고 앱 메시지로 바꾼다. 편집 칸이면 칸이 이 키를 먼저 먹으므로, 여기 닿았다는 것 자체가 읽기 전용 칸이 넘겼다는 뜻이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/readonly_undo_keys.h:14-31" data-path="examples/demo/readonly_undo_keys.h" data-start="14"><script type="text/plain">
+    // 읽기 전용 칸에 초점이 있는 채 앱 on_key에 닿은 실행 취소(Ctrl+Z)나 다시 실행(Ctrl+Y, Ctrl+Shift+Z)이다.
+    struct readonly_undo_key_intent
+    {
+        bool redo { false };
+    };
+
+    // 초점이 `field` 칸에 있는 채 앱 on_key에 닿은 키가 되돌리기 키이면 그 메시지를 돌려준다.
+    //  - 편집 칸이면 칸이 이 키를 먼저 가져가 on_key에 닿지 않는다. 닿았다는 것이 읽기 전용 칸이 넘겼다는 증거다.
+    [[nodiscard]] inline std::optional<readonly_undo_key_intent> readonly_undo_key_of(const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot, const luil::ui_element_kind field)
+    {
+        if (snapshot.focused_input.kind != field || event.primary_shortcut_down() == false)
+            return std::nullopt;
+        if (event.key == luil::key_code::key_z)
+            return readonly_undo_key_intent { event.shift };
+        if (event.key == luil::key_code::key_y)
+            return readonly_undo_key_intent { true };
+        return std::nullopt;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1451-1455" data-path="examples/demo_main.cpp" data-start="1451"><script type="text/plain">
+            [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override
+            {
+                // 읽기 전용 안내 칸에 초점이 있는 채 닿은 Ctrl+Z·Ctrl+Y다. 칸이 삼키지 않고 넘긴 키를 기본 페이지가 센다.
+                if (const auto undo { readonly_undo_key_of(event, snapshot, kind_link_view_input) }; undo.has_value())
+                    return { luil::make_app_action(*undo) };
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">초안을 지키는 것은 앱이다</span><code>read_only</code>는 키와 IME를 막을 뿐이고 <code>apply_text_edit</code>는 읽기 전용을 모른다. Windows TSF는 쓰기를 거절하고 Android는 키보드를 띄우지 않지만, macOS 입력기 경로에는 읽기 전용 검사가 보이지 않는다 (<a class="xref" href="#platforms">플랫폼 차이</a>). 글이 장식과 짝인 보기라면 차이 보기처럼 글이 바뀐 요청을 되돌리고 caret만 받는다.</div></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:952-964" data-path="examples/demo/workbench_page.cpp" data-start="952"><script type="text/plain">
+            else if (target == target_workbench_diff)
+            {
+                // 읽기 전용 칸이라 caret·선택만 온다. 그래도 글이 바뀌는 요청이면 글은 되돌리고 caret만 받는다 —
+                // 보기의 글은 장식(줄·구간)과 짝이라 앱이 아닌 곳에서 바뀌면 둘이 어긋난다.
+                const std::u8string text { diff_.text };
+                luil::apply_text_edit(diff_, edit->request);
+                if (diff_.text != text)
+                {
+                    diff_.text = text;
+                    diff_.caret = std::min(diff_.caret, diff_.text.size());
+                    diff_.anchor = diff_.caret;
+                }
+            }
+</script></div>
+
+        <h3>차이 보기: 줄 번호·줄 바탕·찾은 곳</h3>
+        <div class="prose"><p>작업대의 변경 보기다. 통합 diff의 줄 머리를 보고 구간 색과 줄 장식을 한 번에 짓는다.</p></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:165-199" data-path="examples/demo/workbench_page.cpp" data-start="165"><script type="text/plain">
+        struct diff_decorations
+        {
+            std::vector<luil::text_span> spans {};
+            std::vector<luil::line_decoration> lines {};
+        };
+
+        // 통합 diff의 줄 머리로 구간 색과 줄 장식을 정한다. 불러온 패치에도 같은 규칙을 쓴다.
+        //  - 구간은 줄 하나를 덮는다. 줄 경계는 늘 글자소 경계라 문서 칸의 계약을 지킨다 (text_document.h).
+        [[nodiscard]] diff_decorations decorate_diff(const std::u8string_view text)
+        {
+            diff_decorations result {};
+            std::size_t begin { 0 };
+            for (std::size_t line { 0 }; begin <= text.size(); ++line)
+            {
+                const std::size_t newline { text.find(u8'\n', begin) };
+                std::size_t end { newline == std::u8string_view::npos ? text.size() : newline };
+                if (end > begin && text[end - 1] == u8'\r')
+                    --end;
+                const std::u8string_view row { text.substr(begin, end - begin) };
+                if (row.starts_with(u8"@@"))
+                    result.spans.push_back({ .begin = begin, .end = end, .color = luil::text_color_role::accent, .bold = true });
+                else if (row.starts_with(u8"diff ") || row.starts_with(u8"--- ") || row.starts_with(u8"+++ ") || row.starts_with(u8"index "))
+                    result.spans.push_back({ .begin = begin, .end = end, .color = luil::text_color_role::secondary, .bold = true });
+                else if (row.starts_with(u8'+'))
+                    result.lines.push_back({ .line = line, .background = luil::line_background_role::added, .marker = U'+' });
+                else if (row.starts_with(u8'-'))
+                    result.lines.push_back({ .line = line, .background = luil::line_background_role::removed, .marker = U'-' });
+                if (newline == std::u8string_view::npos)
+                    break;
+                begin = newline + 1;
+            }
+            // 빈 줄의 구간은 두지 않는다 (비어 있지 않은 구간만 받는다).
+            std::erase_if(result.spans, [](const luil::text_span& span) { return span.begin == span.end; });
+            return result;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="165-169" data-title="두 장식">구간(<code>text_span</code>)은 글자의 색·굵기, 줄 장식(<code>line_decoration</code>)은 줄 바탕과 여백의 표시다.</li>
+            <li data-lines="176-183" data-title="줄 하나씩">줄 끝을 찾고 CR을 뗀다. 구간은 줄 하나를 덮으므로 양 끝이 늘 글자소 경계다. 문서 칸이 요구하는 계약이다.</li>
+            <li data-lines="184-187" data-title="머리 줄">@@ 줄은 강조색 굵게, diff·---·+++·index 줄은 보조색 굵게 칠한다.</li>
+            <li data-lines="188-191" data-title="더하고 뺀 줄">+ 줄과 - 줄은 글자를 칠하지 않고 줄 바탕(<code>added</code>·<code>removed</code>)과 여백 표시(<code>marker</code>)를 단다. 줄 번호는 0부터 센다.</li>
+            <li data-lines="196-197" data-title="빈 구간 걷기">빈 구간은 받지 않는다. 마지막에 걷어 낸다.</li>
+          </ol>
+        </div>
+        <div class="prose"><p>다른 문서를 열면 장식과 cache, 스크롤을 함께 새로 짓는다. 설정에 넘긴 vector는 고치지 않고 새로 만든다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:388-397" data-path="examples/demo/workbench_page.cpp" data-start="388"><script type="text/plain">
+        diff_source_ = std::move(source);
+        diff_ = {};
+        diff_.text = std::move(text);
+        diff_decorations decorations { decorate_diff(diff_.text) };
+        diff_spans_ = std::make_shared<const std::vector<luil::text_span>>(std::move(decorations.spans));
+        diff_lines_ = std::make_shared<const std::vector<luil::line_decoration>>(std::move(decorations.lines));
+        // 다른 문서다. 앞 문서의 접은 자리와 스크롤을 들고 가지 않는다.
+        diff_wrap_ = std::make_shared<luil::text_area_wrap_cache>();
+        diff_scroll_ = 0.0f;
+        diff_scroll_x_ = 0.0f;
+</script></div>
+        <div class="prose"><p>칸 설정이다. 코드 글꼴로 접지 않고 가로로 흘린다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1316-1335" data-path="examples/demo/workbench_page.cpp" data-start="1316"><script type="text/plain">
+        // 읽기 전용 문서 칸이다. 줄 번호와 +/- 표시, 줄 바탕, 머리 줄의 굵은 색 구간, 찾은 곳을 같은 배치 값 위에 칠한다.
+        //  - 코드 글꼴로 접지 않고 가로로 흘린다. 선택과 복사는 읽기 전용에서도 된다.
+        luil::text_area_config view {};
+        view.placeholder = u8"변경 내용";
+        view.read_only = true;
+        view.wrap = false;
+        view.face = luil::text_face::code;
+        view.scroll_offset = diff_scroll_;
+        view.scroll = [](const float delta) { return luil::make_app_action(workbench_diff_scroll_intent { false, delta }); };
+        view.scroll_to = [](const float offset) { return luil::make_app_action(workbench_diff_scroll_to_intent { false, offset }); };
+        view.scroll_x = diff_scroll_x_;
+        view.scroll_horizontal = [](const float delta) { return luil::make_app_action(workbench_diff_scroll_intent { true, delta }); };
+        view.scroll_horizontal_to = [](const float offset) { return luil::make_app_action(workbench_diff_scroll_to_intent { true, offset }); };
+        view.wrap_cache = diff_wrap_;
+        view.spans = diff_spans_;
+        view.lines = diff_lines_;
+        view.gutters.push_back({ .kind = luil::gutter_kind::line_number });
+        view.highlights = matches_;
+        if (current_match_ < view.highlights.size())
+            view.highlights[current_match_].current = true;
+</script></div>
+        <div class="prose"><p>찾기 칸의 글로 찾은 곳을 칠한다. 조합 중인 글도 보이는 대로(<code>displayed_text()</code>) 찾고, 양 끝이 글자소 경계인 곳만 받는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:403-422" data-path="examples/demo/workbench_page.cpp" data-start="403"><script type="text/plain">
+    bool workbench_page::refresh_matches()
+    {
+        // 조합 중인 글자도 보이는 대로 찾는다 — 화면의 칸과 칠한 곳이 어긋나지 않는다.
+        const std::u8string query { luil::make_text_input_view(find_, find_composition_, target_workbench_find).displayed_text() };
+        if (query == matched_query_ && matches_stale_ == false)
+            return false;
+        matched_query_ = query;
+        matches_stale_ = false;
+        matches_.clear();
+        current_match_ = 0;
+        if (query.empty())
+            return true;
+        // 찾은 곳의 양 끝이 글자소 경계인 것만 칠한다. "e"로 "é"의 반쪽을 칠하지 않는다.
+        const std::vector<std::size_t> boundaries { luil::text::grapheme_boundaries(diff_.text) };
+        const auto on_boundary = [&boundaries](const std::size_t offset) { return std::binary_search(boundaries.begin(), boundaries.end(), offset); };
+        for (std::size_t at { diff_.text.find(query) }; at != std::u8string::npos && matches_.size() < match_limit; at = diff_.text.find(query, at + 1))
+            if (on_boundary(at) && on_boundary(at + query.size()))
+                matches_.push_back({ .begin = at, .end = at + query.size() });
+        return true;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>gutter_column</code>의 <code>width</code>가 0이면 줄 번호 폭을 재어 정한다. 화면의 줄 번호는 1부터, 콜백이 받는 줄은 0부터다.</li>
+            <li><code>lines</code>는 <code>line</code> 오름차순이고 같은 줄이 둘 없어야 한다. 그리기가 이분 탐색한다.</li>
+            <li>가로 막대는 <code>wrap == false</code>이고 <code>scroll_horizontal</code>이 있을 때만 선다.</li>
+            <li>여백은 선택·복사·offset에 들지 않는다. 찾은 곳으로 옮길 때는 앱이 <code>anchor</code>·<code>caret</code>과 스크롤 값을 함께 바꾼다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-validate">
+        <header class="sec-head">
+          <h2>만들기: 거르기·검증·숫자</h2>
+          <p class="lede">거르기는 들어오는 글을 바꾸고, 검증은 앱이 판단해 칸에 알린다. 숫자 칸은 이 둘에 증감을 더한 설정이다.</p>
+        </header>
+        <h3>거르기: <code>apply_text_edit</code>의 셋째 인자</h3>
+        <div class="prose"><p>앱 거르기 <code>text_insert_filter</code>는 글을 받아 글을 돌려주는 함수다. <code>apply_text_edit</code>의 셋째 인자로 넘기면 <code>insert</code>와 <code>replace_all</code>의 글만 이것을 지난다. 라이브러리가 주는 거르기는 <code>number_input_filter</code>와 <code>hex_color_filter</code> 둘이다. 편집 다리에 그대로 꽂히는 모습을 test가 보인다.</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/number_input_tests.cpp:237-240" data-path="tests/number_input_tests.cpp" data-start="237"><script type="text/plain">
+    // 편집 다리에 그대로 꽂힌다.
+    luil::text::text_edit_state state {};
+    luil::apply_text_edit(state, luil::text_edit_request { .target = number_target, .command = luil::text::text_edit_command::insert, .text = u8"12초" }, positive_integers);
+    REQUIRE(state.text == u8"12");
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">거르기가 받는 글은 명령마다 다르다</span><code>insert</code>면 친 글자, 붙여 넣은 글, 여러 줄 칸의 <code>"\n"</code> — <strong>넣는 조각</strong>이다. <code>replace_all</code>이면 <strong>글 전체</strong>다. Windows·Android·iOS의 IME 확정과 UIA의 <code>SetValue</code>가 이 길로 온다. 글자마다 판정하는 거르기(숫자만 남기기, 줄 바꿈 바꾸기)는 어느 쪽이 와도 맞다. "틀리면 빈 글"처럼 조각 전체를 판정하는 거르기는 <code>replace_all</code>에서 칸을 통째로 비운다.</div></div>
+
+        <h3>길이 제한: 적용해 보고 넘치면 버린다</h3>
+        <div class="prose"><p>거르기는 글 전체 길이를 모른다. 그래서 상한은 거르기로 할 수 없다. 사본에 적용해 본 뒤 넘치면 옛 상태를 둔다. 이때도 IME 편집 번호는 옮긴다.</p></div>
+        <div class="code" data-lang="cpp" data-label="한 줄 거르기와 글자소 수 상한 (직접 작성)" data-compile="pre-limit"><script type="text/plain">
+// 넣는 글에서 줄 바꿈과 탭을 공백으로 바꾸는 거르기다 (한 줄 칸).
+//  - 글자마다 판정하므로 `insert`의 조각과 `replace_all`의 글 전체 어느 쪽이 와도 같은 답이다.
+//  - Android의 붙여넣기는 원문 그대로 오므로 한 줄 칸이면 앱이 거른다.
+[[nodiscard]] luil::text_insert_filter single_line_filter()
+{
+    return [](const std::u8string_view text) {
+        std::u8string kept { text };
+        for (char8_t& unit : kept)
+            if (unit == u8'\r' || unit == u8'\n' || unit == u8'\t')
+                unit = u8' ';
+        return kept;
+    };
+}
+
+// 글자소 수 상한이다. 거르기는 넣는 조각만 받아 글 전체 길이를 모르므로, 적용해 본 뒤 넘치면 버린다.
+//  - 버려도 IME 편집 번호(`applied_sequence`)는 옮긴다. 옮기지 않으면 Android·iOS IME가 그 번호를 기다리며
+//    앱 글을 IME에 다시 넘기지 않는다.
+//  - 상태 전체(실행 취소 기록 포함)를 한 벌 복사하므로 짧은 한 줄 칸에만 쓴다.
+void apply_limited(luil::text::text_edit_state& state, const luil::text_edit_request& request, const std::size_t limit)
+{
+    luil::text::text_edit_state next { state };
+    luil::apply_text_edit(next, request, single_line_filter());
+    // 경계는 0과 끝을 품는다 (grapheme.h). 글자 수는 경계 수에서 하나를 뺀 값이다.
+    const std::vector<std::size_t> boundaries { luil::text::grapheme_boundaries(next.text) };
+    const std::size_t count { boundaries.empty() ? 0 : boundaries.size() - 1 };
+    if (count > limit)
+    {
+        state.applied_sequence = next.applied_sequence;
+        return;
+    }
+    state = std::move(next);
+}
+</script></div>
+        <script type="text/plain" id="pre-limit" data-prelude>
+#include "luil/text/grapheme.h"
+#include "luil/text/text_edit.h"
+#include "luil/ui/ui_interaction.h"
+#include <cstddef>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li>글자 수는 글자소로 센다. "한 글자"가 몇 바이트인지는 <a class="xref" href="text.html#s1">텍스트 처리 — "한 글자"는 몇 개인가</a>에 있다.</li>
+            <li>거른 결과가 IME가 가진 글과 다르면 Android·iOS의 IME 쪽이 앱 글을 다시 받아 맞춘다. Windows TSF도 조합 중이 아니면 확정 글과 그림자 문서를 다시 맞춘다.</li>
+            <li>번호를 옮기지 않고 요청을 그냥 버리면 Android·iOS IME가 그 번호를 기다리며 앱의 글을 IME에 넘기지 않는다 (<a class="xref" href="#pitfalls">함정</a>).</li>
+          </ul>
+        </div>
+
+        <h3>숫자 칸</h3>
+        <div class="prose"><p><code>text_input_config::number</code>(<code>text_input_number</code>)에 범위와 <code>change_to</code>를 주면 칸이 ↑↓·PageUp/PageDown·스핀 단추로 증감한다. 범위 하나(<code>number_input_range</code>)를 검사·거르기·증감이 함께 본다. 오류 글은 앱의 말이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:53-76" data-path="examples/demo/basics_page.cpp" data-start="53"><script type="text/plain">
+        // 숫자 칸의 범위다. 검사·거르기·증감이 같은 범위를 본다.
+        [[nodiscard]] luil::number_input_range number_range()
+        {
+            return { .minimum = 0.0, .maximum = 3600.0, .step = 5.0 };
+        }
+
+        // 오류 글은 앱의 말이다. 빈 칸은 오류로 보지 않는다 — 아직 적지 않은 것이다.
+        [[nodiscard]] std::u8string number_error(const luil::number_input_check& check)
+        {
+            switch (check.problem)
+            {
+            case luil::number_input_problem::none:
+            case luil::number_input_problem::empty:
+                return {};
+            case luil::number_input_problem::not_a_number:
+                return u8"숫자로 적어 주세요";
+            case luil::number_input_problem::too_precise:
+                return u8"소수 없이 적어 주세요";
+            case luil::number_input_problem::below_minimum:
+            case luil::number_input_problem::above_maximum:
+                return u8"0에서 3600 사이로 적어 주세요";
+            }
+            return {};
+        }
+</script></div>
+        <div class="prose"><p>칸 설정이다. 칸은 혼자 붉어지지 않는다. 앱이 frame마다 <code>check_number_input</code>으로 오류 글을 다시 짓는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:540-552" data-path="examples/demo/basics_page.cpp" data-start="540"><script type="text/plain">
+        // 숫자 칸이다 (number-input-design.md). 0–3600을 5씩, ↑↓·PageUp/PageDown·스핀 단추로 늘리고 줄인다.
+        //  - 붙여넣기·IME 확정은 `number_input_filter`가 거르고(전각 숫자는 ASCII로), 범위 밖은 칸 아래 오류 줄로 보인다.
+        luil::text_input_config number {};
+        number.placeholder = u8"0–3600";
+        number.error = number_error(luil::check_number_input(number_.text, number_range()));
+        number.number = luil::text_input_number {
+            .range = number_range(),
+            .change_to = [](std::u8string text) { return luil::make_app_action(number_text_intent { std::move(text) }); },
+            .spin_buttons = true,
+            .increase_tooltip = u8"5 늘리기",
+            .decrease_tooltip = u8"5 줄이기",
+        };
+        row->add(make_labeled_input(u8"number", u8"숫자 칸 (0–3600, ↑↓ 5씩)", kind_number_input, make_input_view(number_, target_number), std::move(number)), 160.0f);
+</script></div>
+        <div class="prose"><p>칸이 지은 다음 글(<code>number_text_intent</code>)은 <code>replace_all</code>로 통째로 바꾼다. 실행 취소 한 덩어리이고 caret은 끝에 선다. 사용자의 편집을 적용할 때는 거르기를 꽂는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:220-230,247-250" data-path="examples/demo/basics_page.cpp" data-start="220"><script type="text/plain">
+        if (const auto* const stepped { message.get<number_text_intent>() }; stepped != nullptr)
+        {
+            // 칸이 지은 글로 통째로 바꾼다. 실행 취소 한 덩어리이고 caret은 끝에 선다.
+            luil::text_edit_request request {};
+            request.target = target_number;
+            request.command = luil::text::text_edit_command::replace_all;
+            request.text = stepped->text;
+            request.offset = stepped->text.size();
+            luil::apply_text_edit(number_, request);
+            return true;
+        }
+⋯@247
+    void basics_page::apply_edit(const luil::text_edit_request& request)
+    {
+        if (request.target == target_number)
+            luil::apply_text_edit(number_, request, luil::number_input_filter(number_range()));
+</script></div>
+        <div class="prose"><p>측정 단계가 없어서 오류 줄의 높이는 담는 쪽이 더한다. 안내 글은 적으면 사라지므로 접근 이름은 라벨로 단다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:693-697,701" data-path="examples/demo/basics_page.cpp" data-start="693"><script type="text/plain">
+        // 오류 줄이 있으면 칸이 그만큼 키를 더 받는다 (측정 단계가 없어 담는 쪽이 더한다).
+        const float height { 28.0f + luil::text_input_element::error_height_for(input_config) };
+        auto input { std::make_unique<luil::text_input_element>(luil::ui_element_id { input_kind }, std::move(view), std::move(input_config)) };
+        // 안내 글은 적으면 사라지므로 접근 이름은 위 라벨이다.
+        input->set_access_name(std::move(label));
+⋯@701
+        column->add(std::move(input), height);
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>칸은 <code>change_to</code>가 있을 때만 증감을 맡는다. 없으면 ↑↓는 칸을 지나 묶음과 앱으로 흐른다. ↑가 늘린다.</li>
+            <li>조합 중이거나 끝에 닿은 걸음은 키를 삼키기만 한다. 흘려보내면 PageDown이 바깥 스크롤로 새기 때문이다. Ctrl·Alt·Meta와 함께인 ↑↓는 앱 단축키다. ←→·Home·End는 caret의 것이다.</li>
+            <li>키보드 종류를 따로 고르지 않으면 휴대폰 키보드는 <code>number</code>로, 소수 자리가 있으면 <code>decimal</code>로 올라온다.</li>
+            <li>오류 상태는 <code>invalid</code>이거나 <code>error</code>가 비지 않은 것이다. 테두리가 오류색이고, 초점을 받아도 색은 오류색에 두께만 2배다. 오류 글은 상자 아래 16 논리 픽셀(<code>text_input_error_height</code>) 줄에 한 줄로 그리고, 새로 생기거나 바뀌면 보조 기술이 읽는다.</li>
+          </ul>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>글</th><th><code>check_number_input</code>·<code>stepped_number_input</code>이 읽는 법</th></tr></thead>
+            <tbody>
+              <tr><td>앞뒤 공백 (탭·NBSP·전각 공백 포함)</td><td>무시한다</td></tr>
+              <tr><td>전각 숫자·전각 마침표·전각 빼기·U+2212·작은 빼기</td><td>ASCII로 읽는다 (IME 전각 확정, 복사한 "−5")</td></tr>
+              <tr><td>천 단위 쉼표 <code class="free">1,200</code></td><td>받지 않는다 → <code>not_a_number</code>. 쉼표를 소수점으로 쓰는 지역과 섞이면 값이 천 배가 되기 때문이다</td></tr>
+              <tr><td>소수 끝의 0</td><td>자릿수로 세지 않는다. 소수 한 자리 칸에서 "1.50"은 1.5다</td></tr>
+              <tr><td>자릿수보다 자세한 소수</td><td><code>too_precise</code>. 증감은 어림한 값이 눈금 사이에 선 것으로 본다</td></tr>
+              <tr><td>정수 자리 + <code>decimals</code>가 15를 넘는 글</td><td>값만 어림하고 범위 밖(<code>below_minimum</code>·<code>above_maximum</code>)으로 본다</td></tr>
+              <tr><td>눈금</td><td>최솟값에서 센다 (최솟값이 없으면 0에서). 눈금 사이의 값을 늘리면 위 눈금, 줄이면 아래 눈금으로 간다</td></tr>
+              <tr><td>비었거나 읽을 수 없는 글의 증감</td><td>걸음 없이 0을 범위로 접은 값이 된다</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="lab-number" data-toc="실습: 숫자 칸">
+        <header class="sec-head">
+          <h2>실습: 숫자 칸</h2>
+          <p class="lede">위 숫자 칸의 판정을 브라우저로 옮겼다. 치고, 붙여 넣고, ↑↓·PageUp/PageDown을 누를 때마다 칸이 낸 요청과 앱이 한 일이 오른쪽에 쌓인다.</p>
+        </header>
+        <div class="lw" data-title="숫자 칸" data-surface="text_input_number · number_input_filter · check_number_input · stepped_number_input" data-reset id="ti-number-lab">
+          <div class="lw-body"></div>
+          <div class="lw-foot">판정은 원본을 옮긴 함수다 — <code>check_number_input</code>·<code>number_input_filter</code>·<code>stepped_number_input</code>·<code>format_number_input</code>(<code>number_input.cpp</code>). 걸음은 <code>text_input_element::step_number</code>의 규칙을 따른다: ↑가 늘리고, 끝에 닿았거나 조합 중이면 키를 삼키기만 한다. 원본 <code>number_input.cpp</code>·<code>text_document.cpp</code>를 그대로 링크한 C++ 대조기와 무작위·경계 입력 60,114건(숫자 칸 36,074건 — 검사·거르기·걸음 여섯 가지, 값 쓰기 6,053건, 주소 찾기 17,987건)을 견주어 모두 같았다. 칸 자체(caret·선택·IME·그리기)는 브라우저의 입력 칸이다. 타자·붙여넣기는 <code>insert</code>처럼 조각을 거르고, 조합이 끝나면 Windows·Android·iOS의 확정처럼 글 전체를 거른다. 오류 줄의 글은 앱이 정하는 말이라 여기서는 <code>number_input_problem</code>의 이름을 보인다.</div>
+        </div>
+      </section>
+
+      <section class="sec" id="build-links">
+        <header class="sec-head">
+          <h2>만들기: 링크</h2>
+          <p class="lede">링크는 칸 설정에 넘기는 구간 vector다. 주소를 찾는 일은 <code>detect_text_links</code>가, 여는 일은 앱이 한다. 라이브러리는 주소를 스스로 열지 않는다.</p>
+        </header>
+        <h3>찾고, 달고, 연다</h3>
+        <div class="prose"><p>한 줄 메모 칸이다. 친 글에서 주소를 찾아 <code>links</code>에 싣고, 누르면 낼 메시지를 <code>activate_link</code>에 단다. 여러 줄 칸도 같은 세 필드다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:565-568" data-path="examples/demo/basics_page.cpp" data-start="565"><script type="text/plain">
+        luil::text_input_config note { .placeholder = u8"메모" };
+        note.links = std::make_shared<const std::vector<luil::text_link>>(luil::detect_text_links(note_.text));
+        note.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(open_link_intent { std::u8string { destination } }); };
+        note.link_hint = u8"Ctrl+클릭하여 열기";
+</script></div>
+        <div class="prose"><p>앱이 받아서 <code>open_url</code>로 연다. <code>open_url</code>은 허용한 scheme(http·https·mailto)만 연다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.h:119-123" data-path="examples/demo/basics_page.h" data-start="119"><script type="text/plain">
+    // 글 안의 링크를 눌렀다 (메모·메모 한 줄 칸·안내 칸). 앱이 주소를 확인하고 기본 브라우저·메일 앱으로 연다.
+    struct open_link_intent
+    {
+        std::u8string destination {};
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:164-170" data-path="examples/demo/basics_page.cpp" data-start="164"><script type="text/plain">
+        if (const auto* const link { message.get<open_link_intent>() }; link != nullptr)
+        {
+            // 라이브러리는 링크를 열지 않는다 — 여는 것은 앱이고, `open_url`은 허용한 scheme(http·https·mailto)만 연다.
+            const luil::platform_result result { luil::open_url(link->destination) };
+            link_report_ = result.ok() ? link->destination + u8" 를 열었다." : link->destination + u8" 를 열지 못했다 — " + result.error;
+            return true;
+        }
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>칸</th><th>그냥 누름</th><th>Ctrl+누름 (macOS는 Command+누름도)</th><th>포인터·tooltip</th></tr></thead>
+            <tbody>
+              <tr><td>편집 칸 (한 줄 칸은 늘 편집 칸)</td><td>caret을 놓고 끌기를 시작한다</td><td>링크를 연다</td><td>평소 글 모양 포인터. Ctrl을 누른 채 올리면 손 모양과 2픽셀 밑줄. tooltip은 주소 뒤에 <code>link_hint</code></td></tr>
+              <tr><td>읽기 전용 여러 줄 칸</td><td>링크를 연다</td><td>링크를 연다</td><td>손 모양. tooltip은 주소</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>링크마다 칸의 자식 element가 서서 hover·tooltip·포인터와 보조 기술의 Hyperlink를 맡는다. Tab 자리는 아니다.</li>
+            <li><code>activate_link</code>가 비면 링크는 표시만 한다. 암호 칸은 링크를 세우지 않고, 한 줄 칸은 조합 중에 링크 표시를 쉰다.</li>
+            <li>구간은 확정 글의 UTF-8 byte offset이다. 데모처럼 frame마다 <code>detect_text_links</code>를 불러도 되는 것은 메모 크기의 글이다. 링크가 수만 개면 보이는 부분만 넘기는 편이 낫다.</li>
+          </ul>
+        </div>
+        <h3>무엇을 주소로 보나</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>규칙</th><th>예</th></tr></thead>
+            <tbody>
+              <tr><td><code>http://</code>·<code>https://</code>·<code>mailto:</code>로 시작한다 (대소문자 무시)</td><td>HTTPS://EXAMPLE.COM은 링크다</td></tr>
+              <tr><td>낱말 처음의 <code class="free">www.</code>는 뒤에 점이 하나 더 있어야 한다. 주소에 <code class="free">https://</code>를 붙인다</td><td>www.example.org → https://www.example.org. "www."만은 아니다</td></tr>
+              <tr><td><code class="free">이름@도메인.최상위</code> 꼴의 메일 주소. 최상위는 알파벳 두 글자 이상. 주소에 <code class="free">mailto:</code>를 붙인다</td><td>hello@example.com은 링크, x@y.c는 아니다</td></tr>
+              <tr><td>ASCII 영숫자나 <code class="free">.-_@/</code> 바로 뒤에서는 시작하지 않는다</td><td>xhttp://a.b, a.www.b.c는 링크가 아니다</td></tr>
+              <tr><td>공백·제어 문자·<code class="free">&lt;&gt;"</code>·<strong>ASCII 밖 글자</strong>에서 끝난다. 한국어 조사가 주소에 붙어 오기 때문이다</td><td>https://example.com에서 → https://example.com. 퍼센트 인코딩한 주소는 끝까지 간다</td></tr>
+              <tr><td>끝의 문장 부호 <code class="free">.,;:!?'*</code>는 뺀다. 닫는 괄호는 주소 안에 짝이 없을 때만 뺀다</td><td>(https://a.b/x_(y)) → https://a.b/x_(y)</td></tr>
+              <tr><td>이미 주소인 자리의 <code class="free">@</code>는 메일로 보지 않는다. 겹치면 앞의 것이 이긴다</td><td>https://user@host.com/a는 링크 하나다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>키보드로 caret 자리의 링크 열기</h3>
+        <div class="prose"><p>편집 칸에는 링크를 여는 키가 없다. Enter는 줄 바꿈이고, Ctrl+Enter·Alt+Enter는 앱 단축키의 자리다. 앱 정책의 <code>on_key</code>에서 초점 칸의 snapshot을 읽어 묶는다. <code>text_input_snapshot</code>의 <code>link</code>는 caret이 링크 안이거나 바로 뒤일 때의 주소다 (고른 범위가 있으면 한 링크 안일 때만).</p></div>
+        <div class="code" data-lang="cpp" data-label="Ctrl+Enter로 caret 자리의 링크 열기 (직접 작성)" data-compile="pre-link"><script type="text/plain">
+// 앱 정책의 일부다. 편집 칸에는 링크를 여는 키가 없으므로(text-link-design.md "한계") 앱이 Ctrl+Enter에 묶는다.
+class editor_policy final : public luil::interaction_policy
+{
+public:
+    [[nodiscard]] std::vector<luil::input_action> on_key(const luil::ui_tree* tree, const luil::key_pressed_event& event, const luil::interaction_snapshot& snapshot) override
+    {
+        // Ctrl+Enter는 칸도 기본 버튼도 쓰지 않아 여기까지 흐른다. `tree`는 주 창의 tree다 (popup 안의 칸은 찾지 못한다).
+        if (event.key != luil::key_code::enter || event.primary_shortcut_down() == false || tree == nullptr || snapshot.focused_surface.empty() == false)
+            return {};
+        const luil::ui_element* const field { tree->find(snapshot.focused_input) };
+        const std::optional<luil::text_input_snapshot> value { field != nullptr ? field->text_input() : std::nullopt };
+        // caret이 링크 안이거나 바로 뒤면 `link`가 그 주소이고 `activate_link`가 칸 설정의 여는 함수를 가리킨다.
+        if (value.has_value() == false || value->link.empty() || value->activate_link == nullptr || *value->activate_link == nullptr)
+            return {};
+        return { (*value->activate_link)(value->link) };
+    }
+};
+</script></div>
+        <script type="text/plain" id="pre-link" data-prelude>
+#include "luil/ui/ui_element.h"
+#include "luil/ui/ui_events.h"
+#include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_tree.h"
+#include <optional>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose small"><p><code>on_key</code>가 받는 <code>tree</code>는 주 창의 tree다. 그래서 견본은 <code>focused_surface</code>가 빈 경우(주 창)만 본다. popup 안의 칸은 찾지 못한다.</p></div>
+      </section>
+
+      <section class="sec" id="lab-links" data-toc="실습: 주소 찾기">
+        <header class="sec-head">
+          <h2>실습: 주소 찾기</h2>
+          <p class="lede">글을 고치면 <code>detect_text_links</code>가 다시 돈다. 구간이 UTF-8 byte라는 것을 표의 offset으로 확인한다. 한글 한 글자는 3바이트다.</p>
+        </header>
+        <div class="lw" data-title="주소 찾기" data-surface="detect_text_links · text_link" data-reset id="ti-links-lab">
+          <div class="lw-body"></div>
+          <div class="lw-foot">찾기는 <code>detect_text_links</code>(<code>text_document.cpp</code>)를 옮긴 함수다. 숫자 칸 실습과 같은 대조기로 주소 찾기 입력 17,987건(깨진 UTF-8 바이트 포함)을 견주어 구간과 주소가 모두 같았다. 칠한 글은 브라우저의 그림이다. 칸에서는 이 구간마다 링크 element가 서고, 칠하는 색과 밑줄은 칸이 정한다.</div>
+        </div>
+      </section>
+
+      <section class="sec" id="build-code">
+        <header class="sec-head">
+          <h2>만들기: 코드 칸과 구문 강조</h2>
+          <p class="lede">코드 칸은 여러 줄 칸에 코드 글꼴과 색 구간을 준 것이다. 구간은 앱이 쓴 렉서를 <code>syntax_highlighter</code>가 편집에 맞춰 돌려 만든다.</p>
+        </header>
+        <h3>렉서는 앱의 것이다</h3>
+        <div class="prose"><p>렉서는 줄 하나와 윗줄이 끝난 상태를 받아 구간을 더하고, 이 줄이 끝난 상태를 돌려주는 순수 함수다(<code>syntax_line_lexer</code>). 여러 줄 주석 같은 줄 밖의 문맥은 그 정수 하나에 담는다. 고대비 테마에서는 여섯 구문 색이 창 글자색 하나로 접히므로, 데모는 키워드를 굵게, 주석을 기울여 낸다.</p></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/code_lexer.h:66-145" data-path="examples/demo/code_lexer.h" data-start="66"><script type="text/plain">
+    // 줄 하나를 칠한다 (`luil::syntax_line_lexer`). (줄 글, 입력 상태)의 순수 함수다.
+    inline int lex_code_line(const std::u8string_view line, int state, std::vector<luil::text_span>& spans)
+    {
+        using luil::text_color_role;
+        std::size_t at { 0 };
+        while (at < line.size())
+        {
+            if (state == code_state_block_comment)
+            {
+                const std::size_t close { line.find(u8"*/", at) };
+                const std::size_t end { close == std::u8string_view::npos ? line.size() : close + 2 };
+                code_lexer_detail::add_span(spans, at, end, text_color_role::comment, false, true);
+                at = end;
+                if (close != std::u8string_view::npos)
+                    state = code_state_normal;
+                continue;
+            }
+
+            const char8_t byte { line[at] };
+            if (line.substr(at, 2) == u8"//")
+            {
+                code_lexer_detail::add_span(spans, at, line.size(), text_color_role::comment, false, true);
+                break;
+            }
+            if (line.substr(at, 2) == u8"/*")
+            {
+                const std::size_t close { line.find(u8"*/", at + 2) };
+                const std::size_t end { close == std::u8string_view::npos ? line.size() : close + 2 };
+                code_lexer_detail::add_span(spans, at, end, text_color_role::comment, false, true);
+                at = end;
+                if (close == std::u8string_view::npos)
+                    state = code_state_block_comment;
+                continue;
+            }
+            if (byte == u8'"' || byte == u8'\'')
+            {
+                // 닫는 따옴표까지다. 역슬래시는 다음 글자를 건너뛰고, 닫히지 않으면 줄 끝까지다.
+                std::size_t end { at + 1 };
+                while (end < line.size() && line[end] != byte)
+                    end += line[end] == u8'\\' ? 2 : 1;
+                end = end < line.size() ? end + 1 : line.size();
+                code_lexer_detail::add_span(spans, at, end, text_color_role::string);
+                at = end;
+                continue;
+            }
+            if (code_lexer_detail::is_digit(byte))
+            {
+                std::size_t end { at };
+                while (end < line.size() && (code_lexer_detail::is_word_part(line[end]) || line[end] == u8'.'))
+                    ++end;
+                code_lexer_detail::add_span(spans, at, end, text_color_role::number);
+                at = end;
+                continue;
+            }
+            if (code_lexer_detail::is_word_start(byte))
+            {
+                std::size_t end { at };
+                while (end < line.size() && code_lexer_detail::is_word_part(line[end]))
+                    ++end;
+                const std::u8string_view word { line.substr(at, end - at) };
+                if (code_lexer_detail::contains(code_keywords, word))
+                    code_lexer_detail::add_span(spans, at, end, text_color_role::keyword, true);
+                else if (code_lexer_detail::contains(code_types, word))
+                    code_lexer_detail::add_span(spans, at, end, text_color_role::type);
+                else if (end < line.size() && line[end] == u8'(')
+                    code_lexer_detail::add_span(spans, at, end, text_color_role::function);
+                at = end;
+                continue;
+            }
+            ++at;
+        }
+        return state;
+    }
+
+    [[nodiscard]] inline luil::syntax_highlighter_config code_highlighter_config()
+    {
+        luil::syntax_highlighter_config config {};
+        config.lexer = lex_code_line;
+        return config;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="66-72" data-title="(줄, 상태)의 함수">입력은 줄 글과 윗줄이 끝난 상태이고, 출력은 더한 구간과 이 줄이 끝난 상태다. 같은 입력이면 같은 답이어야 도우미가 다시 칠할 줄을 줄일 수 있다.</li>
+            <li data-lines="73-82" data-title="이어진 주석">윗줄에서 열린 주석 안이면 <code class="free">*/</code>까지 주석으로 칠하고, 닫혔으면 상태를 되돌린다.</li>
+            <li data-lines="84-99" data-title="주석의 시작">줄 주석은 줄 끝까지 칠하고 멈춘다. 닫히지 않은 블록 주석은 상태로 다음 줄에 넘긴다.</li>
+            <li data-lines="100-110" data-title="글과 글자">따옴표부터 닫는 따옴표까지다. 역슬래시는 다음 글자를 건너뛰고, 닫히지 않으면 줄 끝까지다.</li>
+            <li data-lines="111-119" data-title="숫자">숫자로 시작하면 낱말 글자와 마침표가 이어지는 데까지다.</li>
+            <li data-lines="120-134" data-title="낱말">키워드는 굵게, 형식 이름은 형식 색, 바로 뒤에 여는 괄호가 오는 낱말은 함수 색이다. 색은 팔레트 역할(<code>text_color_role</code>)로만 준다.</li>
+            <li data-lines="140-145" data-title="도우미 설정">렉서를 <code>syntax_highlighter_config</code>에 꽂는다. 도우미는 앱이 쥔다.</li>
+          </ol>
+        </div>
+        <h3>상태, 편집, frame</h3>
+        <div class="prose"><p>도우미는 logic thread의 앱 상태다. <code>spans()</code>가 const가 아니라서, frame을 짓는 쪽이 받아 둔 포인터를 칸에 건넨다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.h:217-224" data-path="examples/demo/basics_page.h" data-start="217"><script type="text/plain">
+        // 코드 칸의 글과 세로 스크롤이다. 구간은 도우미가 편집에 맞춰 다시 칠한다.
+        luil::text::text_edit_state code_ { .text = std::u8string { code_sample } };
+        float code_scroll_ { 0.0f };
+        std::shared_ptr<luil::text_area_wrap_cache> code_wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+        luil::syntax_highlighter highlighter_ { code_highlighter_config() };
+        // 도우미가 게시한 구간이다. `spans()`가 const가 아니어서 `build`가 받아 두고 칸을 짓는 쪽이 읽는다.
+        std::shared_ptr<const std::vector<luil::text_span>> code_spans_ {};
+        bool code_painted_ { false };
+</script></div>
+        <div class="prose"><p>편집을 적용한 <strong>같은 turn</strong>에 다시 칠한다. 늦으면 칸이 한 frame 동안 낡은 offset으로 그린다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:259-264" data-path="examples/demo/basics_page.cpp" data-start="259"><script type="text/plain">
+        else if (request.target == target_code)
+        {
+            luil::apply_text_edit(code_, request);
+            // 편집을 적용한 같은 logic turn에서 구간을 다시 칠한다. 늦으면 칸이 한 frame 낡은 offset으로 그린다.
+            highlighter_.update(code_.text);
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:333-339" data-path="examples/demo/basics_page.cpp" data-start="333"><script type="text/plain">
+        // 코드 칸의 구간이다. 처음 한 번 칠하고, 그 뒤는 편집이 닿을 때마다 `apply_edit`가 다시 칠한다.
+        if (code_painted_ == false)
+        {
+            code_painted_ = true;
+            highlighter_.update(code_.text);
+        }
+        code_spans_ = highlighter_.spans();
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:605-613" data-path="examples/demo/basics_page.cpp" data-start="605"><script type="text/plain">
+        luil::text_area_config code {};
+        code.placeholder = u8"코드 칸";
+        code.face = luil::text_face::code;
+        code.scroll_offset = code_scroll_;
+        code.scroll = [](const float delta) { return luil::make_app_action(code_scroll_intent { delta }); };
+        code.scroll_to = [](const float offset) { return luil::make_app_action(code_scroll_to_intent { offset }); };
+        code.wrap_cache = code_wrap_;
+        code.spans = code_spans_;
+        column->add(std::make_unique<luil::text_area_element>(luil::ui_element_id { kind_code_input }, make_input_view(code_, target_code), std::move(code)), 160.0f);
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>도우미는 지난 글과 새 글을 견주어 바뀐 줄부터 렉서를 돌리고, 줄이 끝난 상태가 지난번과 같아지는 줄에서 멈춘다. IME 확정의 <code>replace_all</code>, 실행 취소, <code>text_edit_set_text</code>도 같은 길이다. 마지막에 다시 칠한 줄 수는 <code>stats()</code>의 <code>relexed</code>다.</li>
+            <li>렉서의 출력은 도우미가 다듬는다. 줄 밖·빈 구간을 버리고, 정렬하고, 겹친 뒤쪽을 자르고, 양 끝을 글자소 경계로 맞춘다. <code>max_line_size</code>(기본 20,000 byte)보다 긴 줄은 렉서에 보내지 않는다.</li>
+            <li>색 값은 테마가 정한다. 렉서는 <code>keyword</code>·<code>type</code>·<code>string</code>·<code>number</code>·<code>comment</code>·<code>function</code> 역할만 고른다 (<a class="xref" href="theming.html">테마와 스타일</a>).</li>
+            <li>칸 하나에 도우미 하나다. 구문 강조와 서식 presenter가 함께 <code>spans</code>를 채우지 않는다.</li>
+          </ul>
+        </div>
+        <h3>큰 문서: 꼬리는 예산 안에서 칠한다</h3>
+        <div class="prose"><p><code>update</code>에 시간 예산을 주면 편집이 닿은 줄은 그 turn에 칠하고, 남은 꼬리는 <code>pending()</code>으로 남긴다. logic driver의 시간 경로(<code>next_tick</code>·<code>tick</code>)에서 <code>advance</code>로 조금씩 칠한다. 저장소 예제는 예산을 쓰지 않아서 직접 쓴 견본이다.</p></div>
+        <div class="code" data-lang="cpp" data-label="큰 문서: 편집한 줄은 바로, 꼬리는 tick마다 (직접 작성)" data-compile="pre-budget"><script type="text/plain">
+constexpr luil::ui_element_kind kind_source_input { luil::application_element_kind(0) };
+constexpr luil::text_input_target target_source { static_cast<luil::text_input_target>(1) };
+
+struct edit_intent
+{
+    luil::text_edit_request request {};
+};
+struct close_intent
+{
+};
+
+// 줄 하나를 칠한다. 여기서는 `//` 뒤를 주석으로 칠하는 것이 전부다 (렉서는 앱의 몫이다).
+inline int lex_line(const std::u8string_view line, const int state, std::vector<luil::text_span>& spans)
+{
+    if (const std::size_t at { line.find(u8"//") }; at != std::u8string_view::npos)
+        spans.push_back({ at, line.size(), luil::text_color_role::comment, false, luil::text_background_role::none, true });
+    return state;
+}
+
+// 큰 문서를 여는 편집기다. 편집이 닿은 줄은 그 turn에 칠하고, 남은 꼬리는 tick마다 조금씩 칠한다.
+class source_driver final : public luil::logic_driver
+{
+public:
+    void handle(luil::app_message message) override
+    {
+        if (message.get<close_intent>() != nullptr)
+        {
+            closed_.store(true);
+            return;
+        }
+        if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr && edit->request.target == target_source)
+        {
+            luil::apply_text_edit(source_, edit->request);
+            // 같은 turn에 부른다. 편집이 닿은 줄은 예산과 상관없이 칠한다.
+            highlighter_.update(source_.text, std::chrono::milliseconds { 2 });
+        }
+    }
+
+    [[nodiscard]] std::shared_ptr<const luil::ui_frame> make_frame() override
+    {
+        luil::text_area_config config {};
+        config.face = luil::text_face::code;
+        config.wrap = false;
+        config.wrap_cache = wrap_;
+        // `spans()`는 바뀐 것이 없으면 같은 포인터다.
+        config.spans = highlighter_.spans();
+        auto area { std::make_unique<luil::text_area_element>(
+            luil::ui_element_id { kind_source_input, u8"source" }, luil::make_text_input_view(source_, std::nullopt, target_source), std::move(config)) };
+        auto frame { std::make_shared<luil::ui_frame>() };
+        frame->tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(area), { 0.0f, 0.0f, 800.0f, 600.0f }, 1.0f));
+        return frame;
+    }
+
+    // 칠할 꼬리가 남았으면 다음 frame쯤(16ms 뒤)에 다시 깨운다. 다 칠하면 시간 경로가 잠잔다.
+    [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_tick() override
+    {
+        if (highlighter_.pending())
+            return std::chrono::steady_clock::now() + std::chrono::milliseconds { 16 };
+        return std::nullopt;
+    }
+
+    void tick(const std::chrono::steady_clock::time_point now) override
+    {
+        static_cast<void>(now);
+        // 예산이 아무리 작아도 대기 중인 첫 줄은 칠하므로 끝내 수렴한다.
+        highlighter_.advance(std::chrono::milliseconds { 4 });
+    }
+
+    [[nodiscard]] luil::app_message make_close_message() override
+    {
+        return luil::app_message { close_intent {} };
+    }
+
+    [[nodiscard]] bool shutdown_completed() const override
+    {
+        return closed_.load();
+    }
+
+private:
+    luil::text::text_edit_state source_ {};
+    luil::syntax_highlighter highlighter_ { luil::syntax_highlighter_config { .lexer = lex_line } };
+    std::shared_ptr<luil::text_area_wrap_cache> wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+    std::atomic<bool> closed_ { false };
+};
+</script></div>
+        <script type="text/plain" id="pre-budget" data-prelude>
+#include "luil/app/app_host.h"
+#include "luil/text/text_edit.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/syntax_highlighter.h"
+#include "luil/ui/text_area_element.h"
+#include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_tree.h"
+#include <atomic>
+#include <chrono>
+#include <cstddef>
+#include <memory>
+#include <optional>
+#include <string_view>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li>아직 칠하지 않은 줄에는 지난 색이 남는다. offset은 현재 글에 맞춰 옮겨 둔다.</li>
+            <li><code>advance</code>는 예산이 아무리 작아도 대기 중인 첫 줄은 칠하므로 끝내 수렴한다. 다 칠하면 <code>next_tick</code>이 <code>std::nullopt</code>를 돌려 시간 경로가 잠잔다.</li>
+            <li>긴 줄을 접지 않으려면 <code>wrap = false</code>다. 데모의 코드 칸은 접는다.</li>
+          </ul>
+        </div>
+        <h3>Tab 문자를 받는 코드 칸</h3>
+        <div class="prose"><p>여러 줄 칸에서 Tab은 칸을 떠난다. Tab을 칸의 것으로 하려면 <code>set_takes_tab(true)</code>를 단다. 그러면 Tab·Shift+Tab이 초점을 옮기지 않고 키 경로로 흐르고, 칸은 Tab을 쓰지 않으므로 칸의 key handler에 닿는다. <strong>빠져나갈 길은 앱이 만든다.</strong> 이 견본은 Esc로 정하고, 다음 frame의 초점 요청으로 실행 단추에 초점을 옮긴다.</p></div>
+        <div class="code" data-lang="cpp" data-label="Tab은 글자로, Esc로 빠져나가기 (직접 작성)" data-compile="pre-tab"><script type="text/plain">
+constexpr luil::ui_element_kind kind_script_input { luil::application_element_kind(0) };
+constexpr luil::ui_element_kind kind_run_button { luil::application_element_kind(1) };
+constexpr luil::text_input_target target_script { static_cast<luil::text_input_target>(1) };
+
+struct edit_intent
+{
+    luil::text_edit_request request {};
+};
+// 탭 문자를 받는 칸에서 빠져나가는 길이다. 라이브러리는 탈출 키를 정하지 않는다 — 이 앱은 Esc로 정했다.
+struct leave_script_intent
+{
+};
+
+struct script_state
+{
+    luil::text::text_edit_state draft {};
+    std::optional<luil::text_composition_event> composition {};
+    // 나중에 서는 초점 요청이다 (`ui_frame::focus`). 번호가 바뀔 때만 새 요청이다.
+    std::uint64_t focus_revision { 0 };
+};
+
+[[nodiscard]] std::unique_ptr<luil::text_area_element> make_script_editor(const script_state& state)
+{
+    luil::text_area_config config {};
+    config.placeholder = u8"스크립트";
+    config.face = luil::text_face::code;
+    auto editor { std::make_unique<luil::text_area_element>(
+        luil::ui_element_id { kind_script_input, u8"script" }, luil::make_text_input_view(state.draft, state.composition, target_script), std::move(config)) };
+    // Tab·Shift+Tab이 초점을 옮기지 않고 키 경로로 흐른다.
+    editor->set_takes_tab(true);
+    editor->set_key_handler([](const luil::key_pressed_event& event) -> std::optional<std::vector<luil::input_action>> {
+        if (event.key == luil::key_code::tab && event.shift == false && event.shortcut_modifier_down() == false)
+        {
+            luil::text_edit_request request {};
+            request.target = target_script;
+            request.command = luil::text::text_edit_command::insert;
+            request.text = u8"\t";
+            return std::vector<luil::input_action> { luil::make_app_action(edit_intent { request }) };
+        }
+        if (event.key == luil::key_code::escape)
+            return std::vector<luil::input_action> { luil::make_app_action(leave_script_intent {}) };
+        return std::nullopt;
+    });
+    return editor;
+}
+
+// logic thread다. 처리했으면 참이다.
+bool handle_script(script_state& state, const luil::app_message& message)
+{
+    if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr && edit->request.target == target_script)
+    {
+        luil::apply_text_edit(state.draft, edit->request);
+        return true;
+    }
+    if (message.get<leave_script_intent>() != nullptr)
+    {
+        ++state.focus_revision;
+        return true;
+    }
+    return false;
+}
+
+// frame을 지을 때 초점 요청을 싣는다. 같은 번호를 frame마다 실어도 한 번만 이행한다.
+void add_focus_request(luil::ui_frame& frame, const script_state& state)
+{
+    if (state.focus_revision != 0)
+        frame.focus = luil::focus_request { .id = state.focus_revision, .target = luil::ui_element_id { kind_run_button, u8"run" } };
+}
+</script></div>
+        <script type="text/plain" id="pre-tab" data-prelude>
+#include "luil/app/app_host.h"
+#include "luil/text/text_edit.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/text_area_element.h"
+#include "luil/ui/ui_interaction.h"
+#include <cstdint>
+#include <memory>
+#include <optional>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose small"><p>Tab 키의 글자(U+0009)는 글자 경로에서 버린다. 그래서 탭 문자는 key handler가 지은 <code>insert</code> 요청으로만 들어간다.</p></div>
+      </section>
+
+      <section class="sec" id="build-rich">
+        <header class="sec-head">
+          <h2>만들기: 서식 글</h2>
+          <p class="lede">서식은 초안 곁의 <code>text_format</code>에 들고, 글과 함께 바뀐다. 칸에 넘기는 것은 presenter가 그 서식에서 지은 구간과 링크다. 데모의 <code>rich_text_sample</code>이 한 벌을 다 보인다.</p>
+        </header>
+        <h3>상태와 불러오기</h3>
+        <div class="prose"><p>초안, presenter, 스크롤, 접기 cache가 칸 하나의 몫이다. 서식 있는 글을 불러올 때는 <code>text_edit_set_formatted_text</code>를 쓴다. 밖에서 온 값이라 칸의 실행 취소 기록을 비우고, 서식을 글 크기로 자르고 글자소 경계로 다듬는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/rich_text_sample.h:291-299" data-path="examples/demo/rich_text_sample.h" data-start="291"><script type="text/plain">
+        luil::text::text_edit_state state_ {};
+        luil::rich_text_presenter presenter_ {};
+        float scroll_ { 0.0f };
+        std::shared_ptr<luil::text_area_wrap_cache> wrap_ { std::make_shared<luil::text_area_wrap_cache>() };
+        // host에 넣을 클립보드 요청이다. 셸이 가져간다.
+        std::optional<luil::clipboard_request> outgoing_ {};
+        // 붙여넣기 답을 서식 없이 넣는가 (Ctrl+Shift+V).
+        bool paste_plain_ { false };
+        std::u8string clipboard_status_ { u8"복사·붙여넣기 전" };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/rich_text_sample.h:65-82" data-path="examples/demo/rich_text_sample.h" data-start="65"><script type="text/plain">
+        rich_text_sample()
+        {
+            // 서식 넷과 링크 하나가 걸린 견본 글이다. 처음 화면에서 구간과 링크가 보이고 상태 글이 그것을 센다.
+            const std::u8string text { u8"굵게 기울임 밑줄 코드 링크\n범위를 골라 도구 막대나 Ctrl+B·I·U·K로 서식을 켜고 끈다." };
+            luil::text::text_format format {};
+            const auto mark = [&](const std::u8string_view word, const luil::text::text_mark marks) {
+                const std::size_t at { text.find(word) };
+                format.runs.push_back({ at, at + word.size(), marks });
+            };
+            mark(u8"굵게", luil::text::text_mark::bold);
+            mark(u8"기울임", luil::text::text_mark::italic);
+            mark(u8"밑줄", luil::text::text_mark::underline);
+            mark(u8"코드", luil::text::text_mark::code);
+            const std::size_t link { text.find(u8"링크") };
+            format.links.push_back({ link, link + std::u8string_view { u8"링크" }.size(), std::u8string { rich_text_link_address } });
+            luil::text::text_edit_set_formatted_text(state_, text, std::make_shared<const luil::text::text_format>(std::move(format)));
+            presenter_.update(state_);
+        }
+</script></div>
+        <h3>편집과 서식 명령</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/rich_text_sample.h:84-124" data-path="examples/demo/rich_text_sample.h" data-start="84"><script type="text/plain">
+        // 이 칸의 편집 요청을 적용한다. 같은 logic turn에서 구간을 다시 옮긴다. 늦으면 칸이 한 frame 낡은 offset으로 그린다.
+        void apply_edit(const luil::text_edit_request& request)
+        {
+            luil::apply_text_edit(state_, request);
+            presenter_.update(state_);
+        }
+
+        // 서식 명령과 클립보드 답, 스크롤 메시지를 받는다. 받았으면 참이다.
+        //  - 복사·잘라내기·붙여넣기는 클립보드 요청을 지어 쥐어 둔다. host를 쥔 셸이 `take_clipboard_request`로 가져가 넣는다.
+        bool handle(const luil::app_message& message)
+        {
+            if (const auto* const command { message.get<rich_text_command_intent>() }; command != nullptr)
+            {
+                if (clipboard_command(command->command))
+                    return true;
+                // 링크는 대화 상자 대신 고정 주소다. 켜져 있으면 걷는다.
+                if (command->command == luil::rich_text_command::link)
+                    static_cast<void>(luil::set_rich_text_link(state_, luil::rich_text_state_of(state_).link ? std::u8string_view {} : rich_text_link_address));
+                else
+                    static_cast<void>(luil::apply_rich_text_command(state_, command->command));
+                presenter_.update(state_);
+                return true;
+            }
+            if (const auto* const answer { message.get<rich_text_clipboard_intent>() }; answer != nullptr)
+            {
+                paste(answer->data);
+                return true;
+            }
+            if (const auto* const scroll { message.get<rich_text_scroll_intent>() }; scroll != nullptr)
+            {
+                // 범위 다듬기는 칸이 한다. 아래로 넘친 값만 0으로 막는다.
+                scroll_ = std::max(0.0f, scroll_ + scroll->delta);
+                return true;
+            }
+            if (const auto* const scroll_to { message.get<rich_text_scroll_to_intent>() }; scroll_to != nullptr)
+            {
+                scroll_ = std::max(0.0f, scroll_to->offset);
+                return true;
+            }
+            return false;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="84-89" data-title="편집">편집 요청은 평범하게 <code>apply_text_edit</code>로 적용한다. 서식은 글과 함께 옮겨진다. 같은 turn에 <code>presenter_.update</code>를 불러야 칸이 낡은 offset으로 그리지 않는다.</li>
+            <li data-lines="95-98" data-title="클립보드 명령">복사·잘라내기·붙여넣기는 클립보드 요청을 지어 쥔다 (아래).</li>
+            <li data-lines="99-104" data-title="링크와 서식">링크는 데모라 고정 주소를 걸거나 걷는다. 나머지는 <code>apply_rich_text_command</code>다.</li>
+            <li data-lines="107-111" data-title="클립보드 답">셸이 표식을 보고 지은 답 메시지를 받아 붙여 넣는다.</li>
+            <li data-lines="112-122" data-title="스크롤">메모와 같다. 범위 다듬기는 칸이 한다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>고른 구간이 있으면 서식 명령은 구간 전체가 그 서식일 때 끄고, 아니면 켠다. 서식만 바꾸는 실행 취소 한 걸음이다.</li>
+            <li>고른 구간이 없으면 다음에 칠 글자의 서식(<code>typing_marks</code>)만 뒤집는다. 실행 취소 걸음이 아니다.</li>
+            <li>실제 앱의 링크 명령은 주소를 받는 대화 상자를 띄우고, 확인에서 <code>set_rich_text_link</code>를 부른다. 빈 주소는 링크를 걷는다 (<a class="xref" href="dialogs.html">대화 상자와 시트</a>).</li>
+          </ul>
+        </div>
+        <h3>칸과 도구 막대</h3>
+        <div class="prose"><p>칸에는 presenter의 구간·링크를 넘기고, 클립보드 키를 처리기로 넘기고(<code>clipboard_keys_to_parent</code>), 서식 단축키 처리기를 단다. 처리기가 판정에 쓰는 명령표는 정적이다(<code>make_rich_text_commands({})</code>).</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/rich_text_sample.h:143-161" data-path="examples/demo/rich_text_sample.h" data-start="143"><script type="text/plain">
+        // 서식 칸이다. 칸에 키 처리기를 달아 Ctrl+B·I·U·K를 서식 명령으로 바꾼다. 판정용 표는 정적이다.
+        [[nodiscard]] std::unique_ptr<luil::text_area_element> make_editor(const luil::ui_element_kind kind, luil::text_input_view view) const
+        {
+            luil::text_area_config config {};
+            config.placeholder = u8"서식 있는 글";
+            config.scroll_offset = scroll_;
+            config.scroll = [](const float delta) { return luil::make_app_action(rich_text_scroll_intent { delta }); };
+            config.scroll_to = [](const float offset) { return luil::make_app_action(rich_text_scroll_to_intent { offset }); };
+            config.wrap_cache = wrap_;
+            config.spans = presenter_.spans();
+            config.links = presenter_.links();
+            // 복사·붙여넣기 키를 칸이 쓰지 않고 키 처리기로 넘겨 서식째 주고받는다. 넘기는 갈래가 controller에 들어오기 전에는
+            // 칸이 지금처럼 평문으로 복사한다.
+            config.clipboard_keys_to_parent = true;
+            auto editor { std::make_unique<luil::text_area_element>(luil::ui_element_id { kind, u8"rich-editor" }, std::move(view), std::move(config)) };
+            editor->set_key_handler(luil::make_rich_text_key_handler(luil::make_rich_text_commands({}),
+                [](const luil::rich_text_command command) { return luil::make_app_action(rich_text_command_intent { command }); }));
+            return editor;
+        }
+</script></div>
+        <div class="prose"><p>도구 막대의 켜짐은 <code>rich_text_state_of</code>다. 단추마다 <code>set_preserve_pointer_focus(true)</code>를 달아, 누르는 동안 초점이 칸에 남고 고른 구간과 IME 조합이 끊기지 않는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/rich_text_sample.h:163-188" data-path="examples/demo/rich_text_sample.h" data-start="163"><script type="text/plain">
+        // 서식 토글 다섯 줄이다. 누르는 동안 초점이 칸에 남아 IME 조합이 끊기지 않는다 (`set_preserve_pointer_focus`).
+        [[nodiscard]] std::unique_ptr<luil::stack_element> make_toolbar(const luil::ui_element_kind layout_kind, const float spacing) const
+        {
+            const luil::rich_text_state on { luil::rich_text_state_of(state_) };
+            luil::stack_config config {};
+            config.direction = luil::stack_direction::row;
+            config.spacing = spacing;
+            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { layout_kind, u8"rich-toolbar" }, config) };
+            const auto add = [&row](std::u8string owner, std::u8string label, const bool checked, const luil::rich_text_command command) {
+                luil::check_config toggle {};
+                toggle.owner = std::move(owner);
+                toggle.style = luil::check_style::toggle_button;
+                toggle.label = std::move(label);
+                toggle.checked = checked;
+                toggle.toggle = luil::make_message_action(rich_text_command_intent { command });
+                auto element { std::make_unique<luil::check_element>(std::move(toggle)) };
+                element->set_preserve_pointer_focus(true);
+                row->add_fit(std::move(element));
+            };
+            add(u8"rich-bold", u8"굵게", on.bold, luil::rich_text_command::bold);
+            add(u8"rich-italic", u8"기울임", on.italic, luil::rich_text_command::italic);
+            add(u8"rich-underline", u8"밑줄", on.underline, luil::rich_text_command::underline);
+            add(u8"rich-code", u8"코드", on.code, luil::rich_text_command::code);
+            add(u8"rich-link", u8"링크", on.link, luil::rich_text_command::link);
+            return row;
+        }
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>키 (주 = Windows의 Ctrl, macOS의 Command)</th><th>처리기가 내는 명령</th></tr></thead>
+            <tbody>
+              <tr><td class="k">주+B · 주+I · 주+U · 주+K</td><td><code>bold</code> · <code>italic</code> · <code>underline</code> · <code>link</code></td></tr>
+              <tr><td class="k">—</td><td><code>code</code> · <code>clear_format</code>은 기본 단축키가 없다. 메뉴·도구 막대로 낸다</td></tr>
+              <tr><td class="k">주+C · 주+X · 주+V, Ctrl+Insert · Shift+Delete · Shift+Insert</td><td><code>copy</code> · <code>cut</code> · <code>paste</code> (<code>clipboard_keys_to_parent</code>를 켠 칸에서만 처리기에 온다)</td></tr>
+              <tr><td class="k">주+Shift+V</td><td><code>paste_plain</code> — 서식 없이 글만</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>서식째 복사·붙여넣기</h3>
+        <div class="prose"><p>복사는 고른 구간의 글과 HTML을 한 클립에 넣는 요청(<code>rich_text_copy_request</code>)이다. 붙여넣기는 글과 HTML을 함께 읽는 요청이고, 답은 앱이 정한 표식(<code>tag</code>)을 달고 돌아온다. 페이지가 요청을 지어 쥐면, host를 쥔 셸이 같은 logic turn에 가져가 넣는다.</p></div>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/rich_text_sample.h:248-289" data-path="examples/demo/rich_text_sample.h" data-start="248"><script type="text/plain">
+        // 복사·잘라내기·붙여넣기 명령이면 클립보드 요청을 쥐고 참이다.
+        //  - 복사는 고른 구간의 글과 HTML을 한 클립에 넣는 요청이다. 잘라내기는 그 뒤에 고른 구간을 지운다 (실행 취소 한 걸음).
+        //  - 붙여넣기는 글과 HTML을 함께 읽는 요청이다. 답은 `rich_text_clipboard_intent`로 온다.
+        bool clipboard_command(const luil::rich_text_command command)
+        {
+            switch (command)
+            {
+            case luil::rich_text_command::copy:
+            case luil::rich_text_command::cut: {
+                luil::clipboard_data_copy_request request { luil::rich_text_copy_request(state_) };
+                if (request.text.empty())
+                {
+                    clipboard_status_ = u8"복사할 글 없음";
+                    return true;
+                }
+                clipboard_status_ = (command == luil::rich_text_command::cut ? u8"잘라내기 · " : u8"복사 · ") + html_summary(request.html);
+                outgoing_ = luil::clipboard_request { std::move(request) };
+                if (command == luil::rich_text_command::cut && luil::text::text_edit_erase_selection(state_))
+                    presenter_.update(state_);
+                return true;
+            }
+            case luil::rich_text_command::paste:
+            case luil::rich_text_command::paste_plain:
+                paste_plain_ = command == luil::rich_text_command::paste_plain;
+                outgoing_ = luil::clipboard_request { luil::clipboard_data_paste_request { rich_text_clipboard_tag } };
+                return true;
+            default:
+                return false;
+            }
+        }
+
+        void paste(const luil::clipboard_data& data)
+        {
+            if (luil::rich_text_paste(state_, data, paste_plain_) == false)
+            {
+                clipboard_status_ = u8"붙여넣을 글 없음";
+                return;
+            }
+            presenter_.update(state_);
+            const bool formatted { paste_plain_ == false && luil::rich_text_from_html(data.html).text.empty() == false };
+            clipboard_status_ = formatted ? u8"붙여넣기 · " + html_summary(data.html) : std::u8string { u8"붙여넣기 · 글만" };
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:729-737,1558-1564" data-path="examples/demo_main.cpp" data-start="729"><script type="text/plain">
+                // 서식 있는 글 페이지다 (rich-edit-exchange-design.md). 복사·붙여넣기는 페이지가 클립보드 요청을 지어 쥐고, 셸이
+                // 여기(logic thread)서 가져가 host에 넣는다. 편집 메시지는 target이 다르면 거짓이라 다음 페이지가 받는다.
+                if (rich_text_.handle(message))
+                {
+                    if (std::optional<luil::clipboard_request> request { rich_text_.take_clipboard_request() }; request.has_value())
+                        if (luil::app_host* const host { host_.load() }; host != nullptr)
+                            host->post_clipboard_request(std::move(*request));
+                    return;
+                }
+⋯@1558
+            // 클립보드의 글과 그림이다. 이미지 페이지가 받아 logic thread에서 푼다. 서식 글 페이지가 청한 답은 표식으로 가른다.
+            [[nodiscard]] luil::app_message make_clipboard_data_message(const luil::clipboard_data& data) override
+            {
+                if (data.tag == rich_text_clipboard_tag)
+                    return luil::app_message { rich_text_clipboard_intent { data } };
+                return luil::app_message { image_clipboard_data_intent { data } };
+            }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>rich_text_paste</code>는 HTML이 있으면 걸러 읽은 조각을 서식째 넣고, <code>plain</code>이거나 HTML이 없으면 글만 넣는다. 거른 조각이 비면(한도 초과, 깨진 UTF-8) 글로 물러선다. 실행 취소 한 덩어리다.</li>
+            <li>HTML을 읽는 <code>rich_text_from_html</code>은 굵게·기울임·밑줄·코드와 http·https·mailto 링크만 남기고 바깥 자원을 읽지 않는다. 내보내는 <code>rich_text_to_html</code>과 짝이다.</li>
+            <li>macOS에서는 이 클립보드 키 경로가 Command와 맞지 않는다. <a class="xref" href="#platforms">플랫폼 차이</a>를 본다.</li>
+          </ul>
+        </div>
+        <h3>서식 메뉴</h3>
+        <div class="prose"><p>메뉴와 팔레트에 보이는 표만 지금 상태로 짓는다. 체크가 켜짐을 보이고, 고르면 명령 id(<code class="free">format.bold</code> 따위)가 돌아온다. <code>rich_text_command_of</code>가 그 id에서 명령을 되찾는다. 저장소 예제는 메뉴를 짓지 않아서 직접 쓴 견본이다. 메뉴 자체는 <a class="xref" href="menus.html">메뉴와 메뉴 막대</a>에 있다.</p></div>
+        <div class="code" data-lang="cpp" data-label="서식 메뉴와 링크 대화 (직접 작성)" data-compile="pre-format"><script type="text/plain">
+// 메뉴에서 고른 서식 명령이다. 키는 `format.bold` 같은 명령 id다.
+struct format_menu_intent
+{
+    std::u8string key {};
+};
+// 링크 명령은 주소를 받는 대화 상자를 띄운다 (앱의 몫). 대화의 확인이 이 메시지를 낸다.
+struct link_dialog_result_intent
+{
+    std::u8string destination {};
+};
+
+struct editor_state
+{
+    luil::text::text_edit_state draft {};
+    luil::rich_text_presenter presenter {};
+    bool link_dialog_open { false };
+};
+
+// "서식" 메뉴다. 체크는 지금 편집 상태의 켜짐이다 (`rich_text_state_of`) — 보이는 표만 상태로 짓는다.
+[[nodiscard]] luil::menu_config make_format_menu(const editor_state& state)
+{
+    luil::menu_config menu {};
+    menu.owner = u8"format";
+    for (const luil::app_command& command : luil::make_rich_text_commands(luil::rich_text_state_of(state.draft)))
+        menu.items.push_back(luil::menu_item_from(command));
+    menu.select = [](const std::u8string& key) { return luil::make_app_action(format_menu_intent { key }); };
+    return menu;
+}
+
+// logic thread다. 처리했으면 참이다.
+bool handle_format(editor_state& state, const luil::app_message& message)
+{
+    if (const auto* const picked { message.get<format_menu_intent>() }; picked != nullptr)
+    {
+        const std::optional<luil::rich_text_command> command { luil::rich_text_command_of(picked->key) };
+        if (command.has_value() == false)
+            return false;
+        if (*command == luil::rich_text_command::link)
+            state.link_dialog_open = true;
+        else if (luil::apply_rich_text_command(state.draft, *command))
+            state.presenter.update(state.draft);
+        return true;
+    }
+    if (const auto* const result { message.get<link_dialog_result_intent>() }; result != nullptr)
+    {
+        state.link_dialog_open = false;
+        // 빈 주소는 링크를 걷는다. 고른 구간이 없으면 caret이 선 링크를 고친다.
+        if (luil::set_rich_text_link(state.draft, result->destination))
+            state.presenter.update(state.draft);
+        return true;
+    }
+    return false;
+}
+</script></div>
+        <script type="text/plain" id="pre-format" data-prelude>
+#include "luil/text/text_edit.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/commands.h"
+#include "luil/ui/menu_element.h"
+#include "luil/ui/rich_text.h"
+#include "luil/ui/rich_text_commands.h"
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 기호는 <a class="xref" href="api.html#text-input-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="text_input_config">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/dialog_elements.h:219-289" data-path="include/luil/ui/dialog_elements.h" data-start="219"><script type="text/plain">
+    // 숫자 칸의 증감이다 (number-input-design.md).
+    struct text_input_number
+    {
+        number_input_range range {};
+        // ↑↓·PageUp/PageDown·스핀 단추가 지은 다음 글을 앱 메시지로 바꾼다. 비어 있으면 칸은 증감하지 않는다.
+        //  - 앱은 받은 글로 초안 전체를 바꾼다 (`text_edit_command::replace_all`, `offset`은 글 길이).
+        std::function<input_action(std::u8string text)> change_to {};
+        // 칸 오른쪽 안쪽에 위·아래 화살표 단추를 세운다. `change_to`가 있어야 선다.
+        bool spin_buttons { false };
+        std::u8string increase_tooltip {};
+        std::u8string decrease_tooltip {};
+    };
+
+    struct text_input_config
+    {
+        // 비어 있고 초점이 없을 때만 그리는 흐린 안내 글이다.
+        std::u8string placeholder {};
+        // 0이 아니면 글 왼쪽에 아이콘 칸을 잡는다 (검색 칸의 돋보기).
+        char32_t leading_glyph { 0 };
+        // 비어 있으면 지우기 버튼을 만들지 않는다.
+        // 무엇을 지울지는 앱이 정한다 — 라이브러리에 `text_edit_command::clear`가
+        // 이미 있으므로 앱은 그 요청을 담아 돌려주면 된다.
+        ui_action clear {};
+        std::u8string clear_tooltip {};
+        // 지우기 버튼의 글리프다. 0이면 닫기(×)다.
+        // 앱이 그 자리를 다른 뜻으로 쓸 때(검색·화살표) 바꾼다 — 무엇을 하는지는
+        // 위의 `clear`가 정하므로 글리프만 따라가면 된다.
+        char32_t clear_glyph { 0 };
+        // 암호 칸이다 (docs/concepts/text-input.md의 "암호 칸").
+        //  - 글자마다 점(●)으로 그린다. 보조 기술에 넘기는 값도 같은 점이다.
+        //  - 복사·잘라내기를 하지 않고, 낱말 단위 이동·지우기·고르기는 칸 끝·칸 전체로 바꾼다 —
+        //    낱말 경계가 공백 자리를 알린다.
+        //  - 플랫폼에 암호 칸으로 알린다. Android 키보드는 추천·학습을 끄고, Windows는 IME 조합을
+        //    붙이지 않는다.
+        bool secret { false };
+        // 암호 칸의 글을 그대로 그린다 (앱의 "보이기" 단추). 그리기와 보조 기술의 값만 바뀌고 나머지 암호 칸의
+        // 규칙은 그대로다 — 키보드를 다시 세우지 않고 켜고 끌 수 있다.
+        bool reveal { false };
+        // 기본은 기존의 일반/암호 키보드와 완료(Enter)다.
+        text_input_options input {};
+        // Android 소프트 키보드의 확정 단추를 눌렀다. 비어 있으면 done/search/go/send는
+        // Enter, next/previous는 초점 이동이다. Windows의 Enter는 종전 경로를 유지한다.
+        ui_action submit {};
+        // 콤보의 열린 후보 탐색은 입력 칸 바깥의 키 handler가 맡는다.
+        bool navigation_keys_to_parent { false };
+        // 값이 받아들여지지 않는다. 테두리를 오류색으로 그리고 보조 기술에 알린다. 판단은 앱이 한다
+        // (`check_number_input`) — 칸이 혼자 붉어지지 않아 "저장할 때만 보이기" 같은 앱의 규칙이 선다.
+        bool invalid { false };
+        // 칸 아래 줄에 그리는 오류 글이다. 비어 있지 않으면 `invalid`로도 본다.
+        //  - 담는 쪽이 `text_input_element::error_height_for`만큼 칸을 키운다. 입력 상자는 slot의 위쪽이다.
+        //  - 새로 생기거나 바뀌면 보조 기술이 그 글을 읽는다.
+        std::u8string error {};
+        // 숫자 칸의 증감이다. 있으면 ↑가 늘리고 ↓가 줄인다 (←→·Home/End는 caret의 것으로 남는다).
+        std::optional<text_input_number> number {};
+        // 글 안의 하이퍼링크다 (`text_area_config::links`와 같은 규칙). 공유한 vector는 게시 뒤 고치지 않는다.
+        //  - 한 줄 칸은 늘 편집 칸이라 Ctrl+클릭으로 연다. 그냥 클릭은 caret을 놓는다.
+        //  - 조합 중에는 링크 표시를 쉰다 — 조합 글이 끼어든 자리를 옮겨 그리지 않는다. 확정되면 다시 선다.
+        //  - 암호 칸은 링크를 세우지 않는다.
+        std::shared_ptr<const std::vector<text_link>> links {};
+        std::function<input_action(std::u8string_view destination)> activate_link {};
+        // 링크 tooltip에서 주소 뒤에 붙는 안내다 (예: "Ctrl+클릭하여 열기").
+        std::u8string link_hint {};
+    };
+
+    // 앞 글리프와 지우기 버튼의 크기, 그리고 글과의 간격이다 (논리 픽셀).
+    inline constexpr float text_input_glyph_size { 14.0f };
+    inline constexpr float text_input_clear_size { 18.0f };
+    inline constexpr float text_input_icon_gap { 5.0f };
+    // 스핀 단추 기둥의 폭과 칸 아래 오류 줄의 높이다 (논리 픽셀).
+    inline constexpr float text_input_spin_width { 14.0f };
+    inline constexpr float text_input_error_height { 16.0f };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>placeholder</code></td><td>빈 글</td><td>안내 글이 없다. 접근 이름(<code>set_access_name</code>)이 없으면 보조 기술이 이것을 이름으로 읽는다</td></tr>
+                  <tr><td><code>leading_glyph</code> · <code>clear</code></td><td>0 · 없음</td><td>앞 아이콘 칸, 지우기 단추를 만들지 않는다. 폭은 <code>leading_width_for</code>·<code>trailing_width_for</code>로 잰다</td></tr>
+                  <tr><td><code>secret</code> · <code>reveal</code></td><td>거짓</td><td>보통 칸. <code>reveal</code>은 <code>secret</code>일 때만 뜻이 있다</td></tr>
+                  <tr><td><code>input</code></td><td><code>text</code> · <code>done</code></td><td>일반 키보드와 완료 단추. 숫자 칸이면 <code>number</code>(소수면 <code>decimal</code>)로 올린다</td></tr>
+                  <tr><td><code>submit</code></td><td>없음</td><td>휴대폰 확정 단추가 Enter 또는 Tab을 낸다. <strong>데스크톱은 읽지 않는다</strong></td></tr>
+                  <tr><td><code>navigation_keys_to_parent</code></td><td>거짓</td><td>(콤보 안의 칸) 켜면 ↑↓·Page·Enter를 감싼 쪽이 받는다. 조합 중에는 칸에 남는다</td></tr>
+                  <tr><td><code>invalid</code> · <code>error</code></td><td>거짓 · 빈 글</td><td>오류 표시가 없다. 오류 글이 있으면 담는 쪽이 <code>error_height_for</code>만큼 칸을 키운다</td></tr>
+                  <tr><td><code>number</code></td><td>없음</td><td>증감하지 않는다. <code>change_to</code>가 비어도 그렇다</td></tr>
+                  <tr><td><code>links</code> · <code>activate_link</code> · <code>link_hint</code></td><td>없음</td><td>링크가 없다 / 표시만 한다 / tooltip은 주소만</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="옵션 · view">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/text_input_options.h:4-35" data-path="include/luil/ui/text_input_options.h" data-start="4"><script type="text/plain">
+    // 소프트 키보드에 알리는 입력 종류다. 입력값 검사는 앱의 몫이다.
+    enum class text_input_kind
+    {
+        text,
+        number,
+        decimal,
+        phone,
+        email,
+        url,
+    };
+
+    // 키보드의 확정 단추다. 기본 done은 지금까지의 Enter 동작이다.
+    enum class text_input_action
+    {
+        done,
+        search,
+        go,
+        send,
+        next,
+        previous,
+        none,
+    };
+
+    struct text_input_options
+    {
+        text_input_kind kind { text_input_kind::text };
+        text_input_action action { text_input_action::done };
+        // number·decimal 키보드에 부호 입력을 허용한다.
+        bool signed_number { false };
+
+        [[nodiscard]] bool operator==(const text_input_options&) const noexcept = default;
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/text_input_state.h:9-44" data-path="include/luil/ui/text_input_state.h" data-start="9"><script type="text/plain">
+    // 한 줄 텍스트 박스의 표시 상태다.
+    // caret과 선택 anchor는 UTF-8 byte offset이고 둘이 같으면 선택이 없다.
+    // element는 이 값으로 선택 띠와 caret 위치를 그린다.
+    // 값은 앱의 view 모델이 만들어 tree 빌드에 넘긴다.
+    struct text_input_view
+    {
+        std::u8string text {};
+        std::size_t caret { 0 };
+        std::size_t anchor { 0 };
+        // caret이 앞 글자 쪽에 붙는다 (`text_edit_state::caret_upstream`). 여러 줄 칸만 쓴다.
+        bool caret_upstream { false };
+
+        // IME 조합 중이다.
+        // 조합 글은 아직 사용자의 글이 아니므로 `text`에 넣지 않는다.
+        //  - 실행 취소 기록이 조합 단계마다 더럽혀진다.
+        //    대신 그 동안 **화면에 보이는 글 전체**를 따로 싣고 element가 그것을 그린다.
+        bool composing { false };
+        std::u8string composition_text {};
+        std::size_t composition_caret { 0 };
+        // `composition_text` 안에서 밑줄을 긋는 구간이다 (UTF-8 byte offset).
+        std::size_t composing_begin { 0 };
+        std::size_t composing_end { 0 };
+        // 마지막으로 적용된 비동기 편집 번호다. make_text_input_view가 초안에서 옮긴다.
+        std::uint64_t applied_sequence { 0 };
+
+        // 지금 화면에 보이는 글이다 (조합 중이면 조합 글이 섞인 쪽).
+        // element가 그리는 글과 같은 것이라, 점진 검색처럼 **보이는 대로**
+        // 걸러야 하는 앱이 이것을 본다 — `text`를 보면 조합이 끝나기 전까지
+        // 화면의 글과 결과가 어긋난다.
+        [[nodiscard]] std::u8string_view displayed_text() const noexcept
+        {
+            return composing ? std::u8string_view { composition_text } : std::u8string_view { text };
+        }
+
+        [[nodiscard]] bool operator==(const text_input_view&) const = default;
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>text_input_options::kind</code></td><td>휴대폰 키보드 종류의 힌트. 값 검사가 아니다. 플랫폼별 대응은 <a class="xref" href="#platforms">플랫폼 차이</a></td></tr>
+                  <tr><td><code>text_input_options::action</code></td><td>휴대폰 확정 단추의 모양. <code>none</code>이면 단추가 아무것도 하지 않는다</td></tr>
+                  <tr><td><code>text_input_view::text</code> · <code>caret</code> · <code>anchor</code></td><td>확정 글과 caret·선택 기준점 (UTF-8 byte). 둘이 같으면 선택이 없다</td></tr>
+                  <tr><td><code>composing</code> · <code>composition_text</code></td><td>조합 중이면 화면에 보이는 글 전체를 따로 싣는다. <code>text</code>에는 넣지 않는다</td></tr>
+                  <tr><td><code>displayed_text()</code></td><td>지금 화면에 보이는 글. 점진 검색이 본다</td></tr>
+                  <tr><td><code>applied_sequence</code></td><td>마지막으로 적용한 IME 편집 번호. <code>make_text_input_view</code>가 초안에서 옮긴다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="text_area_config">
+            <div class="walk side">
+              <div class="code tall" data-lang="cpp" data-src="include/luil/ui/text_area_element.h:89-156" data-path="include/luil/ui/text_area_element.h" data-start="89"><script type="text/plain">
+    // 여러 줄 텍스트 칸의 설정이다.
+    enum class text_face { ui, code };
+
+    struct text_area_config
+    {
+        // 비어 있고 초점이 없을 때만 그리는 흐린 안내 글이다. 보조 기술이 읽는 칸의 이름이기도 하다.
+        std::u8string placeholder {};
+        // 지금 흘러간 양이다 (논리 픽셀, 앱 상태). 범위 밖 값은 `arrange`가 다듬는다.
+        float scroll_offset { 0.0f };
+        // 세로 스크롤을 이만큼 옮기자는 메시지다 (논리 픽셀) — 휠, 막대, caret 따라가기가 이것을 낸다.
+        //  - 없으면 흘리지 않는 칸이다. 줄이 넘치면 아래가 잘린다.
+        std::function<input_action(float delta)> scroll {};
+        // 스크롤을 이 자리로 하라는 절대 메시지다 (보조 기술이 막대의 값을 정할 때).
+        std::function<input_action(float offset)> scroll_to {};
+        // 접은 자리를 frame 사이에 쥐는 곳이다 (`text_area_wrap_cache`). 큰 글을 받는 칸만 넘긴다.
+        //  - 없으면 배치가 frame마다 글 전체를 접는다. 결과는 같다.
+        std::shared_ptr<text_area_wrap_cache> wrap_cache {};
+        // 읽기 전용에서도 선택·복사와 caret은 남는다.
+        //  - 글을 바꾸는 키(Ctrl+X·Ctrl+V·Delete·Enter·Shift+Insert)는 칸이 삼킨다. Ctrl+Z·Ctrl+Y는 칸에 되돌릴 글이 없어
+        //    삼키지 않고 칸 밖으로 흘러 앱 `on_key`가 받는다 (key-propagation-design.md).
+        bool read_only { false };
+        bool wrap { true };
+        // 접는 자리를 고르는 규칙이다 (line_break.h). 비면 앱 스타일의 `text.wrap_policy`다 (배치 문맥의 `style`,
+        // docs/wrap-policy-key-design.md). 적은 값이 스타일보다 앞선다.
+        //  - 배치가 푼 정책이 바뀌면 `wrap_cache`가 통째로 비워진다. config가 같아도 스타일이 바뀌어 정책이 뒤집히면 그렇다.
+        std::optional<text::line_break_policy> line_break {};
+        text_face face { text_face::ui };
+        float font_size { 0.0f };
+        float scroll_x { 0.0f };
+        std::function<input_action(float delta)> scroll_horizontal {};
+        std::function<input_action(float offset)> scroll_horizontal_to {};
+        // 구간은 begin 순서이고 겹치지 않는다. 공유한 vector는 게시 뒤 고치지 않는다.
+        //  - offset은 확정 글(`text_input_view::text`) 기준이다. 조합 중에는 칸이 조합 글만큼 옮겨 그린다.
+        //  - 편집하는 코드 글의 구간은 `syntax_highlighter`(syntax_highlighter.h)가 편집마다 바뀐 줄부터 다시 칠해 만든다.
+        //    구문 색(`text_color_role::keyword`…`function`)과 굵기·기울임(`text_span::bold`·`italic`)을 싣는다.
+        //  - 서식 있는 글의 구간은 `rich_text_presenter`(rich_text.h)가 편집 상태의 서식에서 옮겨 만든다. 굵기·기울임·밑줄·코드
+        //    (`underline`·`code`)를 싣는다. 칸 하나에 도우미 하나다. 두 도우미가 함께 채우지 않는다.
+        //  - 보조 기술의 서식 속성(굵기·기울임·밑줄)이 이 구간을 읽는다 (`text_input_snapshot::spans`).
+        std::shared_ptr<const std::vector<text_span>> spans {};
+        // `line` 오름차순이고 같은 줄이 둘 없다. 그리기가 줄마다 이분 탐색(`lower_bound`)으로 찾는다.
+        std::shared_ptr<const std::vector<line_decoration>> lines {};
+        std::vector<gutter_column> gutters {};
+        std::vector<text_highlight> highlights {};
+        // 글 안의 하이퍼링크다 (`text_link`, 글에서 찾으려면 `detect_text_links`). begin 순서이고 겹치지 않는다.
+        // 공유한 vector는 게시 뒤 고치지 않는다.
+        //  - offset은 `spans`처럼 확정 글 기준이다. 조합 중에는 칸이 조합 글만큼 옮겨 그린다.
+        //  - 강조색과 밑줄로 그리고, 링크마다 보조 기술의 Hyperlink가 선다. 머무르면 주소를 tooltip으로 보인다.
+        //  - 읽기 전용 칸은 클릭으로, 편집 칸은 Ctrl+클릭으로 연다. 편집 칸의 그냥 클릭은 caret을 놓는다 — 링크 안의 글도
+        //    고칠 수 있어야 해서다. 터치는 탭이 caret이고, 길게 누르면 편집 메뉴에 "링크 열기·주소 복사"가 선다.
+        std::shared_ptr<const std::vector<text_link>> links {};
+        // 링크를 눌렀을 때 앱 메시지를 짓는다. 비어 있으면 링크는 표시만 한다.
+        //  - 라이브러리는 주소를 스스로 열지 않는다. 앱이 받아 확인하고 연다 (`open_url`).
+        std::function<input_action(std::u8string_view destination)> activate_link {};
+        // 편집 칸의 링크 tooltip에서 주소 뒤에 붙는 안내다 (예: "Ctrl+클릭하여 열기"). 비어 있으면 주소만 보인다.
+        std::u8string link_hint {};
+        // 복사·잘라내기·붙여넣기 키(Ctrl+C·X·V, Ctrl+Insert(Shift 포함), Shift+Insert, Shift+Delete)를 칸이 쓰지 않고 `key_handler`로 넘긴다.
+        //  - 서식 칸이 켠다. 칸에 단 `make_rich_text_key_handler`가 그 키를 복사·붙여넣기 명령으로 내고, 앱이 logic thread에서
+        //    `rich_text_copy_request`·`rich_text_paste`로 글과 HTML을 주고받는다 (docs/rich-edit-exchange-design.md).
+        //  - `text_input_snapshot`에 같은 이름으로 실린다. 읽기 전용 칸이 Ctrl+X·Ctrl+V를 삼키는 것은 그대로다.
+        bool clipboard_keys_to_parent { false };
+    };
+
+    // 글자 크기와 줄 높이, 안쪽 여백이다 (논리 픽셀).
+    // 줄 높이가 고정이라 내용 높이는 화면의 줄 수(접은 줄 포함)에 줄 높이를 곱하고 위아래 여백을 더한 값이다.
+    inline constexpr float text_area_font_size { 11.0f };
+    inline constexpr float text_area_line_height { 18.0f };
+    inline constexpr float text_area_padding_x { 7.0f };
+    inline constexpr float text_area_padding_y { 5.0f };
+</script></div>
+              <ol class="walk-steps-src">
+                <li data-lines="94-102" data-title="안내 글과 세로 스크롤">스크롤 위치는 앱 상태다. <code>scroll</code>이 없으면 흘리지 않는 칸이고, 넘친 줄은 잘린다.</li>
+                <li data-lines="103-105" data-title="접기 cache">frame 사이에 접은 자리를 쥔다. 없어도 결과는 같다.</li>
+                <li data-lines="106-109" data-title="읽기 전용">선택·복사·caret은 남는다. 글을 바꾸는 키는 삼키고 Ctrl+Z·Ctrl+Y는 흘린다.</li>
+                <li data-lines="110-119" data-title="접기와 글꼴">접기 여부와 줄 나눔 규칙, 글꼴(<code>ui</code>·<code>code</code>)과 크기, 가로 스크롤. <code>font_size</code>가 0이면 기본 11이고, 줄 높이는 크기에 비례한다.</li>
+                <li data-lines="120-131" data-title="구간과 줄 장식">색·굵기 구간, 줄 바탕과 여백 표시, 줄 번호 기둥, 찾은 곳. offset은 확정 글 기준이고 칸 하나에 도우미 하나다.</li>
+                <li data-lines="132-143" data-title="링크">링크 구간, 여는 메시지, 편집 칸의 tooltip 안내.</li>
+                <li data-lines="144-148" data-title="서식 칸의 클립보드">복사·붙여넣기 키를 칸이 쓰지 않고 key handler로 넘긴다.</li>
+                <li data-lines="151-156" data-title="치수">글자 11, 줄 18, 안쪽 여백 7·5 논리 픽셀. 줄 높이가 고정이라 내용 높이는 화면 줄 수로 정해진다.</li>
+              </ol>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>scroll</code> · <code>scroll_to</code></td><td>없음</td><td>흘리지 않는다. caret 따라가기도 없다 / 보조 기술이 막대 값을 정하지 못한다</td></tr>
+                  <tr><td><code>wrap</code></td><td>참</td><td>— 거짓이면 가로로 흘린다. 가로 막대는 <code>scroll_horizontal</code>이 있을 때만 선다</td></tr>
+                  <tr><td><code>line_break</code></td><td>없음</td><td>앱 스타일의 <code class="free">text.wrap_policy</code>를 따른다</td></tr>
+                  <tr><td><code>face</code> · <code>font_size</code></td><td><code>ui</code> · 0</td><td>UI 글꼴, 11 논리 픽셀</td></tr>
+                  <tr><td><code>spans</code> · <code>lines</code></td><td>없음</td><td>모든 글이 기본 색, 줄 장식 없음</td></tr>
+                  <tr><td><code>gutters</code></td><td>빈 vector</td><td>줄 번호 기둥이 없다. <code>width</code> 0인 기둥은 폭을 재어 정한다</td></tr>
+                  <tr><td><code>read_only</code></td><td>거짓</td><td>편집 칸이다. 링크는 Ctrl+클릭으로 연다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="구간 · 장식 · 링크">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/text_document.h:11-80" data-path="include/luil/ui/text_document.h" data-start="11"><script type="text/plain">
+    enum class text_color_role
+    {
+        primary,
+        secondary,
+        accent,
+        warning,
+        error,
+        // 구문 색이다. 팔레트의 `syntax_*` 역할로 칠한다 (구문 강조 도우미는 syntax_highlighter.h).
+        //  - 고대비에서는 여섯 모두 창 글자색 하나로 접힌다. 색에만 뜻을 싣지 않으려면 `bold`·`italic`을 함께 쓴다.
+        keyword,
+        string,
+        comment,
+        number,
+        type,
+        function,
+    };
+    enum class text_background_role { none, added, removed, changed };
+    enum class line_background_role { none, added, removed, changed };
+    enum class gutter_kind { line_number, custom };
+
+    struct text_span
+    {
+        std::size_t begin { 0 };
+        std::size_t end { 0 };
+        text_color_role color { text_color_role::primary };
+        bool bold { false };
+        text_background_role background { text_background_role::none };
+        // `background` 뒤에 둔다. `{ begin, end, color, bold }` 같은 순서 초기화가 그대로 읽힌다.
+        // 고대비에서 색이 모여도 남는 단서다 (주석을 기울이는 식). 기울임 face가 없는 글꼴은 글자를 눕혀 메운다.
+        bool italic { false };
+        // 글자 아래 1 논리 픽셀 선을 그 구간의 글자색으로 긋는다 (링크 밑줄과 같은 자리). 폭을 바꾸지 않아 배치에 싣지 않는다.
+        bool underline { false };
+        // code face로 배치하고 바탕을 `raised_background`로 칠한다. 고대비에서는 그 바탕이 창 바탕과 같아 face만 남는 단서다.
+        //  - 배치가 없는 측정기 길은 보통 글꼴로 재고 그리며 바탕만 칠한다.
+        bool code { false };
+    };
+
+    struct line_decoration
+    {
+        // 줄 바꿈으로 나뉜 논리 줄이다. 넘겨 접은 화면 줄과 구별한다.
+        std::size_t line { 0 };
+        line_background_role background { line_background_role::none };
+        char32_t marker { 0 };
+    };
+
+    struct gutter_column
+    {
+        gutter_kind kind { gutter_kind::line_number };
+        // 0부터 세는 논리 줄을 받는다. 줄 번호 표시는 1부터다.
+        std::function<std::u8string(std::size_t line)> text {};
+        float width { 0.0f };
+    };
+
+    struct text_highlight
+    {
+        std::size_t begin { 0 };
+        std::size_t end { 0 };
+        bool current { false };
+    };
+
+    // 글 안의 하이퍼링크 구간이다 (UTF-8 byte offset).
+    struct text_link
+    {
+        std::size_t begin { 0 };
+        std::size_t end { 0 };
+        // 누르면 앱에 넘기는 주소다. 보이는 글과 다를 수 있다 — 그래서 칸이 머무름 tooltip으로 이것을 보인다.
+        std::u8string destination {};
+
+        [[nodiscard]] bool operator==(const text_link&) const = default;
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>형</th><th>쓰임</th></tr></thead>
+                <tbody>
+                  <tr><td><code>text_span</code></td><td>글자 구간의 색 역할·굵게·기울임·밑줄·코드. 고대비에서는 구문 색 여섯이 하나로 접히므로 굵기·기울임을 함께 쓴다</td></tr>
+                  <tr><td><code>line_decoration</code></td><td>논리 줄(줄 바꿈으로 나뉜 줄) 하나의 바탕과 여백 표시 글자</td></tr>
+                  <tr><td><code>gutter_column</code></td><td>줄 번호(<code>line_number</code>)나 앱 글(<code>custom</code>). 콜백은 0부터 센 줄을 받는다</td></tr>
+                  <tr><td><code>text_highlight</code></td><td>찾은 곳. <code>current</code>는 지금 찾은 곳</td></tr>
+                  <tr><td><code>text_link</code></td><td>링크 구간과 누르면 넘길 주소. 보이는 글과 주소가 다를 수 있다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>모든 구간은 begin 순서이고 겹치지 않으며, 양 끝은 앱이 주는 글자소 경계다. 빈 구간은 아무것도 걸지 않는다.</p></div>
+          </section>
+          <section data-tab="syntax_highlighter">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/syntax_highlighter.h:14-76" data-path="include/luil/ui/syntax_highlighter.h" data-start="14"><script type="text/plain">
+namespace luil {
+    // 줄 하나를 칠한다. 줄 바꿈은 `line`에 들지 않는다.
+    //  - `state`는 윗줄이 끝난 뒤의 상태이고, 첫 줄은 `initial_state`다.
+    //  - 구간은 줄 처음 기준 offset으로 `spans`에 더한다 (`spans`는 비워서 건넨다).
+    //  - 돌려주는 값은 이 줄이 끝난 뒤의 상태다.
+    // (줄 글, 입력 상태)의 순수 함수여야 한다. 줄 번호나 밖의 값을 읽지 않는다. 도우미가 같은 글과 같은 입력 상태의 줄은
+    // 지난번과 같은 결과라고 보고 다시 부르지 않기 때문이다.
+    using syntax_line_lexer = std::function<int(std::u8string_view line, int state, std::vector<text_span>& spans)>;
+
+    // `update`에 예산을 주지 않는다는 값이다. 수렴할 때까지 칠한다.
+    inline constexpr std::chrono::microseconds syntax_unlimited_budget { std::chrono::microseconds::max() };
+
+    struct syntax_highlighter_config
+    {
+        // 비어 있으면 아무 구간도 칠하지 않는다.
+        syntax_line_lexer lexer {};
+        int initial_state { 0 };
+        // 이보다 긴 줄은 렉서에 보내지 않고, 구간 없이 입력 상태를 그대로 다음 줄에 넘긴다.
+        // 한 줄에 수 MB가 든 글(압축한 파일)에서 렉서 하나가 오래 서는 것을 막는다.
+        std::size_t max_line_size { 20'000 };
+    };
+
+    struct syntax_highlight_stats
+    {
+        std::size_t lines { 0 };
+        std::size_t spans { 0 };
+        // 마지막 `update`·`advance`가 렉서에 보낸 줄 수다 (test·진단용). `max_line_size`를 넘어 건너뛴 줄은 세지 않는다.
+        std::size_t relexed { 0 };
+    };
+
+    // 편집하는 코드 글의 구간 색을 편집에 맞춰 다시 칠한다 (docs/syntax-highlight-design.md).
+    // 앱이 줄 하나를 칠하는 렉서를 주면, 바뀐 줄부터 렉서를 다시 돌려 `text_area_config::spans`에 넘길 구간을 만든다.
+    //  - 줄은 LF, CRLF, 홀로 선 CR로 끝난다 (`text_area_element`의 배치가 줄을 나누는 규칙과 같다). 글이 줄 바꿈으로
+    //    끝나면 마지막에 빈 줄이 하나 있다.
+    //  - 렉서 출력은 도우미가 다듬는다. 줄 글 밖과 빈 구간은 버리고, begin 순으로 정렬하고, 겹친 뒤쪽을 자르고,
+    //    양끝을 글자소 경계로 맞춘다. 같은 모양의 이웃 구간을 줄 바꿈 너머로 합치지 않는다.
+    //  - thread-safe가 아니다. 앱 logic이 쥐는 상태이고, `spans()`가 돌려준 vector는 어느 thread에서나 읽는다.
+    class syntax_highlighter
+    {
+    public:
+        explicit syntax_highlighter(syntax_highlighter_config config);
+
+        // 글이 바뀐 뒤 부른다 (`apply_text_edit`와 같은 logic turn에서, 칸을 짓기 전에).
+        // 지난 호출의 글과 견주어 바뀐 줄부터 다시 칠한다.
+        //  - 편집이 닿은 줄은 늘 칠한다. 그 뒤(꼬리)는 앞 줄이 끝난 상태가 지난번과 같아지는 줄에서 멈춘다.
+        //  - 꼬리와 첫 불러오기는 `budget` 안에서만 칠하고 남기면 `pending()`이 참이다. 아직 칠하지 않은 줄은 지난 색이 남는다
+        //    (offset은 늘 현재 글에 맞는다). 처음 열 때는 남은 색이 없어 맨 위부터 차례로 색이 든다.
+        //  - 대기 중에 편집이 오면 그 편집의 상태가 앞의 대기분에 기대므로, 대기분 중 편집보다 앞선 줄도 함께 칠한다.
+        //  - 예산을 주지 않으면 늘 수렴까지 칠한다.
+        void update(std::u8string_view text, std::chrono::microseconds budget = syntax_unlimited_budget);
+        // 남은 일을 `budget` 안에서 이어 받는다. 남은 것이 없으면 아무 일도 하지 않는다.
+        // 예산이 아무리 작아도 대기 중인 첫 줄은 칠한다. 앱이 작은 예산으로 틱마다 불러도 끝내 다 칠해진다.
+        void advance(std::chrono::microseconds budget);
+        [[nodiscard]] bool pending() const noexcept;
+        // 다른 문서를 열 때 앞 문서의 줄 기록을 버린다. 다음 `update`가 첫 불러오기가 된다.
+        void reset();
+
+        // 지금까지 칠한 구간이다 (begin 순서, 겹치지 않음, 문서 byte offset).
+        // 앞 호출 뒤 바뀐 것이 없으면 같은 포인터를 돌려준다. 게시한 vector는 고치지 않는다 (`text_area_config::spans`의 계약).
+        // 새 vector는 이 호출이 짓는다. 한 turn에 `update`가 여러 번이어도 한 번만 쓴다.
+        [[nodiscard]] std::shared_ptr<const std::vector<text_span>> spans();
+        [[nodiscard]] const syntax_highlight_stats& stats() const noexcept;
+
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>함수</th><th>언제 부르나</th></tr></thead>
+                <tbody>
+                  <tr><td><code>update(text, budget)</code></td><td>편집을 적용한 같은 logic turn, 칸을 짓기 전. 예산을 주지 않으면 수렴까지 칠한다</td></tr>
+                  <tr><td><code>advance(budget)</code> · <code>pending()</code></td><td>남은 꼬리를 시간 경로(<code>tick</code>)에서 이어 칠한다</td></tr>
+                  <tr><td><code>reset()</code></td><td>다른 문서를 열 때. 다음 <code>update</code>가 첫 불러오기가 된다</td></tr>
+                  <tr><td><code>spans()</code></td><td>frame을 지을 때. 바뀐 것이 없으면 같은 포인터다. const가 아니다</td></tr>
+                  <tr><td><code>stats()</code></td><td>진단. <code>relexed</code>는 마지막 호출이 렉서에 보낸 줄 수다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="서식">
+            <div class="code" data-lang="cpp" data-src="include/luil/text/text_format.h:12-21,59-70" data-path="include/luil/text/text_format.h" data-start="12"><script type="text/plain">
+    // 글자 하나에 걸리는 인라인 서식이다 (docs/rich-edit-design.md). 비트 합이다.
+    //  - 뒤 비트는 2단계 몫(취소선 등)으로 남긴다. 글자 크기를 바꾸는 서식은 두지 않는다 (여러 줄 칸의 줄 높이가 고정이다).
+    enum class text_mark : std::uint8_t
+    {
+        none = 0,
+        bold = 1u << 0,
+        italic = 1u << 1,
+        underline = 1u << 2,
+        code = 1u << 3,
+    };
+⋯@59
+    // 글 한 벌의 서식이다 (UTF-8 byte offset, 글자소 경계).
+    //  - 글은 들지 않는다. 글은 `text_edit_state::text`가 들고 이 값은 그 곁에서 함께 바뀐다.
+    //  - 아래 불변식을 모든 함수가 지킨다. 그래서 같은 서식은 `==`로 같고, test와 presenter의 견줌이 여기에 기댄다.
+    struct text_format
+    {
+        // begin 순이고 겹치지 않는다. 빈 구간과 `none` 구간은 없고, 맞닿은 같은 서식은 합친다.
+        std::vector<text_mark_run> runs {};
+        // begin 순이고 겹치지 않는다. 빈 구간은 없다. 맞닿은 이웃은 주소가 같을 때만 합친다.
+        std::vector<text_format_link> links {};
+
+        [[nodiscard]] bool operator==(const text_format&) const = default;
+    };
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/rich_text.h:15-79" data-path="include/luil/ui/rich_text.h" data-start="15"><script type="text/plain">
+    // 서식 있는 글 칸의 명령이다 (docs/rich-edit-design.md).
+    //  - 앞의 다섯(굵게·기울임·밑줄·코드·서식 지우기)은 `apply_rich_text_command`가 한다.
+    //  - 링크는 앱이 주소를 받은 뒤 `set_rich_text_link`로 건다. 복사·잘라내기·붙여넣기는 교환 쪽 helper의 몫이다
+    //    (docs/rich-edit-exchange-design.md).
+    enum class rich_text_command
+    {
+        bold,
+        italic,
+        underline,
+        code,
+        clear_format,
+        link,
+        copy,
+        cut,
+        paste,
+        paste_plain,
+    };
+
+    // 메뉴 체크와 도구 막대 단추의 켜짐이다 (`rich_text_state_of`).
+    struct rich_text_state
+    {
+        bool bold { false };
+        bool italic { false };
+        bool underline { false };
+        bool code { false };
+        bool link { false };
+
+        [[nodiscard]] bool operator==(const rich_text_state&) const = default;
+    };
+
+    // 지금 편집 상태의 서식 켜짐이다.
+    //  - 고른 구간이 있으면 구간 전체에 그 서식이 켜졌는지다. 링크는 고른 구간이 한 링크 안에 들 때다.
+    //  - 없으면 다음에 넣는 글이 받을 서식(`text::text_edit_typing_marks`)이다. 링크는 caret이 링크 안이거나 바로 뒤일 때다.
+    [[nodiscard]] rich_text_state rich_text_state_of(const text::text_edit_state& state);
+
+    // 서식 명령 하나를 편집 상태에 적용한다. 바뀐 것이 있으면 참이다.
+    //  - 고른 구간이 모두 그 서식이면 끄고 아니면 켠다. 서식만 바꾸는 실행 취소 한 걸음이다 (`text_edit_set_format`).
+    //  - 고른 구간이 없으면 다음 글자 서식(`typing_marks`)만 뒤집는다. 걸음이 아니다.
+    //  - `clear_format`은 고른 구간의 굵기·기울임·밑줄·코드를 지운다. 링크는 그대로다 (링크 걷기는 `set_rich_text_link(state, {})`).
+    //  - 서식 다섯만 한다. `link`·`copy`·`cut`·`paste`·`paste_plain`에는 거짓이다.
+    bool apply_rich_text_command(text::text_edit_state& state, rich_text_command command);
+
+    // 고른 구간에 그 주소의 링크를 건다. 빈 주소는 링크를 걷는다. 바뀐 것이 있으면 참이다.
+    //  - 고른 구간이 없으면 caret이 선 링크(안이거나 바로 뒤)의 주소를 바꾸거나 걷는다. 그런 링크가 없으면 거짓이다.
+    //  - 서식만 바꾸는 실행 취소 한 걸음이다.
+    bool set_rich_text_link(text::text_edit_state& state, std::u8string_view destination);
+
+    // 편집 상태의 서식을 여러 줄 칸의 `text_area_config::spans`·`links`로 옮긴다.
+    //  - 앱은 칸 하나에 하나를 쥐고, 편집을 적용한 같은 logic turn에서 `update`를 부른 뒤 두 값을 칸 설정에 넘긴다.
+    //  - 서식 포인터가 지난번과 같으면 지난 vector를 그대로 둔다. 칸의 wrap cache와 배치 cache가 같은 구간을 다시 견주지 않는다.
+    //  - 지난 서식의 포인터를 쥐어 둔다. 풀린 서식의 주소에 새 서식이 앉아 같은 포인터로 보이는 일이 없다.
+    //  - 서식이 없으면 둘 다 빈 포인터다.
+    class rich_text_presenter
+    {
+    public:
+        void update(const text::text_edit_state& state);
+        [[nodiscard]] std::shared_ptr<const std::vector<text_span>> spans() const noexcept;
+        [[nodiscard]] std::shared_ptr<const std::vector<text_link>> links() const noexcept;
+
+    private:
+        bool updated_ { false };
+        std::shared_ptr<const text::text_format> format_ {};
+        std::shared_ptr<const std::vector<text_span>> spans_ {};
+        std::shared_ptr<const std::vector<text_link>> links_ {};
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/rich_text_commands.h:33-53" data-path="include/luil/ui/rich_text_commands.h" data-start="33"><script type="text/plain">
+    // { 굵게(Ctrl+B), 기울임(Ctrl+I), 밑줄(Ctrl+U), 코드, 링크(Ctrl+K), 서식 지우기 }다. 범위는 `focused`이고 모두 켠다.
+    //  - 코드와 서식 지우기는 기본 단축키가 없다. Ctrl+E는 2단계 가운데 정렬의 자리이고 Ctrl+Space는 IME 전환과 겹치는
+    //    환경이 있다. 사용자가 다시 정한 단축키(`user_shortcuts`)는 앱이 결과에 채운다.
+    //  - 서식 넷과 링크는 체크 명령이고 `checked`가 `state`를 따른다. 서식 지우기는 체크가 없다.
+    //
+    // **판정용 표는 정적이다.** 판정은 input thread가 하고 칸의 기록은 logic thread의 것이라 판정이 편집 상태를 읽을 수
+    // 없다. 키 처리기에는 `make_rich_text_commands({})`를 넘기고, 체크와 켜짐은 메뉴·팔레트에 보이는 표만
+    // `rich_text_state_of`로 짓는다 (실행 취소 명령표의 같은 규칙).
+    [[nodiscard]] std::vector<app_command> make_rich_text_commands(const rich_text_state& state, const rich_text_command_labels& labels = {});
+
+    // 명령 id의 서식 명령이다. 서식 명령표의 id가 아니면 없다.
+    [[nodiscard]] std::optional<rich_text_command> rich_text_command_of(std::u8string_view id);
+
+    // 서식 칸에 다는 키 처리기다 (`ui_element::set_key_handler`).
+    //  - 칸이 쓰지 않는 Ctrl+B·I·U·K는 칸의 처리기에 닿는다. 명령표를 `match_command`(범위 `focused`)로 맞추고
+    //    `make_action`이 지은 앱 메시지 하나를 낸다. 맞지 않는 키는 소비하지 않는다 (위로 흐른다).
+    //  - 명령표는 정적 판정용 표다. 사용자 단축키를 반영하려면 앱이 `user_shortcuts`를 채운 표를 넘긴다.
+    //  - 명령표와 따로, 편집의 표준 키를 먼저 본다 (docs/rich-edit-exchange-design.md). Ctrl+C·Ctrl+Insert(Shift 포함)는 `copy`, Ctrl+X·Shift+Delete는
+    //    `cut`, Ctrl+V·Shift+Insert는 `paste`, Ctrl+Shift+V는 `paste_plain`이다 (Ctrl+Shift+C·X도 복사·잘라내기). 사용자가 다시 정하지 않는다.
+    //  - 칸은 `text_area_config::clipboard_keys_to_parent`를 켠 때만 이 키를 처리기에 넘긴다. 끈 칸은 지금처럼 평문으로 복사한다.
+    [[nodiscard]] key_handler make_rich_text_key_handler(std::vector<app_command> commands, std::function<input_action(rich_text_command)> make_action);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>할 일</th><th>쓰는 것</th></tr></thead>
+                <tbody>
+                  <tr><td>도구 막대·메뉴의 켜짐</td><td><code>rich_text_state_of</code></td></tr>
+                  <tr><td>굵게·기울임·밑줄·코드·서식 지우기</td><td><code>apply_rich_text_command</code> (바뀌었으면 참)</td></tr>
+                  <tr><td>링크 걸기·고치기·걷기</td><td><code>set_rich_text_link</code> (빈 주소는 걷는다)</td></tr>
+                  <tr><td>칸에 넘길 구간·링크</td><td><code>rich_text_presenter</code>의 <code>update</code> → <code>spans()</code>·<code>links()</code></td></tr>
+                  <tr><td>단축키</td><td><code>make_rich_text_key_handler(make_rich_text_commands({}), …)</code></td></tr>
+                  <tr><td>서식째 복사·붙여넣기, HTML</td><td><code>rich_text_copy_request</code> · <code>rich_text_paste</code> · <code>rich_text_to_html</code> · <code>rich_text_from_html</code></td></tr>
+                  <tr><td>서식 있는 글 불러오기</td><td><code>text_edit_set_formatted_text</code> (칸 기록을 비운다)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="요청 · 정책 · element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_interaction.h:23-78,265-300" data-path="include/luil/ui/ui_interaction.h" data-start="23"><script type="text/plain">
+    // 텍스트 편집 한 동작이다.
+    // controller가 만들고 policy가 앱 메시지로 바꾼다.
+    struct text_edit_request
+    {
+        text_input_target target { text_input_target::none };
+        text::text_edit_command command { text::text_edit_command::insert };
+        bool extend { false };
+        std::size_t offset { 0 };
+        std::u8string text {};
+        // replace_all의 선택 시작점이다. 비어 있으면 caret으로 접는다.
+        std::optional<std::size_t> anchor {};
+        // place_caret이 놓는 caret이 앞 글자 쪽에 붙는다 (`text_edit_state::caret_upstream`).
+        bool upstream { false };
+        // IME가 발번한다. apply_text_edit와 make_text_input_view가 처리 완료 번호를 되돌린다.
+        std::uint64_t sequence { 0 };
+    };
+
+    // IME 조합의 표시 상태다.
+    // TSF session이 만들고 policy가 앱 메시지로 바꾼다.
+    // `composing == false`는 조합이 끝났다는 뜻이라 표시 상태를 버린다.
+    struct text_composition_event
+    {
+        text_input_target target { text_input_target::none };
+        // 조합 중 화면에 보이는 글 전체다 (확정된 글 + 조합 글).
+        std::u8string text {};
+        std::size_t caret { 0 };
+        // `text` 안에서 밑줄을 그을 구간이다 (UTF-8 byte offset).
+        std::size_t composing_begin { 0 };
+        std::size_t composing_end { 0 };
+        bool composing { false };
+    };
+
+    // insert·replace 전에 글을 다듬는 앱 훅이다 (숫자만 남기기, 길이 제한 등).
+    // 비어 있으면 그대로 넣는다.
+    using text_insert_filter = std::function<std::u8string(std::u8string_view)>;
+
+    // 편집 명령 하나를 초안 상태에 적용한다.
+    // 명령 enum(text_edit_command)과 상태 기계 함수(text_edit_*)가 둘 다
+    // 라이브러리의 것이라 이 다리도 라이브러리가 놓는다 — 앱 logic은
+    // policy가 만든 요청을 자기 초안에 이 함수로 적용하기만 하면 된다.
+    void apply_text_edit(text::text_edit_state& state, const text_edit_request& request, const text_insert_filter& filter = {});
+
+    // 초안과 조합 표시 상태를 텍스트 박스가 그릴 view로 합친다.
+    // 조합 이벤트가 없거나 다른 target의 것이면 확정 글만 담긴다.
+    [[nodiscard]] text_input_view make_text_input_view(const text::text_edit_state& state, const std::optional<text_composition_event>& composition, text_input_target target);
+
+    // 점진 검색(검색 칸이 목록을 좁히는 것)이 쓸 질의를 고른다.
+    // 조합 중인 글자를 포함한 글로 먼저 찾고(`text_input_view::displayed_text`),
+    // 그것이 **아무것도 맞히지 못하면** 조합 중인 글자를 뺀 확정된 글로 물러선다.
+    //  - 한글은 한 글자가 여러 단계로 완성된다. "토스"의 중간인 "토ㅅ"은 어디에도
+    //    없으므로, 물러서지 않으면 목록이 사라졌다 나타나기를 반복한다.
+    //  - **확정된 글이 비어 있으면 물러서지 않는다.** 빈 질의는 좁히기가 아니라
+    //    "전부"라서, 첫 글자를 조합하는 동안 목록 전체가 되살아난다.
+    //  - 무엇이 맞는지는 앱이 정한다 (부분 일치·대소문자·초성 검색 등).
+    //    `any_match`는 그 질의로 맞는 것이 하나라도 있는지만 답한다.
+    [[nodiscard]] std::u8string_view search_query(const text_input_view& value, const std::function<bool(std::u8string_view)>& any_match);
+⋯@265
+    // 구현은 input thread에서 불린다.
+    // tree는 게시된 불변 tree다.
+    class interaction_policy
+    {
+    public:
+        interaction_policy() = default;
+        interaction_policy(const interaction_policy&) = delete;
+        interaction_policy(interaction_policy&&) = delete;
+        interaction_policy& operator=(const interaction_policy&) = delete;
+        interaction_policy& operator=(interaction_policy&&) = delete;
+        virtual ~interaction_policy() = default;
+
+        // 그 element가 문자 입력을 받는 텍스트 박스인지와 그 대상 id다.
+        // nullopt면 텍스트 박스가 아니다.
+        [[nodiscard]] virtual std::optional<text_input_target> text_target_of(ui_element_kind kind) const
+        {
+            static_cast<void>(kind);
+            return std::nullopt;
+        }
+
+        // 편집 동작을 앱 메시지로 바꾼다.
+        // 기본은 무시(monostate)다.
+        [[nodiscard]] virtual input_action make_text_edit_action(const text_edit_request& request) const
+        {
+            static_cast<void>(request);
+            return {};
+        }
+
+        // IME 조합 표시를 앱 메시지로 바꾼다.
+        // 기본은 무시(monostate)다.
+        // UI thread (TSF session)에서도 불리므로 구현은 순수 변환이어야 한다.
+        [[nodiscard]] virtual input_action make_text_composition_action(const text_composition_event& event) const
+        {
+            static_cast<void>(event);
+            return {};
+        }
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element.h:1256-1260,1270-1274,1288,1313-1316,1337-1339,1352-1355" data-path="include/luil/ui/ui_element.h" data-start="1256"><script type="text/plain">
+        // 후보 popup처럼 입력 칸의 논리 초점을 유지하는 표면에 쓴다.
+        void set_preserve_pointer_focus(bool preserve) noexcept
+        {
+            preserve_pointer_focus_ = preserve;
+        }
+⋯@1270
+        // 화면에 뜨지 않는, 보조 기술만 읽는 이름이다 (`access_name`).
+        //
+        // 글을 세우지 않는 컨테이너(목록·탭 막대·스크롤 막대)에 이름을 주는 자리다.
+        // 그리기에도 글자 탐색에도 쓰이지 않으므로 화면은 그대로다.
+        void set_access_name(std::u8string text);
+⋯@1288
+        void set_drop_target(std::optional<drop_target> target);
+⋯@1313
+        // 초점이 이 element이거나 그 자손일 때, 더 안쪽이 소비하지 않은 키를 받는다 (`key_handler`).
+        //  - 목록의 Ctrl+A처럼 **초점이 행 안의 부품에 있어도** 그 부품이 쓰지 않는 키를 목록이 받는 자리다.
+        //  - hit 대상을 넓히지 않는다 (`set_key_step_target`과 같은 이유). 키는 포인터가 아니라 초점을 따른다.
+        void set_key_handler(key_handler handler);
+⋯@1337
+        // Tab을 이 element의 것으로 만든다 (코드 칸의 탭 문자).
+        // 쓰는 쪽이 **빠져나갈 길을 함께 만들어야 한다.**
+        void set_takes_tab(bool value) noexcept;
+⋯@1352
+        // 키보드 초점이 이 가지를 떠날 때의 액션이다 (`focus_leave_action`).
+        // 초점을 따라 사는 표면(편집형 콤보의 후보 popup)을 닫는 자리다 — 밖 누름은 플랫폼의 popup 닫힘이 이미 받지만
+        // Tab·보조 기술로 옮긴 초점은 거기 오지 않는다.
+        void set_focus_leave_action(ui_action action);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>칸에 거는 것</th><th>쓰임</th></tr></thead>
+                <tbody>
+                  <tr><td><code>set_access_name</code></td><td>보조 기술이 읽는 이름. 안내 글보다 먼저다</td></tr>
+                  <tr><td><code>set_key_handler</code></td><td>칸이 쓰지 않은 키(Enter·Esc·Ctrl+B…)를 받는다</td></tr>
+                  <tr><td><code>set_takes_tab</code></td><td>Tab을 칸의 것으로. 빠져나갈 길은 앱이 만든다</td></tr>
+                  <tr><td><code>set_focus_leave_action</code></td><td>초점이 이 가지를 떠날 때 (확정·검증)</td></tr>
+                  <tr><td><code>set_preserve_pointer_focus</code></td><td>다른 element에 단다. 눌러도 칸의 초점을 지킨다 (도구 막대·후보 popup)</td></tr>
+                  <tr><td><code>set_drop_target</code></td><td>OS에서 끌어 온 파일·글을 받는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="숫자 칸 도우미">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/number_input.h:13-68" data-path="include/luil/ui/number_input.h" data-start="13"><script type="text/plain">
+    struct number_input_range
+    {
+        double minimum { std::numeric_limits<double>::lowest() };
+        double maximum { std::numeric_limits<double>::max() };
+        // ↑↓·스핀 단추의 걸음이다. 눈금은 최솟값에서 센다 (최솟값이 정해지지 않았으면 0에서).
+        double step { 1.0 };
+        // PageUp·PageDown의 걸음이다. 0이면 `step`의 10배다.
+        double page_step { 0.0 };
+        // 소수 자릿수다. 증감한 글을 이 자릿수로 쓰고, 이보다 자세한 글은 `too_precise`다.
+        int decimals { 0 };
+    };
+
+    // 글이 숫자 칸의 값으로 서지 못하는 까닭이다.
+    enum class number_input_problem
+    {
+        none,
+        empty,
+        not_a_number,
+        too_precise,
+        below_minimum,
+        above_maximum,
+    };
+
+    struct number_input_check
+    {
+        number_input_problem problem { number_input_problem::empty };
+        // 읽은 값이다. 범위를 벗어났어도 읽었으면 있다.
+        std::optional<double> value {};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return problem == number_input_problem::none;
+        }
+
+        [[nodiscard]] bool operator==(const number_input_check&) const = default;
+    };
+
+    // 글을 숫자로 읽고 범위를 잰다.
+    //  - 앞뒤 공백을 무시하고, 전각 숫자·전각 마침표·전각 빼기·U+2212를 ASCII로 읽는다 (IME 전각 확정, 복사한 "−5").
+    //  - 천 단위 쉼표는 받지 않는다. 쉼표를 소수점으로 쓰는 지역과 섞이면 값이 조용히 천 배가 된다.
+    //  - 끝의 0은 소수 자릿수로 세지 않는다 ("1.50"은 소수 한 자리 칸에서 1.5다).
+    [[nodiscard]] number_input_check check_number_input(std::u8string_view text, const number_input_range& range);
+
+    // 값을 `decimals` 자리 글로 쓴다. 범위로 접지 않는다.
+    [[nodiscard]] std::u8string format_number_input(double value, const number_input_range& range);
+
+    // `step` 한 걸음 뒤의 글이다. 이미 같은 글이면(끝에 닿았다) nullopt다.
+    //  - 지금 값이 눈금 사이면 늘리기는 위 눈금, 줄이기는 아래 눈금으로 간다. 결과는 범위 안으로 접는다.
+    //  - 비었거나 읽을 수 없는 글에서는 걸음 없이 0을 범위로 접은 값이다.
+    //  - `minimum`·`maximum`은 그 끝이 정해져 있을 때만 간다.
+    [[nodiscard]] std::optional<std::u8string> stepped_number_input(std::u8string_view text, const number_input_range& range, value_step step);
+
+    // 넣는 글(타자·붙여넣기·IME 확정)에서 그 범위의 숫자에 나올 수 있는 글자만 남기는 거르기다 (`apply_text_edit`).
+    //  - 숫자, 최솟값이 음수면 부호, `decimals`가 있으면 마침표를 남긴다. 전각 글자는 ASCII로 바꾼다.
+    //  - 조각만 보므로 이어 붙여 틀린 글("1..2")은 막지 못한다 — 그것은 `check_number_input`이 잡는다.
+    [[nodiscard]] text_insert_filter number_input_filter(const number_input_range& range);
+</script></div>
+            <div class="prose small"><p><code>value_step</code>의 여섯 값 가운데 칸이 쓰는 것은 넷(↑↓·PageUp/PageDown)이다. Home·End는 칸의 caret 키라서 <code>minimum</code>·<code>maximum</code> 걸음은 칸에서 나오지 않는다.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">앱이 받는 것은 셋이다. 정책 <code>make_text_edit_action</code>이 싼 편집 요청, <code>make_text_composition_action</code>이 싼 조합 표시, 칸 설정의 factory(<code>clear</code>·<code>submit</code>·<code>change_to</code>·<code>activate_link</code>·<code>scroll</code>…)가 지은 앱 메시지. 셋 다 logic thread의 <code>handle</code>에 온다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>나오는 것</th><th>지어지는 thread</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>글자를 친다</td><td><code>insert</code> 요청 (코드포인트 하나)</td><td>input</td><td><code>apply_text_edit</code></td></tr>
+              <tr><td>Backspace · Ctrl+Backspace (macOS Option+⌫)</td><td>글자 U+0008 → <code>backspace</code>, U+007F → <code>delete_word_left</code></td><td>input</td><td>같다</td></tr>
+              <tr><td>이동·선택·지우기·되돌리기 키</td><td><code class="free">move_*</code> · <code>select_all</code> · <code>delete_forward</code> · <code>delete_word_right</code> · <code>undo</code> · <code>redo</code></td><td>input</td><td>같다</td></tr>
+              <tr><td>누름 / 끌기 / 두 번 / 세 번</td><td><code>place_caret</code>(Shift면 <code>extend</code>) / <code>place_caret</code> + <code>extend</code> / <code>select_word</code>(암호 칸은 <code>select_all</code>) / <code>select_all</code></td><td>input</td><td>같다</td></tr>
+              <tr><td>터치 길게 누르기</td><td><code>select_word</code> + <code>ui_command::text_edit_menu</code></td><td>input</td><td>같다. 메뉴는 host가 띄운다</td></tr>
+              <tr><td>붙여넣기 (주+V, Shift+Insert, 메뉴)</td><td>controller는 <code>clipboard_paste_request</code>만 내고, UI thread가 클립보드를 읽어 <code>insert</code> 요청을 짓는다</td><td><strong>UI</strong></td><td><code>apply_text_edit</code>. 거르기를 주면 여기서 걸린다</td></tr>
+              <tr><td>복사 · 잘라내기</td><td><code>clipboard_copy_request</code>를 바로 낸다 (앱을 거치지 않는다). 잘라내기는 이어서 <code>cut</code> 요청</td><td>input</td><td><code>cut</code>만 적용</td></tr>
+              <tr><td>IME 조합 중</td><td><code>text_composition_event</code> (<code>composing</code> 참)</td><td><strong>UI</strong></td><td>표시용으로 쥔다. 초안은 건드리지 않는다</td></tr>
+              <tr><td>IME 확정</td><td>Windows·Android·iOS는 <code>replace_all</code> (글 전체·caret, Android·iOS는 <code>anchor</code>·<code>sequence</code>도), macOS는 <code>insert</code>. 이어서 <code>composing</code> 거짓</td><td><strong>UI</strong></td><td><code>apply_text_edit</code>, 조합 표시를 버린다</td></tr>
+              <tr><td>보조 기술의 값 쓰기 (UIA <code>SetValue</code>)</td><td><code>replace_all</code> (offset은 글 길이)</td><td><strong>UI</strong></td><td><code>apply_text_edit</code></td></tr>
+              <tr><td>지우기 단추</td><td><code>clear</code> 액션이 낸 메시지</td><td>input</td><td>보통 <code>text_edit_command::clear</code> 요청 — 칸 기록도 비워진다</td></tr>
+              <tr><td>숫자 칸 ↑↓·PageUp/PageDown·스핀 단추</td><td><code>change_to(다음 글)</code>. 끝이거나 조합 중이면 아무것도 없이 삼킨다</td><td>input</td><td><code>replace_all</code>로 적용</td></tr>
+              <tr><td>Enter — 한 줄 칸</td><td>칸은 쓰지 않는다 → key handler → 기본 버튼 → 정책 <code>on_key</code></td><td>input</td><td>확정하려면 key handler나 기본 버튼</td></tr>
+              <tr><td>Enter — 여러 줄 칸</td><td><code>insert "\n"</code> (Shift+Enter도). Ctrl·Alt·Meta와 함께면 칸이 쓰지 않는다</td><td>input</td><td>단축키는 <code>on_key</code>에서</td></tr>
+              <tr><td>Esc</td><td>칸은 쓰지 않는다 → key handler → 가둠의 닫기 → <code>on_key</code></td><td>input</td><td>되돌리려면 칸에 key handler</td></tr>
+              <tr><td>휴대폰 확정 단추</td><td><code>submit</code>이 있으면 그 메시지. 없으면 Enter(done·search·go·send)나 Tab·Shift+Tab(next·previous), <code>none</code>은 없음</td><td>UI</td><td><code>submit</code> 메시지를 처리</td></tr>
+              <tr><td>칸을 떠남 (Tab·누름·보조 기술 초점)</td><td><code>set_focus_leave_action</code>의 메시지. 창 비활성화·tree 교체는 아니다</td><td>input</td><td>확정·검증</td></tr>
+              <tr><td>휠·막대·caret 따라가기 (여러 줄 칸)</td><td><code>scroll(delta)</code> · <code>scroll_to(offset)</code>. caret 따라가기는 caret이나 글이 바뀐 frame에서만</td><td>input</td><td>스크롤 상태를 바꾼다</td></tr>
+              <tr><td>링크 누름 · Ctrl+누름 · 보조 기술 Invoke</td><td><code>activate_link(destination)</code></td><td>input</td><td>주소를 확인하고 <code>open_url</code></td></tr>
+              <tr><td>서식 칸의 주+B·I·U·K, 클립보드 키</td><td>칸 key handler(<code>make_rich_text_key_handler</code>)가 지은 명령 메시지</td><td>input</td><td><code>apply_rich_text_command</code> · 클립보드 요청</td></tr>
+              <tr><td>서식 붙여넣기의 답</td><td><code>make_clipboard_data_message</code>가 지은 메시지 (<code>html</code> 포함)</td><td>UI</td><td><code>rich_text_paste</code></td></tr>
+              <tr><td>OS에서 끌어 놓기</td><td>칸의 <code>drop_target</code>이 지은 메시지</td><td>UI</td><td>데모는 <code>select_all</code> + <code>insert</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">정책과 factory는 UI thread에서도 불린다</span>헤더는 정책 구현이 input thread에서 불린다고 적고, UI thread 이야기는 <code>make_text_composition_action</code>에만 적었다. 코드에서는 <code>make_text_edit_action</code>도 붙여넣기·IME 확정·<code>SetValue</code> 때 UI thread에서 불린다. 둘 다 앱 상태를 읽지 않는 순수 변환으로 쓴다.</div></div>
+        <div class="prose small"><p>조합 중에 칸을 누르면 host가 먼저 조합을 확정한 뒤 누름을 넘긴다. 확정의 <code>replace_all</code>이 먼저 inbox에 들어가고 caret 이동이 뒤에 적용된다.</p></div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">편집 키는 물리 키가 아니라 역할로 판정한다. 아래 표의 "주"는 주 단축키 수정자(<code>primary_shortcut_down()</code>), "낱말"은 낱말 이동 수정자(<code>word_navigation_down()</code>)다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>플랫폼</th><th>주</th><th>낱말</th></tr></thead>
+            <tbody>
+              <tr><td>Windows (기본값)</td><td>Ctrl</td><td>Ctrl</td></tr>
+              <tr><td>macOS</td><td>Command (Meta로도 함께 실린다)</td><td>Option</td></tr>
+              <tr><td>Android</td><td>Ctrl</td><td>Ctrl</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tabs">
+          <section data-tab="한 줄 칸">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>명령</th></tr></thead>
+                <tbody>
+                  <tr><td class="k">← · →</td><td><code>move_left</code> · <code>move_right</code> — 글자소 하나. 선택이 있고 Shift가 없으면 선택의 끝으로 접힌다. Shift는 늘 선택 늘리기다</td></tr>
+                  <tr><td class="k">낱말+← · 낱말+→</td><td><code>move_word_left</code> · <code>move_word_right</code> (암호 칸은 칸 끝)</td></tr>
+                  <tr><td class="k">Home · End</td><td>글의 처음·끝. 주 수정자와 함께여도 같다</td></tr>
+                  <tr><td class="k">Delete · 낱말+Delete</td><td><code>delete_forward</code> · <code>delete_word_right</code></td></tr>
+                  <tr><td class="k">Backspace</td><td>키는 칸에서 끝나고, 지우기는 글자 U+0008이 한다 → <code>backspace</code></td></tr>
+                  <tr><td class="k">Ctrl+Backspace (macOS Option+⌫)</td><td>글자 U+007F → <code>delete_word_left</code></td></tr>
+                  <tr><td class="k">주+Z · 주+Shift+Z · 주+Y</td><td>칸의 <code>undo</code> · <code>redo</code> · <code>redo</code>. 칸 기록이 비어도 앱으로 넘기지 않는다</td></tr>
+                  <tr><td class="k">주+A</td><td><code>select_all</code></td></tr>
+                  <tr><td class="k">주+C · Ctrl+Insert</td><td>복사 (Shift와 상관없이). 암호 칸은 하지 않는다</td></tr>
+                  <tr><td class="k">주+X · Shift+Delete</td><td>잘라내기. 암호 칸은 하지 않는다</td></tr>
+                  <tr><td class="k">주+V · Shift+Insert</td><td>붙여넣기 (<code>clipboard_paste_request</code>)</td></tr>
+                  <tr><td class="k">Space</td><td>글자로 들어간다. 키는 삼켜서 앱 단축키로 새지 않는다</td></tr>
+                  <tr><td class="k">그 밖의 제어 글자</td><td>버린다 (Tab·Enter의 글자 포함)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p><strong>한 줄 칸이 쓰지 않는 키:</strong> Enter, Esc, Tab(초점 이동이 먼저), ↑↓·PageUp·PageDown(숫자 칸이면 증감), 위에 없는 주 수정자 조합(Ctrl+B 따위), F 키, Alt+Backspace. 이 키들은 아래 "앱까지 오는 키"의 차례로 흐른다. ←·→ 갈래는 Alt를 보지 않아서, 칸에 초점이 있으면 Alt+←도 caret 이동이다.</p></div>
+          </section>
+          <section data-tab="여러 줄 칸">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>한 줄 칸과 다른 점</th></tr></thead>
+                <tbody>
+                  <tr><td class="k">Enter · Shift+Enter</td><td><code>insert "\n"</code></td></tr>
+                  <tr><td class="k">Ctrl·Alt·Meta·주+Enter</td><td>칸이 쓰지 않는다 → 앱 단축키</td></tr>
+                  <tr><td class="k">↑ · ↓</td><td>같은 가로 자리의 위·아래 화면 줄(접은 줄 포함). 첫 줄 위는 글의 처음, 마지막 줄 아래는 글의 끝. 짧은 줄을 지나도 처음 가로 자리를 기억하지 않는다</td></tr>
+                  <tr><td class="k">PageUp · PageDown</td><td>창에 드는 줄 수보다 하나 적게</td></tr>
+                  <tr><td class="k">Home · End</td><td>caret이 선 화면 줄의 처음·끝. 접은 줄의 End는 caret이 윗줄 끝에 붙는다(<code>caret_upstream</code>)</td></tr>
+                  <tr><td class="k">주+Home · 주+End</td><td>글의 처음·끝</td></tr>
+                  <tr><td class="k">Tab</td><td>칸을 떠난다. 탭 문자를 넣지 않는다 (<code>set_takes_tab</code>이면 키 경로로)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>Android에서는 Home·End를 IME가 먼저 받아 글의 처음·끝으로 간다.</p></div>
+          </section>
+          <section data-tab="설정이 바꾸는 키">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>설정</th><th>바뀌는 것</th></tr></thead>
+                <tbody>
+                  <tr><td><code>read_only</code> (여러 줄 칸)</td><td>삼킨다: 주+X·주+V, Delete(모든 수정자), Enter·Shift+Enter, Shift+Insert, 모든 글자. <strong>흘린다: 주+Z·주+Y(Shift 포함)</strong>. 남는다: 이동·선택·주+C·Ctrl+Insert·주+A</td></tr>
+                  <tr><td><code>secret</code> (한 줄 칸)</td><td>복사·잘라내기 키가 아무것도 하지 않는다. 낱말 이동은 칸 끝, 낱말 지우기는 고른 구간이나 그쪽 끝까지, 두 번 누름은 칸 전체</td></tr>
+                  <tr><td><code>clipboard_keys_to_parent</code></td><td>주+C·X·V, Ctrl/Shift+Insert, Shift+Delete를 칸이 쓰지 않고 key handler로 넘긴다 (암호 칸은 제외). 읽기 전용의 삼킴이 먼저다</td></tr>
+                  <tr><td><code>navigation_keys_to_parent</code></td><td>수정자 없는 ↑↓·PageUp·PageDown·Enter를 칸이 쓰지 않는다 (조합 중 제외). Home·End는 칸에 남는다</td></tr>
+                  <tr><td><code>number</code> + <code>change_to</code></td><td>↑ 늘리기, ↓ 줄이기, PageUp·PageDown 쪽 걸음 (↑가 늘린다)</td></tr>
+                  <tr><td><code>set_takes_tab(true)</code></td><td>Tab·Shift+Tab이 초점을 옮기지 않고 key handler에 닿는다</td></tr>
+                  <tr><td><code>make_rich_text_key_handler</code></td><td>주+B·I·U·K → 서식 명령. 클립보드 키 → <code>copy</code>·<code>cut</code>·<code>paste</code>, 주+Shift+V → <code>paste_plain</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="마우스 · 터치">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>동작</th><th>결과</th></tr></thead>
+                <tbody>
+                  <tr><td>누름</td><td>caret을 놓는다. 접은 줄 끝이면 윗줄 쪽</td></tr>
+                  <tr><td>Shift+누름 · 끌기</td><td>선택을 늘린다. 끌기는 포인터가 칸을 벗어나도 이어진다</td></tr>
+                  <tr><td>두 번 누름 (500ms·4 픽셀 안)</td><td>낱말 고르기. 암호 칸은 전체</td></tr>
+                  <tr><td>세 번 이상</td><td>전체 고르기</td></tr>
+                  <tr><td>편집 칸 링크 위 누름 / Ctrl+누름</td><td>칸의 누름(caret·끌기) / 링크 열기</td></tr>
+                  <tr><td>터치 탭 · 두 번 · 세 번</td><td>caret · 낱말 · 전체. 뗄 때 놓는다</td></tr>
+                  <tr><td>터치 길게 누르기</td><td>낱말을 고르고 편집 메뉴를 청한다 (조합 중이면 고르지 않는다). 앱의 우클릭 동작이 있으면 그것이 먼저다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>낱말은 ASCII 영숫자와 ASCII 밖 바이트로 된 글이고, 나머지는 구분자다. 그래서 경로의 <code class="free">/</code>, 식별자의 <code class="free">-</code>에서 멈춘다. 글자소와 낱말 경계의 규칙은 <a class="xref" href="text.html#s3">텍스트 처리 — caret은 글자소로 움직인다</a>에 있다.</p></div>
+          </section>
+          <section data-tab="앱까지 오는 키">
+            <div class="prose">
+              <p>controller는 키 하나를 아래 차례로 묻는다. 먼저 가져간 쪽에서 끝나고, 아무도 가져가지 않은 키만 정책 <code>on_key</code>에 닿는다.</p>
+              <ol>
+                <li>초점이 키 잡기 칸이면 모든 키가 그 칸의 것이다.</li>
+                <li>메뉴 막대(Alt·F10·접근 키), 열린 메뉴. 메뉴 안 검색 칸은 메뉴가 갖지 않은 키를 받는다.</li>
+                <li>Shift+F10 — 초점에서 가장 가까운 우클릭 동작.</li>
+                <li>Space·Enter의 실행. <strong>텍스트 칸이면 Space는 여기서 삼키고, Enter는 아래로 보낸다.</strong></li>
+                <li>Tab의 초점 이동 (<code>set_takes_tab</code>이면 건너뛴다).</li>
+                <li><strong>텍스트 칸의 편집 키</strong> — 위 표들.</li>
+                <li>확대, 숫자 칸 같은 값 element의 걸음, 초점 묶음의 화살표.</li>
+                <li>끌기 중의 Esc.</li>
+                <li>초점 element에서 root 쪽으로 key handler. 칸에 단 처리기가 여기서 받는다.</li>
+                <li>가둠(modal)의 Esc, 기본 버튼의 Enter.</li>
+                <li>정책 <code>on_key</code>.</li>
+              </ol>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>칸이 쓰지 않아 위 차례로 흐르는 키 (앞 단계가 가져가지 않으면 <code>on_key</code>까지 온다)</th><th>칸에서 끝나는 키</th></tr></thead>
+                <tbody>
+                  <tr><td>Enter·Esc (한 줄 칸), 주·Ctrl·Alt·Meta와 함께인 Enter, F 키, Ctrl+B처럼 칸이 쓰지 않는 조합, ↑↓·Page (한 줄 칸, 숫자 칸 아님), <strong>읽기 전용 칸의 주+Z·주+Y</strong></td><td>글자와 Space, Backspace, 편집 칸의 주+Z·주+Y·주+A·주+C·X·V, Home·End, ←·→, 여러 줄 칸의 Enter·↑↓·Page</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>키 라우팅 전체는 <a class="xref" href="input.html#s5">입력과 초점 — 키 라우팅</a>이 다룬다.</p></div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>요소</th><th>역할</th><th>이름</th><th>값·상태</th></tr></thead>
+                <tbody>
+                  <tr><td>한 줄 칸</td><td><code>access_role::edit</code></td><td><code>set_access_name</code>, 없으면 <code>placeholder</code></td><td>확정 글 (조합 글이 아니다). 가린 칸은 점. <code>secret</code>·<code>invalid</code>·<code>error</code></td></tr>
+                  <tr><td>여러 줄 칸</td><td><code>access_role::edit</code></td><td>같다</td><td>확정 글. 서식 구간</td></tr>
+                  <tr><td>칸 안의 링크</td><td><code>access_role::link</code></td><td>보이는 글</td><td>주소. Invoke는 누름과 같은 메시지. Tab 자리가 아니다</td></tr>
+                  <tr><td>지우기·스핀 단추</td><td>단추</td><td><code>clear_tooltip</code> · <code>increase_tooltip</code> · <code>decrease_tooltip</code></td><td>Tab 자리가 아니다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose">
+              <ul>
+                <li><strong>Windows UIA</strong> — 칸은 Edit다. Value 패턴은 글이 비어도 서고, Text 패턴은 <strong>암호 칸에는 내주지 않는다</strong>. <code>IsReadOnly</code>는 <code>read_only</code>이거나 그 kind가 <code>text_target_of</code>에 없을 때 참이고, 그때 <code>SetValue</code>는 거절된다. <code>IsDataValidForForm</code>은 <code>invalid</code>의 반대, <code>HelpText</code>와 <code>FullDescription</code>은 오류 글이다. 오류 글이 새로 생기거나 바뀌면 알림 이벤트로 읽게 한다.</li>
+                <li><strong>서식도 UIA에 실린다.</strong> Text 패턴 범위의 <code>FontWeight</code>·<code>IsItalic</code>·<code>UnderlineStyle</code>을 칸의 <code>spans</code>에서 답한다. 구문 강조의 굵은 키워드도 굵게라고 답한다. 코드 표시는 알리지 않는다.</li>
+                <li><strong>macOS</strong> — 한 줄 칸은 <code>AXTextField</code>, 여러 줄 칸은 <code>AXTextArea</code>, 암호 칸은 <code>AXTextField</code>에 하위 역할 <code>AXSecureTextField</code>로 알린다. 한 줄 칸의 확정 동작은 Enter 키를 보낸다.</li>
+                <li><strong>Android</strong> — 접근성 계층이 없어 오류 알림과 서식 속성을 알리지 않는다.</li>
+                <li>보조 기술 쪽 이름·역할·알림 규칙 전체는 <a class="xref" href="accessibility.html">접근성</a>에 있다.</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">편집 모델·<code>apply_text_edit</code>·키 판정·그리기·링크·서식·구문 강조는 모두 같은 C++이다. 앱 코드는 플랫폼마다 갈리지 않는다. 다른 것은 IME와 휴대폰 키보드, 클립보드를 읽는 host 쪽이다.</p>
+        </header>
+        <h3>IME 길 (앱이 보는 것만)</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>플랫폼</th><th>조합 중</th><th>확정</th><th>암호 칸</th><th>읽기 전용 칸</th></tr></thead>
+            <tbody>
+              <tr><td>Windows (TSF)</td><td><code>text_composition_event</code> (UI thread의 그림자 문서)</td><td><code>replace_all</code> — 글 전체와 caret</td><td>TSF에 문서를 넘기지 않고 창의 IMM 문맥도 뗀다. 한글 모드여도 영문 글자로 들어온다</td><td>문서가 읽기 전용이다. 쓰기를 거절하고 조합은 확정 없이 끝내며 편집을 보내지 않는다</td></tr>
+              <tr><td>Android (GameTextInput)</td><td>조합 범위가 있으면 <code>text_composition_event</code></td><td><code>replace_all</code> — 글·caret·<code>anchor</code>·<code>sequence</code></td><td>암호 키보드 (<code>TYPE_TEXT_VARIATION_PASSWORD</code> + <code>IME_FLAG_NO_PERSONALIZED_LEARNING</code>)</td><td>키보드를 띄우지 않고 IME 상태를 받지 않는다</td></tr>
+              <tr><td>iOS (UITextInput)</td><td>Android와 같은 IME 세션 코드</td><td>같다</td><td><code>secureTextEntry</code></td><td>같다</td></tr>
+              <tr><td>macOS (NSTextInputClient)</td><td><code>setMarkedText:</code> → <code>text_composition_event</code></td><td><code>insert</code> — 확정 글</td><td>입력기를 끄는 처리가 없다 (아래)</td><td>읽기 전용 검사가 없다 (아래)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>확정이 실행 취소에 남는 모양도 갈린다. <code>replace_all</code>은 앞 타자와 묶이지 않는 한 덩어리이고, macOS의 <code>insert</code>는 코드포인트 하나면 앞 타자와 이어 묶일 수 있다. 그림자 문서와 조합 caret은 <a class="xref" href="text.html#s11">텍스트 처리 — IME 조합</a>에 있다.</p></div>
+
+        <h3>휴대폰 키보드 (<code>text_input_options</code>, <code>submit</code>)</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th>Android</th><th>iOS</th><th>Windows · macOS</th></tr></thead>
+            <tbody>
+              <tr><td>키보드 종류</td><td><code>TYPE_CLASS_NUMBER</code>(+<code>TYPE_NUMBER_FLAG_DECIMAL</code>·<code>TYPE_NUMBER_FLAG_SIGNED</code>), <code>TYPE_CLASS_PHONE</code>, <code>TYPE_TEXT_VARIATION_EMAIL_ADDRESS</code>, <code>TYPE_TEXT_VARIATION_URI</code>. 여러 줄 칸은 <code>TYPE_TEXT_FLAG_MULTI_LINE</code></td><td><code>UIKeyboardTypeNumberPad</code>·<code>UIKeyboardTypeDecimalPad</code>(부호면 <code>UIKeyboardTypeNumbersAndPunctuation</code>), <code>UIKeyboardTypePhonePad</code>, <code>UIKeyboardTypeEmailAddress</code>, <code>UIKeyboardTypeURL</code></td><td>쓰지 않는다</td></tr>
+              <tr><td>확정 단추</td><td><code class="free">IME_ACTION_*</code>. 여러 줄 칸은 <code>IME_FLAG_NO_ENTER_ACTION</code>. 늘 <code>IME_FLAG_NO_FULLSCREEN</code>·<code>IME_FLAG_NO_EXTRACT_UI</code></td><td><code class="free">UIReturnKey*</code>. next·previous는 둘 다 <code>UIReturnKeyNext</code>, 여러 줄 칸은 <code>UIReturnKeyDefault</code></td><td>없다</td></tr>
+              <tr><td>확정 단추를 누르면</td><td>IME가 확정한 글을 먼저 초안으로 보낸 뒤 <code>submit</code>, 없으면 Enter·Tab</td><td><code>submit</code>, 없으면 Enter·Tab</td><td><code>submit</code>을 읽지 않는다</td></tr>
+              <tr><td>키보드가 칸을 가릴 때</td><td>키보드 높이를 안전 영역 아래에 더하고 정책 <code>on_focus_moved</code>로 초점을 드러낸다</td><td>같은 길</td><td>—</td></tr>
+              <tr><td>길게 누름 편집 메뉴</td><td>복사·잘라내기·붙여넣기·전체 선택 (+ 링크 열기·주소 복사)</td><td>시스템 편집 메뉴</td><td>없다 (앱이 우클릭 메뉴를 단다)</td></tr>
+              <tr><td>자동 고침·대문자</td><td>코드에서 정하지 않는다</td><td>종류가 <code>text</code>이고 암호 칸이 아닐 때만 켠다</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>Android의 한 줄 칸에서 IME가 줄 바꿈을 글로 넣으면 걷어 내고 확정 단추와 같은 길을 탄다. 여러 줄 칸은 줄 바꿈이 곧 글이다. 휴대폰 "비밀번호 표시" 설정은 따르지 않고 늘 가린다.</p></div>
+
+        <h3>한 줄 칸에 여러 줄을 붙여 넣으면</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>플랫폼</th><th>앱의 <code>insert</code>에 실려 오는 글</th></tr></thead>
+            <tbody>
+              <tr><td>Windows</td><td>첫 CR·LF·탭 <strong>앞까지 자른다</strong>. 클립보드에 글 없이 파일 목록만 있으면 첫 경로를 붙인다</td></tr>
+              <tr><td>macOS · iOS</td><td>CR·LF를 <strong>공백으로 바꾸고</strong> 나머지를 다 넣는다. 탭은 그대로다</td></tr>
+              <tr><td>Android</td><td>원문 <strong>그대로</strong> 넣는다. 줄 바꿈이 칸에 들어간다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>한 줄 칸에 줄 바꿈이 들면 안 되는 앱은 플랫폼에 기대지 말고 거르기를 단다 (<a class="xref" href="#build-validate">한 줄 거르기 견본</a>). 여러 줄 칸은 모든 플랫폼에서 줄 바꿈과 탭을 지킨다.</p></div>
+
+        <h3>macOS의 Command</h3>
+        <div class="prose">
+          <ul>
+            <li>주 단축키는 Command다. Command+C·V·X·Z·A가 칸의 편집 키이고, 메뉴 막대의 편집 항목도 같은 키를 보낸다. Command·Control 조합은 입력기를 거치지 않고 곧바로 키로 간다 (조합 중이면 먼저 확정한다). Command 조합은 메뉴보다 view가 먼저 받고, Command+Q만 메뉴에 남긴다.</li>
+            <li>Command+←·→는 Home·End(줄 처음·끝)로, Command+↑·↓는 주 수정자를 단 Home·End(글 처음·끝)로 바뀌어 온다. Command+클릭은 링크 열기의 Ctrl+클릭이다.</li>
+          </ul>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">macOS 입력기 경로는 <code>read_only</code>·<code>secret</code>을 보지 않는다</span>수정자 없는 키는 모두 입력기가 먼저 본다. <code>setMarkedText:</code>와 확정은 칸의 <code>read_only</code>를 보지 않고 조합 표시와 <code>insert</code> 편집을 낸다. host가 문서에 <code>secret</code>·<code>read_only</code>를 싣기는 하지만 macOS 쪽에는 그것을 읽는 곳이 없어, 암호 칸에서도 입력기가 조합한다. Windows는 같은 자리에서 막는다. 읽기 전용 초안을 지키려면 앱이 글이 바뀐 요청을 되돌린다 (<a class="xref" href="#build-area">차이 보기의 방어</a>). <em>코드에서 확인한 동작, macOS에서 실행해 보지 않았다.</em></div></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">macOS 서식 칸의 Command+C·X·V</span><code>make_rich_text_key_handler</code>의 클립보드 판정은 Meta가 서 있으면 답하지 않는다. macOS는 Command를 누르면 Meta도 세운다. <code>clipboard_keys_to_parent</code>를 켠 칸은 그 키를 처리기로 넘기므로, Command+C·X·V는 처리기를 지나고 명령표에도 맞지 않아 정책 <code>on_key</code>까지 흐른다. 칸의 평문 복사도 일어나지 않는다. 서식 명령 Command+B 따위는 명령표 판정이 Meta를 주 역할로 받아 맞는다. test는 Ctrl 조합만 잠근다. <em>코드에서 확인한 동작, macOS에서 실행해 보지 않았다.</em></div></div>
+        <div class="prose small"><p>그 밖에: Windows popup은 자기 TSF 세션이 없어 앵커 창의 TSF host가 대신 잇는다. 앱이 할 일은 같다 (kind 등록). Android 하드웨어 키보드의 글자도 IME가 먼저 받는다. 보조 기술의 차이는 <a class="xref" href="#keyboard">키보드와 접근성</a>의 "보조 기술" 탭에 있다. host 전반은 <a class="xref" href="platforms.html">플랫폼과 host</a>가 다룬다.</p></div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>kind를 등록하지 않은 칸은 죽은 칸이다.</strong> 정책 <code>text_target_of</code>가 그 kind에 답하지 않으면 눌러도 텍스트 초점이 서지 않고 글자·caret·IME·클립보드가 모두 끊긴다. UIA는 Value를 읽기 전용으로 답한다. 칸을 하나 늘릴 때마다 표에 한 줄이 는다. 데모는 표를 정책 밖 함수로 빼서 페이지 test가 모든 칸의 등록을 확인한다.</li>
+          <li><strong>편집 칸의 Ctrl+Z는 앱 stack으로 넘어가지 않는다.</strong> 초점이 편집 칸에 있으면 주+Z·주+Y·주+Shift+Z는 칸의 <code>undo</code>·<code>redo</code>이고, 칸 기록이 비어도 <code>on_key</code>에 닿지 않는다. 읽기 전용 칸만 이 키를 흘린다. 칸 편집을 앱 걸음으로 올리는 길은 <a class="xref" href="undo.html#s1">앱 수준 실행 취소</a>에 있다.</li>
+          <li><strong>지우기 단추와 <code>text_edit_set_text</code>는 칸 기록을 비운다.</strong> <code>text_edit_command::clear</code>는 <code>text_edit_set_text(state, {}, false)</code>이고, undo·redo·서식·다음 글자 서식이 함께 사라진다. 지우기 뒤의 Ctrl+Z가 지운 글을 되살리게 하려면 지우기 액션이 빈 글의 <code>replace_all</code> 요청을 낸다. <code>replace_all</code>은 글이 다르면 한 걸음을 남긴다.</li>
+          <li><strong>거르기는 명령마다 다른 글을 받는다.</strong> <code>insert</code>는 넣는 조각을, <code>replace_all</code>은 IME나 <code>SetValue</code>가 보낸 글 전체를 거르기에 넘긴다. 조각을 통째로 거절하는 거르기는 IME 확정 때 칸을 비우고, 글 전체 길이를 봐야 하는 상한은 거르기로 만들 수 없다. IME가 준 caret은 거르기 전 글의 자리라서, 글자를 빼는 거르기는 caret을 끝 쪽으로 밀 수 있다.</li>
+          <li><strong>편집 요청을 버리면 휴대폰 IME가 멈춘다.</strong> Android·iOS IME는 자기가 보낸 편집의 번호(<code>sequence</code>)가 view의 <code>applied_sequence</code>로 돌아올 때까지 앱 글을 IME에 넘기지 않는다. 아무 페이지도 그 target을 받지 않거나 검증에 실패한 요청을 그냥 버리면 그 칸은 IME와 동기가 끊긴다. 거절할 때도 번호는 옮긴다.</li>
+          <li><strong><code>make_text_edit_action</code>은 UI thread에서도 불린다.</strong> 붙여넣기·IME 확정·UIA 쓰기가 UI thread에서 부른다. 헤더는 이것을 조합 쪽에만 적었다. Android·iOS의 <code>submit</code>과 편집 메뉴의 링크 열기도 UI thread에서 실행된다. 정책과 칸 설정의 함수는 메시지만 짓고 앱 상태를 읽거나 쓰지 않는다.</li>
+          <li><strong><code>read_only</code>는 초안을 지키지 않는다.</strong> <code>apply_text_edit</code>는 읽기 전용을 모른다. 막는 것은 controller의 키 판정과 플랫폼 IME 층인데, macOS 입력기 경로에는 그 검사가 없다 (<em>코드에서 확인한 동작, macOS에서 실행해 보지 않았다</em>). 글이 장식과 짝인 보기는 글이 바뀐 요청을 되돌린다.</li>
+          <li><strong>데스크톱에서 <code>submit</code>은 불리지 않는다.</strong> Android와 iOS의 확정 단추만 읽는다 (헤더 주석은 Android만 말하지만 iOS host도 <code>submit</code>과 <code>input</code>을 읽는다). Windows·macOS에서 Enter로 확정하려면 칸에 key handler를 달거나 기본 버튼을 둔다.</li>
+          <li><strong>한 줄 칸의 여러 줄 붙여넣기는 OS마다 다르다.</strong> Windows는 첫 줄 바꿈·탭 앞에서 자르고, macOS·iOS는 줄 바꿈을 공백으로 바꾸고, Android는 그대로 넣는다. 한 줄이어야 하는 칸은 앱이 거른다.</li>
+          <li><strong>칸에 단 Esc 처리기는 대화 상자의 Esc를 가로챈다.</strong> key handler는 가둠의 닫기보다 앞이다. 칸이 Esc를 먹으면 대화 상자가 닫히지 않는다. 닫기까지 바라면 처리기가 <code>std::nullopt</code>를 돌려 흘린다.</li>
+          <li><strong>구문 색·서식 구간은 편집과 같은 turn에 갱신한다.</strong> <code>syntax_highlighter::update</code>와 <code>rich_text_presenter::update</code>는 <code>apply_text_edit</code>를 부른 그 logic turn에, 칸을 짓기 전에 부른다. 늦으면 칸이 한 frame 동안 엉뚱한 글자에 색을 얹는다.</li>
+          <li><strong>칸 하나에 도우미 하나, cache 하나.</strong> <code>spans</code>를 구문 강조와 서식 presenter가 함께 채우지 않는다. <code>text_area_wrap_cache</code>를 칸 둘이 나눠 쓰면 서로의 문단을 버린다. 다른 문서를 열면 새 cache를 짓고 도우미는 <code>reset()</code>한다.</li>
+          <li><strong>offset은 UTF-8 byte이고, 앱이 주는 구간은 글자소 경계여야 한다.</strong> 도우미는 스스로 경계를 맞추지만, 앱이 직접 짓는 찾은 곳·링크·구간은 앱이 맞춘다. JS나 UTF-16 자리를 그대로 넣으면 한글 글자 한가운데를 가리킨다 (<a class="xref" href="text.html#s2">텍스트 처리 — 좌표는 UTF-8 byte 하나</a>).</li>
+          <li><strong>서식을 직접 갈면 실행 취소가 모른다.</strong> <code>text_edit_state</code>의 <code>format</code>을 바로 바꾸면 기록에 걸음이 남지 않는다. 서식만 바꾸는 걸음은 <code>text_edit_set_format</code>이고, 보통은 <code>apply_rich_text_command</code>·<code>set_rich_text_link</code>로 충분하다.</li>
+          <li><strong>도구 막대 단추가 칸의 초점을 빼앗으면 서식이 사라진다.</strong> 고른 구간 없이 누른 서식은 다음 글자 서식만 세우는데, 초점이 단추로 가면 IME 조합이 확정되고 칸을 다시 누르는 caret 놓기가 그것을 지운다. 단추에 <code>set_preserve_pointer_focus(true)</code>를 단다.</li>
+          <li><strong>같은 글을 다시 보낸 <code>replace_all</code>은 걸음이 아니고, 타자 묶음은 시간으로 끊지 않는다.</strong> 이어 친 문장은 Ctrl+Z 한 번에 사라진다. 칸 기록은 100걸음, undo·redo 합쳐 32 MiB까지다.</li>
+          <li><strong>숫자 칸은 혼자 붉어지지 않는다.</strong> <code>invalid</code>·<code>error</code>는 앱이 frame마다 정하고, 오류 줄 높이는 담는 쪽이 더한다. <code>change_to</code>가 없으면 ↑↓가 칸을 지나 바깥으로 흐른다.</li>
+          <li><strong>안내 글은 초점이 있으면 사라진다.</strong> 화면을 열면서 초점을 준 칸은 처음부터 안내 글이 없다. 접근 이름은 <code>set_access_name</code>이나 옆 라벨로 준다.</li>
+          <li><strong>macOS 서식 칸의 Command+C·X·V는 처리기에 맞지 않는다.</strong> 클립보드 판정이 Meta를 보면 답하지 않는데 macOS의 Command는 Meta를 세운다. 키가 <code>on_key</code>까지 흐르고 칸의 평문 복사도 일어나지 않는다 (<em>코드에서 확인한 동작, macOS에서 실행해 보지 않았다</em>).</li>
+          <li><strong>암호 글은 메모리에서 지워지지 않는다.</strong> 초안, snapshot, IME 사본으로 여러 thread를 지나므로 지운다고 보장하지 않는다. 화면 캡처 막기도 앱이 정한다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>칸을 눌러도 caret이 안 나오고 글자도 안 써진다.</summary><div class="faq-a"><p class="faq-short">그 kind를 정책 <code>text_target_of</code>에 등록하지 않았다.</p><p>텍스트 초점은 그 답이 있을 때만 선다. 등록했는데도 글이 그대로면 <code>make_text_edit_action</code>을 재정의하지 않았거나(기본은 무시) <code>handle</code>이 그 메시지를 적용하지 않는 것이다. <a class="xref" href="#build-single">가장 작은 칸</a>의 여섯 조각을 맞춰 본다.</p></div></details>
+          <details class="faq"><summary>글은 누가 들고 있나? frame마다 칸을 새로 지으면 글이 사라지지 않나?</summary><div class="faq-a"><p class="faq-short">앱 logic의 <code>text_edit_state</code>가 든다. 칸은 그 사본을 받아 그릴 뿐이다.</p><p>칸을 다시 지어도 초안이 그대로라 입력이 이어진다. caret·선택·칸의 실행 취소 기록·서식도 초안에 있다. 초점만 controller의 <code>interaction_snapshot</code>에 있다.</p></div></details>
+          <details class="faq"><summary>Enter로 폼을 제출하려면?</summary><div class="faq-a"><p class="faq-short">기본 버튼(<code>text_button_config::default_button = true</code>)을 둔다. 칸마다 뜻이 다르면 칸에 key handler를 단다.</p><p>한 줄 칸은 Enter를 쓰지 않으므로 칸에서 친 Enter가 기본 버튼의 클릭이 된다. Ctrl·Alt·Meta와 함께인 Enter는 가지 않는다. <code>submit</code>은 휴대폰 키보드의 확정 단추 전용이라 데스크톱에서는 불리지 않는다 (<a class="xref" href="#build-single">Enter로 확정하고 Esc로 되돌리기</a>).</p></div></details>
+          <details class="faq"><summary>Esc로 입력을 취소하려면?</summary><div class="faq-a"><p class="faq-short">칸에 key handler를 달아 Esc에 되돌리기 메시지를 낸다. Esc 설정 필드는 없다.</p><p>대화 상자 안이면 그 처리기가 대화의 Esc 닫기보다 먼저다. 되돌리기와 닫기를 함께 바라면 처리기가 메시지를 내지 말고 <code>std::nullopt</code>로 흘린 뒤 대화의 닫기에서 초안을 버린다.</p></div></details>
+          <details class="faq"><summary>숫자만 받고, 범위를 넘으면 빨갛게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>apply_text_edit</code>에 <code>number_input_filter(range)</code>를 넘기고, frame마다 <code>check_number_input</code>으로 <code>error</code>를 채운다.</p><p>↑↓ 증감은 <code>number</code>의 <code>change_to</code>로 받는다. 천 단위 쉼표는 받지 않고, 전각 숫자와 U+2212는 ASCII로 읽는다. 거르기는 조각만 보므로 "1..2"는 검사가 잡는다. <a class="xref" href="#lab-number">실습</a>에서 직접 넣어 본다. 슬라이더·별점 같은 다른 값 컨트롤은 <a class="xref" href="values.html">슬라이더·숫자·별점·진행</a>에 있다.</p></div></details>
+          <details class="faq"><summary>최대 길이를 두려면?</summary><div class="faq-a"><p class="faq-short">적용해 본 뒤 넘치면 버린다. 버려도 <code>applied_sequence</code>는 옮긴다.</p><p>거르기는 넣는 조각만 받고, IME 확정 때는 글 전체를 받아서 길이를 알 수 없다. 글자 수는 글자소로 센다 (<a class="xref" href="#build-validate">길이 제한 견본</a>).</p></div></details>
+          <details class="faq"><summary>칸의 기록을 다 되돌린 뒤 Ctrl+Z를 더 누르면 앱의 실행 취소로 가나?</summary><div class="faq-a"><p class="faq-short">가지 않는다. 편집 칸에서는 기록이 비어도 칸의 <code>undo</code>다.</p><p>칸의 기록과 앱 stack은 따로다. 칸 편집을 앱 걸음으로 올리려면 확정 시점(칸 떠남·Enter)에 앞뒤 글을 앱 걸음으로 쌓는다 (<a class="xref" href="undo.html#s1">앱 수준 실행 취소</a>).</p></div></details>
+          <details class="faq"><summary>문서 보기(읽기 전용 칸)에 초점이 있을 때 Ctrl+Z로 앱의 실행 취소를 하려면?</summary><div class="faq-a"><p class="faq-short">이미 넘어온다. 읽기 전용 칸은 주+Z·주+Y(Shift 포함)를 삼키지 않고 흘린다.</p><p>키는 조상의 key handler를 거쳐 정책 <code>on_key</code>에 닿는다. 데모의 <code>readonly_undo_key_of</code>처럼 snapshot의 <code>focused_input</code>으로 그 칸인지 확인하고 앱 메시지로 바꾼다 (<a class="xref" href="#build-area">문서 보기</a>).</p></div></details>
+          <details class="faq"><summary>지우기(×)를 누른 뒤 Ctrl+Z로 되살릴 수 없다.</summary><div class="faq-a"><p class="faq-short"><code>text_edit_command::clear</code>는 칸 기록까지 비운다.</p><p>되살리게 하려면 지우기 액션이 <code>clear</code> 대신 빈 글의 <code>replace_all</code> 요청(offset 0)을 낸다. <code>replace_all</code>은 글이 바뀌면 한 걸음을 남긴다.</p></div></details>
+          <details class="faq"><summary>한글을 조합하는 동안 검색 결과가 비었다 나타났다 한다.</summary><div class="faq-a"><p class="faq-short"><code>search_query(view, any_match)</code>로 질의를 고른다.</p><p>조합 중인 글("토ㅅ")이 아무것도 맞히지 못하면 확정 글("토")로 물러서고, 확정 글이 비면 물러서지 않는다. 화면에 보이는 그대로 찾아야 하면 <code>displayed_text()</code>를 쓴다.</p></div></details>
+          <details class="faq"><summary>편집 칸의 링크를 키보드로 열 수 있나?</summary><div class="faq-a"><p class="faq-short">라이브러리에 그 키는 없다. 앱이 <code>on_key</code>에서 초점 칸의 snapshot을 읽어 단축키에 묶는다.</p><p><code>text_input_snapshot</code>의 <code>link</code>와 <code>activate_link</code>를 읽는다. Enter는 줄 바꿈이라 Ctrl+Enter 같은 조합을 쓴다 (<a class="xref" href="#build-links">견본</a>).</p></div></details>
+          <details class="faq"><summary>이 주소는 왜 링크가 안 되나?</summary><div class="faq-a"><p class="faq-short"><code>detect_text_links</code>가 거절하는 꼴이다. 낱말 한가운데, 점 없는 <code class="free">www.</code>, 최상위가 짧은 메일, ASCII 밖 글자가 흔한 까닭이다.</p><p>ASCII 영숫자나 <code class="free">.-_@/</code> 바로 뒤에서는 시작하지 않는다 (xhttp://a.b). <code class="free">www.</code> 뒤에는 점이 하나 더 있어야 한다. 메일은 최상위가 알파벳 두 글자 이상이어야 한다 (x@y.c는 아니다). 주소는 ASCII 밖 글자에서 끝나서 "https://example.com에서"는 조사 앞까지다. 끝의 문장 부호와 짝 없는 닫는 괄호는 뺀다. <a class="xref" href="#lab-links">실습</a>에 글을 넣어 본다.</p></div></details>
+          <details class="faq"><summary>코드 칸에서 Tab을 탭 문자로 넣으려면?</summary><div class="faq-a"><p class="faq-short">칸에 <code>set_takes_tab(true)</code>을 걸고 key handler에서 <code>insert "\t"</code> 요청을 낸다.</p><p>빠져나갈 키는 앱이 정한다. 견본은 Esc를 받아 다음 frame의 <code>focus_request</code>로 다른 단추에 초점을 옮긴다 (<a class="xref" href="#build-code">Tab 문자를 받는 코드 칸</a>).</p></div></details>
+          <details class="faq"><summary>문서가 크면 구문 강조가 타이핑을 늦춘다.</summary><div class="faq-a"><p class="faq-short"><code>update</code>에 시간 예산을 주고, 남은 꼬리는 <code>advance</code>로 tick마다 이어 칠한다.</p><p>편집이 닿은 줄은 늘 그 turn에 칠한다. 칸 쪽의 접기 비용은 <code>text_area_wrap_cache</code>로 줄인다. 긴 줄은 <code>max_line_size</code>를 넘으면 렉서에 보내지 않는다.</p></div></details>
+          <details class="faq"><summary>Ctrl+B로 켠 굵게도 Ctrl+Z로 되돌아가나?</summary><div class="faq-a"><p class="faq-short">고른 구간에 건 서식은 서식만 바꾸는 실행 취소 한 걸음이다.</p><p>글 편집과 같은 칸 기록에 들어 차례대로 되돌아간다. 고른 구간 없이 누른 명령은 다음 글자 서식만 바꾸고 걸음이 아니다.</p></div></details>
+          <details class="faq"><summary>서식 칸에서 Ctrl+C를 누르면 서식이 따라가나?</summary><div class="faq-a"><p class="faq-short"><code>clipboard_keys_to_parent</code>를 켜고 <code>make_rich_text_key_handler</code>를 단 칸이면 따라간다.</p><p>controller가 그 칸의 클립보드 키를 처리기로 넘기고, 처리기가 <code>copy</code>·<code>cut</code>·<code>paste</code>·<code>paste_plain</code> 명령을 낸다. 앱은 logic thread에서 <code>rich_text_copy_request</code>를 host에 넣는다. 데모 주석은 "넘기는 갈래가 controller에 들어오기 전"을 말하지만, 그 갈래는 이미 controller에 있다. 플래그를 끈 칸은 평문으로 복사한다. macOS의 Command 조합은 예외다 (<a class="xref" href="#platforms">플랫폼 차이</a>).</p></div></details>
+          <details class="faq"><summary>보조 기술이 굵게·기울임을 읽나?</summary><div class="faq-a"><p class="faq-short">Windows UIA는 읽는다. 칸의 <code>spans</code>에서 <code>FontWeight</code>·<code>IsItalic</code>·<code>UnderlineStyle</code>을 답한다.</p><p>서식 글의 구간뿐 아니라 구문 강조의 굵은 키워드도 굵게라고 답한다. 코드 표시는 알리지 않는다. Android는 접근성 계층이 없어 알리지 않는다.</p></div></details>
+          <details class="faq"><summary>다른 앱에서 서식 글을 붙여 넣으면 무엇이 남나?</summary><div class="faq-a"><p class="faq-short">굵게·기울임·밑줄·코드와 http·https·mailto 링크만 남는다.</p><p>스크립트·스타일·문서 머리는 내용째, 그림·주석은 버린다. 블록은 줄 바꿈, 표 칸 사이는 탭이 된다. 한도를 넘거나 깨진 UTF-8이면 글로 물러선다. 서식 없이 붙이기는 주+Shift+V(<code>paste_plain</code>)다.</p></div></details>
+          <details class="faq"><summary>휴대폰에서 숫자 키보드와 "다음" 단추를 띄우려면?</summary><div class="faq-a"><p class="faq-short"><code>input</code>에 <code>{ .kind = text_input_kind::number, .action = text_input_action::next }</code>를 준다.</p><p><code>next</code>는 Tab을 내어 다음 칸으로 간다. Android와 iOS가 모두 읽는다. 숫자 칸(<code>number</code>)이면 종류를 고르지 않아도 숫자 키보드다. 플랫폼별 키보드 이름은 <a class="xref" href="#platforms">플랫폼 차이</a>에 있다.</p></div></details>
+          <details class="faq"><summary>붙여 넣은 글의 줄 바꿈이 한 줄 칸에 들어간다.</summary><div class="faq-a"><p class="faq-short">Android는 한 줄 칸에도 클립보드 원문을 넣는다. 줄 바꿈을 바꾸는 거르기를 단다.</p><p>Windows는 첫 줄 바꿈·탭 앞에서 자르고, macOS·iOS는 줄 바꿈을 공백으로 바꾼다. 플랫폼에 기대지 않으려면 <a class="xref" href="#build-validate">한 줄 거르기 견본</a>처럼 앱이 거른다.</p></div></details>
+        </div>
       </section>
 
       <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
@@ -222,5 +2933,11 @@ namespace sample {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="assets/manual.js"></script>
+<script src="assets/textinputmodel.js"></script>
+<script src="assets/text-input-lab.js"></script>
+<script>
+  LuilTextInputLab.setupNumber(document.getElementById("ti-number-lab"));
+  LuilTextInputLab.setupLinks(document.getElementById("ti-links-lab"));
+</script>
 </body>
 </html>

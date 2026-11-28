@@ -167,7 +167,7 @@
     };
     const outputs = { width: q("width-out"), height: q("height-out"), gap: q("gap-out"), fx: q("fx-out"), fy: q("fy-out") };
 
-    const initial = () => ({ fx: 40, fy: 210, open: true });
+    const initial = () => ({ fx: 40, fy: 70, open: true });
     let S = initial();
 
     // 그림: viewBox는 논리 픽셀, limit은 (0,0)에서 시작한다.

@@ -1438,7 +1438,7 @@ namespace luil {
               <tr><td>Shift+F10</td><td>초점에서 가장 가까운 <code>right_click</code> 임자 = 컨텍스트 메뉴 (그 요소 가운데 좌표)</td></tr>
               <tr><td>Tab · Shift+Tab</td><td>그리기 순서. 묶음(탭 막대·목록·선택 묶음)은 한 자리이고 안은 화살표가 돈다 (<a class="xref" href="input.html#s7">입력과 초점</a>)</td></tr>
               <tr><td>보조 기술의 SetFocus</td><td>키보드로 옮긴 것과 같은 부류라 초점 테가 보인다. <code>focusable()</code>이 아니면 거절한다</td></tr>
-              <tr><td>보조 기술의 Invoke·Toggle·Select</td><td>Tab의 자리가 아닌 요소도 부른다 — 초점이 서지 않아 앱이 초점으로 알 수는 없다</td></tr>
+              <tr><td>보조 기술의 Invoke·Toggle·Select</td><td>Tab의 자리가 아닌 요소도 부른다. 초점은 옮겨 가지 않으니 앱이 초점으로 알 수는 없다 (코드에서 확인한 동작)</td></tr>
             </tbody>
           </table>
         </div>
@@ -1481,23 +1481,23 @@ namespace luil {
           <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
         </header>
         <ol class="recap">
-          <li><div><strong>이름 없는 누를 것은 사라진다.</strong> 기본 규칙은 이름이 비면 <code>none</code>이다. 글리프 단추에 tooltip도 access name도 없으면 접근 tree에 없다. 탭의 닫기 단추가 그 경우다.</div></li>
-          <li><div><strong>tooltip은 이름과 도움말을 겸한다.</strong> 같은 글이 이름과 HelpText로 두 번 실린다. 실제로 몇 번 읽히는지는 스크린 리더가 정한다. 짧은 이름은 <code>set_access_name</code>에 둔다.</div></li>
-          <li><div><strong>컨테이너에 tooltip을 달면 화면에 글 상자가 뜬다.</strong> 목록·탭 막대의 이름은 <code>set_access_name</code>이다.</div></li>
-          <li><div><strong>절대 명령은 기본 실행이 없다.</strong> 펼치기·접기·값 정하기·더하기·빼기·흘림 백분율은 목표 상태를 나르는 메시지가 없으면 할 수 없는 일이다. 클릭(뒤집기)으로 대신하면 오래된 발행본을 본 두 명령이 두 번 뒤집기 때문이다.</div></li>
-          <li><div><strong><code>plan_access_request</code>는 비활성을 보지 않는다.</strong> 그것만 test하면 비활성 요소도 계획이 선다. 거절은 다리가 <code>enabled()</code>·<code>access_reachable</code>로 한다.</div></li>
-          <li><div><strong>factory는 "묻기만 해도" 불린다.</strong> UIA의 패턴 질의, <code>IsReadOnly</code>, macOS·iOS의 허용 판정이 계획을 세운다. 상태를 바꾸는 factory는 보조 기술이 훑기만 해도 앱을 바꾼다 (코드에서 확인한 동작).</div></li>
-          <li><div><strong>중복 id는 뒤의 요소를 지운다.</strong> 다리가 훑는 형제 줄에는 첫 등록만 선다. 같은 키를 두 목록이나 두 탭 막대에 쓰면 뒤의 것이 보조 기술에서 사라진다 (그 자식은 남는다). 발행본(<code>make_access_snapshot</code>)은 둘 다 담아 test에서 드러나지 않으니 <code>ui_tree::duplicate_ids()</code>로 잡는다.</div></li>
-          <li><div><strong>id가 frame마다 바뀌면 보조 기술이 자리를 잃는다.</strong> 다리와 VoiceOver 요소는 id로 frame을 넘는다. 색인이나 주소로 id를 짓지 않는다.</div></li>
-          <li><div><strong>live region은 역할이 있는 요소에만 뜻이 있다.</strong> 배치 판에 걸면 접혀서 아무것도 알리지 않는다. 한 frame에 live region 하나는 한 번만 알린다.</div></li>
-          <li><div><strong>역할이 바뀌면 다른 요소다.</strong> property가 아니라 부모의 structure로 알린다.</div></li>
-          <li><div><strong>modal 뒤는 닿지 않는다.</strong> 가둠 밖이어도 포인터가 닿는 자리(덮이지 않은 캡션 단추)는 닿는다 — 상자의 아홉 점을 사람이 쓰는 <code>hit_test</code>로 훑는다. 숨긴 가지는 닿지 않고, 스크롤로 잘린 것은 닿는다.</div></li>
-          <li><div><strong>검사기의 <code class="free">access</code> 줄은 <code>accessibility()</code> 그대로다.</strong> <code>enabled</code>·<code>help</code>·<code>live</code>가 없고, <code>dump_tree</code>는 접기 전의 모든 요소를 쓴다. 숨은 가지와 구조를 접은 tree는 <code>make_access_snapshot</code>으로 본다 (중복 id는 접지 않는다).</div></li>
-          <li><div><strong>값 글이 있는 범위 요소의 Value 패턴.</strong> <code>IsReadOnly</code>는 RangeValue와 같은 답이라 쓸 수 있는 요소는 "쓸 수 있음"이라 답하지만, 글로 쓰는 <code>Value.SetValue</code>는 <code>E_ACCESSDENIED</code>다. 값은 <code>RangeValue.SetValue</code>로만 바뀐다 (코드에서 확인한 동작).</div></li>
-          <li><div><strong>다중 선택의 큰 변화는 항목마다 알리지 않는다.</strong> 20개를 넘으면 <code>selection_invalidated</code> 하나다.</div></li>
-          <li><div><strong>그리지 않은 창에는 tree가 없다.</strong> 숨긴 채 시작한 창은 자동화로 읽히지 않는다.</div></li>
-          <li><div><strong>끌기처럼 포인터만의 몸짓에는 보조 기술 명령이 없다.</strong> <code>access_command</code>에 "옮겨라"가 없다. 순서 바꾸기·떼어 내기는 메뉴 명령 같은 다른 길을 앱이 준다.</div></li>
-          <li><div><strong>Android에서는 아무것도 읽히지 않는다.</strong> <code>access_info</code>를 고쳐도 Android에서는 아무도 읽지 않는다.</div></li>
+          <li><strong>이름 없는 누를 것은 사라진다.</strong> 기본 규칙은 이름이 비면 <code>none</code>이다. 글리프 단추에 tooltip도 access name도 없으면 접근 tree에 없다. 탭의 닫기 단추가 그 경우다.</li>
+          <li><strong>tooltip은 이름과 도움말을 겸한다.</strong> 같은 글이 이름과 HelpText로 두 번 실린다. 실제로 몇 번 읽히는지는 스크린 리더가 정한다. 짧은 이름은 <code>set_access_name</code>에 둔다.</li>
+          <li><strong>컨테이너에 tooltip을 달면 화면에 글 상자가 뜬다.</strong> 목록·탭 막대의 이름은 <code>set_access_name</code>이다.</li>
+          <li><strong>절대 명령은 기본 실행이 없다.</strong> 펼치기·접기·값 정하기·더하기·빼기·흘림 백분율은 목표 상태를 나르는 메시지가 없으면 할 수 없는 일이다. 클릭(뒤집기)으로 대신하면 오래된 발행본을 본 두 명령이 두 번 뒤집기 때문이다.</li>
+          <li><strong><code>plan_access_request</code>는 비활성을 보지 않는다.</strong> 그것만 test하면 비활성 요소도 계획이 선다. 거절은 다리가 <code>enabled()</code>·<code>access_reachable</code>로 한다.</li>
+          <li><strong>factory는 "묻기만 해도" 불린다.</strong> UIA의 패턴 질의, <code>IsReadOnly</code>, macOS·iOS의 허용 판정이 계획을 세운다. 상태를 바꾸는 factory는 보조 기술이 훑기만 해도 앱을 바꾼다 (코드에서 확인한 동작).</li>
+          <li><strong>중복 id는 뒤의 요소를 지운다.</strong> 다리가 훑는 형제 줄에는 첫 등록만 선다. 같은 키를 두 목록이나 두 탭 막대에 쓰면 뒤의 것이 보조 기술에서 사라진다 (그 자식은 남는다). 발행본(<code>make_access_snapshot</code>)은 둘 다 담아 test에서 드러나지 않으니 <code>ui_tree::duplicate_ids()</code>로 잡는다.</li>
+          <li><strong>id가 frame마다 바뀌면 보조 기술이 자리를 잃는다.</strong> 다리와 VoiceOver 요소는 id로 frame을 넘는다. 색인이나 주소로 id를 짓지 않는다.</li>
+          <li><strong>live region은 역할이 있는 요소에만 뜻이 있다.</strong> 배치 판에 걸면 접혀서 아무것도 알리지 않는다. 한 frame에 live region 하나는 한 번만 알린다.</li>
+          <li><strong>역할이 바뀌면 다른 요소다.</strong> property가 아니라 부모의 structure로 알린다.</li>
+          <li><strong>modal 뒤는 닿지 않는다.</strong> 가둠 밖이어도 포인터가 닿는 자리(덮이지 않은 캡션 단추)는 닿는다 — 상자의 아홉 점을 사람이 쓰는 <code>hit_test</code>로 훑는다. 숨긴 가지는 닿지 않고, 스크롤로 잘린 것은 닿는다.</li>
+          <li><strong>검사기의 <code class="free">access</code> 줄은 <code>accessibility()</code> 그대로다.</strong> <code>enabled</code>·<code>help</code>·<code>live</code>가 없고, <code>dump_tree</code>는 접기 전의 모든 요소를 쓴다. 숨은 가지와 구조를 접은 tree는 <code>make_access_snapshot</code>으로 본다 (중복 id는 접지 않는다).</li>
+          <li><strong>값 글이 있는 범위 요소의 Value 패턴.</strong> <code>IsReadOnly</code>는 RangeValue와 같은 답이라 쓸 수 있는 요소는 "쓸 수 있음"이라 답하지만, 글로 쓰는 <code>Value.SetValue</code>는 <code>E_ACCESSDENIED</code>다. 값은 <code>RangeValue.SetValue</code>로만 바뀐다 (코드에서 확인한 동작).</li>
+          <li><strong>다중 선택의 큰 변화는 항목마다 알리지 않는다.</strong> 20개를 넘으면 <code>selection_invalidated</code> 하나다.</li>
+          <li><strong>그리지 않은 창에는 tree가 없다.</strong> 숨긴 채 시작한 창은 자동화로 읽히지 않는다.</li>
+          <li><strong>끌기처럼 포인터만의 몸짓에는 보조 기술 명령이 없다.</strong> <code>access_command</code>에 "옮겨라"가 없다. 순서 바꾸기·떼어 내기는 메뉴 명령 같은 다른 길을 앱이 준다.</li>
+          <li><strong>Android에서는 아무것도 읽히지 않는다.</strong> <code>access_info</code>를 고쳐도 Android에서는 아무도 읽지 않는다.</li>
         </ol>
       </section>
 
