@@ -23,10 +23,13 @@
   .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
   .loop.from0 { counter-reset: loop -1; }
   @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  /* 탭 안의 발췌·표·알림 사이를 띄운다 (숨긴 탭은 그대로 숨는다) */
+  .tabs > section:not([hidden]) { display: grid; gap: 14px; }
   /* 표의 "있다/없다" 칸 */
   .t td.no { color: var(--fg-3); }
   /* 칸이 넷 이상인 표는 좁은 화면에서 줄이지 않고 표 상자 안에서 옆으로 흘린다 */
   .t.matrix { min-width: 720px; }
+  /* 그 표에서는 첫 칸의 기호 이름을 가운데서 끊지 않는다 */
   .t.matrix td:first-child code { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
   /* 실습: 응답 몸의 갈래 (assets/services-lab.js) */
   .bk-grid { display: grid; gap: 14px; }
@@ -1164,7 +1167,7 @@ namespace sample {
             <li>URL은 소문자 <code>ws://</code>·<code>wss://</code>로 시작하고 ASCII(32–126)만 쓴다. 한글 경로는 escape해서 넣는다. 자격 증명(<code>@</code>)·공백·<code>#</code>은 받지 않는다.</li>
             <li>끊겨도 저절로 다시 붙지 않는다. 다시 붙는 것은 새 client다 — 위 <code class="free">connect</code>가 그 자리다.</li>
             <li><code>stop()</code>이 돌아오기 전에 <code>closed</code>(오류 <code>stopped</code>, 코드 1006)가 올 수 있다. <code>deliver</code>가 쥔 host는 <code>stop()</code>이 끝날 때까지 살아 있어야 한다.</li>
-            <li>Android는 Java 전송부(<code>WebSocketTransport</code>)를 APK에 실어야 한다. 없으면 모든 조작이 "Include the luil Java transport in the APK." 오류다. minify를 켠 앱은 <code>luil-websocket.pro</code> 규칙도 싣는다.</li>
+            <li>Android는 Java 전송부(<code>WebSocketTransport</code>)를 APK에 실어야 한다. 없으면 모든 조작이 "Include the luil Java transport in the APK." 오류다. minify를 켠 앱은 <code>src/android/java/luil-websocket.pro</code> 규칙도 싣는다.</li>
           </ul>
         </div>
       </section>
@@ -1756,7 +1759,7 @@ TEST_CASE("Only URLs whose scheme is on the allow list may be opened", "[platfor
 </script></div>
         <div class="prose">
           <ul>
-            <li>자기 scheme을 열려면 <code>open_url(url, { .schemes = { u8"myapp" } })</code>처럼 목록을 넘긴다. 넘긴 목록은 기본 목록을 <strong>대신한다</strong>. 빈 목록은 아무것도 열지 않는다.</li>
+            <li>자기 scheme을 열려면 <code class="free">open_url(url, { .schemes = { u8"myapp" } })</code>처럼 목록을 넘긴다. 넘긴 목록은 기본 목록을 <strong>대신한다</strong>. 빈 목록은 아무것도 열지 않는다.</li>
             <li>공백으로 시작·끝나거나 제어 문자가 섞인 주소는 거짓이다. OS가 그것들을 걸러 읽으면 막은 scheme이 되살아나기 때문이다. 도메인(피싱)은 보지 않는다.</li>
             <li><strong><code>ok</code>는 "넘겼다"까지다.</strong> Windows는 브라우저가 열었는지 모른다. Android 10+는 앞에 없는 앱의 Activity를 OS가 조용히 막아도 <code>ok</code>다. iOS는 메인 큐에 비동기로 넘기고 <strong>늘 <code>ok</code></strong>다 — 헤더 주석의 "열 앱이 없으면 <code>not_found</code>"는 iOS에서 오지 않는다.</li>
             <li>사용자가 링크를 누른 그 순간처럼 앱이 앞에 있을 때 부른다. Android는 앞에 보이지 않는 앱이 띄우는 Activity를 막는다.</li>
@@ -1800,7 +1803,7 @@ TEST_CASE("Only URLs whose scheme is on the allow list may be opened", "[platfor
         return *sent;
 </script></div>
         <div class="prose">
-          <p>첫째 쪽은 <code>window_environment::instance</code>를 단다. instance는 창보다 오래 산다.</p>
+          <p>첫째 쪽은 <code>window_environment::instance</code>를 단다. instance는 창보다 오래 산다. 창을 세우는 환경과 창 delegate는 <a class="xref" href="window.html">창과 셸 통합</a>에 있다.</p>
         </div>
         <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1789-1798" data-path="examples/demo_main.cpp" data-start="1789"><script type="text/plain">
     luil::win32::window_environment environment {};
@@ -2011,6 +2014,9 @@ TEST_CASE("Only URLs whose scheme is on the allow list may be opened", "[platfor
           <h2>설정 레퍼런스</h2>
           <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 기호는 <a class="xref" href="api.html#net--http-client-config">API 찾아보기</a>에 있다.</p>
         </header>
+        <div class="prose">
+          <p>API 찾아보기로 바로 가기: <a class="xref" href="api.html#net--http-client"><code>http_client</code></a> · <a class="xref" href="api.html#net--http-request"><code>http_request</code></a> · <a class="xref" href="api.html#net--http-response"><code>http_response</code></a> · <a class="xref" href="api.html#net--http-body"><code>http_body</code></a> · <a class="xref" href="api.html#net--decode-http-body"><code>decode_http_body</code></a> · <a class="xref" href="api.html#net--websocket-client"><code>websocket_client</code></a> · <a class="xref" href="api.html#net--smb-client"><code>smb_client</code></a> · <a class="xref" href="api.html#file-watcher"><code>file_watcher</code></a> · <a class="xref" href="api.html#store-secret"><code>store_secret</code></a> · <a class="xref" href="api.html#replace-file-atomically"><code>replace_file_atomically</code></a> · <a class="xref" href="api.html#open-url"><code>open_url</code></a> · <a class="xref" href="api.html#single-instance"><code>single_instance</code></a></p>
+        </div>
         <div class="tabs">
           <section data-tab="http_client_config">
             <div class="code tall" data-lang="cpp" data-src="include/luil/net/http_client.h:12-66" data-path="include/luil/net/http_client.h" data-start="12"><script type="text/plain">
@@ -2881,7 +2887,7 @@ namespace luil {
           <table class="t">
             <thead><tr><th>자리</th><th>상한</th></tr></thead>
             <tbody>
-              <tr><td>HTTP 몸</td><td>기본 64 MiB, 요청마다 <code>max_body_bytes</code>. 미리 잡는 메모리는 1 MiB까지라 <code>Content-Length: 4 GB</code>가 메모리를 예약하게 두지 않는다. 읽지 못한 <code>Content-Length</code>는 가장 큰 값으로 보아 상한에 걸린다</td></tr>
+              <tr><td>HTTP 몸</td><td>기본 64 MiB, 요청마다 <code>max_body_bytes</code>. WinHTTP 백엔드는 미리 잡는 메모리를 1 MiB까지로 묶어 <code>Content-Length: 4 GB</code>가 메모리를 예약하게 두지 않고, 읽지 못한 <code>Content-Length</code>는 가장 큰 값으로 보아 상한에 건다</td></tr>
               <tr><td>HTTP 헤더 글</td><td>1 MiB (WinHTTP 백엔드)</td></tr>
               <tr><td>JSON 풀기</td><td>16 MiB, 깊이 256</td></tr>
               <tr><td>그림 풀기</td><td>파일에서 읽을 때와 같은 디코더 상한, 그리고 요청의 <code>parse.image.decode</code></td></tr>
@@ -2952,7 +2958,7 @@ namespace luil {
                 </tbody>
               </table>
             </div>
-            <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">주석이 코드보다 좁게 적힌 자리</span>헤더 주석(<code>http_client_config::transcode</code>)과 빌드 규칙의 주석은 "Android 기본 변환은 utf-16만 옮긴다"고 적는다. 코드는 그 밖의 이름도 JVM <code>CharsetDecoder</code>로 옮긴다 — euc-kr은 <code>windows-949</code>로 읽힌다. HTTP 설계 문서는 "Android는 플랫폼이 gzip을 청해 몰래 풀고 deflate는 풀지 않는다"고 적지만, 코드는 <code>Accept-Encoding</code>을 직접 적어 gzip·deflate를 모두 luil이 푼다. 몸 있는 GET을 Android 플랫폼이 POST로 바꾼다는 설계 문서의 말도, luil이 그 전에 <code>send</code>에서 거절하므로 앱이 겪을 일이 아니다. HTTP 설계 문서에는 NSURLSession 백엔드 절이 없다.</div></div>
+            <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">주석이 코드보다 좁게 적힌 자리</span>헤더 주석(<code>http_client_config::transcode</code>)과 빌드 규칙의 주석은 "Android 기본 변환은 utf-16만 옮긴다"고 적는다. 코드는 그 밖의 이름도 JVM <code>CharsetDecoder</code>로 옮긴다 — euc-kr은 <code>windows-949</code>로 읽힌다. HTTP 설계 문서는 "Android는 플랫폼이 gzip을 청해 몰래 풀고 deflate는 풀지 않는다"고 적지만, 코드는 <code>Accept-Encoding</code>을 직접 적어 gzip·deflate를 모두 luil이 푼다. 몸 있는 GET을 Android 플랫폼이 POST로 바꾼다는 설계 문서의 말도, luil이 그 전에 <code>send</code>에서 거절하므로 앱이 겪을 일이 아니다.</div></div>
           </section>
           <section data-tab="WebSocket">
             <div class="table-wrap">
@@ -3082,11 +3088,11 @@ namespace luil {
           <details class="faq"><summary>HTTP 답은 어느 thread로 오나? 요청마다 callback을 줄 수 있나?</summary><div class="faq-a"><p class="faq-short">client가 소유한 thread에서 <code>deliver</code>가 불린다. 요청마다 callback은 없다.</p><p>logic thread도 UI thread도 아니다. 그 자리에서 <code>post_app_message</code>로 logic thread에 옮기고, <code>handle</code>에서 <code>response.ticket</code>으로 어느 요청의 답인지 가른다 (<a class="xref" href="#concepts">개념</a>).</p></div></details>
           <details class="faq"><summary><code>send</code>가 0을 돌려준다.</summary><div class="faq-a"><p class="faq-short">손잡이가 서기 전의 거절이다. 답은 오지 않고 <code>error</code>에 이유가 있다.</p><p>URL·scheme·헤더·메서드 규칙 위반, 동시 상한(<code>max_in_flight</code> 32)이나 배달 대기 상한(<code>max_pending_responses</code> 128) 초과, 멈춘 client다. <strong>몸을 실은 GET·HEAD</strong>도 Android·Apple에서는 여기서 거절된다 — Windows는 그대로 보내므로 한 플랫폼에서만 시험하면 놓친다.</p></div></details>
           <details class="faq"><summary>취소하면 답이 안 오나?</summary><div class="faq-a"><p class="faq-short">온다. <code>cancelled</code>를 실은 답 하나다.</p><p>취소가 답을 지우면 "아직 오는 중"과 "접었다"를 앱이 따로 들어야 한다. 모르는 표·끝난 표의 <code>cancel</code>은 아무 일도 하지 않는다. test가 "정확히 한 번"을 잠근다 (<a class="xref" href="#build-http-cancel">취소</a>).</p></div></details>
-          <details class="faq"><summary><code>stop()</code>을 부르면 남은 요청에 <code>stopped</code> 답이 오나?</summary><div class="faq-a"><p class="faq-short">기대하지 않는다. WebSocket의 <code>closed</code>만 예외다.</p><p>HTTP 세 백엔드는 배달을 끄고 pump를 join한 <strong>뒤에</strong> 남은 요청을 <code>stopped</code>로 접으므로 그 답은 앱에 닿지 않는다. test도 "0개도 옳다"고 적는다. SMB와 파일 감시도 배달하지 않은 답·묶음을 버린다. WebSocket은 <code>stop()</code>이 돌아오기 전에 <code>closed</code>(오류 <code>stopped</code>, 코드 1006)를 낼 수 있다. 화면을 다시 쓰는 중에 client를 멈췄다면 앱이 표를 직접 잊는다.</p></div></details>
+          <details class="faq"><summary><code>stop()</code>을 부르면 남은 요청에 <code>stopped</code> 답이 오나?</summary><div class="faq-a"><p class="faq-short">기대하지 않는다. WebSocket의 <code>closed</code>만 예외다.</p><p>HTTP 세 백엔드는 배달을 끄고 pump를 join한 <strong>뒤에</strong> 남은 요청을 <code>stopped</code>로 접으므로, 그 답이 앱에 닿는다고 기대하지 않는다. test도 "0개도 옳다"고 적고, 나간 답이 있다면 그것이 <code>stopped</code>인지만 본다. SMB와 파일 감시도 배달하지 않은 답·묶음을 버린다. WebSocket은 <code>stop()</code>이 돌아오기 전에 <code>closed</code>(오류 <code>stopped</code>, 코드 1006)를 낼 수 있다. 화면을 다시 쓰는 중에 client를 멈췄다면 앱이 표를 직접 잊는다.</p></div></details>
           <details class="faq"><summary>답이 몰려 app inbox가 차면?</summary><div class="faq-a"><p class="faq-short">새 메시지가 조용히 버려진다. 파일 감시만 다시 낸다.</p><p>app inbox는 1024칸 <code>reject_newest</code>다. HTTP·SMB·WebSocket의 <code>deliver</code>는 <code>void</code>라 버려진 답은 다시 오지 않는다. 감시의 <code>deliver</code>는 <code>post_app_message_ticketed(...) != 0</code>을 답하면 거절된 묶음을 다음 변경과 합쳐 다시 낸다. HTTP는 같은 함수의 0을 보고 잃은 표를 적어 둔다 (<a class="xref" href="#build-http-drop">답을 잃지 않기</a>). 버려진 수는 <code>app_inbox_statistics()</code>가 센다.</p></div></details>
           <details class="faq"><summary>404·500은 어떻게 오나?</summary><div class="faq-a"><p class="faq-short">오류가 아니라 답이다. <code>error.empty()</code>가 참이고 <code>ok()</code>가 거짓이다.</p><p>몸은 평소대로 풀린다. <code>application/problem+json</code> 오류 몸은 json으로 온다. 성공은 언제나 <code>ok()</code>로 묻는다.</p></div></details>
           <details class="faq"><summary>JSON인데 <code>text/plain</code>으로 온다.</summary><div class="faq-a"><p class="faq-short">요청의 <code>parse.assume_kind = http_body_kind::json</code>을 준다.</p><p>라이브러리는 서버가 구체적인 형식을 말하면 바이트를 보고 뒤집지 않는다. 서버가 틀린 것을 아는 쪽은 앱이고, 그 문이 <code>assume_kind</code>다. 빈 몸은 그래도 <code>empty</code>다.</p></div></details>
-          <details class="faq"><summary>euc-kr이나 deflate로 압축된 응답이 플랫폼마다 같게 풀리나?</summary><div class="faq-a"><p class="faq-short">세 백엔드 모두 CP949 계열 표로 옮기지만, 옮기지 못할 때의 답이 다르다. Android는 주석과 달리 charset과 압축을 모두 직접 다룬다.</p><p>euc-kr은 Windows가 코드 페이지 949로, Android가 JVM <code>CharsetDecoder</code>(<code>windows-949</code>)로, Apple이 CoreFoundation 표로 옮긴다. 헤더 주석은 "Android 기본 변환은 utf-16만"이라 적지만 코드는 그렇다. 옮길 수 없는 바이트를 만나면 Windows는 바꿔 넣고 이유를 적고, Android·Apple은 엄격해서 빈 글과 이유를 준다. 압축은 Android에서도 luil이 gzip·deflate를 모두 푼다 (설계 문서의 "deflate는 풀지 않는다"는 코드와 다르다). 다른 규칙이 필요하면 <code>http_client_config::transcode</code>를 준다.</p></div></details>
+          <details class="faq"><summary>euc-kr이나 deflate로 압축된 응답이 플랫폼마다 같게 풀리나?</summary><div class="faq-a"><p class="faq-short">세 백엔드가 저마다의 표로 옮기고, 옮기지 못할 때의 답이 다르다. Android는 주석과 달리 charset과 압축을 모두 직접 다룬다.</p><p>euc-kr은 Windows가 코드 페이지 949로, Android가 JVM <code>CharsetDecoder</code>(<code>windows-949</code>)로, Apple이 CoreFoundation 표(DOSKorean)로 옮긴다. 헤더 주석은 "Android 기본 변환은 utf-16만"이라 적지만 코드는 그렇다. 옮길 수 없는 바이트를 만나면 Windows는 바꿔 넣고 이유를 적고, Android·Apple은 엄격해서 빈 글과 이유를 준다. 압축은 Android에서도 luil이 gzip·deflate를 모두 푼다 (설계 문서의 "deflate는 풀지 않는다"는 코드와 다르다). 다른 규칙이 필요하면 <code>http_client_config::transcode</code>를 준다.</p></div></details>
           <details class="faq"><summary>큰 그림이 메모리를 터뜨리지 않게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>parse.image.decode</code>에 상한을 준다. 섬네일이면 <code>parse.image.animated = false</code>.</p><p>4000×3000 사진 하나가 48 MB이고 움직이는 그림은 장 수가 곱해진다. 받는 몸 자체를 줄이려면 <code>max_body_bytes</code>를 낮춘다 (<a class="xref" href="#build-http-image">그림 받기</a>).</p></div></details>
           <details class="faq"><summary>https에서 http로 재지정되면? POST가 307을 받으면?</summary><div class="faq-a"><p class="faq-short">둘 다 따라가지 않는다. 다만 https→http의 답 모양은 플랫폼마다 다를 수 있다.</p><p>Android·Apple은 그 3xx를 답으로 준다. Windows는 WinHTTP의 정책 플래그에 맡겨서, 3xx가 답으로 오는지 오류로 오는지 확인하지 못했다. 헤더의 <code>secure_failure</code> 주석은 이 걸음을 그 오류로 적는다. 몸이 있는 요청(POST·307)은 정책과 무관하게 따라가지 않고 3xx가 답으로 온다 — 앱이 <code>Location</code>을 보고 다시 보낸다.</p></div></details>
           <details class="faq"><summary>인증 헤더가 다른 도메인으로 새지 않나? 인증서 검증을 끌 수 있나?</summary><div class="faq-a"><p class="faq-short">다른 출처로 재지정되면 여덟 이름 밖의 앱 헤더를 지운다. 검증을 끄는 손잡이는 없다.</p><p>남는 것은 <code>Accept</code>·<code>Accept-Language</code>·<code>Cache-Control</code>·<code>Range</code>·<code>If-Range</code>·<code>If-None-Match</code>·<code>If-Modified-Since</code>·<code>Depth</code>다. Windows HTTP는 TLS 1.2·1.3만 쓴다 (<a class="xref" href="#security">보안과 한계</a>).</p></div></details>

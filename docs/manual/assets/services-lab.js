@@ -217,11 +217,14 @@
       let cls = "";
       switch (d.fill) {
         case "json-parse":
-          work = el("span", null, "크기(상한 16 MiB)와 깊이 " + d.depth + "(상한 256)를 넘지 않았다 → nlohmann이 푼다. 깨진 JSON이면 갈래는 ", code("json"), "인 채 ", code("json"), " 슬롯이 비고 ", code("parse_error"), "가 선다. 파싱의 성패는 이 재현에 없다.");
+          work = el("span", null, "크기(상한 16 MiB)와 깊이(" + d.depth + ", 상한 256)가 상한 안이다 → nlohmann이 푼다. 깨진 JSON이면 갈래는 ", code("json"), "인 채 ", code("json"), " 슬롯이 비고 ", code("parse_error"), "가 선다. 파싱의 성패는 이 재현에 없다.");
           break;
         case "json-too-deep":
+          work = el("span", null, "깊이(" + d.depth + ")가 상한(256)을 넘어 파서를 부르지 않는다. ", code("json"), " 슬롯은 비어 있다.");
+          cls = "err";
+          break;
         case "json-too-large":
-          work = el("span", null, "상한에 걸려 파서를 부르지 않는다. ", code("json"), " 슬롯은 비어 있다 (깊이 " + d.depth + ").");
+          work = el("span", null, "크기(" + sizeText(bytes.length) + ")가 상한(16 MiB)을 넘어 파서를 부르지 않는다. ", code("json"), " 슬롯은 비어 있다.");
           cls = "err";
           break;
         case "image":
@@ -236,7 +239,7 @@
           break;
         case "transcode": {
           const bare = B.decodeHttpBody(bytes, media, Object.assign({}, options, { transcoder: false }));
-          work = el("span", null, "charset " + charsetName + "는 UTF-8 갈래가 아니다 → ", code("transcode"), " 갈고리가 옮긴다 (기본 ", code("codepage_text_transcoder"), "). 결과는 플랫폼마다 다르다 — Windows는 옮기지 못한 바이트를 바꿔 넣고, Android·Apple은 실패면 빈 글과 이유를 준다. 변환은 이 재현에 없다. 갈고리가 비어 있으면: ", code(bare.parseError));
+          work = el("span", null, "charset이 UTF-8 갈래가 아니다 (" + charsetName + ") → ", code("transcode"), " 갈고리가 옮긴다 (기본 ", code("codepage_text_transcoder"), "). 결과는 플랫폼마다 다르다 — Windows는 옮기지 못한 바이트를 바꿔 넣고, Android·Apple은 실패면 빈 글과 이유를 준다. 변환은 이 재현에 없다. 갈고리가 비어 있으면: ", code(bare.parseError));
           break;
         }
         case "html":
