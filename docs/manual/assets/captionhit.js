@@ -7,11 +7,12 @@
  *   src/ui/ui_tree.cpp            caption_client_under · intersect (ui_tree::caption_client_at)
  *   src/ui/ui_element.cpp         rect_f::contains
  *   src/ui/caption_element.cpp    caption_element::arrange (그린 단추의 자리)
+ *   src/win32/caption_surface.cpp caption_click_executes · is_caption_button (누름과 뗌의 짝)
  *
  * 대조: make_caption_layout · hit_test_caption · hit_test_window · default_caption_band는 원본 .cpp 두 개를
  * 손대지 않고 컴파일한 대조기에 무작위 입력을 넣어 이 함수들과 견주었다. caption_band_in의 반올림,
- * caption_client_at, caption_element::arrange는 원본을 읽어 옮기고 tests/caption_layout_tests.cpp의 기준값에만 맞추었다
- * (그 셋은 Skia에 기대는 element 계층 위에 있어 따로 컴파일하지 않았다).
+ * caption_client_at, caption_element::arrange, caption_click_executes는 원본을 읽어 옮기고 tests/caption_layout_tests.cpp의
+ * 기준값에만 맞추었다 (앞의 셋은 Skia에 기대는 element 계층 위에 있고, 마지막은 windows.h를 드는 파일에 있어 따로 컴파일하지 않았다).
  * DwmDefWindowProc의 답(caption_surface.cpp)은 코드로 알 수 없어 옮기지 않았다.
  *
  * 정수 식은 원본처럼 버림 나눗셈이고, 실수(rect_f) 식은 Math.fround로 float을 흉내 낸다.
@@ -163,6 +164,18 @@
     return { hit, flipped: false, band };
   }
 
+  // caption_surface.cpp:567-570 — 창 버튼 셋이다 (HTMINBUTTON · HTMAXBUTTON · HTCLOSE).
+  function isCaptionButton(hit) {
+    return hit === "minimize_button" || hit === "maximize_button" || hit === "close_button";
+  }
+
+  // caption_surface.cpp:560-565 — 누른 단추에서 뗀 것만 실행한다. 전체 화면에서는 실행하지 않는다.
+  // pressed는 누를 때 적어 둔 값이다: 단추면 그 판정, 아니면 "nowhere"(HTNOWHERE).
+  function captionClickExecutes(pressed, released, mode) {
+    if (mode === "fullscreen") return false;
+    return pressed === released && isCaptionButton(released);
+  }
+
   // caption_element.cpp:135-151 — 높이는 height_for × 배율, 단추는 오른쪽 끝에서 닫기 → 최대화 → 최소화 → 앱 단추(거꾸로) 순.
   // 판정과 달리 왼쪽 끝에서 멈추지 않고, 폭은 실수 (버튼 폭 × 배율)이다.
   function arrangeCaption(slot, scale, metrics, buttons, appButtons) {
@@ -187,5 +200,5 @@
     return { bounds, buttons: placed, apps };
   }
 
-  window.LuilCaptionHit = { scaleForDpi, lround, defaultCaptionBand, captionBandIn, makeCaptionLayout, hitTestCaption, hitTestWindow, contains, intersect, captionClientAt, nonClientHit, arrangeCaption };
+  window.LuilCaptionHit = { scaleForDpi, lround, defaultCaptionBand, captionBandIn, makeCaptionLayout, hitTestCaption, hitTestWindow, contains, intersect, captionClientAt, nonClientHit, arrangeCaption, isCaptionButton, captionClickExecutes };
 })();

@@ -559,7 +559,7 @@
     }
 
     // 앱이 대화를 연다 — 진입: 초점이 없고 가둠이 자리를 이름 지었으면 거기, 테는 끈다
-    function openBox(input) {
+    function openBox(input, takeFocus) {
       const cfg = boxConfig();
       const ei = D.messageBoxEntryIndex(cfg.roles);
       M.open = true;
@@ -567,7 +567,7 @@
       M.focus = ei >= 0 ? cfg.buttons[ei].key : null;
       M.ring = false;
       render();
-      box.focus({ preventScroll: true });
+      if (takeFocus) box.focus({ preventScroll: true });
       log(input, [], M.focus ? `첫 초점: ${nameOf(cfg, M.focus)} — 테 없이 선다. 첫 Tab이 테를 켠다` : "단추가 없어 첫 초점이 없다");
     }
     // 앱이 닫는다 — 가둠이 사라지면 focus_return 자리로, 테를 켠 채
@@ -603,7 +603,12 @@
       }
       if (!cfg.result || xi < 0) {
         const why = !cfg.result ? "result가 비어 닫는 액션이 없다" : "reject가 없고 단추가 하나가 아니라 닫는 길이 없다";
-        log(input, [], `${why} — ${outside ? "바깥 누름은 흡수만 한다" : "Esc가 앱의 키 정책으로 흐른다"}`);
+        if (outside) log(input, [], `${why} — 바깥 누름은 흡수만 한다`);
+        else {
+          // 앱의 키 정책이 받은 Esc다. 재현의 앱은 초점을 재현 밖(본보기 선택)으로 내보낸다 — 가둠에서 나갈 길이다
+          presetSel.focus({ preventScroll: true });
+          log(input, [], `${why} — Esc가 앱의 키 정책으로 흐른다. 이 재현의 앱은 키보드 초점을 재현 밖으로 내보낸다`);
+        }
         return;
       }
       const key = cfg.buttons[xi].key;
@@ -666,7 +671,7 @@
       // 그 밖의 자리는 상자가 흡수한다 (hit_opaque)
     });
     scrim.addEventListener("click", () => dismiss("바깥(scrim)을 눌렀다", true));
-    openBtn.addEventListener("click", () => openBox("대화 열기"));
+    openBtn.addEventListener("click", () => openBox("대화 열기", true));
 
     // 설정이 바뀌면 앱이 다시 짓는다. 쥔 초점이 사라졌으면 controller가 거두고 진입이 다시 선다 (테 끔).
     function rebuilt(input, effect) {

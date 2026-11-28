@@ -1,5 +1,6 @@
 /* 창과 셸 통합 — caption 판정 지도 실습.
- * 판정은 assets/captionhit.js(원본을 옮긴 함수)만 부른다. 이 파일은 그 답을 칠하고 적을 뿐이다.
+ * 판정(어느 자리가 무엇인가, 누름과 뗌이 실행되는가)은 assets/captionhit.js(원본을 옮긴 함수)만 부른다.
+ * 이 파일은 그 답을 칠하고, 누름과 뗌이 caption_surface.cpp:467-500의 어느 갈래로 가는지 적을 뿐이다.
  * 창 크기·caption의 자리·검색 칸의 배치는 앱 쪽 선택이다 (examples/demo_main.cpp:810-845의 배치를 본떴다).
  */
 (function () {
@@ -24,7 +25,6 @@
     resize_top_left: "왼쪽 위 모서리", resize_top_right: "오른쪽 위 모서리", resize_bottom_left: "왼쪽 아래 모서리", resize_bottom_right: "오른쪽 아래 모서리",
   };
   const isEdge = (hit) => hit.startsWith("resize_");
-  const isButton = (hit) => hit === "minimize_button" || hit === "maximize_button" || hit === "close_button";
   const COMMAND = { minimize_button: "ui_command::window_minimize", maximize_button: "ui_command::window_toggle_maximize", close_button: "ui_command::window_close" };
 
   const DEFAULTS = { w: 1000, h: 600, dpi: 96, mode: "normal", place: "top", min: true, max: true, close: true, apps: 1, search: true };
@@ -105,7 +105,7 @@
     if (kind === "caption_drag") return "ch-h-drag";
     if (kind === "system_menu") return "ch-h-sys";
     if (kind === "close_button") return "ch-h-close";
-    if (isButton(kind)) return "ch-h-btn";
+    if (H.isCaptionButton(kind)) return "ch-h-btn";
     return "ch-h-edge";
   }
 
@@ -120,7 +120,7 @@
       return [`보통 창의 크기 조절 (가장자리 ${b}px, 모서리 ${c}px). 모서리가 먼저다. 최대화 창에는 없다.`, "window_mode.cpp:24-51"];
     }
     if (r.hit === "system_menu") return [`띠 안이고 x < 띠 왼쪽 + ${slot}px. 아이콘이 없어도, 창 버튼보다 먼저다.`, "window_mode.cpp:55-57"];
-    if (isButton(r.hit)) return [`띠 안이고 x ≥ ${r.hit === "close_button" ? "close_left " + layout.closeLeft : r.hit === "maximize_button" ? "maximize_left " + layout.maximizeLeft : "minimize_left " + layout.minimizeLeft}.`, "caption_layout.cpp:86-97"];
+    if (H.isCaptionButton(r.hit)) return [`띠 안이고 x ≥ ${r.hit === "close_button" ? "close_left " + layout.closeLeft : r.hit === "maximize_button" ? "maximize_left " + layout.maximizeLeft : "minimize_left " + layout.minimizeLeft}.`, "caption_layout.cpp:86-97"];
     if (r.hit === "caption_drag") return ["띠 안의 버튼 왼쪽. 여기에 보이는 client 칸이 없다.", "caption_layout.cpp:96 · caption_surface.cpp:438-448"];
     if (r.flipped) return ["판정은 끌기였지만 그 자리에 client 표시(set_caption_client)가 달린 element가 보여 client로 뒤집었다.", "caption_surface.cpp:440-446 · ui_tree.cpp:623-651"];
     if (r.band.width === 0 || r.band.height === 0) return ["띠가 없다 — caption이 숨었다. 어느 자리도 끌기가 아니다.", "caption_layout.cpp:45-46"];
@@ -139,7 +139,6 @@
     let s = start();
     let m = build(s);
     let probe = { x: Math.floor(s.w / 2), y: 18 };
-    let pressed = null;
 
     const svgEl = LU.svg("svg", { viewBox: `0 0 ${s.w} ${s.h}`, role: "img", "aria-label": "창의 자리마다 비클라이언트 판정을 칠한 지도" });
     mapBox.append(svgEl);
@@ -236,35 +235,52 @@
       while (log.children.length > 40) log.lastElementChild.remove();
     }
 
-    // caption_surface.cpp:467-500 — 누름과 뗌. 단추는 누른 단추에서 뗐을 때만 실행한다 (caption_click_executes).
+    // caption_surface.cpp:467-500 — 비클라이언트의 누름과 뗌. 단추 위의 누름이면 그 판정을 적어 두고(pressed_caption_hit_),
+    // 뗌에서 caption_click_executes로 짝을 본다. client 자리의 누름·뗌은 이 처리에 오지 않는다 (client 영역의 메시지다).
+    let pressedCaptionHit = "nowhere";
+    let down = null;
+    const named = (r) => `${KO[r.hit]}${r.flipped ? " · client 칸" : ""}`;
     function press(button, at) {
       const r = judge(s, m, at.x, at.y);
-      pressed = { button, hit: r.hit, flipped: r.flipped, at };
+      down = { button, at, r, note: "" };
+      if (button !== "left" || r.hit === "client") return;
+      // WM_NCLBUTTONDOWN (전체 화면은 어디나 client라 여기에 오지 않는다)
+      // 떠 있는 popup을 먼저 닫고, 단추면 그 판정을 적고 누름을 삼킨다. 아니면 기본 처리로 넘긴다 —
+      // 끌기 띠와 가장자리는 그 기본 처리가 OS의 끌기·크기 조절 루프다 (caption_surface.cpp:468-470의 주석).
+      pressedCaptionHit = H.isCaptionButton(r.hit) ? r.hit : "nowhere";
+      down.note = H.isCaptionButton(r.hit) ? "누름: 단추 위라 삼킨다." : r.hit === "caption_drag" ? "누름: 기본 처리로 넘긴다 — OS의 창 끌기 루프가 잡는다." : isEdge(r.hit) ? "누름: 기본 처리로 넘긴다 — OS의 크기 조절 루프가 잡는다." : "누름: 기본 처리로 넘긴다 (그 뒤는 OS의 동작이다).";
+      down.note += " 떠 있는 popup은 바깥 누름으로 닫힌다.";
     }
     function release(button, at) {
       const r = judge(s, m, at.x, at.y);
-      const p = pressed && pressed.button === button ? pressed : null;
-      pressed = null;
-      const where = `(${at.x}, ${at.y}) ${KO[r.hit]}${r.flipped ? " · client 칸" : ""}`;
-      if (button === "right") {
-        if (s.mode !== "fullscreen" && (r.hit === "caption_drag" || r.hit === "system_menu")) return entry(`오른쪽 뗌 ${where}`, "WM_NCRBUTTONUP → 시스템 메뉴", "커서 자리에 창의 시스템 메뉴를 연다. 고른 명령은 WM_SYSCOMMAND로 간다.");
-        if (r.hit === "client") return entry(`오른쪽 뗌 ${where}`, "client 영역의 오른쪽 클릭", "input thread가 게시된 tree에서 그 자리의 right_click 액션을 찾는다.");
-        return entry(`오른쪽 뗌 ${where}`, `${HT[r.hit]} — 기본 처리로 넘긴다`, "luil이 따로 하는 일이 없다.");
-      }
-      if (s.mode === "fullscreen") return entry(`왼쪽 누르고 뗌 ${where}`, "HTCLIENT — 전체 화면", "어디를 눌러도 client다. 창 버튼도 실행하지 않는다.");
-      if (isButton(r.hit) || (p && isButton(p.hit))) {
-        if (p && p.hit === r.hit && isButton(r.hit)) {
-          const close = r.hit === "close_button";
-          return entry(`왼쪽 누르고 뗌 ${where}`, `${HT[r.hit]} → tree의 단추 액션 → ${COMMAND[r.hit]}`, close ? "UI thread가 닫힘 요청을 낸다: ui_frame::close가 있으면 그 동작만, 없으면 앱을 끝낸다." : "UI thread가 창 명령을 실행한다 (WM_SYSCOMMAND).");
-        }
-        return entry(`왼쪽 누름 ${p ? KO[p.hit] : "?"} → 뗌 ${where}`, "짝이 맞지 않는 뗌 — 삼킨다", "누른 단추와 뗀 단추가 같을 때만 실행한다. 단추 위의 누름은 처음부터 삼킨다.");
-      }
+      const d = down && down.button === button ? down : null;
+      down = null;
+      const side = button === "right" ? "오른쪽" : "왼쪽";
+      const same = d && d.at.x === at.x && d.at.y === at.y;
+      const title = same ? `${side} 누르고 뗌 (${at.x}, ${at.y}) ${named(r)}` : `${side} 누름 ${d ? `(${d.at.x}, ${d.at.y}) ${named(d.r)}` : "?"} → 뗌 (${at.x}, ${at.y}) ${named(r)}`;
+      const inner = r.flipped ? (m.search && H.contains(m.search, at.x, at.y) ? "그 자리의 element는 검색 칸(명령 팔레트 입구)이다." : "그 자리의 element는 앱 단추다.") : "";
       if (r.hit === "client") {
-        if (r.flipped) return entry(`왼쪽 누르고 뗌 ${where}`, "HTCLIENT — client 칸이 누름을 받는다", m.search && H.contains(m.search, at.x, at.y) ? "검색 칸(명령 팔레트 입구)의 액션이 input thread에서 나간다." : "앱 단추의 action이 input thread에서 나간다.");
-        return entry(`왼쪽 누르고 뗌 ${where}`, "HTCLIENT — client 영역의 클릭", "input thread가 게시된 tree에서 hit test한다.");
+        // WM_LBUTTONUP·WM_RBUTTONUP — 비클라이언트 처리는 받지 않는다. 적어 둔 누름도 그대로 남는다.
+        const msg = s.mode === "fullscreen" ? "HTCLIENT — 전체 화면에는 비클라이언트가 없다" : "HTCLIENT — client 영역의 뗌";
+        if (d && d.r.hit === "client") return entry(title, msg, `input thread가 게시된 tree에서 hit test한다. 같은 element에서 누르고 떼야 클릭이다. ${inner}`.trim());
+        return entry(title, msg, `${d && d.note ? d.note + " " : ""}비클라이언트 처리는 이 뗌을 받지 않는다. 누를 때 적어 둔 값도 그대로 남는다.`);
       }
-      const what = r.hit === "caption_drag" ? "OS가 창을 끈다. 끌기가 끝나면 배치 보고가 온다." : r.hit === "system_menu" ? "luil은 이 누름을 따로 다루지 않는다. 그다음은 OS의 기본 동작이다." : "OS가 그 가장자리로 크기를 조절한다. 끝나면 배치 보고가 온다.";
-      return entry(`왼쪽 누르고 뗌 ${where}`, `${HT[r.hit]} — 기본 처리로 넘긴다`, what + " 떠 있는 popup은 바깥 누름으로 닫힌다.");
+      if (button === "right") {
+        // WM_NCRBUTTONUP
+        if (r.hit === "caption_drag" || r.hit === "system_menu") return entry(title, "WM_NCRBUTTONUP → 시스템 메뉴", "커서 자리에 창의 시스템 메뉴를 연다. 고른 명령은 WM_SYSCOMMAND로 간다.");
+        return entry(title, `${HT[r.hit]} — 기본 처리로 넘긴다`, "luil이 따로 하는 일이 없다.");
+      }
+      // WM_NCLBUTTONUP
+      const pressedHit = pressedCaptionHit;
+      pressedCaptionHit = "nowhere";
+      const before = d && d.note ? d.note + " " : "";
+      if (H.captionClickExecutes(pressedHit, r.hit, s.mode)) {
+        const close = r.hit === "close_button";
+        return entry(title, `${HT[r.hit]} → tree의 단추 액션 → ${COMMAND[r.hit]}`, before + (close ? "뗌에서 UI thread가 닫힘 요청을 낸다: ui_frame::close가 있으면 그 동작만, 없으면 앱을 끝낸다." : "뗌에서 UI thread가 창 명령을 실행한다 (WM_SYSCOMMAND)."));
+      }
+      if (H.isCaptionButton(r.hit)) return entry(title, "짝이 맞지 않는 뗌 — 삼킨다", `${before}누를 때 적어 둔 값이 ${pressedHit === "nowhere" ? "HTNOWHERE" : HT[pressedHit]}이다. 누른 단추에서 뗀 것만 실행한다.`);
+      const moved = d && (d.r.hit === "caption_drag" || isEdge(d.r.hit));
+      return entry(title, `${HT[r.hit]} — 뗌은 기본 처리로 넘긴다`, before + (moved ? "끌기·크기 조절이 끝나면 배치 보고가 온다." : "luil은 이 뗌을 따로 다루지 않는다."));
     }
 
     function at(ev) {
@@ -386,6 +402,8 @@
     const tree3 = { children: [{ caption: true, bounds: { x: 0, y: 0, width: 1000, height: 36 }, children: [] }, field(400, 4, 200, 28), field(100, 4, 28, 28), field(200, 4, 28, 28, { visible: false }), { clipChildren: true, bounds: { x: 700, y: 4, width: 40, height: 28 }, children: [field(700, 4, 120, 28)] }] };
     add("겹쳐 세운 칸: 비활성·숨김·잘림", "tests/caption_layout_tests.cpp:227-266", [[H.hitTestCaption(l, 500, 18), "drag"], [H.captionClientAt(tree3, 500, 18), true], [H.captionClientAt(tree3, 380, 18), false], [H.captionClientAt(tree3, 110, 18), true], [H.captionClientAt(tree3, 210, 18), false], [H.captionClientAt(tree3, 720, 18), true], [H.captionClientAt(tree3, 780, 18), false]]);
     const fs = frame(ALL, 8, 16);
+    const C = H.captionClickExecutes;
+    add("누른 단추에서 뗀 것만 실행", "tests/caption_layout_tests.cpp:276-288", [[C("close_button", "close_button", "normal"), true], [C("maximize_button", "maximize_button", "maximized"), true], [C("nowhere", "close_button", "normal"), false], [C("minimize_button", "close_button", "normal"), false], [C("caption_drag", "caption_drag", "normal"), false], [C("close_button", "close_button", "fullscreen"), false]]);
     add("전체 화면은 어디나 client", "tests/caption_layout_tests.cpp:268-274", [[H.hitTestWindow(fs, "fullscreen", 1000, 800, 96, 500, 18, H.defaultCaptionBand(1000, 96, M)), "client"], [H.hitTestWindow(fs, "normal", 1000, 800, 96, 500, 18, H.defaultCaptionBand(1000, 96, M)), "caption_drag"]]);
 
     let p = placed({ x: 0, y: 764, width: 1000 });

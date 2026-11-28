@@ -113,8 +113,7 @@
     }
 
     function draw() {
-      raf = 0;
-      redrawTimer = 0;
+      // 걸려 있는 예고(rAF·timer)는 schedule이 거둔다 — 여기서 비우면 앱이 곧바로 부른 draw가 남은 예고를 놓쳐 그리기 고리가 겹친다
       const at = now();
       S.frames++;
       S.lastDraw = at;
@@ -281,7 +280,7 @@
       draw();
     });
     widthIn.addEventListener("change", () => {
-      log(`자리 폭 ${W}`, [], W < 352 ? `폭 320 + 여백 16은 자리로 줄지 않는다. ${W}에서는 반대편 가장자리를 넘는다` : "쌓음은 자리 폭과 무관하게 320이다");
+      log(`자리 폭 ${W}`, [], W < 336 ? `폭 320 + 여백 16은 자리로 줄지 않는다. ${W}에서는 반대편 가장자리를 넘는다` : "쌓음은 자리 폭과 무관하게 320이다");
     });
     pruneCb.addEventListener("change", () => {
       log(pruneCb.checked ? "앱이 만료를 지운다" : "앱이 만료를 지우지 않는다", [], pruneCb.checked ? "next_tick이 가장 이른 만료 시각을 답한다. 이미 지난 것은 곧바로 tick이 지운다" : "next_tick이 비었다. 다 흐려진 토스트가 목록과 tree에 남는다");

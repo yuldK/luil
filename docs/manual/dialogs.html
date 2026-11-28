@@ -304,7 +304,7 @@
               <div class="dl-log" data-sh="log" aria-live="polite" aria-label="메시지 기록"></div>
             </div>
           </div>
-          <div class="lw-foot">판정은 원본을 함수 단위로 옮긴 <code>assets/dialogmodel.js</code>다 — <code>resolve_sheet_kind</code>·<code>sheet_detent_height</code>·<code>sheet_visible_height</code>·<code>settle_sheet</code>·<code>sheet_surface_bounds</code>·<code>release_action</code>(<code>sheet_host_element.cpp</code>)와 놓은 속도의 100ms 창(<code>motion_track</code>, <code>ui_interaction.cpp</code>). 원본 줄을 잘라 그대로 컴파일한 대조기의 무작위 입력 9만 건과 단정밀도까지 같음을 확인했다. 손잡이 끌기는 마우스·펜·터치가 같고, 시트 몸 끌기(터치의 넘겨받기)와 시트 안 목록은 옮기지 않았다. 이 앱은 <code>settle</code>·<code>release</code>를 받으면 스프링 없이 바로 멈춘다 — luil의 시트는 스스로 움직이지 않는다. 자리 폭·높이는 논리 픽셀이고 좁은 화면에서는 그림을 통째로 줄였다. 그림은 같은 치수로 그린 재현이지 luil의 실제 렌더링이 아니다.</div>
+          <div class="lw-foot">판정은 원본을 함수 단위로 옮긴 <code>assets/dialogmodel.js</code>다 — <code>resolve_sheet_kind</code>·<code>sheet_detent_height</code>·<code>sheet_visible_height</code>·<code>settle_sheet</code>·<code>sheet_surface_bounds</code>·<code>release_action</code>(<code>sheet_host_element.cpp</code>)와 놓은 속도의 100ms 창(<code>motion_track</code>, <code>ui_interaction.cpp</code>). 원본 줄을 잘라 그대로 컴파일한 대조기의 무작위 입력 9만 건과 단정밀도까지 같음을 확인했다. 손잡이 끌기는 마우스·펜·터치가 같고, 시트 몸 끌기(터치의 넘겨받기)와 시트 안 목록은 옮기지 않았다. 이 앱은 <code>drag</code> 메시지를 곧바로 반영해 다시 짓는다고 둔다 — 실제로는 놓는 순간 input thread가 가진 tree의 <code>drag_offset</code>으로 정하므로, 앱이 마지막 이동을 반영하기 전에 놓으면 조금 앞의 자리로 판정한다. 이 앱은 <code>settle</code>·<code>release</code>를 받으면 스프링 없이 바로 멈춘다 — luil의 시트는 스스로 움직이지 않는다. 자리 폭·높이는 논리 픽셀이고 좁은 화면에서는 그림을 통째로 줄였다. 그림은 같은 치수로 그린 재현이지 luil의 실제 렌더링이 아니다.</div>
         </div>
         <div class="lw" data-title="확인 대화 상자: 역할과 키" data-surface="make_message_box · message_box_role" data-reset id="mb-lab">
           <div class="lw-body dl-grid">
@@ -1683,7 +1683,7 @@ namespace sample {
                   <tr><td><code>kind</code></td><td><code>bottom</code></td><td>—</td></tr>
                   <tr><td><code>side_from_width</code></td><td>없음</td><td>아래 시트가 옆 시트로 바뀌지 않는다</td></tr>
                   <tr><td><code>modal</code></td><td>참</td><td>거짓이면 scrim·가둠·Esc가 없고 역할이 <code>pane</code>이다</td></tr>
-                  <tr><td><code>side_width</code></td><td>360</td><td>좁으면 폭 − 56까지 줄인다. 옆 시트는 왼쪽에, 서랍은 오른쪽에 56이 남는다</td></tr>
+                  <tr><td><code>side_width</code></td><td>360</td><td>좁으면 폭 − 56까지 줄인다. 옆 시트는 왼쪽에, 서랍은 오른쪽에 56이 남는다. 위 헤더 주석은 방향을 반대로 적었다 — 코드와 시험(<code>tests/sheet_host_element_tests.cpp</code> 623~624줄)이 정본이다</td></tr>
                   <tr><td><code>full_top_margin</code> · <code>bottom_max_width</code></td><td>24 · 640</td><td>—</td></tr>
                   <tr><td><code>dismiss</code></td><td>없음</td><td>scrim·Esc가 아무것도 내지 않고, 끌어 닫는 놓기가 <code>settle(half)</code>로 돌아온다</td></tr>
                   <tr><td><code>drag</code></td><td>없음</td><td>손잡이는 그려지지만 끌기가 서지 않는다</td></tr>
@@ -1929,6 +1929,7 @@ namespace sample {
           <li><strong><code>sheet_release::velocity</code>는 높아지는 쪽이 양수다.</strong> <code>settle_sheet</code>의 <code>velocity</code>와 부호가 반대다.</li>
           <li><strong>시트는 스스로 움직이지 않는다.</strong> <code>sheet_host_element</code>에는 다시 그리기 예고(<code>next_update</code>)가 없다. 여닫기·놓은 뒤의 움직임은 앱이 상태와 <code>next_tick</code>으로 만든다.</li>
           <li><strong>옆 시트로 바뀌는 순간 끄던 양은 앱이 거둔다.</strong> 옆 시트에는 끌기 종료 콜백이 없다.</li>
+          <li><strong>좁은 자리의 56은 시트의 바깥쪽이 아니라 안쪽에 남는다.</strong> 오른쪽 옆 시트는 왼쪽에, 왼쪽 서랍은 오른쪽에 56을 남겨 뒤 화면이 비친다. <code>side_width</code>의 헤더 주석은 반대로 적었지만 코드가 정본이다 (<code>sheet_host_element.cpp</code> 261~264줄).</li>
           <li><strong>시트 안 목록의 넘겨받기는 앱이 싣는 <code>at_start</code>가 정한다.</strong> 싣지 않으면(기본 거짓) 맨 위 목록을 아래로 쓸어도 시트가 내려가지 않는다. 접촉 도중 맨 위에 닿아도 넘기지 않는다.</li>
           <li><strong>파일 대화 상자는 id 0이면 <code>failed</code>, 이미 쓴 id면 아무 일도 없다.</strong> 매번 새 id를 쓴다.</li>
           <li><strong>요청을 frame에서 빼도 열린 OS 대화 상자는 닫히지 않는다.</strong></li>
