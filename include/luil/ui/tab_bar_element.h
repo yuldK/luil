@@ -75,6 +75,7 @@ namespace luil {
         // 0이면 아이콘이 없다.
         char32_t icon { 0 };
         // 닫기 버튼은 이 값과 close factory가 모두 있어야 생긴다.
+        //  - 글리프뿐인 단추라 라이브러리가 기본 문구("이름 닫기")로 툴팁이자 보조 기술이 읽는 이름을 단다.
         bool closable { false };
         // 이름 뒤의 배지다 (개수·상태 점). 없으면 배지가 없다.
         std::optional<tab_badge> badge {};

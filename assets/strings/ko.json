@@ -123,6 +123,7 @@
         "calendar_unavailable": "고를 수 없음",
         "teaching_tip_name": "안내",
         "teaching_tip_close": "닫기",
+        "tab_close_name": "{label} 닫기",
         "text_edit_menu_copy": "복사",
         "text_edit_menu_cut": "잘라내기",
         "text_edit_menu_paste": "붙여넣기",

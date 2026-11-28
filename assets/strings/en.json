@@ -118,6 +118,7 @@
         "calendar_unavailable": "Unavailable",
         "teaching_tip_name": "Tip",
         "teaching_tip_close": "Close",
+        "tab_close_name": "Close {label}",
         "text_edit_menu_copy": "Copy",
         "text_edit_menu_cut": "Cut",
         "text_edit_menu_paste": "Paste",

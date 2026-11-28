@@ -102,6 +102,9 @@ namespace luil::default_text {
     // 요소마다 함수를 둔다.
     [[nodiscard]] std::u8string_view teaching_tip_name() noexcept;  // 안내
     [[nodiscard]] std::u8string_view teaching_tip_close() noexcept;  // 닫기
+    // 탭 닫기 단추의 툴팁이자 접근 이름이다 ("문서 닫기"). 글리프뿐인 단추라 이름이 없으면 접근 tree에서 빠지고, 탭마다
+    // 단추가 서므로 어느 탭의 단추인지 이름에 든다. 어순은 표의 문장이다 (`split_button_arrow_name`과 같은 꼴).
+    [[nodiscard]] std::u8string tab_close_name(std::u8string_view tab_label);
 
     // 앱이 준 글이 비어 있으면 기본 문구다. 돌려준 view는 두 인자보다 오래 살지 않는다.
     //  - 빈 값의 판정은 `empty()`뿐이다. 공백만 있는 글은 앱의 글이다.

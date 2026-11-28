@@ -410,6 +410,12 @@ namespace luil::default_text {
         return word(key::teaching_tip_close);
     }
 
+    std::u8string tab_close_name(const std::u8string_view tab_label)
+    {
+        const std::array<string_argument, 1> arguments { { { u8"label", tab_label } } };
+        return sentence(key::tab_close_name, arguments);
+    }
+
     std::u8string_view text_or_default(const std::u8string_view configured, const std::u8string_view fallback) noexcept
     {
         return configured.empty() ? fallback : configured;

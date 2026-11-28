@@ -185,6 +185,11 @@ TEST_CASE("The teaching tip words are its own functions even where the word matc
     REQUIRE(luil::default_text::teaching_tip_close() == luil::default_text::info_bar_close());
 }
 
+TEST_CASE("A tab close button name carries the tab label in the table's word order", "[ui][default-text][tab]")
+{
+    REQUIRE(luil::default_text::tab_close_name(u8"문서") == u8"문서 닫기");
+}
+
 TEST_CASE("The words and sentences follow the library language and come back the same", "[ui][default-text][i18n]")
 {
     using namespace std::chrono_literals;

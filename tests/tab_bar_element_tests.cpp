@@ -1,5 +1,6 @@
 #include "luil/ui/tab_bar_element.h"
 
+#include "luil/ui/accessibility.h"
 #include "luil/ui/app_message.h"
 #include "luil/ui/ui_element.h"
 #include "luil/ui/ui_interaction.h"
@@ -7,6 +8,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <algorithm>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -361,6 +363,36 @@ TEST_CASE("A scaled tab bar keeps its lane and maximum in logical pixels", "[ui]
     REQUIRE(bar.children()[1]->bounds().x == 1600.0f - luil::tab_overflow_width * 2.0f);
     REQUIRE(bar.maximum_scroll() == 800.0f + luil::tab_overflow_width);
     REQUIRE(bar.scroll_offset() == 800.0f + luil::tab_overflow_width);
+}
+
+TEST_CASE("A tab close button is named after its tab and stands in the accessibility tree", "[ui][tab][accessibility]")
+{
+    // 글리프뿐인 단추라 이름이 없으면 접근 tree에서 통째로 빠진다. 기본 문구가 툴팁이자 접근 이름이다.
+    luil::tab_bar_config config { make_config(2) };
+    config.items[0].closable = true;
+    config.items[1].closable = true;
+    config.close = [](const std::u8string& key) { return luil::input_action { luil::app_message { close_intent { key } } }; };
+    auto bar { std::make_unique<luil::tab_bar_element>(std::move(config)) };
+    const luil::ui_element& close { *tab_at(*bar, 0).children()[0] };
+    REQUIRE(close.id() == luil::ui_element_id { luil::ui_element_kind::tab_close, u8"tab-a" });
+    REQUIRE(close.tooltip() == u8"tab-a 닫기");
+    REQUIRE(close.accessibility().role == luil::access_role::button);
+    REQUIRE(close.accessibility().name == u8"tab-a 닫기");
+    // 탭의 이름은 그대로다 — 닫기 단추의 이름이 탭 이름에 섞이지 않는다.
+    REQUIRE(tab_at(*bar, 0).accessibility().name == u8"tab-a");
+
+    // 발행본에도 탭마다 닫기 단추가 그 탭 아래에 선다. 초점 순서에는 들지 않는다 (focus-group-design.md).
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(bar), { 0.0f, 0.0f, 600.0f, 40.0f }, 1.0f) };
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    for (const std::u8string_view key : { std::u8string_view { u8"tab-a" }, std::u8string_view { u8"tab-b" } })
+    {
+        const luil::ui_element_id id { luil::ui_element_kind::tab_close, std::u8string { key } };
+        const auto found { std::find_if(snapshot.entries.begin(), snapshot.entries.end(), [&id](const luil::access_snapshot_entry& entry) { return entry.id == id; }) };
+        REQUIRE(found != snapshot.entries.end());
+        REQUIRE(found->info.role == luil::access_role::button);
+        REQUIRE(found->info.name == std::u8string { key } + u8" 닫기");
+        REQUIRE(found->parent == luil::ui_element_id { luil::ui_element_kind::tab, std::u8string { key } });
+    }
 }
 
 TEST_CASE("A tab badge speaks after the tab name", "[ui][tab][accessibility]")

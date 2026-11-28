@@ -1,6 +1,7 @@
 #include "luil/ui/tab_bar_element.h"
 
 #include "ui/badge_paint.h"
+#include "ui/default_text.h"
 #include "ui/reorder_drop.h"
 
 #include "luil/generated/codicons.h"
@@ -398,6 +399,11 @@ namespace luil {
                 // 번갈아 지난다 — 키보드로는 넘침 메뉴가 그 자리다
                 // (focus-group-design.md).
                 button->set_tab_stop(false);
+                // 글리프뿐인 단추라 이름을 주지 않으면 접근 tree에서 통째로 빠진다 (`ui_element::accessibility`). 기본 문구로
+                // 툴팁이자 접근 이름을 단다 — 정보 막대·안내 풍선의 닫기와 같은 선례다. 어느 탭의 단추인지 이름에 든다.
+                const std::u8string close_name { default_text::tab_close_name(item_.label) };
+                button->set_tooltip(close_name);
+                button->set_access_name(close_name);
                 button->set_cursor(ui_cursor::hand);
                 button->set_action(ui_trigger::left_click, [key, &close](const ui_action_context&) -> std::vector<input_action> { return { close(key) }; });
                 // 우클릭은 hit된 element의 것만 나가고 부모로 올라가지 않는다.
