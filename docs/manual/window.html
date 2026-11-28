@@ -1808,7 +1808,7 @@ namespace sample {
               <tr><td>caption의 닫기 · Alt+F4 · 작업 표시줄의 닫기 · <code>ui_command::window_close</code></td><td>앱을 끝낸다 (보조 창도 함께 사라진다)</td><td>그 동작만 낸다. <strong>아무것도 닫지 않는다.</strong> 게시된 frame당 한 번</td></tr>
               <tr><td><code>ui_command::application_exit</code></td><td>끝낸다</td><td>훅을 비켜 끝낸다</td></tr>
               <tr><td>세션 종료 (로그오프·재시작)</td><td>끝낸다</td><td>훅을 거치지 않고 끝낸다</td></tr>
-              <tr><td>logic·input thread가 멈춤 (<code>app_host::faulted</code>)</td><td>끝낸다</td><td>훅을 부르지 않고 끝낸다 — 낸 동작을 받을 logic이 없다</td></tr>
+              <tr><td>logic·input thread가 멈춘 뒤의 닫기 요청 (<code>app_host::faulted</code>)</td><td>끝낸다</td><td>훅을 부르지 않고 끝낸다 — 낸 동작을 받을 logic이 없다. 멈춤 자체로 창이 닫히지는 않는다. Win32는 사용자가 닫을 때까지 창을 그대로 둔다 (코드에서 확인한 동작 — <a class="xref" href="threads.html#faq">스레드 모델의 자주 묻는 질문</a>에 플랫폼별 차이가 있다)</td></tr>
             </tbody>
           </table>
         </div>
