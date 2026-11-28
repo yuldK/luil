@@ -170,6 +170,37 @@ TEST_CASE("Tab selection reveals an offscreen tab while wheel scrolling remains 
     REQUIRE(bar->scroll_offset() == 0.0f);
 }
 
+TEST_CASE("A demo tab dropped outside anchors its new window at the grabbed logical point at any scale", "[demo][tabs]")
+{
+    // 잡은 점은 tree의 물리 픽셀이고 닻의 client 점은 논리 점이다. 배율 2에서 20×10 물리 픽셀을 잡으면 10×5 논리 점이다.
+    for (const float scale : { 1.0f, 2.0f })
+    {
+        demo::tabs_page page {};
+        const luil::ui_tree tree { luil::make_arranged_tree(page.build(800.0f, 600.0f, scale), { 0.0f, 0.0f, 800.0f * scale, 600.0f * scale }, scale) };
+        const luil::ui_element* const tab { tree.find({ luil::ui_element_kind::tab, u8"tab-3" }) };
+        REQUIRE(tab != nullptr);
+        REQUIRE(tab->drag() != nullptr);
+        REQUIRE(tab->drag()->on_unclaimed_drop != nullptr);
+        luil::ui_action_context grab {};
+        grab.element = tab->id();
+        grab.x = tab->bounds().x + 10.0f * scale;
+        grab.y = tab->bounds().y + 5.0f * scale;
+        const luil::drag_payload payload { tab->drag()->make_payload(grab) };
+        luil::drag_release release {};
+        release.outside = true;
+        release.screen = luil::screen_point { 600, 300 };
+        const luil::input_action action { first_action(tab->drag()->on_unclaimed_drop(payload, release)) };
+        const auto* const message { std::get_if<luil::app_message>(&action) };
+        REQUIRE(message != nullptr);
+        const auto* const detach { message->get<demo::tab_detach_intent>() };
+        REQUIRE(detach != nullptr);
+        REQUIRE(detach->key == u8"tab-3");
+        REQUIRE(detach->anchor.has_value());
+        REQUIRE(detach->anchor->client_x == Catch::Approx(24.0f + 10.0f));
+        REQUIRE(detach->anchor->client_y == Catch::Approx(34.0f + 5.0f));
+    }
+}
+
 TEST_CASE("Detached demo tabs publish separate windows and rejoin at the requested gap", "[demo][tabs]")
 {
     demo::tabs_page page {};

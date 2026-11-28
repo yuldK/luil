@@ -273,7 +273,6 @@ namespace demo {
     std::unique_ptr<luil::ui_element> tabs_page::build(const float width, const float height, const float scale)
     {
         static_cast<void>(height);
-        static_cast<void>(scale);
         bar_ = nullptr;
 
         luil::tab_bar_config bar_config {};
@@ -329,10 +328,12 @@ namespace demo {
         bar_config.receive = [](const luil::drag_payload& payload, const std::u8string& target, const luil::drop_side side) {
             return luil::make_app_action(tab_attach_intent { payload.dragged_owner, target, side });
         };
-        bar_config.unclaimed_drop = [](const luil::drag_payload& payload, const luil::drag_release& release) {
+        // 잡은 점(`grab_offset`)은 이 tree의 물리 픽셀이고 닻의 client 점은 새 창의 논리 점이라 이 frame의 배율로 나눈다.
+        //  - 나누지 않으면 배율 100%에서만 탭이 잡은 그 점에 온다. 150%면 잡은 점이 1.5배 멀리 선다.
+        bar_config.unclaimed_drop = [scale = std::max(0.01f, scale)](const luil::drag_payload& payload, const luil::drag_release& release) {
             tab_detach_intent intent { payload.dragged_owner };
             if (release.screen.has_value())
-                intent.anchor = luil::window_screen_anchor { *release.screen, 24.0f + payload.grab_offset_x, 34.0f + payload.grab_offset_y };
+                intent.anchor = luil::window_screen_anchor { *release.screen, 24.0f + payload.grab_offset_x / scale, 34.0f + payload.grab_offset_y / scale };
             return luil::make_app_action(std::move(intent));
         };
         // 막대와 같은 식으로 탭 폭과 레인 폭을 미리 잰다 — 고른 탭을 레인 안으로 들이는 계산이 쓴다.

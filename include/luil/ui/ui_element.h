@@ -231,8 +231,9 @@ namespace luil {
         //    놓을 자리를 아는 것은 이쪽뿐이라, 그림을 밖(탐색기)이 그리는 파일
         //    끌기에도 강조는 우리 몫이다 (os-dragdrop-design.md).
         bool custom_visual { false };
-        // drag 시작 시 포인터와 출발 element 원점의 차이다.
+        // drag 시작 시 포인터와 출발 element 원점의 차이다 (물리 픽셀, tree 좌표).
         // 끌리는 그림이 잡은 지점 그대로 포인터를 따라오게 한다.
+        //  - 논리 점이 필요한 자리(`window_screen_anchor`의 client 점, dock의 떠 있는 판 자리)는 tree의 배율로 나눈다.
         float grab_offset_x { 0.0f };
         float grab_offset_y { 0.0f };
         // OS에서 들어온 파일 끌기의 경로 목록이다.
