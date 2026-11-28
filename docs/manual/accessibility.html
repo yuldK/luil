@@ -36,7 +36,7 @@
       <div class="head-cols">
         <dl class="meta">
           <div><dt>관련 소스</dt><dd><code>accessibility.h</code>·<code>ui_element.h</code>·<code>ui_inspect.h</code>·<code>uia_provider.cpp</code>·<code>accessibility_mapping.cpp</code>·<code>accessibility_ios.mm</code></dd></div>
-          <div><dt>실습</dt><dd>접근 tree 보기 — 접기, 이름의 원천, 공통 값, 발행본 대조</dd></div>
+          <div><dt>실습</dt><dd>없음 — 스크린 리더가 실제로 하는 말은 재현할 수 없다. 대신 <a class="xref" href="#build-test">검사기와 test로 확인하기</a></dd></div>
           <div><dt>먼저 읽기</dt><dd><a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="input.html">입력과 초점</a> · <a class="xref" href="platforms.html#s7">플랫폼과 host — 접근성</a></dd></div>
         </dl>
         <div class="goals">
@@ -60,7 +60,7 @@
         </header>
         <div class="choose">
           <div class="panel">
-            <h4><i class="ci" aria-hidden="true">&#xEA79;</i>이름</h4>
+            <h4><i class="ci" aria-hidden="true">&#xEA67;</i>이름</h4>
             <ul>
               <li>글리프만 있는 단추는 <code>set_tooltip</code>이 이름(이자 도움말)이다.</li>
               <li>목록·탭 막대처럼 글을 세우지 않는 컨테이너는 화면에 뜨지 않는 <code>set_access_name</code>이다.</li>
@@ -68,7 +68,7 @@
             </ul>
           </div>
           <div class="panel">
-            <h4><i class="ci" aria-hidden="true">&#xEB06;</i>직접 그린 요소</h4>
+            <h4><i class="ci" aria-hidden="true">&#xEB2A;</i>직접 그린 요소</h4>
             <ul>
               <li><code>accessibility()</code>를 재정의해 역할·이름·상태·범위를 답한다.</li>
               <li>값 정하기·펼치기 같은 절대 명령은 <code>set_access_handler</code>나 <code>access_actions</code> 재정의로 메시지를 낸다.</li>
@@ -76,7 +76,7 @@
             </ul>
           </div>
           <div class="panel">
-            <h4><i class="ci" aria-hidden="true">&#xEA6B;</i>상태 글</h4>
+            <h4><i class="ci" aria-hidden="true">&#xEAAD;</i>상태 글</h4>
             <ul>
               <li>글이 바뀌면 읽히게 하려면 <code>set_live_region</code>이다.</li>
               <li><code>access_role::alert</code>(토스트·정보 막대)는 정하지 않아도 끊고 읽힌다.</li>
@@ -111,7 +111,7 @@
           <ul>
             <li><strong>보이지 않는 가지는 통째로 빠진다.</strong> 자기나 조상이 <code>set_visible(false)</code>면 읽을 자리도 누를 자리도 아니다. 스크롤로 잘려 화면 밖에 있는 것은 그대로 남는다 — 키보드로 닿으면 화면 안으로 들어오기 때문이다.</li>
             <li><strong>역할이 <code>none</code>인 요소는 접힌다.</strong> stack·panel 같은 배치 요소가 그렇다. 그 자식이 이 자리로 올라와 부모의 형제 줄에 선다.</li>
-            <li><strong>같은 id가 둘이면 첫 등록만 형제 줄에 선다.</strong> 뒤의 것은 구조처럼 접혀 자식만 올라온다. 중복은 <code>ui_tree::duplicate_ids()</code>에 남는 앱 결함이다.</li>
+            <li><strong>같은 id가 둘이면 첫 등록만 형제 줄에 선다.</strong> 뒤의 것은 구조처럼 접혀 자식만 올라온다. 중복은 <code>ui_tree::duplicate_ids()</code>에 남는 앱 결함이다. 이 접기는 세 다리가 훑는 <code>ui_tree</code> 색인의 것이다 — 요소를 들고 묻는 <code>access_children</code>와 그것으로 짓는 발행본(<code>make_access_snapshot</code>)은 중복을 접지 않는다.</li>
             <li><strong>접근 부모는 가장 가까운 접근 조상이다.</strong> 없으면 창(fragment root)이다. 이 색인은 tree가 생길 때 한 번 짓는다 — 긴 목록도 형제 걸음이 한 번이다.</li>
           </ul>
         </div>
@@ -159,15 +159,73 @@
           <h2>만들기: 아이콘 단추와 컨테이너에 이름 붙이기</h2>
           <p class="lede">글이 없는 요소는 이름이 없으면 접근 tree에서 사라진다. 글리프 단추는 tooltip, 컨테이너는 화면에 뜨지 않는 <code>set_access_name</code>이다.</p>
         </header>
-        <div class="code" data-lang="cpp" data-src="examples/widgets/controls_section.cpp:58-66"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="examples/widgets/controls_section.cpp:58-66" data-path="examples/widgets/controls_section.cpp" data-start="58"><script type="text/plain">
+        // 아이콘 버튼: 글리프는 내장 codicon에서 고른다.
+        luil::button_config icon_config {};
+        icon_config.glyph = luil::codicons::icon_add;
+        icon_config.corner_radius = 3.0f;
+        auto icon_button { std::make_unique<luil::button_element>(luil::ui_element_id { kind_icon_button }, icon_config) };
+        icon_button->set_tooltip(u8"하나 더한다");
+        icon_button->set_cursor(luil::ui_cursor::hand);
+        icon_button->set_action(luil::ui_trigger::left_click, luil::make_message_action(increment_intent {}));
+        row->add(std::move(icon_button), 30.0f);
 </script></div>
         <div class="prose">
           <p><code>button_element</code>는 <code>accessibility()</code>를 재정의하지 않는다(코드에서 확인한 동작). 그래서 기본 규칙을 탄다 — <code>left_click</code>이 있고 tooltip이 이름이 되어 <code>button</code> "하나 더한다"로 읽힌다. 같은 tooltip이 도움말(UIA HelpText, macOS AXHelp)도 된다. 이름과 설명을 가르려면 <code>set_access_name(u8"더하기")</code>로 이름을, <code>set_tooltip</code>으로 긴 설명을 준다 — 이름은 access name이 먼저다.</p>
         </div>
         <p class="small muted">기본 규칙 자체를 잠근 test다. 누를 수 있어도 이름이 없으면 <code>none</code>이고, 글자 탐색의 글이 tooltip보다 먼저다.</p>
-        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:759-775"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:759-775" data-path="tests/accessibility_tests.cpp" data-start="759"><script type="text/plain">
+TEST_CASE("A pressable element with a name reads as a button by default", "[ui][access]")
+{
+    test_panel card { luil::ui_element_id { kind_item, u8"card" } };
+    REQUIRE(card.accessibility().role == luil::access_role::none);
+
+    // 누를 수 있어도 이름이 없으면 승격하지 않는다 — 이름 없는 단추는 소음이다.
+    card.set_action(luil::ui_trigger::left_click, noop_action());
+    REQUIRE(card.accessibility().role == luil::access_role::none);
+
+    card.set_tooltip(u8"열기");
+    REQUIRE(card.accessibility().role == luil::access_role::button);
+    REQUIRE(card.accessibility().name == u8"열기");
+
+    // 글자 탐색이 보는 글이 tooltip보다 먼저다.
+    card.set_search_label(u8"문서");
+    REQUIRE(card.accessibility().name == u8"문서");
+}
 </script></div>
-        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1442-1473"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1442-1473" data-path="tests/accessibility_tests.cpp" data-start="1442"><script type="text/plain">
+TEST_CASE("A container takes its name from the access name, not a visible tooltip", "[ui][access]")
+{
+    // 목록·탭 막대·막대는 자기 글을 세우지 않는다. 이름을 주려고 툴팁을 달면
+    // 화면에 글 상자가 뜨므로 화면에 뜨지 않는 이름의 자리를 따로 쓴다.
+    luil::list_config config {};
+    config.owner = u8"files";
+    config.items = { { .key = u8"a", .label = u8"가" }, { .key = u8"b", .label = u8"나" } };
+    config.select = [](const std::u8string&) { return luil::input_action {}; };
+    config.scroll = [](const float delta) { return luil::make_app_action(access_delta_intent { delta }); };
+    auto list { std::make_unique<luil::list_element>(std::move(config)) };
+    list->set_access_name(u8"파일 목록");
+    const luil::ui_element* const list_view { list.get() };
+
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(std::move(list));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 24.0f }, 1.0f) };
+
+    REQUIRE(list_view->accessibility().name == u8"파일 목록");
+    REQUIRE(list_view->tooltip().empty());
+    // 안의 막대는 앱이 손댈 수 없는 부품이라 목록의 이름을 물려받는다.
+    const luil::ui_element* const bar { tree.find({ luil::ui_element_kind::list_scrollbar, u8"files" }) };
+    REQUIRE(bar != nullptr);
+    REQUIRE(bar->accessibility().name == u8"파일 목록");
+
+    // 툴팁뿐이면 그것이 이름이다 (지금까지의 자리 — 넘침 버튼이 그렇게 읽힌다).
+    luil::tab_bar_element tabs { { .owner = u8"docs", .items = { { u8"one", u8"하나" } }, .selected = u8"one" } };
+    tabs.set_tooltip(u8"열린 문서");
+    REQUIRE(tabs.accessibility().name == u8"열린 문서");
+    // 전용 이름이 있으면 그것이 이긴다.
+    tabs.set_access_name(u8"문서 탭");
+    REQUIRE(tabs.accessibility().name == u8"문서 탭");
+}
 </script></div>
         <div class="prose">
           <p>목록·탭 막대·스크롤 막대처럼 자기 글을 세우지 않는 컨테이너에 tooltip을 달면 빈 자리에 글 상자가 뜬다. 그래서 <code>set_access_name</code>을 쓴다 — 그리기에도 글자 탐색에도 쓰이지 않는다. 컨테이너가 안에 세우는 부품(목록의 스크롤 막대)은 앱이 손댈 수 없어 컨테이너의 이름을 물려받는다.</p>
@@ -193,10 +251,69 @@
           <p class="lede">직접 그린 요소는 <code>accessibility()</code>를 재정의해 역할·이름·상태·범위를 답한다. 값을 정하게 하려면 목표 값을 나르는 메시지를 단다.</p>
         </header>
         <div class="prose"><p>범위만 내주는 가장 작은 요소다 (UIA 변환 test의 것). 범위가 있으니 RangeValue 패턴이 서지만 값을 정할 길이 없어 읽기 전용이다 — <code>IsReadOnly</code>가 참이고 <code>SetValue</code>는 <code>E_ACCESSDENIED</code>다.</p></div>
-        <div class="code" data-lang="cpp" data-src="tests/uia_provider_tests.cpp:1505-1533"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="tests/uia_provider_tests.cpp:1505-1533" data-path="tests/uia_provider_tests.cpp" data-start="1505"><script type="text/plain">
+    // 범위만 내주는 element다. 경계·값·걸음을 정한 그대로 알린다.
+    class range_probe final : public luil::ui_element
+    {
+    public:
+        range_probe(luil::ui_element_id id, const luil::access_range range)
+            : ui_element { std::move(id) }
+            , range_ { range }
+        {
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {
+        }
+
+        [[nodiscard]] luil::access_info accessibility() const override
+        {
+            luil::access_info info { .role = luil::access_role::slider, .name = u8"probe" };
+            info.range = range_;
+            return info;
+        }
+
+    private:
+        luil::access_range range_ {};
+    };
 </script></div>
         <div class="prose"><p>라이브러리의 별점이 범위·값 글·값 정하기를 모두 잇는 본보기다. 값 글이 비지 않아 UIA Value 패턴도 함께 서고, 값 정하기는 앱의 절대 메시지(<code>change_to</code>)만 탄다.</p></div>
-        <div class="code" data-lang="cpp" data-src="src/ui/rating_element.cpp:326-355"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="src/ui/rating_element.cpp:326-355" data-path="src/ui/rating_element.cpp" data-start="326"><script type="text/plain">
+    access_info rating_element::accessibility() const
+    {
+        const float value { clamp_value(config_) };
+        const std::size_t count { count_of(config_) };
+        access_info info { .role = access_role::slider };
+        info.name = config_.name.empty() ? std::u8string { default_text::rating_name() } : config_.name;
+        // 범위가 값을 품어야 한다. 표시 전용에서 지울 수 없는 소수 값(한 걸음보다 작은 값)은 최소보다 작을 수 있다.
+        info.range = access_range { std::min(minimum_for(config_), value), static_cast<float>(count), value, step_of(config_), 1.0f };
+        // 값 글이 비지 않아 UIA Value 패턴도 함께 선다.
+        info.value = config_.value_name != nullptr ? config_.value_name(value, count) : default_text::rating_value_name(value, count);
+        return info;
+    }
+
+    std::optional<std::vector<input_action>> rating_element::access_actions(const access_request& request) const
+    {
+        if (request.command != access_command::set_value)
+            return ui_element::access_actions(request);
+        // 값 정하기는 **절대 메시지**만 탄다. 표시 전용은 값을 받지 않는다.
+        if (config_.change_to == nullptr)
+            return std::nullopt;
+        if (std::isnan(request.value))
+            return std::vector<input_action> {};
+        // 가장 가까운 격자점이고 같은 거리면 큰 쪽이다. 범위 밖은 최소·최대로 자른다. 지울 수 없는 별점이 0 요청을 받으면
+        // 한 걸음이 된다 (provider가 범위 밖 요청을 먼저 거절하므로 이 줄에는 반올림이 범위 가장자리에 닿는 요청만 온다).
+        const float step { step_of(config_) };
+        const float target { std::clamp(std::floor(request.value / step + 0.5f) * step, minimum_for(config_), static_cast<float>(count_of(config_))) };
+        if (same_on_grid(target, clamp_value(config_), step))
+            return std::vector<input_action> {};
+        return emit(target);
+    }
 </script></div>
         <div class="prose"><p>앱이 그린 요소가 값 정하기를 받는 예는 저장소에 없어 손으로 썼다. 재정의 대신 <code>set_access_handler</code>로 <code>set_value</code>만 앱 메시지로 옮긴다.</p></div>
         <div class="code" data-lang="cpp" data-label="값을 정할 수 있는 다이얼 (직접 작성)" data-compile="pre-dial"><script type="text/plain">
@@ -280,7 +397,7 @@ namespace sample {
           <ul>
             <li><strong>계획은 범위가 있는지만 먼저 본다.</strong> <code>set_value</code>는 <code>range</code>가 없으면 할 수 없음이고, 있으면 요소의 <code>access_actions</code>에 묻는다. 기본 <code>access_actions</code>는 <code>set_access_handler</code>로 준 처리기를 먼저 부른다. 처리기가 없으면 <code>set_value</code>는 기본 실행이 없다.</li>
             <li><strong>값 글을 함께 주면 UIA Value 패턴도 선다.</strong> 다만 글로 쓰는 <code>Value.SetValue</code>는 편집 파이프라인에 이어진 <code>edit</code>·<code>combo_box</code>가 아니면 <code>E_ACCESSDENIED</code>다. <code>IsReadOnly</code>는 RangeValue와 Value가 한 함수로 답해서, 값을 받는 이 다이얼은 Value 쪽에서도 "읽기 전용 아님"이라 답한다 — 값을 바꾸는 길은 <code>RangeValue.SetValue</code>다 (코드에서 확인한 동작).</li>
-            <li><strong><code>step</code>·<code>page</code></strong>는 UIA의 SmallChange·LargeChange로 알려진다. 0이면 알리지 않고, macOS의 오르내림(AXIncrement)은 범위의 1/20을 쓴다. iOS는 걸음이 0보다 크고 값 정하기 계획이 설 때만 Adjustable이다.</li>
+            <li><strong><code>step</code>·<code>page</code></strong>는 UIA의 SmallChange·LargeChange로 알려진다. 0(기본)이면 알리지 않는다(UIA에는 0으로 답한다). macOS의 오르내림(AXIncrement)은 <code>step</code>이 0이면 범위의 1/20씩 움직인다. iOS는 진행 막대가 아니고, 그 걸음이 0보다 크고, 값 정하기 계획이 설 때만 Adjustable이다.</li>
             <li>UIA는 범위 밖 값을 자르지 않고 <code>E_INVALIDARG</code>로 거절한다. macOS는 범위로 자른다.</li>
             <li>보조 기술 명령과 키보드는 따로다. 화살표로 값을 바꾸려면 <code>set_key_step_target</code>을 단다.</li>
           </ul>
@@ -293,7 +410,59 @@ namespace sample {
           <p class="lede">명령은 "이 요소에서 무슨 메시지인가"로 바뀐다. 계획의 답은 셋이다: 할 수 없음(<code>nullopt</code>), 내 것이지만 할 일 없음(빈 목록), 낼 메시지들.</p>
         </header>
         <div class="walk side">
-          <div class="code" data-lang="cpp" data-src="src/ui/accessibility.cpp:65-116"><script type="text/plain">
+          <div class="code" data-lang="cpp" data-src="src/ui/accessibility.cpp:65-116" data-path="src/ui/accessibility.cpp" data-start="65"><script type="text/plain">
+    std::optional<std::vector<input_action>> plan_access_request(const ui_element& element, const access_request& request)
+    {
+        const access_info info { element.accessibility() };
+        switch (request.command)
+        {
+        case access_command::invoke:
+            // 누름에는 "이미"가 없다 — 할 수 있는지는 요소가 답한다.
+            break;
+        case access_command::toggle:
+            // 뒤집기라 방향이 없다.
+            if (info.checked.has_value() == false)
+                return std::nullopt;
+            break;
+        case access_command::select:
+            if (info.selected.has_value() == false)
+                return std::nullopt;
+            // 이미 골라져 있으면 할 일이 없다. 실행은 클릭 하나라 뒤집기이므로
+            // 그대로 흘리면 도리어 고름이 풀리는 자리가 있다.
+            //  - 다중 선택에서는 "이것 하나만"이라 다른 항목이 함께 골라져 있을 수 있다. 그것을 아는 앱에 맡긴다.
+            if (*info.selected && request.multiple_selection == false)
+                return std::vector<input_action> {};
+            break;
+        case access_command::add_to_selection:
+        case access_command::remove_from_selection:
+            if (info.selected.has_value() == false)
+                return std::nullopt;
+            // 목표 상태를 나르는 명령이다 — 이미 그 상태면 할 일이 없다.
+            if (*info.selected == (request.command == access_command::add_to_selection))
+                return std::vector<input_action> {};
+            break;
+        case access_command::expand:
+        case access_command::collapse: {
+            if (info.expanded.has_value() == false)
+                return std::nullopt;
+            // UIA의 Expand는 "펼쳐진 상태로 만들라"이지 "펼침을 뒤집으라"가 아니다.
+            if (*info.expanded == (request.command == access_command::expand))
+                return std::vector<input_action> {};
+            break;
+        }
+        case access_command::set_value:
+            if (info.range.has_value() == false)
+                return std::nullopt;
+            break;
+        case access_command::set_scroll_percent:
+            // 흘리는 창이 아니면 할 수 없는 일이다. 같은 자리로의 명령도 요소에 간다 — 내용이 늘어나는 창의 100은
+            // 지금 자리가 100이어도 "끝에 붙어 있으라"는 뜻이 있다.
+            if (info.scroll.has_value() == false)
+                return std::nullopt;
+            break;
+        }
+        return element.access_actions(request);
+    }
 </script></div>
           <ol class="walk-steps-src">
             <li data-lines="70-72" data-title="누르기">누름에는 "이미"가 없다. 할 수 있는지는 요소가 답한다. 빈 계획이 오면 UIA는 거절한다.</li>
@@ -306,7 +475,31 @@ namespace sample {
           </ol>
         </div>
         <div class="prose"><p>요소의 기본 <code>access_actions</code>는 처리기 → 절대 명령이면 할 수 없음 → <code>left_click</code>을 요소 한가운데 좌표로 부르기 순서다. 마우스로 누를 수 없는 것은 보조 기술로도 누를 수 없다.</p></div>
-        <div class="code" data-lang="cpp" data-src="src/ui/ui_element.cpp:719-742"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="src/ui/ui_element.cpp:719-742" data-path="src/ui/ui_element.cpp" data-start="719"><script type="text/plain">
+    std::optional<std::vector<input_action>> ui_element::access_actions(const access_request& request) const
+    {
+        // 앱이 받겠다고 한 명령이 먼저다. 답하지 않으면 아래의 기본으로 물러선다.
+        if (access_handler_ != nullptr)
+            if (std::optional<std::vector<input_action>> handled { access_handler_(request) }; handled.has_value())
+                return handled;
+        // 고른 것에 더하기·빼기는 목표 상태를 나르는 명령이라 클릭(뒤집기)으로 대신하지 않는다. 받는 앱이 없으면
+        // 할 수 없는 일이다.
+        // 값 정하기와 펼치기·접기는 **절대 명령**이라 기본이 없다. 클릭은
+        // 뒤집기라, 오래된 발행본을 보고 흘리면 같은 명령 둘이 두 번 뒤집는다 —
+        // 목표 상태를 나르는 factory를 가진 요소만 재정의로 답한다
+        // (accessibility-action-design.md).
+        if (request.command == access_command::set_value || request.command == access_command::expand || request.command == access_command::collapse
+            || request.command == access_command::add_to_selection || request.command == access_command::remove_from_selection
+            || request.command == access_command::set_scroll_percent)
+            return std::nullopt;
+        const ui_action* const pressed { action(ui_trigger::left_click) };
+        if (pressed == nullptr)
+            return std::nullopt;
+        // 클릭과 같은 액션을 같은 규칙으로 낸다.
+        // 좌표는 요소의 한가운데다 (포인터가 관여하지 않았다).
+        const rect_f box { bounds() };
+        return (*pressed)(ui_action_context { id(), box.x + box.width / 2.0f, box.y + box.height / 2.0f, false });
+    }
 </script></div>
         <div class="table-wrap">
           <table class="t">
@@ -323,7 +516,54 @@ namespace sample {
           </table>
         </div>
         <div class="prose"><p>앱이 받겠다고 한 명령만 처리기가 답하고, 나머지는 기본(클릭)으로 물러서는 모양이다 (원문 test):</p></div>
-        <div class="code" data-lang="cpp" data-src="tests/access_multiple_selection_tests.cpp:176-222"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="tests/access_multiple_selection_tests.cpp:176-222" data-path="tests/access_multiple_selection_tests.cpp" data-start="176"><script type="text/plain">
+TEST_CASE("Rows without app handlers cannot be added or removed", "[ui][accessibility][multi-select]")
+{
+    // 받는 앱이 없으면 클릭(뒤집기)으로 대신하지 않는다 — 할 수 없는 일이다.
+    class item final : public luil::ui_element
+    {
+    public:
+        explicit item(const bool selected)
+            : ui_element { luil::ui_element_id { luil::application_element_kind(0), u8"item" } }
+            , selected_ { selected }
+        {
+            set_action(luil::ui_trigger::left_click, [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::make_app_action(add_intent {}) }; });
+        }
+
+        void arrange(const luil::arrange_context& context) override
+        {
+            set_bounds(context.slot);
+        }
+
+        void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+        {
+        }
+
+        [[nodiscard]] luil::access_info accessibility() const override
+        {
+            return { .role = luil::access_role::list_item, .name = u8"item", .selected = selected_ };
+        }
+
+    private:
+        bool selected_ { false };
+    };
+
+    const item unselected { false };
+    REQUIRE(luil::plan_access_request(unselected, request(luil::access_command::add_to_selection)).has_value() == false);
+    const item selected { true };
+    REQUIRE(luil::plan_access_request(selected, request(luil::access_command::remove_from_selection)).has_value() == false);
+
+    // 앱이 받겠다고 하면 그것이 답한다.
+    item handled { false };
+    handled.set_access_handler([](const luil::access_request& value) -> std::optional<std::vector<luil::input_action>> {
+        if (value.command == luil::access_command::add_to_selection)
+            return std::vector<luil::input_action> { luil::make_app_action(add_intent { u8"handled" }) };
+        return std::nullopt;
+    });
+    REQUIRE(intent_of<add_intent>(luil::plan_access_request(handled, request(luil::access_command::add_to_selection)))->key == u8"handled");
+    // 답하지 않은 명령은 지금까지의 기본(클릭)으로 물러선다.
+    REQUIRE(intent_of<add_intent>(luil::plan_access_request(handled, request(luil::access_command::invoke)))->key.empty());
+}
 </script></div>
         <div class="prose">
           <ul>
@@ -340,16 +580,88 @@ namespace sample {
           <h2>만들기: live region으로 상태 글 알리기</h2>
           <p class="lede">글을 바로 읽히는 API는 없다. 글이 바뀌는 자리를 live region으로 두면 다음 발행본 대조가 그 자리를 읽게 알린다.</p>
         </header>
-        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1864-1880"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1864-1880" data-path="tests/accessibility_tests.cpp" data-start="1864"><script type="text/plain">
+TEST_CASE("Access info carries enabled, tooltip help, and the live setting", "[ui][access]")
+{
+    luil::text_button_element button { luil::ui_element_id { kind_item, u8"send" }, { .text = u8"보내기" } };
+    button.set_enabled(false);
+    button.set_tooltip(u8"받는 사람이 없습니다");
+    const luil::access_info info { luil::access_info_of(button) };
+    REQUIRE(info.enabled == false);
+    REQUIRE(info.help == u8"받는 사람이 없습니다");
+    REQUIRE(info.live == luil::access_live::off);
+
+    // 상태 글을 바꾸는 요소는 live region으로 둔다. 경고 역할은 정하지 않아도 끊고 읽는다.
+    auto status { make_note(u8"status", u8"준비") };
+    status->set_live_region(luil::access_live::polite);
+    REQUIRE(luil::access_info_of(*status).live == luil::access_live::polite);
+    const luil::toast_element toast { luil::toast_config { .text = u8"저장하지 못했습니다" } };
+    REQUIRE(luil::access_info_of(toast).live == luil::access_live::assertive);
+}
 </script></div>
         <div class="prose"><p>비활성 단추에 tooltip으로 까닭을 적으면 그것이 도움말이다. 비활성 단추도 이름과 까닭을 지닌 채 tree에 남고, 활성이나 까닭이 바뀌면 property 변화로 들린다. 판 안의 줄이 바뀌면 판(live region)이 알린다:</p></div>
-        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1882-1936"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1882-1936" data-path="tests/accessibility_tests.cpp" data-start="1882"><script type="text/plain">
+namespace {
+    // 활성·도움말·live region 글을 바꿔 가며 같은 화면을 짓는다.
+    [[nodiscard]] luil::ui_tree make_live_tree(const bool enabled, const std::u8string_view reason, const std::u8string_view status, const bool with_alert)
+    {
+        auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+        auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_item, u8"send" }, luil::text_button_config { .text = u8"보내기" }) };
+        button->set_enabled(enabled);
+        button->set_tooltip(std::u8string { reason });
+        root->add(std::move(button));
+        // live region인 판 안의 줄이 바뀌면 판이 알린다.
+        auto board { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"board" }) };
+        board->set_access_name(u8"상태");
+        board->set_live_region(luil::access_live::polite);
+        board->set_action(luil::ui_trigger::left_click, noop_action());
+        board->add(make_note(u8"line", status));
+        root->add(std::move(board));
+        if (with_alert)
+        {
+            auto alert { make_note(u8"alert", u8"이름이 너무 깁니다") };
+            alert->set_live_region(luil::access_live::assertive);
+            root->add(std::move(alert));
+        }
+        return luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f);
+    }
+}
+
+TEST_CASE("Snapshot diff reports enabled, help, and live region changes", "[ui][access]")
+{
+    const luil::access_snapshot before { luil::make_access_snapshot(make_live_tree(false, u8"받는 사람이 없습니다", u8"대기", false)) };
+    REQUIRE(luil::diff_access_snapshots(before, luil::make_access_snapshot(make_live_tree(false, u8"받는 사람이 없습니다", u8"대기", false))).empty());
+
+    // 단추가 살아나고 도움말이 바뀌면 그 단추의 property 하나다. 짝에 활성과 도움말이 실린다.
+    const std::vector<luil::access_change> enabled { luil::diff_access_snapshots(before, luil::make_access_snapshot(make_live_tree(true, u8"", u8"대기", false))) };
+    REQUIRE(enabled.size() == 1u);
+    REQUIRE(enabled[0].kind == luil::access_change_kind::property);
+    REQUIRE(enabled[0].previous.enabled == false);
+    REQUIRE(enabled[0].current.enabled);
+    REQUIRE(enabled[0].previous.help == u8"받는 사람이 없습니다");
+    REQUIRE(enabled[0].current.help.empty());
+
+    // live region 안의 줄이 바뀌면 줄의 property 뒤에 판의 live region 하나다.
+    const std::vector<luil::access_change> status { luil::diff_access_snapshots(before, luil::make_access_snapshot(make_live_tree(false, u8"받는 사람이 없습니다", u8"보내는 중", false))) };
+    REQUIRE(status.size() == 2u);
+    REQUIRE(status[0].kind == luil::access_change_kind::property);
+    REQUIRE(status[0].id.owner == u8"line");
+    REQUIRE(status[1].kind == luil::access_change_kind::live_region);
+    REQUIRE(status[1].id.owner == u8"board");
+
+    // 글을 가진 채 새로 선 live region은 구조 변화 뒤에 스스로 알린다.
+    const std::vector<luil::access_change> appeared { luil::diff_access_snapshots(before, luil::make_access_snapshot(make_live_tree(false, u8"받는 사람이 없습니다", u8"대기", true))) };
+    REQUIRE(appeared.size() == 2u);
+    REQUIRE(appeared[0].kind == luil::access_change_kind::structure);
+    REQUIRE(appeared[1].kind == luil::access_change_kind::live_region);
+    REQUIRE(appeared[1].id.owner == u8"alert");
+}
 </script></div>
         <div class="prose">
           <ul>
             <li><strong>역할이 있는 요소만 live region이 된다.</strong> test의 판은 이름과 누름 액션을 줘 역할(<code>button</code>)을 세웠다. 역할이 <code>none</code>인 배치 요소에 걸면 접혀서 아무것도 알리지 않는다.</li>
             <li>그 요소나 안쪽 요소의 글(이름·값·도움말·오류)이 바뀌거나, 글을 가진 요소가 들고 나면 <strong>가장 안쪽 live region이 frame마다 한 번</strong> 알린다. 사라진 줄도 글이 바뀐 것이다.</li>
-            <li>알림의 차례는 property·selected → 다중 선택 → structure → <strong>마지막에</strong> live region이다. 클라이언트가 바뀐 구조를 다시 읽은 뒤 그 글을 읽는다.</li>
+            <li>알림의 차례는 요소마다의 property·selected(역할이 바뀐 요소는 부모의 structure) → 다중 선택 container의 더하기·빼기 → 자식 구성이 바뀐 부모의 structure → <strong>마지막에</strong> live region이다. 클라이언트가 바뀐 구조를 다시 읽은 뒤 그 글을 읽는다 (코드에서 확인한 동작).</li>
             <li><code>set_live_region</code>을 부르는 라이브러리 요소·예제는 없다 (test에만 있다). 토스트·정보 막대는 <code>alert</code> 역할이라 정하지 않아도 <code>assertive</code>다.</li>
           </ul>
         </div>
@@ -373,13 +685,33 @@ namespace sample {
         </header>
         <h3>실행 중: 검사기 overlay</h3>
         <div class="prose"><p>검사기는 frame에 싣는 설정 하나다. 켜는 단축키는 앱이 정한다 — 라이브러리는 키를 예약하지 않는다. 데스크톱 데모의 연결이다 (원문):</p></div>
-        <div class="code" data-lang="cpp" data-src="examples/demo/inspector_page.h:12-13"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="examples/demo/inspector_page.h:12-13" data-path="examples/demo/inspector_page.h" data-start="12"><script type="text/plain">
+    // 검사기를 켜는 단축키다 (palette_shortcut의 Ctrl+Shift+P와 겹치지 않는다).
+    inline constexpr luil::key_chord inspector_shortcut { luil::key_code::key_i, true, true };
 </script></div>
-        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1459-1461"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1459-1461" data-path="examples/demo_main.cpp" data-start="1459"><script type="text/plain">
+                // 검사기를 켜고 끈다. 검사기 페이지의 단추와 같은 메시지다.
+                if (luil::chord_of(event) == inspector_shortcut)
+                    return { luil::make_app_action(inspector_command_intent { inspector_command::toggle }) };
 </script></div>
-        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:931-932"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:931-932" data-path="examples/demo_main.cpp" data-start="931"><script type="text/plain">
+                // 검사기는 페이지의 상태 하나로 켠다. 어느 페이지를 보든 켠 채 다른 페이지를 들여다볼 수 있다.
+                frame->inspector = inspector_.config();
 </script></div>
-        <div class="code" data-lang="cpp" data-src="examples/demo/inspector_state.h:101-113"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="examples/demo/inspector_state.h:101-113" data-path="examples/demo/inspector_state.h" data-start="101"><script type="text/plain">
+        // frame에 실을 설정이다. 앱 kind의 이름은 값으로 싣는다.
+        [[nodiscard]] luil::inspector_config config(std::vector<luil::inspector_kind_name> kind_names) const
+        {
+            luil::inspector_config result {};
+            result.enabled = inspecting_;
+            result.pick = pick_;
+            result.ancestor_levels = levels_;
+            result.selected = selected_;
+            result.outline_all = outline_;
+            result.show_palette = palette_;
+            result.kind_names = std::move(kind_names);
+            return result;
+        }
 </script></div>
         <div class="prose">
           <ul>
@@ -390,17 +722,81 @@ namespace sample {
         </div>
         <h3>test: tree를 글로 잠그기</h3>
         <div class="prose"><p><code>dump_tree</code>는 ui tree의 <strong>모든</strong> 요소를 한 줄씩 쓰고, 역할이 있는 요소에만 <code class="free">access …</code>를 붙인다. 접기 전의 tree라 배치 요소도 줄이 있다.</p></div>
-        <div class="code" data-lang="cpp" data-src="tests/ui_inspect_tests.cpp:538-555"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="tests/ui_inspect_tests.cpp:538-555" data-path="tests/ui_inspect_tests.cpp" data-start="538"><script type="text/plain">
+TEST_CASE("The tree dump locks one line per element under the totals header", "[ui][inspect]")
+{
+    auto root { make_root({ 0.0f, 0.0f, 400.0f, 300.0f }) };
+    probe_node* const column { root->add(make_box(u8"column", { 0.0f, 0.0f, 400.0f, 300.0f })) };
+    column->add(make_box(u8"title", { 10.0f, 10.0f, 100.0f, 20.0f }, { .role = luil::access_role::static_text, .name = u8"Title" }));
+    probe_node* const hidden { root->add(make_box(u8"gone", { 0.0f, 0.0f, 20.0f, 20.0f })) };
+    hidden->set_visible(false);
+    const luil::ui_tree tree { std::move(root) };
+    const std::u8string root_class { luil::element_class_name(*tree.root()) };
+    const std::u8string expected {
+        u8"elements 4  dup 0  unarranged 0  @2.0x\n"
+        u8"root:  " + root_class + u8"  0,0 200x150\n"
+        u8"  box:column  " + root_class + u8"  0,0 200x150\n"
+        u8"    box:title  " + root_class + u8"  5,5 50x10  access static_text \"Title\"\n"
+        u8"  box:gone  " + root_class + u8"  0,0 10x10  hidden"
+    };
+    REQUIRE(luil::dump_tree(tree, 2.0f, names_config()) == expected);
+}
 </script></div>
         <h3>test: 접힌 접근 tree와 변화를 잠그기</h3>
-        <div class="prose"><p>보조 기술이 보는 접힌 tree는 <code>make_access_snapshot</code>이고, 두 발행본의 차이는 <code>diff_access_snapshots</code>다. 플랫폼 다리가 쓰는 그 함수들이다.</p></div>
-        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1266-1291"><script type="text/plain">
+        <div class="prose"><p>숨은 가지와 구조(<code>none</code>)를 접은 tree는 <code>make_access_snapshot</code>이고, 두 발행본의 차이는 <code>diff_access_snapshots</code>다. 플랫폼 다리가 알림을 견줄 때 쓰는 그 함수들이다. 다만 발행본은 중복 id를 접지 않는다 — 다리가 훑는 형제 줄(<code>ui_tree</code> 색인)은 뒤의 중복을 접으므로, test에서는 <code>ui_tree::duplicate_ids()</code>가 비었는지도 함께 본다.</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1266-1291" data-path="tests/accessibility_tests.cpp" data-start="1266"><script type="text/plain">
+TEST_CASE("An access snapshot flattens the collapsed tree in publish order", "[ui][access]")
+{
+    auto root { std::make_unique<test_panel>(luil::ui_element_id { kind_panel, u8"root" }) };
+    root->add(make_note(u8"outer", u8"바깥"));
+    luil::group_config section_config { .owner = u8"advanced", .title = u8"고급", .toggle = noop_action(), .content_height = 20.0f };
+    root->add(std::make_unique<luil::group_element>(std::move(section_config), make_note(u8"nested", u8"안쪽")));
+    auto hidden { make_note(u8"hidden", u8"숨김") };
+    hidden->set_visible(false);
+    root->add(std::move(hidden));
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, 200.0f, 100.0f }, 1.0f) };
+
+    // 접기 규칙 그대로다: root panel은 접히고, 숨긴 가지는 빠지며, 게시 순서로
+    // 늘어선다. 부모 표식은 감싸는 접근 요소다 (빈 id면 표면 root).
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    REQUIRE(snapshot.entries.size() == 4u);
+    REQUIRE(snapshot.entries[0].id.owner == u8"outer");
+    REQUIRE(snapshot.entries[0].parent == luil::ui_element_id {});
+    REQUIRE(snapshot.entries[1].id.owner == u8"advanced");
+    REQUIRE(snapshot.entries[2].info.role == luil::access_role::button);
+    REQUIRE(snapshot.entries[2].parent == snapshot.entries[1].id);
+    REQUIRE(snapshot.entries[3].id.owner == u8"nested");
+    REQUIRE(snapshot.entries[3].parent == snapshot.entries[1].id);
+
+    // 빈 tree의 발행본도 비어 있다.
+    REQUIRE(luil::make_access_snapshot(luil::ui_tree { nullptr }).entries.empty());
+}
 </script></div>
-        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1334-1353"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1334-1353" data-path="tests/accessibility_tests.cpp" data-start="1334"><script type="text/plain">
+TEST_CASE("Snapshot diff turns a new selection into one selected record", "[ui][access]")
+{
+    const auto make_list_tree = [](const std::u8string_view selected) {
+        luil::list_config config {};
+        config.owner = u8"files";
+        config.items = { { .key = u8"a", .label = u8"가" }, { .key = u8"b", .label = u8"나" } };
+        config.selected = std::u8string { selected };
+        config.select = [](const std::u8string&) { return luil::input_action {}; };
+        return luil::make_arranged_tree(std::make_unique<luil::list_element>(std::move(config)), { 0.0f, 0.0f, 200.0f, 48.0f }, 1.0f);
+    };
+
+    const luil::access_snapshot before { luil::make_access_snapshot(make_list_tree(u8"a")) };
+    const luil::access_snapshot after { luil::make_access_snapshot(make_list_tree(u8"b")) };
+    // 단일 선택이라 새로 골라진 항목의 알림 하나가 곧 그 사건이다 — 풀린 쪽(a)은
+    // property로도 겹쳐 알리지 않는다.
+    const std::vector<luil::access_change> changes { luil::diff_access_snapshots(before, after) };
+    REQUIRE(changes.size() == 1u);
+    REQUIRE(changes.front().kind == luil::access_change_kind::selected);
+    REQUIRE(changes.front().id.owner == u8"b");
+}
 </script></div>
         <div class="prose"><p>앱 test에서 "보조 기술이 훑는 차례"를 한 번에 보는 도우미는 저장소에 없어 손으로 썼다. <code>dump_tree</code>와 달리 접힌 발행본을 공통 값(<code>enabled</code>·<code>help</code>·<code>live</code>)까지 쓴다.</p></div>
         <div class="code" data-lang="cpp" data-label="접근 발행본을 한 요소 한 줄로 (직접 작성)" data-compile="pre-dump"><script type="text/plain">
-// 접근 발행본을 한 요소 한 줄로 푼다. 차례는 발행 순서(pre-order)라 보조 기술이 훑는 차례와 같다.
+// 접근 발행본을 한 요소 한 줄로 푼다. 차례는 발행 순서(pre-order)라 보조 기술이 훑는 차례와 같다 (중복 id가 없을 때).
 //  - make_access_snapshot은 platform이 알림을 견줄 때 쓰는 그 발행본이다 (공통 값은 access_info_of가 채운 것).
 //  - 들여쓰기는 감싸는 접근 요소의 깊이다. 구조(none)는 이미 접혀 있어 줄이 없다.
 [[nodiscard]] std::u8string dump_access(const luil::ui_tree& tree)
@@ -456,7 +852,109 @@ namespace sample {
         </header>
         <div class="tabs">
           <section data-tab="access_info">
-            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/accessibility.h:80-181"><script type="text/plain">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/accessibility.h:80-181" data-path="include/luil/ui/accessibility.h" data-start="80"><script type="text/plain">
+    // 범위 값이다 (막대·스크롤 막대·진행률).
+    struct access_range
+    {
+        float minimum { 0.0f };
+        float maximum { 0.0f };
+        float value { 0.0f };
+        // 보조 기술에 알리는 걸음이다 (UIA RangeValue의 SmallChange·LargeChange). 값을 단계만큼 올리는 클라이언트가 이 크기로 움직인다.
+        //  - 0(기본)이면 알리지 않는다. 막대·스크롤 막대·진행률은 걸음을 element 안에서 델타로 정하므로 채우지 않고 지금처럼 0을 알린다.
+        //  - 값이 이산이라 걸음이 곧 본질인 요소(별점)가 채운다.
+        // 화살표 한 번이 옮기는 값이다.
+        float step { 0.0f };
+        // Page 키 한 번이 옮기는 값이다.
+        float page { 0.0f };
+
+        [[nodiscard]] bool operator==(const access_range&) const = default;
+    };
+
+    enum class access_orientation { horizontal, vertical };
+
+    // 글이 바뀌면 보조 기술이 저절로 읽는 자리(live region)인가다 (UIA LiveSetting).
+    enum class access_live
+    {
+        // 바뀌어도 알리지 않는다.
+        off,
+        // 하던 말을 마친 뒤 읽는다 (상태 글).
+        polite,
+        // 하던 말을 끊고 곧바로 읽는다 (입력 거절 사유 같은 경고).
+        assertive,
+    };
+
+    // 흘리는 창의 지금 자리다 (UIA Scroll 패턴). 자리는 백분율이고 100이 끝이다.
+    //  - 픽셀이 아니라 백분율인 것이 요점이다. 내용이 계속 늘어나는 목록에서 "끝까지"는 어느 offset으로도 정확히
+    //    말할 수 없다 — 그 사이에 내용이 늘면 그 offset은 끝이 아니다. 100은 늘어도 끝이다.
+    struct access_scroll_state
+    {
+        // 그 축의 자리다 (0~100). 음수(`access_no_scroll`)면 그 축으로는 흘리지 않는다.
+        float horizontal_percent { -1.0f };
+        float vertical_percent { -1.0f };
+        // 창이 내용의 몇 %를 보이는가 (0~100). 흘리지 않는 축은 100이다.
+        float horizontal_view_size { 100.0f };
+        float vertical_view_size { 100.0f };
+
+        [[nodiscard]] bool operator==(const access_scroll_state&) const = default;
+    };
+
+    // 흘리지 않는 축의 자리이자 "이 축은 그대로 두라"는 목표다 (UIA `UIA_ScrollPatternNoScroll`과 같은 값).
+    inline constexpr float access_no_scroll { -1.0f };
+
+    // 요소 하나가 보조 기술에 내주는 정보다.
+    // 요소가 `accessibility()`로 답하는 것은 역할에서 흘림 자리(`scroll`)까지다. 뒤의 공통 값(활성·도움말·live region)은 모든 요소에
+    // 같은 규칙이라 `access_info_of`가 요소의 상태에서 채운다 — 요소마다 재정의하면 하나쯤 빠뜨린다.
+    struct access_info
+    {
+        access_role role { access_role::none };
+        std::u8string name {};
+        std::optional<bool> checked {};
+        // 일부만 켜진 체크다 (삼상 체크박스의 가운데 상태). 참이면 `checked`의 값과 무관하게 일부 상태로 읽힌다
+        // (UIA ToggleState_Indeterminate). `checked`가 없는 요소에서는 뜻이 없다.
+        bool mixed { false };
+        std::optional<bool> selected {};
+        std::optional<bool> expanded {};
+        std::optional<access_range> range {};
+        // 텍스트 칸의 글, 드롭다운의 현재 선택 같은 "지금 값"이다.
+        std::u8string value {};
+        // 암호 칸이다. 값은 화면처럼 가린 점이고, 보조 기술에 암호 칸으로 알린다 (UIA IsPassword).
+        bool secret { false };
+        // 선택 container(`access_selection_container`)가 여러 항목을 함께 고른다.
+        //  - 켜진 container는 골라진 항목 모두를 내주고(UIA `GetSelection`), 비워 둘 수 있다 (`IsSelectionRequired`
+        //    거짓). 그 항목의 더하기·빼기·고르기가 각각 `access_command::add_to_selection`·`remove_from_selection`·
+        //    `select`로 요소에 온다 (`access_request::multiple_selection`이 참).
+        //  - 항목에는 뜻이 없다. 항목은 지금처럼 `selected`만 답한다.
+        bool multiple_selection { false };
+        std::optional<access_orientation> orientation {};
+        // 메뉴의 라디오 항목처럼 역할을 바꾸지 않고 선택 container를 알린다.
+        bool selection_container { false };
+        // 입력 칸의 값이 받아들여지지 않는다 (UIA IsDataValidForForm의 반대). 오류 글이 있으면 그것이 까닭이다.
+        bool invalid { false };
+        // 입력 칸 아래의 오류 글이다. 새로 생기거나 바뀌면 platform이 그 글을 읽게 알린다 (number-input-design.md).
+        std::u8string error {};
+        // 이 요소를 고르는 키다 ("Alt+F", 메뉴 안 항목은 "N"). 비면 없다. UIA에서는 AccessKey 속성이다.
+        std::u8string access_key {};
+        // 흘리는 창의 자리다 (UIA Scroll). 있으면 `access_command::set_scroll_percent`를 받는다.
+        std::optional<access_scroll_state> scroll {};
+        // 실행을 받는가다 (UIA IsEnabled). `access_info_of`가 `ui_element::enabled()`로 채운다.
+        //  - 비활성 단추도 이름과 까닭(`help`)을 지닌 채 tree에 남는다. 활성이 바뀌면 platform이 알린다.
+        bool enabled { true };
+        // 도움말이다 (UIA HelpText). 비어 있으면 `access_info_of`가 tooltip 글로 채운다.
+        //  - 비활성 단추의 "왜 누를 수 없는가"를 싣는 자리다. 바뀌면 platform이 알린다.
+        //  - 오류 글(`error`)이 있으면 platform은 그것을 먼저 읽는다 — 지금 들어야 하는 것이 그 글이다.
+        std::u8string help {};
+        // live region이다. `access_info_of`가 `ui_element::live_region()`으로 채우고, 정하지 않은 경고(`alert`)는
+        // `assertive`다. 켜진 요소의 글(이름·값·도움말·오류)이나 그 안의 글이 바뀌면 platform이 읽게 알린다
+        // (`access_change_kind::live_region`).
+        access_live live { access_live::off };
+
+        [[nodiscard]] bool operator==(const access_info&) const = default;
+    };
+
+    // 요소의 `accessibility()`에 공통 값(활성·도움말·live region)을 채운 정보다.
+    // 접근 발행본(`make_access_snapshot`)과 platform의 읽기가 모두 이것으로 읽는다 — 한 값을 두 길로 읽으면 알림과
+    // 질의의 답이 어긋난다.
+    [[nodiscard]] access_info access_info_of(const ui_element& element);
 </script></div>
             <div class="table-wrap">
               <table class="t">
@@ -480,7 +978,69 @@ namespace sample {
             </div>
           </section>
           <section data-tab="access_role">
-            <div class="code" data-lang="cpp" data-src="include/luil/ui/accessibility.h:17-78"><script type="text/plain">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/accessibility.h:17-78" data-path="include/luil/ui/accessibility.h" data-start="17"><script type="text/plain">
+    // 보조 기술이 읽는 역할이다.
+    // platform 어휘(UIA ControlType)가 아니라 이 저장소의 element가 실제로 하는
+    // 일의 목록이다 — platform 번역은 win32 계층의 표 하나다
+    // (accessibility-design.md).
+    enum class access_role
+    {
+        // 구조일 뿐이다 (stack·panel·lane).
+        // 접근 tree에서 접히고 자식이 이 자리로 승격된다.
+        none,
+        button,
+        link,
+        check_box,
+        radio_button,
+        toggle_switch,
+        slider,
+        scroll_bar,
+        progress,
+        // 판 크기를 조절하는 손잡이다.
+        handle,
+        image,
+        edit,
+        combo_box,
+        list,
+        list_item,
+        header,
+        tab_list,
+        tab,
+        // 서로 배타적인 선택지의 묶음이다 (`choice_group`의 라디오 스타일).
+        // 항목(radio_button)의 선택 container라, 구조(none)로 접히지 않고 접근
+        // tree에 선다 — SelectionItem의 짝인 Selection 패턴이 설 자리다.
+        radio_group,
+        menu,
+        menu_item,
+        group,
+        title_bar,
+        dialog,
+        alert,
+        static_text,
+        pane,
+        // 펼치고 접는 계층이다. 항목(tree_item)의 선택 container다 (목록과 같은 Selection 패턴).
+        tree,
+        // 계층의 줄 하나다. 깊이와 펼침은 `access_info::expanded`가 알린다.
+        tree_item,
+        // 행과 열이 있는 표다. 행(data_item)의 선택 container다.
+        //  - UIA에서는 DataGrid다. 읽기만 하는 정적 표(Table)와 갈리는 자리는 행을 고를 수 있는가다 —
+        //    luil의 표는 행을 고르는 컨트롤이라 DataGrid 하나로 둔다.
+        table,
+        // 표의 행 하나다.
+        data_item,
+        // 머리글 줄(`header`) 안의 칸 하나다 (표의 열 머리글).
+        header_item,
+        // 도구 단추들의 줄이다.
+        tool_bar,
+        // 구분선이다. 이름이 없고 실행할 것도 없다 — 보조 기술이 묶음의 경계를 읽는 자리다.
+        separator,
+        // 창 아래의 상태 줄이다.
+        status_bar,
+        // 이동 길잡이 묶음이다 (경로 조각 막대). UIA에서는 Group에 navigation 랜드마크를 단다.
+        navigation,
+        // 창 위의 최상위 메뉴 줄이다 (`menu_bar_element`). 항목은 `menu_item`이다. UIA에서는 MenuBar다.
+        menu_bar,
+    };
 </script></div>
             <div class="table-wrap">
               <table class="t">
@@ -512,7 +1072,64 @@ namespace sample {
             <div class="prose small"><p>플랫폼 낱말(UIA ControlType, AX 역할, iOS trait)로의 번역은 <a class="xref" href="platforms.html#s7">플랫폼과 host의 역할 번역기</a>에 있다. 선택 container는 <code>list</code>·<code>tab_list</code>·<code>radio_group</code>·<code>tree</code>·<code>table</code>, 그리고 <code>selection_container</code>가 참인 정보다.</p></div>
           </section>
           <section data-tab="access_command">
-            <div class="code" data-lang="cpp" data-src="include/luil/ui/accessibility.h:183-239"><script type="text/plain">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/accessibility.h:183-239" data-path="include/luil/ui/accessibility.h" data-start="183"><script type="text/plain">
+    // 보조 기술이 시키는 실행이다.
+    // 읽기(`access_info`)의 짝이고, 어휘가 platform을 모르는 것도 같다 —
+    // UIA 패턴으로의 번역은 win32 계층의 표 하나다
+    // (accessibility-action-design.md).
+    enum class access_command
+    {
+        // 눌러라.
+        invoke,
+        // 켬/끔을 뒤집어라.
+        toggle,
+        // 골라라.
+        select,
+        // 펼쳐라 / 접어라.
+        expand,
+        collapse,
+        // 값을 이것으로 하라.
+        set_value,
+        // 이 항목을 고른 것에 더하라 / 고른 것에서 빼라 (다중 선택 container의 항목).
+        // 목표 상태를 나르는 절대 명령이다 — 이미 그 상태면 할 일이 없다. 기본 실행(클릭)이 없어 요소가
+        // 답하지 않으면 할 수 없는 일이다 (`ui_element::set_access_handler`).
+        add_to_selection,
+        remove_from_selection,
+        // 흘리는 창의 자리를 백분율로 하라 (`access_request::horizontal_percent`·`vertical_percent`, 100은 끝).
+        // 목표 자리를 나르는 절대 명령이라 기본 실행(클릭)이 없다. 요소가 답해야 한다 (`scroll_area_config::scroll_to_percent`).
+        set_scroll_percent,
+    };
+
+    struct access_request
+    {
+        access_command command { access_command::invoke };
+        // `set_value`일 때의 목표 값이다. 그 밖의 명령에는 뜻이 없다.
+        float value { 0.0f };
+        // 선택 명령(`select`·`add_to_selection`·`remove_from_selection`)의 항목을 감싼 container가 여러 항목을
+        // 함께 고른다 (`access_info::multiple_selection`). 부르는 쪽(provider)이 container에 물어 싣는다.
+        //  - 참이면 `select`는 "이것 **하나만** 골라라"라 이미 골라져 있어도 요소에 간다 — 다른 항목이 함께
+        //    골라져 있을 수 있고, 그것을 아는 것은 앱이다.
+        bool multiple_selection { false };
+        // `set_scroll_percent`의 목표 자리다 (0~100, 100은 끝). `access_no_scroll`이면 그 축은 그대로 둔다.
+        float horizontal_percent { access_no_scroll };
+        float vertical_percent { access_no_scroll };
+
+        [[nodiscard]] bool operator==(const access_request&) const = default;
+    };
+
+    // 그 실행이 이 요소에서 무슨 액션인가.
+    //
+    // 답의 규약은 `key_step_target::on_step`과 같다 — **없으면(nullopt) 이 자리에서
+    // 할 수 없는 일이고, 빈 목록이면 내 것이지만 할 일이 없다**(이미 그 상태다).
+    // 판정은 요소가 이미 내주는 `accessibility()`로 하므로 "무엇을 답했는가"와
+    // "무엇을 할 수 있는가"가 어긋날 수 없다.
+    //  - `select`·`expand`·`collapse`는 **방향을 본다.** 이 저장소의 실행은 전부
+    //    클릭 하나라 뒤집기인데, UIA의 Expand는 "펼쳐진 상태로 만들라"이지
+    //    "펼침을 뒤집으라"가 아니다.
+    //  - **비활성은 보지 않는다.** `enabled()`는 info에 싣지 않고 부르는 쪽이 직접
+    //    읽는 값이고(accessibility-design.md), 어느 낱말로 거절할지를 아는 것도
+    //    그쪽이다 (accessibility-action-design.md).
+    [[nodiscard]] std::optional<std::vector<input_action>> plan_access_request(const ui_element& element, const access_request& request);
 </script></div>
             <div class="table-wrap">
               <table class="t">
@@ -527,7 +1144,87 @@ namespace sample {
             </div>
           </section>
           <section data-tab="발행본과 변화">
-            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/accessibility.h:374-453"><script type="text/plain">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/accessibility.h:374-453" data-path="include/luil/ui/accessibility.h" data-start="374"><script type="text/plain">
+    // 접근 tree의 발행본 하나를 편 것이다 — 접기(none)와 숨김을 지난 요소들이
+    // 게시 순서(pre-order)로 늘어선다. tree는 frame마다 통째로 새로 지어지므로,
+    // "무엇이 바뀌었는가"는 이전 발행본의 사본과 견줘야만 알 수 있다 —
+    // 값·상태·구조 변경 알림의 재료다.
+    struct access_snapshot_entry
+    {
+        ui_element_id id {};
+        // 감싸는 접근 요소다. 빈 id면 표면 root 바로 아래다.
+        ui_element_id parent {};
+        access_info info {};
+
+        [[nodiscard]] bool operator==(const access_snapshot_entry&) const = default;
+    };
+
+    struct access_snapshot
+    {
+        std::vector<access_snapshot_entry> entries {};
+
+        [[nodiscard]] bool operator==(const access_snapshot&) const = default;
+    };
+
+    [[nodiscard]] access_snapshot make_access_snapshot(const ui_tree& tree);
+
+    // 두 발행본 사이에서 보조 기술에 알릴 변화 하나다.
+    enum class access_change_kind
+    {
+        // 같은 요소의 정보(이름·값·켬끔·펼침·범위 값)가 바뀌었다.
+        property,
+        // 이 항목이 골라졌다 — 단일 선택 container에서는 새로 골라진 항목이다 (풀린 쪽은 이 알림이 말한다).
+        // 다중 선택 container에서는 이 항목 **하나만** 골라진 상태가 됐다 (UIA ElementSelected의 뜻).
+        selected,
+        // 이 요소(빈 id면 표면 root)의 접근 자식 구성이 바뀌었다.
+        structure,
+        // 다중 선택 container의 이 항목이 고른 것에 더해졌다 / 빠졌다.
+        added_to_selection,
+        removed_from_selection,
+        // 이 다중 선택 container의 선택이 한꺼번에 많이 바뀌었다 (`access_selection_burst`보다 많이).
+        // 항목마다 알리지 않고 다시 읽으라고 한다 (UIA Selection_Invalidated).
+        selection_invalidated,
+        // 이 live region(`access_info::live`)의 글이 바뀌었다 — 지금 다시 읽으라 (UIA LiveRegionChanged).
+        //  - 자기 글(이름·값·도움말·오류)이 바뀌었거나, 글을 가진 채 새로 나타났거나, 안쪽 요소의 글이 바뀌거나 들고 났다.
+        //  - live region 하나에 한 frame에 하나다. 안쪽이 여럿 바뀌어도 가장 안쪽 live region이 한 번 알린다.
+        live_region,
+    };
+
+    // 다중 선택 container 하나의 선택 변화를 항목마다 알리는 한계다. 넘으면 `selection_invalidated` 하나다.
+    // UIA가 권하는 값(MaxSelectionChanges)과 같다.
+    inline constexpr std::size_t access_selection_burst { 20 };
+
+    struct access_change
+    {
+        access_change_kind kind { access_change_kind::property };
+        // property·selected는 그 요소, structure는 부모다 (빈 id면 표면 root).
+        ui_element_id id {};
+        // property일 때의 이전·현재 정보다. 어느 낱말(UIA property)로 알릴지는
+        // platform 계층이 이 짝을 견줘 정한다 — 어휘는 platform을 모른다.
+        access_info previous {};
+        access_info current {};
+
+        [[nodiscard]] bool operator==(const access_change&) const = default;
+    };
+
+    // 이전/현재 접근 발행본을 견줘 알릴 변화를 편다.
+    // 순서는 property·selected(현재 발행본의 게시 순서) 뒤에 다중 선택(container 차례), 그 뒤에 structure, 마지막에
+    // live region이다 — 클라이언트가 바뀐 구조를 다시 읽은 뒤에 그 글을 읽는다.
+    //  - 다중 선택 container의 항목은 골라짐이 바뀐 것을 container마다 모은다. 바뀐 것이 `access_selection_burst`
+    //    보다 많으면 container의 `selection_invalidated` 하나, 지금 골라진 것이 바뀐 항목 하나뿐이고 그것이
+    //    새로 골라졌으면 그 항목의 `selected` 하나, 그 밖에는 항목마다 `added_to_selection`·`removed_from_selection`
+    //    이다. 두 발행본 모두에 있는 항목만 본다 — 들고 나는 항목은 structure가 말한다.
+    //  - 역할(role)이 바뀐 요소는 다른 요소가 된 것이다 — property가 아니라
+    //    부모의 structure 변화로 접는다.
+    //  - 새로 나타나거나 사라진 요소도 부모의 structure 변화 하나로 접는다.
+    //    사라진 부모 자신의 기록은 내지 않는다 — 그 조상의 변화가 이미 말한다.
+    [[nodiscard]] std::vector<access_change> diff_access_snapshots(const access_snapshot& previous, const access_snapshot& current);
+
+    // 좌표를 덮는 가장 위의 접근 요소다.
+    // `hit_test`와 달리 읽기 전용 요소(라벨·진행률)도 맞힌다 — 그쪽의 술어
+    // (`interactive() || hit_opaque()`)로는 읽을 것이 빠진다.
+    // hit를 흡수하는 자리(scrim)에 가리면 아무것도 아니다 (nullptr).
+    [[nodiscard]] const ui_element* access_element_at(const ui_tree& tree, float x, float y);
 </script></div>
             <div class="table-wrap">
               <table class="t">
@@ -544,11 +1241,148 @@ namespace sample {
             </div>
           </section>
           <section data-tab="ui_element">
-            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_element.h:206-208,1113-1122,1270-1284,1308-1312,1457-1488"><script type="text/plain">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_element.h:206-208,1113-1122,1270-1284,1308-1312,1457-1488" data-path="include/luil/ui/ui_element.h" data-start="206"><script type="text/plain">
+    // 보조 기술이 시킨 실행 하나를 이 요소의 메시지로 옮긴다 (`ui_element::set_access_handler`).
+    // 답의 규약은 `ui_element::access_actions`와 같다 — 없으면(nullopt) 기본 실행에 맡기고, 빈 목록이면 할 일이 없다.
+    using access_handler = std::function<std::optional<std::vector<input_action>>(const access_request& request)>;
+⋯@1113
+        // 보조 기술이 읽을 이름이다: `set_access_name` → `search_label` → tooltip 순서.
+        //
+        // **툴팁으로는 이름을 줄 수 없는 자리가 있다.** 목록·탭 막대·스크롤
+        // 막대처럼 자기 글을 세우지 않는 컨테이너에 이름을 주려고 툴팁을 달면
+        // 화면에 글 상자가 뜬다. 그래서 화면에 뜨지 않는 이름의 자리를 따로 둔다.
+        //  - 글자 탐색의 글(`search_label`)로도 물러선다. 항목이 보이는 글을
+        //    거기 적어 두고 있으면 그것이 곧 사람이 부르는 이름이다.
+        //  - `accessibility()`를 재정의한 element도 이 술어를 그대로 쓴다. 이름의
+        //    원천이 자리마다 갈리면 앱이 어디에 무엇을 적어야 할지 알 수 없다.
+        [[nodiscard]] const std::u8string& access_name() const noexcept;
+⋯@1270
+        // 화면에 뜨지 않는, 보조 기술만 읽는 이름이다 (`access_name`).
+        //
+        // 글을 세우지 않는 컨테이너(목록·탭 막대·스크롤 막대)에 이름을 주는 자리다.
+        // 그리기에도 글자 탐색에도 쓰이지 않으므로 화면은 그대로다.
+        void set_access_name(std::u8string text);
+        // 글이 바뀌면 보조 기술이 저절로 읽는 자리로 둔다 (`access_info::live`, UIA LiveSetting·LiveRegionChanged).
+        //  - 상태 글을 바꾸는 단추는 `polite`, 입력 거절 사유는 `assertive`다. 경고 역할(`access_role::alert`)은 정하지
+        //    않아도 `assertive`다.
+        //  - 이 요소 안쪽 요소의 글이 바뀌어도 이 요소가 알린다 — 여러 줄을 한 판에 담은 상태 막대가 그렇다.
+        //  - 접근 tree에 서는 요소(역할이 있는 것)만 뜻이 있다.
+        void set_live_region(access_live live) noexcept;
+        [[nodiscard]] std::optional<access_live> live_region() const noexcept
+        {
+            return live_region_;
+        }
+⋯@1308
+        // 보조 기술이 시킨 실행을 앱 메시지로 받는다 (다중 선택 항목의 더하기·빼기·고르기 등).
+        // 기본 `access_actions`가 먼저 이것에 묻고, 답이 없으면(nullopt) 지금까지의 기본(클릭)으로 물러선다.
+        //  - `access_actions`를 재정의한 element도 처리하지 않는 명령을 기본 구현으로 넘기면 이것이 답한다.
+        //  - 할 수 있는지는 여전히 `plan_access_request`가 먼저 거른다 — 이미 그 상태인 명령은 여기 오지 않는다.
+        void set_access_handler(access_handler handler);
+⋯@1457
+        // 보조 기술이 읽는 이 요소의 정보다 (이름·역할·상태).
+        // 기본 구현은 **누를 수 있고 이름이 있으면 단추로 읽힌다** — `tab_stop`의
+        // "누를 수 있으면 자리다"와 같은 문장이다. 이름은 `access_name()`이 답하고
+        // (`set_access_name` → `search_label` → tooltip), 셋 다 비면 구조(`none`)다 —
+        // 이름 없는 단추는 스크린 리더에 소음이라(scrim) 이름 있는 것만 승격한다.
+        //  - virtual인 이유는 `scroll_delta_to_reveal`과 같다. 앱이 만든 element도
+        //    답해야 한다.
+        [[nodiscard]] virtual access_info accessibility() const;
+
+        // 보조 기술이 시킨 실행 하나를 이 요소의 액션으로 옮긴 것이다.
+        // `accessibility()`의 짝이다 — 저쪽이 "나는 무엇인가"를, 이쪽이 "그것을
+        // 어떻게 하는가"를 답한다. 답의 규약도 `plan_access_request`와 같다
+        // (없으면 할 수 없고, 빈 목록이면 할 일이 없다).
+        //
+        // 기본 구현은 **누를 수 있으면 그 클릭이다** — `accessibility()`의 기본이
+        // "누를 수 있으면 단추다"인 것과 같은 문장이라, 마우스로 누를 수 없는 것은
+        // 보조 기술로도 누를 수 없다. 좌표는 요소의 한가운데다 (포인터가 관여하지
+        // 않은 실행의 통상 규칙 — Space의 실행이 그렇게 한다).
+        //  - `set_value`와 `expand`·`collapse`는 기본이 없음이다. 절대 명령은
+        //    목표 상태를 나르는 factory를 가진 요소만 답할 수 있다 — 클릭은
+        //    뒤집기라, 오래된 발행본 기준으로 흘리면 같은 명령 둘이 두 번 뒤집는다
+        //    (accessibility-action-design.md).
+        //  - 상태를 답하는 요소와 그 상태를 바꾸는 요소가 다를 수 있다 (그룹의
+        //    펼침은 머리행이, 목록 행의 펼침은 삼각형이 쥔다). 그것을 아는 것은 그
+        //    요소뿐이라 재정의가 자리다.
+        [[nodiscard]] virtual std::optional<std::vector<input_action>> access_actions(const access_request& request) const;
+
+        // 화면 밖 항목까지 답하는 모델이다 (`access_item_model`). 기본은 없다(nullptr).
+        //  - 창에 걸치는 행만 짓는 container(가상 목록)가 재정의한다. 보조 기술의 항목 찾기·선택 읽기·위치가 tree가
+        //    아니라 이 모델을 본다.
+        //  - virtual인 이유는 `accessibility()`와 같다. 앱이 만든 가상 container도 답해야 한다.
+        [[nodiscard]] virtual const access_item_model* access_items() const noexcept;
 </script></div>
           </section>
           <section data-tab="검사기">
-            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_inspect.h:15-57,101-124"><script type="text/plain">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_inspect.h:15-57,101-124" data-path="include/luil/ui/ui_inspect.h" data-start="15"><script type="text/plain">
+// 실행 중인 화면의 요소를 들여다보는 검사기다 (inspector-design.md).
+//  - 이 헤더의 함수들은 모두 순수하다. 게시된 tree는 불변이라 어느 thread에서나 부르고, 앱의 로그와 test가
+//    overlay와 같은 글을 얻는다.
+//  - overlay는 그리기만 한다 (`ui_frame::inspector`). 요소가 아니라서 hit test, 입력, 초점, 접근성 tree에 닿지 않는다.
+namespace luil {
+    // 요소를 집는 길이다. 집은 요소에서 `inspector_config::ancestor_levels`만큼 조상으로 올라간 요소가 대상이다.
+    enum class inspector_pick
+    {
+        hovered,
+        focused,
+        pressed,
+        // 앱이 `inspector_config::selected`로 정한 요소다. `inspect_step`으로 옮긴다.
+        selected,
+        // 앱이 `inspector_config::point`로 준 좌표 아래의 가장 깊은 보이는 요소다.
+        point,
+    };
+
+    // 앱 kind의 이름이다. 값이라 UI thread가 앱 상태를 잡은 함수를 부르지 않는다.
+    struct inspector_kind_name
+    {
+        ui_element_kind kind {};
+        std::u8string name {};
+    };
+
+    // frame마다 앱이 싣는다 (`ui_frame::inspector`). 기본값이면 아무것도 그리지 않는다.
+    //  - `selected`는 pick이 selected일 때, `point`는 point일 때 쓴다. `point`는 `ui_tree::hit_test`와 같은 tree 좌표다
+    //    (물리 픽셀, 표면의 주 tree면 안전 영역 원점 기준).
+    //  - 켜는 단축키는 앱이 정한다. 라이브러리는 키를 예약하지 않는다.
+    struct inspector_config
+    {
+        bool enabled { false };
+        inspector_pick pick { inspector_pick::hovered };
+        std::size_t ancestor_levels { 0 };
+        ui_element_id selected {};
+        std::optional<point_f> point {};
+        // 보이는 모든 요소의 윤곽도 옅게 긋는다.
+        bool outline_all { false };
+        // 정보 상자다.
+        bool show_info { true };
+        // 팔레트 견본이다.
+        bool show_palette { false };
+        std::vector<inspector_kind_name> kind_names {};
+    };
+⋯@101
+    // `from`에서 `move`만큼 옮긴 요소의 id다. 앱은 방금 지은 tree로 부른다. 옮길 곳이 없으면 빈 id다.
+    //  - `from`이 비었거나 tree에 없으면 `next`만 뿌리를 돌려준다. 나머지 이동은 빈 id다.
+    //  - 같은 id가 둘이면 그리기 순서의 첫 요소에서 출발한다 (`ui_tree::find`와 같은 규칙).
+    [[nodiscard]] ui_element_id inspect_step(const ui_tree& tree, const ui_element_id& from, inspect_move move);
+
+    // 열거자 이름 그대로다 (`info_bar_close`). 라이브러리 kind가 아니면 빈 값이다.
+    //  - 새 라이브러리 kind는 같은 커밋에 이름을 더한다. 이름 없는 kind는 `inspect_names.cpp`의 `default` 없는 switch가
+    //    경고로, 전수 test가 실패로 막는다.
+    [[nodiscard]] std::u8string_view library_kind_name(ui_element_kind kind) noexcept;
+    // 라이브러리 이름, `config.kind_names`, `kind#<수>` 순이다.
+    [[nodiscard]] std::u8string kind_display_name(ui_element_kind kind, const inspector_config& config);
+    // 열거자 이름이다 (`button`). 모르는 값은 빈 값이고, 글로 쓸 때는 `describe_element`가 `role#<수>`로 쓴다.
+    [[nodiscard]] std::u8string_view access_role_name(access_role role) noexcept;
+    // `typeid`에서 푼 클래스 이름이다. MSVC의 `class `·`struct ` 접두를 떼고, `__GNUG__` 계열은 demangle한다.
+    [[nodiscard]] std::u8string element_class_name(const ui_element& element);
+
+    // 요소 하나를 다섯 줄 글로 푼다. 글은 개발자용 ASCII 식별자와 숫자다. 줄은 `\n`으로 잇고 끝에는 붙이지 않는다.
+    //  - `scale`은 tree를 그린 배율이다. 치수는 논리 픽셀로 쓴다.
+    //  - 앱이 준 접근 이름은 그대로 쓰되 제어 문자는 공백으로 바꾼다. 값(`access_info::value`)은 쓰지 않는다. 암호 칸과
+    //    긴 글이 새지 않게 하려는 것이다.
+    //  - 요소가 tree에 없으면 깊이를 0으로, 보이는 영역을 bounds와 같게 쓴다.
+    [[nodiscard]] std::u8string describe_element(const ui_tree& tree, const ui_element& element, float scale, const inspector_config& config);
+    // tree 전체를 한 요소 한 줄로 풀어 쓴다. 첫 줄은 요소 수와 중복 id·미배치 수다.
+    [[nodiscard]] std::u8string dump_tree(const ui_tree& tree, float scale, const inspector_config& config);
 </script></div>
           </section>
         </div>
@@ -647,23 +1481,23 @@ namespace sample {
           <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
         </header>
         <ol class="recap">
-          <li><strong>이름 없는 누를 것은 사라진다.</strong> 기본 규칙은 이름이 비면 <code>none</code>이다. 글리프 단추에 tooltip도 access name도 없으면 접근 tree에 없다. 탭의 닫기 단추가 그 경우다.</li>
-          <li><strong>tooltip은 이름과 도움말을 겸한다.</strong> 같은 글이 이름과 HelpText로 두 번 실린다. 실제로 몇 번 읽히는지는 스크린 리더가 정한다. 짧은 이름은 <code>set_access_name</code>에 둔다.</li>
-          <li><strong>컨테이너에 tooltip을 달면 화면에 글 상자가 뜬다.</strong> 목록·탭 막대의 이름은 <code>set_access_name</code>이다.</li>
-          <li><strong>절대 명령은 기본 실행이 없다.</strong> 펼치기·접기·값 정하기·더하기·빼기·흘림 백분율은 목표 상태를 나르는 메시지가 없으면 할 수 없는 일이다. 클릭(뒤집기)으로 대신하면 오래된 발행본을 본 두 명령이 두 번 뒤집기 때문이다.</li>
-          <li><strong><code>plan_access_request</code>는 비활성을 보지 않는다.</strong> 그것만 test하면 비활성 요소도 계획이 선다. 거절은 다리가 <code>enabled()</code>·<code>access_reachable</code>로 한다.</li>
-          <li><strong>factory는 "묻기만 해도" 불린다.</strong> UIA의 패턴 질의, <code>IsReadOnly</code>, macOS·iOS의 허용 판정이 계획을 세운다. 상태를 바꾸는 factory는 보조 기술이 훑기만 해도 앱을 바꾼다 (코드에서 확인한 동작).</li>
-          <li><strong>중복 id는 뒤의 요소를 지운다.</strong> 형제 줄에는 첫 등록만 선다. 같은 키를 두 목록이나 두 탭 막대에 쓰면 뒤의 것이 접근 tree에서 사라진다.</li>
-          <li><strong>id가 frame마다 바뀌면 보조 기술이 자리를 잃는다.</strong> 다리와 VoiceOver 요소는 id로 frame을 넘는다. 색인이나 주소로 id를 짓지 않는다.</li>
-          <li><strong>live region은 역할이 있는 요소에만 뜻이 있다.</strong> 배치 판에 걸면 접혀서 아무것도 알리지 않는다. 한 frame에 live region 하나는 한 번만 알린다.</li>
-          <li><strong>역할이 바뀌면 다른 요소다.</strong> property가 아니라 부모의 structure로 알린다.</li>
-          <li><strong>modal 뒤는 닿지 않는다.</strong> 가둠 밖이어도 포인터가 닿는 자리(덮이지 않은 캡션 단추)는 닿는다 — 상자의 아홉 점을 사람이 쓰는 <code>hit_test</code>로 훑는다. 숨긴 가지는 닿지 않고, 스크롤로 잘린 것은 닿는다.</li>
-          <li><strong>검사기의 <code class="free">access</code> 줄은 <code>accessibility()</code> 그대로다.</strong> <code>enabled</code>·<code>help</code>·<code>live</code>가 없고, <code>dump_tree</code>는 접기 전의 모든 요소를 쓴다. 접힌 접근 tree는 <code>make_access_snapshot</code>으로 본다.</li>
-          <li><strong>값 글이 있는 범위 요소의 Value 패턴.</strong> <code>IsReadOnly</code>는 RangeValue와 같은 답이라 쓸 수 있는 요소는 "쓸 수 있음"이라 답하지만, 글로 쓰는 <code>Value.SetValue</code>는 <code>E_ACCESSDENIED</code>다. 값은 <code>RangeValue.SetValue</code>로만 바뀐다 (코드에서 확인한 동작).</li>
-          <li><strong>다중 선택의 큰 변화는 항목마다 알리지 않는다.</strong> 20개를 넘으면 <code>selection_invalidated</code> 하나다.</li>
-          <li><strong>그리지 않은 창에는 tree가 없다.</strong> 숨긴 채 시작한 창은 자동화로 읽히지 않는다.</li>
-          <li><strong>끌기처럼 포인터만의 몸짓에는 보조 기술 명령이 없다.</strong> <code>access_command</code>에 "옮겨라"가 없다. 순서 바꾸기·떼어 내기는 메뉴 명령 같은 다른 길을 앱이 준다.</li>
-          <li><strong>Android에서는 아무것도 읽히지 않는다.</strong> <code>access_info</code>를 고쳐도 Android에서는 아무도 읽지 않는다.</li>
+          <li><div><strong>이름 없는 누를 것은 사라진다.</strong> 기본 규칙은 이름이 비면 <code>none</code>이다. 글리프 단추에 tooltip도 access name도 없으면 접근 tree에 없다. 탭의 닫기 단추가 그 경우다.</div></li>
+          <li><div><strong>tooltip은 이름과 도움말을 겸한다.</strong> 같은 글이 이름과 HelpText로 두 번 실린다. 실제로 몇 번 읽히는지는 스크린 리더가 정한다. 짧은 이름은 <code>set_access_name</code>에 둔다.</div></li>
+          <li><div><strong>컨테이너에 tooltip을 달면 화면에 글 상자가 뜬다.</strong> 목록·탭 막대의 이름은 <code>set_access_name</code>이다.</div></li>
+          <li><div><strong>절대 명령은 기본 실행이 없다.</strong> 펼치기·접기·값 정하기·더하기·빼기·흘림 백분율은 목표 상태를 나르는 메시지가 없으면 할 수 없는 일이다. 클릭(뒤집기)으로 대신하면 오래된 발행본을 본 두 명령이 두 번 뒤집기 때문이다.</div></li>
+          <li><div><strong><code>plan_access_request</code>는 비활성을 보지 않는다.</strong> 그것만 test하면 비활성 요소도 계획이 선다. 거절은 다리가 <code>enabled()</code>·<code>access_reachable</code>로 한다.</div></li>
+          <li><div><strong>factory는 "묻기만 해도" 불린다.</strong> UIA의 패턴 질의, <code>IsReadOnly</code>, macOS·iOS의 허용 판정이 계획을 세운다. 상태를 바꾸는 factory는 보조 기술이 훑기만 해도 앱을 바꾼다 (코드에서 확인한 동작).</div></li>
+          <li><div><strong>중복 id는 뒤의 요소를 지운다.</strong> 다리가 훑는 형제 줄에는 첫 등록만 선다. 같은 키를 두 목록이나 두 탭 막대에 쓰면 뒤의 것이 보조 기술에서 사라진다 (그 자식은 남는다). 발행본(<code>make_access_snapshot</code>)은 둘 다 담아 test에서 드러나지 않으니 <code>ui_tree::duplicate_ids()</code>로 잡는다.</div></li>
+          <li><div><strong>id가 frame마다 바뀌면 보조 기술이 자리를 잃는다.</strong> 다리와 VoiceOver 요소는 id로 frame을 넘는다. 색인이나 주소로 id를 짓지 않는다.</div></li>
+          <li><div><strong>live region은 역할이 있는 요소에만 뜻이 있다.</strong> 배치 판에 걸면 접혀서 아무것도 알리지 않는다. 한 frame에 live region 하나는 한 번만 알린다.</div></li>
+          <li><div><strong>역할이 바뀌면 다른 요소다.</strong> property가 아니라 부모의 structure로 알린다.</div></li>
+          <li><div><strong>modal 뒤는 닿지 않는다.</strong> 가둠 밖이어도 포인터가 닿는 자리(덮이지 않은 캡션 단추)는 닿는다 — 상자의 아홉 점을 사람이 쓰는 <code>hit_test</code>로 훑는다. 숨긴 가지는 닿지 않고, 스크롤로 잘린 것은 닿는다.</div></li>
+          <li><div><strong>검사기의 <code class="free">access</code> 줄은 <code>accessibility()</code> 그대로다.</strong> <code>enabled</code>·<code>help</code>·<code>live</code>가 없고, <code>dump_tree</code>는 접기 전의 모든 요소를 쓴다. 숨은 가지와 구조를 접은 tree는 <code>make_access_snapshot</code>으로 본다 (중복 id는 접지 않는다).</div></li>
+          <li><div><strong>값 글이 있는 범위 요소의 Value 패턴.</strong> <code>IsReadOnly</code>는 RangeValue와 같은 답이라 쓸 수 있는 요소는 "쓸 수 있음"이라 답하지만, 글로 쓰는 <code>Value.SetValue</code>는 <code>E_ACCESSDENIED</code>다. 값은 <code>RangeValue.SetValue</code>로만 바뀐다 (코드에서 확인한 동작).</div></li>
+          <li><div><strong>다중 선택의 큰 변화는 항목마다 알리지 않는다.</strong> 20개를 넘으면 <code>selection_invalidated</code> 하나다.</div></li>
+          <li><div><strong>그리지 않은 창에는 tree가 없다.</strong> 숨긴 채 시작한 창은 자동화로 읽히지 않는다.</div></li>
+          <li><div><strong>끌기처럼 포인터만의 몸짓에는 보조 기술 명령이 없다.</strong> <code>access_command</code>에 "옮겨라"가 없다. 순서 바꾸기·떼어 내기는 메뉴 명령 같은 다른 길을 앱이 준다.</div></li>
+          <li><div><strong>Android에서는 아무것도 읽히지 않는다.</strong> <code>access_info</code>를 고쳐도 Android에서는 아무도 읽지 않는다.</div></li>
         </ol>
       </section>
 
@@ -678,6 +1512,7 @@ namespace sample {
           <details class="faq"><summary>직접 그린 요소를 슬라이더로 읽히게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>accessibility()</code>를 재정의해 <code>role = access_role::slider</code>와 <code>range</code>를 낸다.</p><p>값을 정할 수 있게 하려면 <code>set_access_handler</code>로 <code>set_value</code>를 받아 목표 값 메시지를 낸다 (<a class="xref" href="#build-custom">직접 그린 요소</a>).</p></div></details>
           <details class="faq"><summary>보조 기술이 "펼쳐라"를 보냈는데 아무 일도 없다.</summary><div class="faq-a"><p class="faq-short"><code>expand</code>·<code>collapse</code>는 기본 실행이 없다.</p><p>목표 상태를 나르는 메시지(목록의 <code>set_expanded</code> 같은 것)를 처리기나 <code>access_actions</code> 재정의로 낸다. <code>expanded</code>를 답하지 않으면 아예 할 수 없는 명령이다.</p></div></details>
           <details class="faq"><summary>이미 펼친 그룹에 Expand가 오면?</summary><div class="faq-a"><p class="faq-short">빈 계획이라 UIA는 <code>S_OK</code>로 답하고 아무것도 하지 않는다.</p><p>절대 명령은 "이미 그 상태"면 할 일이 없다. 누르기(<code>invoke</code>)만은 빈 계획이 거절이다.</p></div></details>
+          <details class="faq"><summary>설계 문서는 명령이 여섯이라는데 <code>access_command</code>는 아홉 값이다. 어느 쪽인가?</summary><div class="faq-a"><p class="faq-short">헤더가 맞다. 아홉이다.</p><p><code>docs/accessibility-action-design.md</code>는 invoke·toggle·select·expand·collapse·set_value 여섯만 적는다. 다중 선택의 <code>add_to_selection</code>·<code>remove_from_selection</code>과 흘리는 창의 <code>set_scroll_percent</code>가 뒤에 더해졌다. 처리기를 <code>switch</code>로 쓴다면 이 셋도 다룬다 — 받지 않을 명령은 <code>std::nullopt</code>로 돌려 기본에 맡긴다.</p></div></details>
           <details class="faq"><summary>상태 글이 바뀔 때 읽히게 하려면?</summary><div class="faq-a"><p class="faq-short">그 글을 담은 역할 있는 요소에 <code>set_live_region(access_live::polite)</code>. 끊고 읽어야 하면 <code>assertive</code>.</p><p>안쪽 줄의 글이 바뀌어도 그 요소가 한 번 알린다 (<a class="xref" href="#build-live">live region</a>).</p></div></details>
           <details class="faq"><summary>임의의 글을 바로 읽히는 함수가 있나?</summary><div class="faq-a"><p class="faq-short">없다.</p><p>live region, <code>alert</code> 역할(토스트), 입력 칸의 <code>error</code>, 머리글로 초점 옮기기(<code>focus_request</code>)를 쓴다. 모두 다음 발행본의 대조가 알린다.</p></div></details>
           <details class="faq"><summary>비활성 단추가 왜 눌리지 않는지 읽히게 하려면?</summary><div class="faq-a"><p class="faq-short">tooltip에 까닭을 적는다. 그것이 도움말이다.</p><p>비활성 단추도 이름과 까닭을 지닌 채 tree에 남는다. 활성이나 까닭이 바뀌면 property로 알린다.</p></div></details>
@@ -692,6 +1527,21 @@ namespace sample {
         </div>
       </section>
 
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/accessibility.h" target="_blank" rel="noopener">include/luil/ui/accessibility.h</a><span class="n">최상위 기호 32</span></div>
+            <div class="hdr-syms"><a href="api.html#access-role" title="열거형"><span class="kb e">E</span>access_role</a><a href="api.html#access-range" title="구조체"><span class="kb t">S</span>access_range</a><a href="api.html#access-orientation" title="열거형"><span class="kb e">E</span>access_orientation</a><a href="api.html#access-live" title="열거형"><span class="kb e">E</span>access_live</a><a href="api.html#access-scroll-state" title="구조체"><span class="kb t">S</span>access_scroll_state</a><a href="api.html#access-no-scroll" title="상수"><span class="kb ">k</span>access_no_scroll</a><a href="api.html#access-info" title="구조체"><span class="kb t">S</span>access_info</a><a href="api.html#access-info-of" title="함수"><span class="kb f">f</span>access_info_of</a><a href="api.html#access-command" title="열거형"><span class="kb e">E</span>access_command</a><a href="api.html#access-request" title="구조체"><span class="kb t">S</span>access_request</a><a href="api.html#plan-access-request" title="함수"><span class="kb f">f</span>plan_access_request</a><a href="api.html#access-children" title="함수"><span class="kb f">f</span>access_children</a><a href="api.html#access-reachable" title="함수"><span class="kb f">f</span>access_reachable</a><a href="api.html#access-parent" title="함수"><span class="kb f">f</span>access_parent</a><a href="api.html#access-sibling" title="함수"><span class="kb f">f</span>access_sibling</a><a href="api.html#access-selection-container" title="함수"><span class="kb f">f</span>access_selection_container</a><a href="api.html#access-scroll-item" title="함수"><span class="kb f">f</span>access_scroll_item</a><a href="api.html#access-selection-container-of" title="함수"><span class="kb f">f</span>access_selection_container_of</a><a href="api.html#access-selected-items" title="함수"><span class="kb f">f</span>access_selected_items</a><a href="api.html#access-multiple-selection" title="함수"><span class="kb f">f</span>access_multiple_selection</a><a href="api.html#access-item-position" title="구조체"><span class="kb t">S</span>access_item_position</a><a href="api.html#access-item-model" title="클래스"><span class="kb t">C</span>access_item_model</a><a href="api.html#access-item-container-of" title="함수"><span class="kb f">f</span>access_item_container_of</a><a href="api.html#access-selected-ids" title="함수"><span class="kb f">f</span>access_selected_ids</a><a href="api.html#access-snapshot-entry" title="구조체"><span class="kb t">S</span>access_snapshot_entry</a><a href="api.html#access-snapshot" title="구조체"><span class="kb t">S</span>access_snapshot</a><a href="api.html#make-access-snapshot" title="함수"><span class="kb f">f</span>make_access_snapshot</a><a href="api.html#access-change-kind" title="열거형"><span class="kb e">E</span>access_change_kind</a><a href="api.html#access-selection-burst" title="상수"><span class="kb ">k</span>access_selection_burst</a><a href="api.html#access-change" title="구조체"><span class="kb t">S</span>access_change</a><a href="api.html#diff-access-snapshots" title="함수"><span class="kb f">f</span>diff_access_snapshots</a><a href="api.html#access-element-at" title="함수"><span class="kb f">f</span>access_element_at</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
     </div>
     <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
   </main>

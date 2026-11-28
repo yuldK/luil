@@ -1,0 +1,2260 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>테마와 스타일 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — 밝게·어둡게·고대비, 시스템 테마 따르기, 키 컬러 카탈로그와 고르기, 역할로 말하는 팔레트, compose_palette와 tone, 스타일 JSON과 실행 중 스타일, 가지 단위 팔레트.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  /* 고르는 기준 판과 흐름 (lists.html과 같은 꼴) */
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  /* 역할 표 */
+  table.roles-ref tr.grp th, table.tl-roles tr.grp th { text-align: left; font-size: var(--fs-xs); color: var(--fg-2); background: var(--sunk); font-weight: 600; }
+  table.roles-ref tr.grp th .n, table.tl-roles tr.grp th .n { font-family: var(--font-code); color: var(--fg-3); font-weight: 400; margin-left: 6px; }
+  table.roles-ref td code { font-size: 11.5px; }
+  table.accents td, table.accents th { white-space: nowrap; }
+  table.accents .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; vertical-align: -1px; box-shadow: 0 0 0 1px var(--line-2); }
+  /* 실습: 팔레트 조합기 — 견본 칸은 luil이 계산한 실제 색(내용의 색)을 칠하고, 껍데기만 토큰을 쓴다 */
+  .tl-controls { display: grid; gap: 10px; }
+  .tl-swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+  .tl-sw { appearance: none; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px 0 4px; border-radius: 999px; border: 1px solid var(--line-2); background: var(--panel); color: var(--fg-2); font: inherit; font-size: var(--fs-xs); cursor: pointer; }
+  .tl-sw .dot { width: 17px; height: 17px; border-radius: 50%; box-shadow: inset 0 0 0 1px var(--line-2); }
+  .tl-sw[aria-pressed="true"] { border-color: var(--accent); color: var(--fg); box-shadow: 0 0 0 1px var(--accent); }
+  .tl-sw:focus-visible, .lw .seg button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .tl-grid { display: grid; gap: 18px; margin-top: 14px; }
+  @media (min-width: 1000px) { .tl-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .tl-left, .tl-right { min-width: 0; display: grid; gap: 8px; align-content: start; }
+  .tl-left h4, .tl-right h4 { margin: 6px 0 0; font-size: var(--fs-sm); color: var(--fg); }
+  .tl-call { font-size: var(--fs-xs); color: var(--fg-2); }
+  .tl-call code { font-size: 11.5px; }
+  .tl-states { display: grid; gap: 6px; }
+  .tl-state { display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: center; }
+  .tl-btn { height: 30px; border-radius: 4px; display: grid; place-items: center; font-size: 13px; font-weight: 500; }
+  .tl-st-txt { font-size: var(--fs-sm); line-height: 1.35; }
+  .tl-st-txt .ok, .tl-st-txt .low { font-family: var(--font-code); font-size: 12px; }
+  .tl-st-txt .low { color: var(--error); font-weight: 600; }
+  .tl-st-txt .muted { font-size: 11.5px; }
+  .tl-meter { margin: 4px 0 18px; }
+  .tl-meter .lbl { display: flex; justify-content: space-between; font-size: 11px; color: var(--fg-3); margin-bottom: 5px; }
+  .tl-meter .track { position: relative; height: 10px; border-radius: 5px; background: var(--sunk); border: 1px solid var(--line-2); }
+  .tl-meter .edge { position: absolute; top: -5px; bottom: -5px; width: 2px; margin-left: -1px; background: var(--fg-2); }
+  .tl-meter .edge span { position: absolute; top: 20px; left: 50%; transform: translateX(-50%); white-space: nowrap; font-size: 10.5px; color: var(--fg-3); font-family: var(--font-code); }
+  .tl-meter .mark { position: absolute; top: -4px; width: 16px; height: 16px; margin-left: -8px; border-radius: 50%; border: 2px solid var(--panel); box-shadow: 0 0 0 1px var(--line-3); }
+  .tl-meter .mark.h { width: 12px; height: 12px; margin-left: -6px; top: -2px; }
+  .tl-verdict p { margin: 2px 0; font-size: var(--fs-sm); overflow-wrap: anywhere; }
+  .tl-sample { border: 1px solid; border-radius: var(--r-row); padding: 10px 12px; display: grid; gap: 8px; font-size: 13px; }
+  .tl-sample .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .tl-chip { padding: 4px 10px; border-radius: 3px; font-size: 12px; }
+  .tl-link { text-decoration: underline; font-size: 12px; }
+  .tl-rowsel { padding: 4px 8px; border-left: 3px solid; border-radius: 0 4px 4px 0; font-size: 12px; }
+  .tl-table-h { margin: 20px 0 8px; font-size: var(--fs-sm); color: var(--fg); overflow-wrap: anywhere; }
+  table.tl-roles td code { font-size: 11.5px; }
+  /* 실습이 짓는 식별자는 '_'·'.'·'(' 뒤에 줄 바꿀 자리(wbr)를 둔다 — 낱자 단위로 끊지 않는다. */
+  .tl-call code, table.tl-roles td code { word-break: normal; overflow-wrap: normal; }
+  table.t.tl-roles td, table.t.tl-roles th { padding-top: 5px; padding-bottom: 5px; }
+  table.tl-roles td .f { display: block; margin-top: 3px; font-family: var(--font-code); font-size: 11px; color: var(--fg-3); }
+  table.tl-roles td.v code { white-space: nowrap; }
+  table.tl-roles td:nth-child(2) { width: 52px; }
+  table.tl-roles td:nth-child(3) { width: 1%; }
+  .tl-swatch { display: inline-block; width: 34px; height: 18px; border-radius: 3px; border: 1px solid var(--line-2); background: repeating-conic-gradient(var(--line) 0 25%, transparent 0 50%) 0 0 / 8px 8px; overflow: hidden; vertical-align: middle; }
+  .tl-swatch > span { display: block; width: 100%; height: 100%; }
+</style>
+</head>
+<body data-page="theming">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>테마와 스타일</h1>
+      <p class="summary">luil에서 색을 정하는 것은 element가 아니라 그리는 순간의 팔레트다. 앱은 테마 선호와 키 컬러 id(사용자 설정), 중립 색·tone·치수(앱 스타일)만 frame에 싣고, UI thread가 OS의 밝은 모드·고대비와 함께 frame마다 팔레트 하나를 짓는다. 시스템 테마를 따르는 데에는 처리할 메시지가 없다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>appearance.h</code>·<code>ui_theme.h</code>·<code>ui_style.h</code>·<code>palette_scope_element.h</code>·<code>theme_picker_element.h</code>·<code>assets/style.json</code>·<code>assets/accents.json</code></dd></div>
+          <div><dt>실습</dt><dd>팔레트 조합기 — 테마와 키 컬러 25개로 지은 팔레트의 색 56칸, 채운 강조 위 글자의 0.179 규칙과 대비</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="rendering.html#s8">색은 역할로만 말한다</a> · <a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="messaging.html">스레드 경계 메시징</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>시스템 테마 따르기·다크 고정·키 컬러 바꾸기·사용자 고르기를 앱 상태로 만든다.</li>
+            <li>역할 하나가 그리는 순간 어떤 식으로 색이 되는지 알고, 커스텀 그리기에서도 역할을 쓴다.</li>
+            <li>스타일 JSON(빌드 때)과 코드로 지은 <code>ui_style</code>(실행 중)으로 앱의 중립 색·치수를 바꾼다.</li>
+            <li>고대비·0.179 글자 규칙·움직임 줄이기가 앱 코드에 무엇을 요구하는지 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>무엇을 어디서 바꾸나</h2>
+          <p class="lede">팔레트는 세 계층에서 온다. 사용자 설정, 앱 스타일, OS 상태다. 셋은 임자가 다르고 실리는 자리도 다르다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA67;</i><code>appearance_settings</code></h4>
+            <ul>
+              <li>사용자 설정: 테마 선호(<code>system</code>·<code>light</code>·<code>dark</code>)와 키 컬러 id.</li>
+              <li>앱 상태로 들고 frame마다 <code>ui_frame::appearance</code>에 싣는다.</li>
+              <li>기본은 <code>system</code>·<code>mint</code>. 모르는 id는 그리기만 기본색으로 물러선다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB2A;</i><code>ui_style</code></h4>
+            <ul>
+              <li>앱의 것: 두 테마의 중립 색, accent tone, 치수, 컴포넌트 칸(탭 막대·popup·글).</li>
+              <li>빌드 때 <code>assets/style.json</code>(또는 <code>LUIL_STYLE</code>)에서 굽는다.</li>
+              <li>실행 중에는 코드로 지어 <code>ui_frame::style</code>과 배치에 같은 포인터로 준다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA7A;</i><code>system_appearance</code></h4>
+            <ul>
+              <li>OS 상태: 밝은 모드, 고대비와 그 시스템 색, OS 키 컬러, 움직임 줄이기, 투명 효과.</li>
+              <li>host가 읽는다. 앱은 <code>current_system_appearance()</code>로 묻거나 메시지로 받는다.</li>
+              <li>고대비는 앱의 스타일과 키 컬러보다 세다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>바꾸는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>OS의 다크 모드를 따른다</td><td>아무것도. 기본 선호가 <code>system</code>이다</td><td><a class="xref" href="#build-system">시스템 테마 따르기</a></td></tr>
+              <tr><td>늘 어둡게(또는 밝게)</td><td><code>appearance.theme = theme_preference::dark</code></td><td><a class="xref" href="#build-dark">늘 어둡게</a></td></tr>
+              <tr><td>키 컬러를 바꾼다</td><td><code>appearance.accent_id</code> (실행 중) · <code>LUIL_DEFAULT_ACCENT_ID</code> (빌드 때)</td><td><a class="xref" href="#build-accent">키 컬러 바꾸기</a></td></tr>
+              <tr><td>사용자가 테마·키 컬러를 고르게 한다</td><td><code>theme_picker_element</code> · <code>accent_picker_element</code></td><td><a class="xref" href="#build-picker">고르기 화면</a></td></tr>
+              <tr><td>앱의 중립 색·모서리·글자 크기를 바꾼다</td><td><code>LUIL_STYLE</code>의 JSON (빌드 때)</td><td><a class="xref" href="#build-style-json">스타일 JSON</a></td></tr>
+              <tr><td>스타일을 실행 중에 바꾼다</td><td>코드로 지은 <code>ui_style</code>을 <code>ui_frame::style</code>과 배치에</td><td><a class="xref" href="#build-runtime-style">실행 중 스타일</a></td></tr>
+              <tr><td>화면 일부만 옅게 또는 다른 역할로</td><td><code>palette_scope_element</code></td><td><a class="xref" href="#build-scope">가지 팔레트</a></td></tr>
+              <tr><td>내 element를 테마에 맞게 그린다</td><td><code>draw_context::palette</code>의 역할</td><td><a class="xref" href="#build-custom">커스텀 그리기</a></td></tr>
+              <tr><td>OS가 테마를 바꾼 순간을 안다</td><td><code>app_delegate::make_system_appearance_message</code></td><td><a class="xref" href="#build-notify">OS 바뀜 알기</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">실행 중 스타일 JSON 읽기는 이 체크아웃에 없다</span>설계 문서가 링크하는 스타일 파서(<code class="free">parse_ui_style</code>)와 파일 핫 리로드(<code class="free">hot_reloader</code>)는 보존 브랜치의 것이다. main의 공개 헤더·구현·데모·시험에 들지 않았다. 실행 중에 스타일을 바꾸는 길은 코드로 <code>ui_style</code> 값을 짓는 것뿐이다 (<a class="xref" href="#build-runtime-style">실행 중 스타일</a>).</div></div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 역할이 그리는 순간 색이 된다</h2>
+          <p class="lede">element의 config는 "이 자리가 무엇을 뜻하는가"만 담는다. 그 뜻을 색으로 바꾸는 일은 UI thread가 frame마다 지은 팔레트가 한다. 원칙 자체는 <a class="xref" href="rendering.html#s8">그리기 문서</a>에 있다. 여기서는 그 팔레트가 어디서 어떻게 지어지는지를 본다.</p>
+        </header>
+        <h3>한 frame에서 팔레트가 지어지는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">logic thread</span><span>앱이 <code>make_frame()</code>에서 선호(<code>ui_frame::appearance</code>)와 스타일 포인터(<code>ui_frame::style</code>)를 싣는다. 스타일이 비면 내장 스타일이다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>host가 캐시해 둔 OS 값으로 <code>resolve_color_theme(선호, 고대비, 밝은 모드)</code>를 부른다. 고대비가 가장 세고, <code>system</code>만 OS를 따른다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span><code>frame_palette</code>가 팔레트 하나를 짓는다. 고대비면 OS가 준 시스템 색으로, 아니면 스타일의 중립 색 위에 키 컬러를 얹는다(<code>compose_palette</code>).</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>그 팔레트가 <code>draw_context::palette</code>로 tree 전체에 내려간다. 창 테두리(DWM)와 웹뷰 바닥색도 같은 팔레트를 본다.</span></div>
+          <div role="listitem"><span class="who">element</span><span>config의 역할을 팔레트의 칸으로 바꿔 칠한다. <code>label_color_role::dim</code>이면 <code>secondary_foreground</code>, 기본 단추면 <code>accent</code>와 <code>accent_foreground</code>다.</span></div>
+          <div role="listitem"><span class="who">다음 frame</span><span>선호·스타일·OS 값 가운데 하나가 바뀌면 다음 그리기부터 새 팔레트다. element는 하나도 손대지 않는다.</span></div>
+        </div>
+        <div class="code" data-lang="cpp" data-src="src/theme/ui_theme.cpp:442-457" data-path="src/theme/ui_theme.cpp" data-start="442"><script type="text/plain">
+    color_theme resolve_color_theme(const theme_preference preference, const bool high_contrast, const bool system_prefers_light) noexcept
+    {
+        // 고대비는 접근성 설정이라 어떤 선호보다 세다.
+        if (high_contrast)
+            return color_theme::high_contrast;
+        switch (preference)
+        {
+        case theme_preference::light:
+            return color_theme::light;
+        case theme_preference::dark:
+            return color_theme::dark;
+        case theme_preference::system:
+        default:
+            return system_prefers_light ? color_theme::light : color_theme::dark;
+        }
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="src/host/frame_state.cpp:21-38" data-path="src/host/frame_state.cpp" data-start="21"><script type="text/plain">
+    const ui_style& frame_style(const frame_state& state) noexcept
+    {
+        return state.style != nullptr ? *state.style : default_ui_style();
+    }
+
+    ui_color_palette frame_palette(const frame_state& state) noexcept
+    {
+        // 고대비는 사용자가 고른 시스템 색으로 합성한다 — 앱의 스타일보다 세다.
+        // 키 컬러 경로는 스타일의 중립 색 위에 accent를 얹는 나머지 두 테마의 것이다.
+        if (state.theme == color_theme::high_contrast)
+            return high_contrast_palette_for(state.high_contrast);
+        ui_color_palette palette { color_palette_for(frame_style(state), state.theme, accent_for(state.accent_id)) };
+        // 캡션도 효과를 비춘다. 창 바탕 역할(`window_background`) 자체는 그대로 둔다 — 체크 표시처럼 그 색을 대비로
+        // 쓰는 자리가 있어 옅게 하면 표시가 흐려진다. 옅어지는 것은 창 전체를 칠하는 바탕(`draw_frame`)과 캡션뿐이다.
+        if (state.backdrop)
+            palette.caption.background = palette.backdrop_background;
+        return palette;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="src/theme/ui_style.cpp:40-47" data-path="src/theme/ui_style.cpp" data-start="40"><script type="text/plain">
+    ui_color_palette color_palette_for(const ui_style& style, const color_theme theme, const accent_definition& accent) noexcept
+    {
+        // 고대비는 접근성 설정이라 앱의 스타일보다 세다.
+        // 실제 시스템 색을 아는 platform은 `high_contrast_palette_for`를 직접 부른다.
+        if (theme == color_theme::high_contrast)
+            return high_contrast_palette_for(high_contrast_colors {});
+        return compose_palette(style.neutral_for(theme), accent.for_theme(theme), style.tones);
+    }
+</script></div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">고대비 갈래는 둘이다</span>host의 <code>frame_palette</code>는 host가 OS에서 읽은 시스템 색(<code>state.high_contrast</code>)으로 짓는다. 공개 함수 <code>color_palette_for</code>는 OS를 모르므로 고대비를 기본 <code>high_contrast_colors {}</code>(검정 바탕)로 짓는다. 앱이 팔레트 값을 직접 쥐어야 하면 고대비 갈래를 스스로 갈라야 host와 같은 색이 된다 (<a class="xref" href="#build-notify">OS 바뀜 알기</a>).</div></div>
+        <h3><code>compose_palette</code> — 칸마다의 식</h3>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/theme/ui_theme.cpp:170-229" data-path="src/theme/ui_theme.cpp" data-start="170"><script type="text/plain">
+    ui_color_palette compose_palette(const neutral_color_palette& neutral, const accent_color_set& accent, const accent_tones& tones) noexcept
+    {
+        return ui_color_palette {
+            .window_background = neutral.window_background,
+            .surface_background = neutral.surface_background,
+            .primary_foreground = neutral.primary_foreground,
+            .secondary_foreground = neutral.secondary_foreground,
+            .disabled_foreground = neutral.disabled_foreground,
+            .divider = neutral.divider,
+            .input_background = neutral.input_background,
+            .input_border = neutral.input_border,
+            .control_border = neutral.control_border,
+            .group_border = neutral.group_border,
+            .accent = accent.accent,
+            .accent_hover = accent.hover,
+            .accent_soft = accent.soft,
+            .accent_emphasis_foreground = accent.emphasis_foreground,
+            .accent_foreground = foreground_on(accent.accent),
+            .error_foreground = foreground_on(neutral.error_accent),
+            // 파생 역할은 accent 위에 tone을 얹은 것이다.
+            // 어느 역할에 얹는지는 여기가 정하고, 양은 tone이 정한다.
+            .accent_pressed = with_alpha(accent.accent, tones.pressed),
+            .soft_button_background = with_alpha(accent.soft, tones.soft_button),
+            .soft_button_hover_background = with_alpha(accent.hover, tones.soft_button_hover),
+            .active_toggle_background = with_alpha(accent.soft, tones.active_toggle),
+            .selection_background = with_alpha(accent.soft, tones.selection),
+            // 옅은 선택 위의 글자는 본문 글자 그대로다 — 고대비만 highlight 짝으로 바꾼다.
+            .selection_foreground = neutral.primary_foreground,
+            .row_selection_background = with_alpha(accent.soft, tones.row_selection),
+            .drop_target_background = with_alpha(accent.accent, tones.drop_target),
+            .danger_button_background = with_alpha(neutral.error_accent, tones.danger_button),
+            .danger_button_hover_background = with_alpha(neutral.error_accent, tones.danger_button_hover),
+            .danger_button_pressed_background = with_alpha(neutral.error_accent, tones.danger_button_pressed),
+            .warning_accent = neutral.warning_accent,
+            .error_accent = neutral.error_accent,
+            .button_hover_background = neutral.button_hover_background,
+            .button_hover_foreground = neutral.button_hover_foreground,
+            .button_pressed_background = neutral.button_pressed_background,
+            .tooltip_background = neutral.tooltip_background,
+            .tooltip_border = neutral.tooltip_border,
+            .content_shadow = neutral.content_shadow,
+            .notice_background = neutral.notice_background,
+            .raised_background = neutral.raised_background,
+            .thumb_background = neutral.thumb_background,
+            .backdrop_background = neutral.backdrop_background,
+            .caption = neutral.caption,
+            .document_added_background = with_alpha(accent.accent, 0.12f),
+            .document_removed_background = with_alpha(neutral.error_accent, 0.12f),
+            .document_changed_background = with_alpha(neutral.warning_accent, 0.12f),
+            .document_search_background = with_alpha(accent.soft, 0.35f),
+            .document_search_foreground = neutral.primary_foreground,
+            // 구문 색
+            .syntax_keyword = neutral.syntax_keyword,
+            .syntax_string = neutral.syntax_string,
+            .syntax_comment = neutral.syntax_comment,
+            .syntax_number = neutral.syntax_number,
+            .syntax_type = neutral.syntax_type,
+            .syntax_function = neutral.syntax_function,
+        };
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="172-182" data-title="중립 색은 그대로 옮긴다">바탕·글자·선은 스타일의 <code>neutral_color_palette</code>에서 그대로 온다. 보조 글자·구분선·입력칸은 전경색의 낮은 알파로 두는 것이 규약이다 — 바탕과 전경만 뒤집어도 그리기 코드가 그대로 선다.</li>
+            <li data-lines="183-186" data-title="키 컬러 4역할">고른 키 컬러가 그 테마에서 맡는 <code>accent</code>·<code>hover</code>·<code>soft</code>·<code>emphasis_foreground</code>다.</li>
+            <li data-lines="187-188" data-title="채운 바탕 위의 글자">표에 두지 않고 바탕에서 고른다. 상대 밝기 0.179 이하면 흰색, 아니면 검정이다 (<a class="xref" href="#keyboard">접근성</a>).</li>
+            <li data-lines="189-202" data-title="tone 파생 역할">어느 역할에 얹는지는 여기가, 양은 <code>accent_tones</code>가 정한다. <code>with_alpha</code>는 알파를 곱하지 않고 바꿔 끼운다.</li>
+            <li data-lines="203-215" data-title="뜻 있는 색·단추·caption">경고·오류·일반 단추·tooltip·그림자·caption은 키 컬러와 무관한 중립 색이다.</li>
+            <li data-lines="216-220" data-title="문서 비교·찾기">이 알파(0.12·0.35)는 tone 표에 없고 여기에 박혀 있다. 스타일로 바꿀 수 없다.</li>
+            <li data-lines="221-227" data-title="구문 색 여섯">코드 칸의 <code>text_color_role::keyword</code>…<code>function</code>이 고르는 색이다. 키 컬러를 따르지 않는다.</li>
+          </ol>
+        </div>
+        <h3>element의 값이 고르는 칸</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>element의 값</th><th>그리기에서 고르는 칸</th></tr></thead>
+            <tbody>
+              <tr><td><code>label_color_role::primary</code> · <code>dim</code> · <code>error</code></td><td><code>primary_foreground</code> · <code>secondary_foreground</code> · <code>error_accent</code></td></tr>
+              <tr><td>기본 단추 (<code>text_button_config::default_button</code>)</td><td>바탕 <code>accent</code> → hover <code>accent_hover</code> → 눌림 <code>accent_pressed</code>, 글자는 셋 모두 <code>accent_foreground</code></td></tr>
+              <tr><td><code>text_button_visual::accent</code></td><td>바탕 <code>soft_button_background</code> → hover <code>soft_button_hover_background</code> → 눌림 <code>button_pressed_background</code>, 글자 <code>accent_emphasis_foreground</code></td></tr>
+              <tr><td><code>text_button_visual::danger</code></td><td>바탕 <code>danger_button_*</code> 셋, 글자 <code>error_accent</code></td></tr>
+              <tr><td><code>text_button_visual::link</code></td><td>글자 <code>accent</code>, hover면 <code>accent_hover</code></td></tr>
+              <tr><td>꺼진 단추의 글자</td><td><code>disabled_foreground</code></td></tr>
+              <tr><td>키보드 초점 테</td><td><code>accent</code></td></tr>
+              <tr><td>탭 막대의 <code>palette_role</code> 칸</td><td><code>palette_color(palette, role)</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>element가 앱에서 <code>ui_color</code>를 받는 자리는 없다. 역할로 이름 붙일 수 없는 모양에는 <strong>팔레트 선택자</strong>(<code>std::function&lt;ui_color(const ui_color_palette&amp;)&gt;</code>)를 받는 자리가 넷 있다 — <code>panel_config::background</code>·<code>border</code>, 아이콘 단추 <code>button_config</code>의 다섯 칸, <code>text_button_config::fill</code>·<code>label_color</code>, <code>modal_host_config::scrim_background</code>. 색이 아니라 고르는 방법을 받으므로 고르는 시점은 여전히 그리기다. 다만 선택자가 고른 색은 hover·눌림에도 그대로 남는다.</p>
+        </div>
+        <h3>키 컬러: 카탈로그, 기본 id, 시스템 항목</h3>
+        <div class="prose">
+          <ul>
+            <li><strong>카탈로그.</strong> <code>assets/accents.json</code>의 25항목이 빌드 때 구워진다. 항목마다 id, 이름(<code>ko</code>가 든 언어 맵), 대표색(<code>swatch</code>), 테마마다 네 역할이 있다. 순서는 JSON 그대로다 (<code>accent_catalog()</code>).</li>
+            <li><strong>기본 id.</strong> <code>LUIL_DEFAULT_ACCENT_ID</code>(기본 <code>mint</code>)가 <code>default_accent_id</code>가 된다. 모르는 id의 물러설 곳이자 <code>appearance_settings::accent_id</code>의 초기값이다.</li>
+            <li><strong>찾기.</strong> <code>accent_for(id)</code>는 값으로 돌려준다. <code>system</code>이면 실행 시점 항목, 다음은 카탈로그, 없으면 기본 id다. 저장된 id는 지우지 않는다.</li>
+            <li><strong>시스템 항목.</strong> host가 OS 키 컬러를 읽어 <code>set_system_accent(key)</code>로 세운다. 조회할 때마다 <code>make_system_accent</code>가 OKLab에서 색상을 보존하고 역할마다 밝기를 고정한 사다리(dark 0.58·0.65·0.84·0.90, light 0.49·0.43·0.40)에 세운다. 정적 목록에는 넣지 않는다 — 목록을 보여 주는 쪽이 <code>system_accent()</code>를 곁에 세운다.</li>
+            <li><strong>이름.</strong> <code>accent_definition::label</code>은 늘 <code>ko</code> 글이다. 표시 언어의 이름은 <code>accent_label(accent)</code>가 라이브러리 언어로 고른다 (<a class="xref" href="i18n.html">다국어</a>).</li>
+          </ul>
+        </div>
+        <h3>치수·글꼴·컴포넌트 칸</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>칸</th><th>무엇</th><th>읽는 자리</th></tr></thead>
+            <tbody>
+              <tr><td><code>ui_style::metrics</code></td><td>본문 글자 12, 작은 글자 11, 컨트롤 모서리 3, 행 모서리 4 (논리 픽셀), 컴포넌트 글의 굵기</td><td>그리기 <code>draw_context::metrics</code>, 배치·측정 <code>arrange_context::style</code>. 둘이 같아야 잰 폭과 그린 글이 맞는다</td></tr>
+              <tr><td><code>ui_style::tab_bar</code></td><td>탭 막대 모양·닫기 단추·상태 표시 자리·바탕 역할</td><td>배치 문맥. 막대 config의 <code>style</code>이 비면 이 값</td></tr>
+              <tr><td><code>ui_style::popup</code></td><td>popup 창의 모서리</td><td>host가 frame의 스타일에서</td></tr>
+              <tr><td><code>text_style::line_break</code></td><td>한 줄 도우미의 줄바꿈 (<code>space</code>·<code>symbol</code>·<code>paragraphs</code>)</td><td>host가 frame의 스타일에서</td></tr>
+              <tr><td><code>text_style::wrap_policy</code></td><td>config가 비운 여러 줄 글의 줄 나눔 정책</td><td>배치·측정 <code>measure_context::style</code>, 그리기 <code>draw_context::wrap_policy</code>. <strong>JSON 키가 없다</strong> — 코드로만</td></tr>
+              <tr><td><code>font_settings</code> (<code>ui_frame::fonts</code>)</td><td>UI·고정폭 글꼴 가족. 스타일이 아니라 사용자 설정이다</td><td>host가 frame마다 글꼴 registry에 건다 (<a class="xref" href="text-display.html">글 표시와 글꼴</a>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>누가 언제</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>일</th><th>thread·시점</th></tr></thead>
+            <tbody>
+              <tr><td>선호·스타일 포인터를 frame에 싣는다</td><td>logic thread, <code>make_frame</code></td></tr>
+              <tr><td>OS 값을 읽는다</td><td>host(UI thread). 창을 세울 때와 OS의 설정 변경 알림에서</td></tr>
+              <tr><td>테마를 풀고 팔레트를 짓는다</td><td>UI thread, frame마다</td></tr>
+              <tr><td>가지 팔레트 함수</td><td>UI thread, 그리기마다</td></tr>
+              <tr><td><code>current_system_appearance()</code> · <code>set_system_accent</code></td><td>어느 thread에서나 (잠금·원자 값)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 팔레트 조합기">
+        <header class="sec-head">
+          <h2>실습: 팔레트 조합기</h2>
+          <p class="lede">테마와 내장 키 컬러를 고르면 luil이 그 frame에 짓는 팔레트의 모든 칸과, 채운 강조 위 글자가 흰색인지 검정인지를 밝기 수와 함께 보인다.</p>
+        </header>
+        <div class="lw" data-title="팔레트 조합기" data-surface="color_palette_for · compose_palette · foreground_on" data-reset id="th-lab">
+          <div class="lw-body"></div>
+          <div class="lw-foot">옮긴 것: <code>with_alpha</code>·<code>relative_luminance</code>·<code>is_dark_background</code>·<code>foreground_on</code>·<code>compose_palette</code>·<code>high_contrast_palette_for</code>·<code>color_palette_for</code>(<code>assets/thememodel.js</code>). 데이터는 <code>assets/style.json</code>·<code>assets/accents.json</code>을 스크립트로 옮겼고 원본과 같은지 견주었다. 대조: 이 커밋의 <code>src/theme</code>를 컴파일한 프로그램의 출력과 팔레트 51개(25 키 컬러 × dark·light + 기본 고대비)의 색 2,856칸(팔레트마다 56칸), 상대 밝기 4,452건(회색 256단계와 색 4,096개 포함), 알파 10,001건이 모두 같다. <strong>눌림의 대비는 luil이 셈하는 값이 아니다.</strong> 기본 단추는 눌림 바탕 <code>accent_pressed</code>(<code>accent</code>의 알파 0.70)를 아래 바탕 위에 칠하므로, 그 색을 고른 바탕에 알파로 얹은 값(test의 <code>composite_over</code> 꼴)으로 이 문서가 셈했다. 화면에서 잰 값이 아니다. 고대비는 OS 색을 모를 때의 기본값(검정 바탕)만 보인다. 실행 시점 시스템 키 컬러(<code>make_system_accent</code>)는 옮기지 않았다. 견본 그림은 luil의 실제 렌더링이 아니라 같은 색으로 그린 재현이다.</div>
+        </div>
+      </section>
+
+      <section class="sec" id="build-system">
+        <header class="sec-head">
+          <h2>만들기: 시스템 테마 따르기</h2>
+          <p class="lede">할 일이 없다. 기본 선호가 <code>system</code>이고, host가 frame마다 OS의 밝은 모드로 푼다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="include/luil/theme/appearance.h:19-31" data-path="include/luil/theme/appearance.h" data-start="19"><script type="text/plain">
+    // 앱 단위 외양 설정이다.
+    // 외양은 사용자·기기 단위 값이라 이것이 기준 계층이고,
+    // 더 좁은 범위는 `appearance_overrides`로만 덮어쓴다.
+    struct appearance_settings
+    {
+        theme_preference theme { theme_preference::system };
+        // 키 컬러 id다.
+        // 표시 계층의 목록(assets/accents.json)에 없으면
+        // 그쪽이 기본색으로 물러서고 저장된 값은 그대로 둔다.
+        std::u8string accent_id { default_accent_id };
+
+        [[nodiscard]] bool operator==(const appearance_settings&) const noexcept = default;
+    };
+</script></div>
+        <div class="prose">
+          <p>앱은 기본값 그대로의 설정을 상태로 들고 frame에 싣기만 한다. 데스크톱 데모의 테마 페이지와 셸이 그렇다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/theme_page.h:78-82,109" data-path="examples/demo/theme_page.h" data-start="78"><script type="text/plain">
+        // 셸이 frame에 싣는 유효 선호다.
+        [[nodiscard]] const luil::appearance_settings& appearance() const noexcept
+        {
+            return appearance_;
+        }
+⋯@109
+        luil::appearance_settings appearance_ {};
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:925-928" data-path="examples/demo_main.cpp" data-start="925"><script type="text/plain">
+                auto frame { std::make_shared<luil::win32::ui_frame>() };
+                frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
+                frame->appearance = theme_.appearance();
+                frame->backdrop = theme_.backdrop();
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>host는 frame을 하나도 받기 전에도 기본값(<code>system</code>·<code>mint</code>)으로 푼다.</li>
+            <li>OS가 다크 모드로 바뀌면 host가 OS 값을 다시 읽고 모든 표면을 다시 칠한다. Win32는 설정·색·DWM 색소·테마 메시지를 한 갈래에서 받는다.</li>
+            <li>바뀐 순간을 앱이 <strong>알아야</strong> 할 때만 delegate 훅을 넓힌다 (<a class="xref" href="#build-notify">OS 바뀜 알기</a>). 그리기에는 필요 없다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="src/win32/win32_window.cpp:2332-2341" data-path="src/win32/win32_window.cpp" data-start="2332"><script type="text/plain">
+            // 테마·키 컬러·글꼴 선호를 state에 옮긴다.
+            // frame을 아직 받지 못했으면 기본값(system·mint)이다.
+            // 반환된 typeface는 render 호출 동안 살아 있어야 한다.
+            [[nodiscard]] sk_sp<SkTypeface> apply_frame_appearance(frame_state& state, const ui_frame* const frame) override
+            {
+                const appearance_settings appearance { frame != nullptr ? frame->appearance : appearance_settings {} };
+                // 고대비 여부는 밝은 모드처럼 캐시를 읽는다.
+                // 매 frame·표면마다 시스템 호출을 반복하지 않고 WM_SETTINGCHANGE가 갱신한다.
+                state.theme = resolve_color_theme(appearance.theme, system_.high_contrast, system_.prefers_light);
+                state.accent_id = appearance.accent_id;
+</script></div>
+        <div class="code" data-lang="cpp" data-src="src/win32/win32_window.cpp:1323-1336,1344" data-path="src/win32/win32_window.cpp" data-start="1323"><script type="text/plain">
+                case WM_SETTINGCHANGE:
+                case WM_SYSCOLORCHANGE:
+                case WM_DWMCOLORIZATIONCOLORCHANGED:
+                case WM_THEMECHANGED: {
+                    // OS 테마가 바뀌면 `system` 선호가 가리키는 팔레트도 바뀐다.
+                    // popup·보조 창 표면도 새 팔레트로 다시 칠한다.
+                    const bool was_reduced { system_.reduce_motion };
+                    system_ = read_system_appearance();
+                    if (host_ != nullptr)
+                    {
+                        if (app_message changed { observe_appearance() }; changed.empty() == false)
+                            host_->post_app_message(std::move(changed));
+                    }
+                    publish_platform();
+⋯@1344
+                    invalidate_all_surfaces();
+</script></div>
+      </section>
+
+      <section class="sec" id="build-dark">
+        <header class="sec-head">
+          <h2>만들기: 늘 어둡게</h2>
+          <p class="lede">선호를 <code>dark</code>로 싣는다. 고대비만 이것보다 세다.</p>
+        </header>
+        <div class="prose">
+          <p>동영상 예제는 단추 하나로 system → dark → light를 돌고, frame에는 그 선호만 싣는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/video/main.cpp:108-115" data-path="examples/video/main.cpp" data-start="108"><script type="text/plain">
+                case command::change_theme:
+                    if (theme_ == luil::theme_preference::system)
+                        theme_ = luil::theme_preference::dark;
+                    else if (theme_ == luil::theme_preference::dark)
+                        theme_ = luil::theme_preference::light;
+                    else
+                        theme_ = luil::theme_preference::system;
+                    break;
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/video/main.cpp:203-204" data-path="examples/video/main.cpp" data-start="203"><script type="text/plain">
+                auto frame { std::make_shared<luil::ui_frame>() };
+                frame->appearance.theme = theme_;
+</script></div>
+        <div class="prose">
+          <p>처음부터 어둡게 고정하는 가장 짧은 꼴은 아래다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="늘 어둡게 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/app/app_host.h"
+
+#include <memory>
+#include <utility>
+
+namespace sample {
+    // 고대비가 아니면 OS가 밝아도 늘 어둡게 그린다. 고대비만 이 선호보다 세다 (resolve_color_theme).
+    [[nodiscard]] std::shared_ptr<const luil::ui_frame> make_dark_frame(std::shared_ptr<const luil::ui_tree> tree)
+    {
+        auto frame { std::make_shared<luil::ui_frame>() };
+        frame->tree = std::move(tree);
+        frame->appearance.theme = luil::theme_preference::dark;
+        return frame;
+    }
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>어두운 테마의 내장 중립 색은 창 <code>#1e1e1e</code>, 표면 <code>#2d2d30</code>, 글자 <code>#ffffff</code>다.</li>
+            <li>창 테두리의 명암은 테마 이름이 아니라 <code>is_dark_background(window_background)</code>가 정한다. 스타일이 "dark" 칸에 밝은 바탕을 두면 Windows의 DWM 창 그림도 밝은 쪽을 따른다. 고대비에서는 건드리지 않는다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="src/win32/win32_window.cpp:2372-2380" data-path="src/win32/win32_window.cpp" data-start="2372"><script type="text/plain">
+            void apply_frame_theme(const color_theme theme, const ui_color_palette& palette) noexcept
+            {
+                if (window_ == nullptr || theme == color_theme::high_contrast)
+                    return;
+
+                // 명암은 테마의 이름이 아니라 **바탕의 밝기**가 정한다.
+                // 앱이 세운 스타일은 "dark"에 밝은 바탕을 둘 수 있고, 그때 OS 그림이
+                // 이름을 따라가면 밝은 창에 어두운 모드의 요소가 선다.
+                const BOOL dark { is_dark_background(palette.window_background) ? TRUE : FALSE };
+</script></div>
+      </section>
+
+      <section class="sec" id="build-accent">
+        <header class="sec-head">
+          <h2>만들기: 키 컬러 바꾸기</h2>
+          <p class="lede">실행 중에는 <code>appearance_settings::accent_id</code>를, 앱의 기본값은 빌드 때 <code>LUIL_DEFAULT_ACCENT_ID</code>를 바꾼다.</p>
+        </header>
+        <div class="prose"><p><strong>실행 중 (사용자 설정).</strong> 데스크톱 데모의 테마 페이지가 메시지를 받아 그 칸을 바꾸는 전부다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/theme_page.cpp:105-114" data-path="examples/demo/theme_page.cpp" data-start="105"><script type="text/plain">
+        if (const auto* const theme { message.get<theme_intent>() }; theme != nullptr)
+        {
+            appearance_.theme = theme->theme;
+            return true;
+        }
+        if (const auto* const accent { message.get<accent_intent>() }; accent != nullptr)
+        {
+            appearance_.accent_id = accent->id;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>고르는 id는 카탈로그의 id(<code>blue</code>, <code>mint</code>…)이거나 예약 id <code>system</code>(<code>system_accent_id</code>)이다.</li>
+            <li>목록에 없는 id는 그리기에서 기본 id로 물러서고, 저장된 값은 그대로 둔다. 다른 PC로 옮겼다 돌아와도 값이 산다.</li>
+            <li><code>system</code>은 OS가 키 컬러를 알려 준 동안만 선다. 서지 않으면 기본색이다. 플랫폼마다 서는지가 다르다 (<a class="xref" href="#platforms">플랫폼 차이</a>).</li>
+          </ul>
+        </div>
+        <div class="prose"><p><strong>빌드 때 (앱의 기본 키 컬러).</strong> 기본 id를 카탈로그의 다른 id로 준다. 모르는 id의 물러설 곳과 설정의 초기값이 함께 바뀐다. 소문자·숫자·하이픈만 받고 <code>system</code>은 막는다.</p></div>
+        <div class="code" data-lang="cmake" data-src="CMakeLists.txt:79-91" data-path="CMakeLists.txt" data-start="79"><script type="text/plain">
+# 키 컬러 정의는 JSON에서 빌드 시점에 만든다.
+# 소비자는 자기 카탈로그 JSON으로 바꿔칠 수 있다
+# (같은 스키마여야 하며 LUIL_DEFAULT_ACCENT_ID를 담아야 한다).
+set(LUIL_ACCENT_CATALOG "${PROJECT_SOURCE_DIR}/assets/accents.json"
+    CACHE FILEPATH "Accent catalog JSON embedded at build time.")
+set(LUIL_DEFAULT_ACCENT_ID "mint" CACHE STRING "Default accent id in the embedded catalog.")
+if(NOT LUIL_DEFAULT_ACCENT_ID MATCHES "^[a-z0-9-]+$" OR LUIL_DEFAULT_ACCENT_ID STREQUAL "system")
+    message(FATAL_ERROR "LUIL_DEFAULT_ACCENT_ID must be a non-reserved accent id.")
+endif()
+configure_file("${LUIL_CMAKE_DIRECTORY}/accent_defaults.h.in"
+    "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/accent_defaults.h" @ONLY)
+set(LUIL_GENERATED_ACCENTS
+    "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/accents.h")
+</script></div>
+      </section>
+
+      <section class="sec" id="build-picker">
+        <header class="sec-head">
+          <h2>만들기: 사용자가 테마와 키 컬러를 고르게</h2>
+          <p class="lede">라이브러리의 고르기 둘을 쓴다. 값은 앱이 들고, 고르기는 메시지만 낸다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/theme_page.cpp:247-270" data-path="examples/demo/theme_page.cpp" data-start="247"><script type="text/plain">
+        page.begin_card(u8"테마");
+        luil::theme_picker_config themes {};
+        themes.owner = u8"theme";
+        themes.selected = appearance_.theme;
+        themes.accent_id = appearance_.accent_id;
+        themes.select = [](const luil::theme_preference value) { return luil::make_app_action(theme_intent { value }); };
+        const float themes_height { luil::theme_picker_element::height_for(themes, content_width) };
+        page.add(std::make_unique<luil::theme_picker_element>(std::move(themes)), themes_height);
+        page.gap(6.0f);
+        page.add(make_label({ kind_text, u8"theme-system-help" }, u8"'시스템'을 고르면 Windows의 앱 모드를 따릅니다.", 11.0f, luil::label_color_role::dim), 18.0f);
+        page.end_card();
+
+        page.begin_card(u8"강조색 · " + std::u8string { luil::accent_for(appearance_.accent_id).label });
+        luil::accent_picker_config accents {};
+        accents.owner = u8"accent";
+        accents.selected = appearance_.accent_id;
+        accents.select = [](const std::u8string& key) { return luil::make_app_action(accent_intent { key }); };
+        const float accents_height { luil::accent_picker_element::height_for(accents, content_width) };
+        page.add(std::make_unique<luil::accent_picker_element>(std::move(accents)), accents_height);
+        page.gap(6.0f);
+        page.add(make_label({ kind_text, u8"accent-help" }, u8"강조색은 기본 단추 · 선택 · 초점 테에 함께 쓰입니다.", 11.0f,
+                     luil::label_color_role::dim),
+            18.0f);
+        page.end_card();
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>select</code>가 낸 메시지가 위 <code>handle</code>로 온다. 앱이 <code>selected</code>를 바꾸지 않으면 그림도 바뀌지 않는다.</li>
+            <li>높이는 <code>height_for(config, width)</code>로 미리 안다. 카드는 고정 크기(기본 112×70, 간격 12 논리 픽셀)이고 한 줄에 들지 않으면 다음 줄로 넘어간다. 견본은 32 논리 픽셀, 간격 8이다.</li>
+            <li>카드 묶음의 이름, 카드 낱말(밝게·시스템·어둡게), 견본 묶음의 이름은 비면 라이브러리 기본 문구이고 표시 언어를 따른다. 칸마다 판정해 하나만 덮어도 된다.</li>
+            <li>견본의 툴팁과 접근 이름은 <code>accent_label(accent)</code>다.</li>
+            <li><code>accent_picker_config::include_system</code>(기본 참)이면 서 있는 시스템 항목을 맨 앞에 보인다.</li>
+          </ul>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">데모의 카드 제목은 늘 한국어다</span>위 코드의 카드 제목은 <code>accent_for(...).label</code>을 이어 붙인다. <code>label</code>은 늘 <code>ko</code> 글이라 영어로 바꿔도 "블루"로 남는다. 모바일 데모의 이름 줄과 툴팁도 같다. 표시 언어를 따르려면 <code>accent_label</code>을 쓴다.</div></div>
+        <div class="code" data-lang="cpp" data-label="키 컬러 이름을 표시 언어로 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/theme/appearance.h"
+#include "luil/theme/ui_theme.h"
+
+#include <string>
+
+namespace sample {
+    // 카드 제목처럼 강조색 이름을 글로 보일 때다. `accent_definition::label`은 늘 `ko` 글이다.
+    [[nodiscard]] std::u8string accent_title(const luil::appearance_settings& appearance)
+    {
+        return std::u8string { luil::accent_label(luil::accent_for(appearance.accent_id)) };
+    }
+}
+</script></div>
+        <div class="prose"><p>폰에서는 카드 셋을 한 줄에 넣으려고 폭을 줄인다. 모바일 데모의 견본은 라이브러리 고르기 대신 자기 element로 그린다 (<a class="xref" href="#build-custom">커스텀 그리기</a>).</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/theme_page.cpp:83-92" data-path="examples/mobile_demo/theme_page.cpp" data-start="83"><script type="text/plain">
+        // 테마 선호는 라이브러리의 테마 카드로 그린다. 글을 주지 않아 기기 페이지에서 고른 언어의 기본 문구를 따른다.
+        const float themes_width { width - 2.0f * page_padding };
+        luil::theme_picker_config themes {};
+        themes.owner = u8"theme";
+        themes.selected = appearance_.theme;
+        themes.accent_id = appearance_.accent_id;
+        // 폰 폭에서도 세 장이 한 줄에 들게 줄인다. 다음 줄로 넘기면 왼쪽에 두 장만 서서 화면을 많이 먹는다.
+        themes.card_width = std::min(themes.card_width, (themes_width - 2.0f * themes.gap) / 3.0f);
+        themes.select = [](const luil::theme_preference value) { return luil::make_app_action(theme_intent { value }); };
+        const float themes_height { luil::theme_picker_element::height_for(themes, themes_width) };
+</script></div>
+      </section>
+
+      <section class="sec" id="build-style-json">
+        <header class="sec-head">
+          <h2>만들기: 자기 스타일 JSON과 키 컬러 카탈로그 (빌드 때)</h2>
+          <p class="lede">빌드 때 굽는 값이다. JSON을 바꾸면 라이브러리를 다시 빌드한다. 설치된 바이너리가 실행 중에 JSON을 읽는 기능이 아니다.</p>
+        </header>
+        <div class="code" data-lang="cmake" data-src="CMakeLists.txt:92-97" data-path="CMakeLists.txt" data-start="92"><script type="text/plain">
+# 중립 색·tone·치수(스타일)도 JSON에서 빌드 시점에 만든다.
+# 소비자는 자기 파일로 바꿔칠 수 있다 (같은 스키마여야 한다 — 생성 script가 검사한다).
+set(LUIL_STYLE "${PROJECT_SOURCE_DIR}/assets/style.json"
+    CACHE FILEPATH "Style JSON (neutral palettes, accent tones, metrics) embedded at build time.")
+set(LUIL_GENERATED_STYLE
+    "${LUIL_GENERATED_INCLUDE_DIRECTORY}/luil/generated/ui_style.h")
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>루트에 <code>dark</code>·<code>light</code>·<code>tones</code>·<code>metrics</code>가 반드시 있다. <code>tabBar</code>·<code>popup</code>·<code>text</code>는 빠져도 된다. 그 밖의 루트 키는 막는다.</li>
+            <li>중립 색 키가 빠지거나 낯선 키(오타)가 있으면 생성이 멈춘다. 나중에 생긴 역할만 빠지면 같은 테마의 다른 키로 채운다 (<a class="xref" href="#config">설정 레퍼런스</a>의 중립 색 표).</li>
+            <li>색은 <code>#rrggbb</code>나 <code>#rrggbbaa</code>다. tone은 0~1, metrics는 0~1000의 수이고, 글로 적은 수(<code>"0.5"</code>)는 막는다.</li>
+            <li>컴포넌트 칸 값은 camelCase enum 이름(<code>"connected"</code>, <code>"selectedOrHovered"</code>)과 역할 이름(<code>"windowBackground"</code>)이다.</li>
+          </ul>
+        </div>
+        <div class="prose"><p>가장 안전한 길은 <code>assets/style.json</code>을 통째로 복사해 바꾸는 것이다. 아래는 그 복사본에서 바꾼 칸만 보인 것이다. 이것만으로는 스타일 파일이 아니다(중립 색 키는 모두 있어야 한다). 내장 파일을 복사해 이 칸만 바꾼 파일을 저장소의 <code>cmake/generate_style.cmake</code>에 넣어 돌려 받히는 것을 확인했다.</p></div>
+        <div class="code" data-lang="json" data-label="복사본에서 바꾼 칸 (직접 작성)"><script type="text/plain">
+{
+    "dark": { "windowBackground": "#1a1b26", "surfaceBackground": "#24283b" },
+    "light": { "windowBackground": "#fafaff" },
+    "tones": { "rowSelection": 0.30 },
+    "metrics": { "controlCornerRadius": 6, "fontWeights": { "title": "semibold" } },
+    "tabBar": { "variant": "connected" },
+    "popup": { "corner": "roundSmall" }
+}
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl"><code>text.wrapPolicy</code>는 JSON 키가 아니다</span>설계 문서 몇 곳이 스타일 키라고 적지만 생성기의 <code>text</code> 칸 표에는 <code>lineBreak</code> 하나뿐이다. 내장 JSON에 <code>"wrapPolicy": "hangulWords"</code>를 더해 돌리면 <code>Unknown key in text: wrapPolicy</code>로 빌드가 선다. 여러 줄 정책은 코드로 <code>text_style::wrap_policy</code>에 정한다 (<a class="xref" href="#build-runtime-style">실행 중 스타일</a>).</div></div>
+        <div class="code" data-lang="cmake" data-src="cmake/generate_style.cmake:217-230" data-path="cmake/generate_style.cmake" data-start="217"><script type="text/plain">
+# 컴포넌트 스타일(`tabBar`·`popup`·`text`)은 **빠져도 된다** — 앱이 LUIL_STYLE로 준 옛 JSON이 그대로 빌드되어야 하고,
+# 빠진 칸은 struct의 기본값(처음부터의 모양)이다. 낯선 키와 모르는 값은 여기서도 막는다.
+#  - 짝은 `key|field|enum type|허용 값들`이고 허용 값은 `,`로 적는다. JSON 값은 camelCase, C++ 값은 snake_case다.
+set(palette_roles "windowBackground,surfaceBackground,inputBackground,tooltipBackground,noticeBackground,captionBackground,buttonHoverBackground,accentSoft")
+set(tab_bar_fields
+    "variant|variant|tab_bar_variant|underline,connected,flat"
+    "closeVisibility|close_visibility|tab_close_visibility|always,selectedOrHovered"
+    "indicatorPlacement|indicator_placement|tab_indicator_placement|iconCorner,closeSlot"
+    "barBackground|bar_background|palette_role|${palette_roles}"
+    "selectedBackground|selected_background|palette_role|${palette_roles}")
+set(popup_fields
+    "corner|corner|popup_corner|system,round,roundSmall,square")
+set(text_fields
+    "lineBreak|line_break|single_line_break|space,symbol,paragraphs")
+</script></div>
+        <div class="prose"><p><strong>키 컬러 카탈로그.</strong> <code>LUIL_ACCENT_CATALOG</code>가 경로이고 파일 이름은 자유다. 바꾼 카탈로그는 <code>LUIL_DEFAULT_ACCENT_ID</code>의 id를 담아야 한다. 소비자 CMake는 개념 문서의 꼴이다.</p></div>
+        <div class="code" data-lang="cmake" data-src="docs/concepts/asset-pipeline.md:34-37" data-path="docs/concepts/asset-pipeline.md" data-start="34"><script type="text/plain">
+# add_subdirectory(luil) 전에 설정한다. 기존 캐시에는 -D 옵션으로 변경한다.
+set(LUIL_ACCENT_CATALOG "${CMAKE_CURRENT_SOURCE_DIR}/accent.json" CACHE FILEPATH "Accent catalog")
+set(LUIL_DEFAULT_ACCENT_ID "brand" CACHE STRING "Default accent")
+add_subdirectory(luil)
+</script></div>
+        <div class="code" data-lang="json" data-label="브랜드 카탈로그 accents.json (직접 작성)"><script type="text/plain">
+[
+    {
+        "id": "brand",
+        "label": { "ko": "브랜드", "en": "Brand", "ja": "ブランド" },
+        "swatch": "#ffb4a2",
+        "dark": {
+            "accent": "#b85f48",
+            "accentHover": "#cc735b",
+            "accentSoft": "#ffb4a2",
+            "accentEmphasisFg": "#ffd2c6"
+        },
+        "light": {
+            "accent": "#a33a22",
+            "accentHover": "#8f2a14",
+            "accentSoft": "#7c210d",
+            "accentEmphasisFg": "#7c210d"
+        }
+    },
+    {
+        "id": "ocean",
+        "label": "오션",
+        "swatch": "#8ed6f6",
+        "dark": {
+            "accent": "#0086af",
+            "accentHover": "#289bc4",
+            "accentSoft": "#8ed6f6",
+            "accentEmphasisFg": "#b5e7fe"
+        },
+        "light": {
+            "accent": "#006a8b",
+            "accentHover": "#005a76",
+            "accentSoft": "#004e67",
+            "accentEmphasisFg": "#004e67"
+        }
+    }
+]
+</script></div>
+        <div class="prose">
+          <p>이 파일을 저장소의 <code>cmake/generate_accents.cmake</code>에 기본 id <code>brand</code>로 넣어 돌리면 받힌다. 기본 id를 그대로(<code>mint</code>) 두면 <code>The accent catalog must contain the default id: mint</code>로 멈춘다.</p>
+          <ul>
+            <li>항목마다 <code>id</code>·<code>label</code>·<code>swatch</code>·<code>dark</code>·<code>light</code>가 필요하고, 두 테마 각각 <code>accent</code>·<code>accentHover</code>·<code>accentSoft</code>·<code>accentEmphasisFg</code>를 <code>#rrggbb</code>로 준다. 스타일과 달리 알파를 받지 않는다.</li>
+            <li>id는 소문자·숫자·하이픈이고 겹치면 안 되며 <code>system</code>은 예약이다.</li>
+            <li><code>label</code>은 글 하나이거나 <code>ko</code>가 든 언어 맵이다. 맵에 <code>ja</code>를 두어도 라이브러리 문자열 표에 <code>ja</code>가 없으면 고르지 않는다 (<a class="xref" href="i18n.html">다국어</a>).</li>
+            <li>채운 강조 위의 글자는 카탈로그에 두지 않는다. 팔레트가 흰색·검정 가운데 고른다. 생성기는 hover 색의 대비를 검사하지 않는다 (<a class="xref" href="#keyboard">접근성</a>).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-runtime-style">
+        <header class="sec-head">
+          <h2>만들기: 실행 중에 스타일 바꾸기</h2>
+          <p class="lede">코드로 <code>ui_style</code> 값을 짓고 <code>std::shared_ptr</code>를 갈아 끼운다. 같은 포인터를 frame과 배치에 함께 준다.</p>
+        </header>
+        <div class="prose"><p><strong>1. 내장값을 복사해 바꿀 칸만 고친다.</strong> 기본 생성 <code>ui_style {}</code>는 중립 색이 모두 0(투명 검정)이라 쓸 수 있는 스타일이 아니다. test가 쓰는 꼴이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/ui_style_tests.cpp:19-35" data-path="tests/ui_style_tests.cpp" data-start="19"><script type="text/plain">
+    [[nodiscard]] luil::ui_style custom_style()
+    {
+        luil::ui_style style { luil::default_ui_style() };
+        style.dark.window_background = luil::make_ui_color(26, 27, 38);
+        style.dark.surface_background = luil::make_ui_color(36, 40, 59);
+        style.dark.primary_foreground = luil::make_ui_color(192, 202, 245);
+        style.dark.caption.background = luil::make_ui_color(22, 22, 30);
+        style.light.window_background = luil::make_ui_color(250, 250, 255);
+        style.light.error_accent = luil::make_ui_color(200, 0, 0);
+        style.dark.syntax_string = luil::make_ui_color(9, 99, 199);
+        style.light.syntax_function = luil::make_ui_color(120, 30, 10);
+        style.tones.row_selection = 0.5f;
+        style.tones.pressed = 0.9f;
+        style.metrics.body_font_size = 14.0f;
+        style.metrics.control_corner_radius = 0.0f;
+        return style;
+    }
+</script></div>
+        <div class="prose"><p><strong>2. frame과 배치에 같은 포인터를 준다.</strong> 팔레트·그리기 치수는 frame에서, 컴포넌트 칸·글 크기·줄 나눔 정책은 배치 문맥에서 읽는다. <code>make_arranged_tree</code>는 <code>metrics</code>를 비우고 <code>style</code>을 주면 그 스타일의 치수를 쓴다. 바꿀 때는 새 값을 지어 포인터를 바꾼다. 다음 frame부터 새 값이다.</p></div>
+        <div class="code" data-lang="cpp" data-label="스타일을 짓고 싣기 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/app/app_host.h"
+#include "luil/theme/ui_style.h"
+#include "luil/ui/ui_tree.h"
+
+#include <memory>
+#include <utility>
+
+namespace sample {
+    // 앱이 고르는 스타일 묶음이다. 바꿀 때마다 새 값을 짓고 포인터를 갈아 끼운다 (= 실행 중 "다시 읽기").
+    [[nodiscard]] std::shared_ptr<const luil::ui_style> make_style(const bool brand)
+    {
+        luil::ui_style style { luil::default_ui_style() };
+        if (brand)
+        {
+            style.dark.window_background = luil::make_ui_color(26, 27, 38);
+            style.dark.surface_background = luil::make_ui_color(36, 40, 59);
+            style.light.window_background = luil::make_ui_color(250, 250, 255);
+            style.tones.row_selection = 0.30f;
+            style.metrics.control_corner_radius = 6.0f;
+            style.tab_bar.variant = luil::tab_bar_variant::connected;
+            // JSON 키가 없다. 코드로만 정한다.
+            style.text.wrap_policy = luil::line_break_policy::unicode;
+        }
+        return std::make_shared<const luil::ui_style>(std::move(style));
+    }
+
+    // logic thread가 frame을 지을 때다. 배치와 그리기에 같은 포인터를 준다.
+    [[nodiscard]] std::shared_ptr<const luil::ui_frame> publish(const std::shared_ptr<const luil::ui_style>& style, std::unique_ptr<luil::ui_element> root, const float width, const float height, const float scale)
+    {
+        auto frame { std::make_shared<luil::ui_frame>() };
+        frame->tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, width, height }, scale, {}, nullptr, style.get()));
+        frame->style = style;
+        return frame;
+    }
+}
+</script></div>
+        <div class="prose">
+          <p>이 갈래를 앱 수준에서 보이는 예제는 저장소에 없다. 두 데모는 <code>style</code> 포인터를 늘 비워 두고 frame에 스타일을 싣지 않는다. 실린 스타일이 팔레트가 되는 것은 host 비공개 헤더를 쓰는 test가 잠근다.</p>
+          <p>배치 쪽만 바꾸는 예제는 있다. 데스크톱 데모의 탭 페이지가 <code>ui_style</code> 값을 상태로 들고, 메시지마다 <code>tab_bar</code> 칸을 고치고, 그 가지를 그 스타일로 배치한다. 팔레트는 바꾸지 않는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:40-69" data-path="examples/demo/tabs_page.cpp" data-start="40"><script type="text/plain">
+        // 그 아래 가지를 이 스타일로 배치한다 — 앱이 `make_arranged_tree`에 스타일을 넘기는 것과 같은 길이다.
+        // 데모는 페이지마다 다른 화면이라 페이지 뿌리에서 배치 문맥의 스타일만 바꾼다. 막대는 config에 모양을 적지 않는다.
+        class style_scope final : public luil::ui_element
+        {
+        public:
+            style_scope(const luil::ui_style* const style, std::unique_ptr<luil::ui_element> content)
+                : ui_element { luil::ui_element_id { kind_layout, u8"tabs-style" } }
+                , style_ { style }
+                , content_ { content.get() }
+            {
+                add_child(std::move(content));
+            }
+
+            void arrange(const luil::arrange_context& context) override
+            {
+                set_bounds(context.slot);
+                luil::arrange_context inner { context.for_child(context.slot) };
+                inner.style = style_;
+                content_->arrange(inner);
+            }
+
+            void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override
+            {
+                draw_children(context, interaction);
+            }
+
+        private:
+            const luil::ui_style* style_ { nullptr };
+            luil::ui_element* content_ { nullptr };
+        };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:208-223" data-path="examples/demo/tabs_page.cpp" data-start="208"><script type="text/plain">
+        if (const auto* const setting { message.get<tab_setting_intent>() }; setting != nullptr)
+        {
+            luil::tab_bar_style& style { style_.tab_bar };
+            if (setting->setting == u8"variant")
+                style.variant = setting->value == u8"connected" ? luil::tab_bar_variant::connected : setting->value == u8"flat" ? luil::tab_bar_variant::flat : luil::tab_bar_variant::underline;
+            else if (setting->setting == u8"close")
+                style.close_visibility = setting->value == u8"hover" ? luil::tab_close_visibility::selected_or_hovered : luil::tab_close_visibility::always;
+            else if (setting->setting == u8"indicator")
+                style.indicator_placement = setting->value == u8"slot" ? luil::tab_indicator_placement::close_slot : luil::tab_indicator_placement::icon_corner;
+            else if (setting->setting == u8"overflow")
+                step_overflow_ = setting->value == u8"step";
+            else if (setting->setting == u8"width")
+                shrink_ = setting->value == u8"shrink";
+            reveal_selected();
+            return true;
+        }
+</script></div>
+      </section>
+
+      <section class="sec" id="build-scope">
+        <header class="sec-head">
+          <h2>만들기: 가지 하나만 다른 팔레트</h2>
+          <p class="lede"><code>palette_scope_element</code>가 감싼 가지의 역할을 고쳐 쓴다. 컨트롤마다 색 선택자를 달지 않는다.</p>
+        </header>
+        <div class="prose"><p><strong>옅게 그리기 (잠긴 판·미리 보기).</strong> 데스크톱 데모의 갤러리다. 고대비에서는 바꾸지 않는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:589-603" data-path="examples/demo/gallery_page.cpp" data-start="589"><script type="text/plain">
+        // 가지 단위 팔레트: 안의 기본 컨트롤을 옅게 그린다 (잠긴 판·미리 보기). 고대비에서는 바꾸지 않는다.
+        luil::palette_scope_config faded {};
+        faded.palette = [](luil::ui_color_palette colors, luil::color_theme) {
+            colors.primary_foreground = luil::with_alpha(colors.primary_foreground, 0.55f);
+            colors.secondary_foreground = luil::with_alpha(colors.secondary_foreground, 0.55f);
+            colors.accent = luil::with_alpha(colors.accent, 0.45f);
+            colors.accent_hover = luil::with_alpha(colors.accent_hover, 0.45f);
+            return colors;
+        };
+        auto faded_scope { std::make_unique<luil::palette_scope_element>(luil::ui_element_id { kind_layout, u8"gallery/faded" }, std::move(faded)) };
+        auto faded_row { row(u8"gallery/faded-row") };
+        faded_row->add_fit(button(u8"gallery/faded-primary", u8"옅게 그린 기본 단추", luil::text_button_visual::accent, luil::make_message_action(toast_request_intent { u8"옅은 판 안의 단추" })));
+        faded_row->add_fit(make_label({ kind_text, u8"gallery/faded-text" }, u8"판 안의 글과 강조색이 함께 옅어집니다.", 12.0f, luil::label_color_role::primary));
+        faded_scope->set_content(std::move(faded_row));
+        page.add(std::move(faded_scope), luil::text_button_height);
+</script></div>
+        <div class="prose"><p><strong>역할 맞바꾸기.</strong> 동영상 예제는 표면 바탕을 창 바탕으로 바꿔 레터박스가 창과 이어지게 한다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/video/scene.cpp:192-204" data-path="examples/video/scene.cpp" data-start="192"><script type="text/plain">
+        // 레터박스를 창 바탕에 맞춰 화면 비율이 바뀌어도 영상 둘레의 여백이 이어진다.
+        luil::palette_scope_config stage_colors {};
+        stage_colors.palette = [](luil::ui_color_palette palette, luil::color_theme)
+        {
+            palette.surface_background = palette.window_background;
+            return palette;
+        };
+        auto stage { std::make_unique<luil::palette_scope_element>(luil::ui_element_id {}, std::move(stage_colors)) };
+        stage->set_content(std::make_unique<luil::video_element>(luil::ui_element_id { kind, u8"video" }
+            , luil::video_config { .name = view.text(key::video), .frame = view.image }, overlay(view, film.width < 300.0f)
+        ));
+
+        body->add_flexible(std::move(stage));
+</script></div>
+        <div class="prose"><p><strong>고대비에서도 바꾸기.</strong> 뜻이 있는 바꿈(위험 구역을 오류색 역할로)만 켠다. 아래 가지는 기본 단추·강조를 오류색 역할로 그린다. 고대비에서 <code>error_accent</code>는 창 글자색, <code>error_foreground</code>는 창 바탕색이라 쉬는 단추는 사용자가 고른 창 글자·바탕 짝 그대로다.</p></div>
+        <div class="code" data-lang="cpp" data-label="위험 구역 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/ui/palette_scope_element.h"
+
+#include <memory>
+#include <utility>
+
+namespace sample {
+    // 위험 구역: 안의 기본 단추·강조를 오류색 역할로 바꿔 그린다. 뜻이 있는 바꿈이라 고대비에서도 켠다.
+    [[nodiscard]] std::unique_ptr<luil::ui_element> danger_zone(std::unique_ptr<luil::ui_element> content)
+    {
+        luil::palette_scope_config danger {};
+        danger.palette = [](luil::ui_color_palette colors, luil::color_theme) {
+            colors.accent = colors.error_accent;
+            colors.accent_hover = colors.error_accent;
+            colors.accent_pressed = colors.danger_button_pressed_background;
+            colors.accent_foreground = colors.error_foreground;
+            return colors;
+        };
+        danger.in_high_contrast = true;
+        auto scope { std::make_unique<luil::palette_scope_element>(luil::ui_element_id { luil::application_element_kind(0), u8"danger-zone" }, std::move(danger)) };
+        scope->set_content(std::move(content));
+        return scope;
+    }
+}
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/palette_scope_element.cpp:25-37" data-path="src/ui/palette_scope_element.cpp" data-start="25"><script type="text/plain">
+    void palette_scope_element::draw(draw_context& context, const interaction_snapshot& interaction) const
+    {
+        const bool applies { config_.palette != nullptr && (context.theme != color_theme::high_contrast || config_.in_high_contrast) };
+        if (applies == false)
+        {
+            draw_children(context, interaction);
+            return;
+        }
+        // 바뀐 팔레트는 이 그리기 동안만 산다 — 문맥이 참조로 든다.
+        const ui_color_palette palette { config_.palette(context.palette, context.theme) };
+        draw_context scoped { derive_draw_context(context, palette, context.scale) };
+        draw_children(scoped, interaction);
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="27-32" data-title="고대비면 그대로">함수가 없거나, 고대비인데 <code>in_high_contrast</code>가 거짓이면 바깥 팔레트로 그린다. 사용자가 OS에서 고른 시스템 색을 앱이 옅게 하지 않는다.</li>
+            <li data-lines="33-34" data-title="그리기마다 부른다">UI thread가 그리기마다 함수를 부른다. 테마가 바뀌면 다음 frame에 새 테마의 팔레트로 다시 불린다. 캡처한 값은 값으로 잡는다.</li>
+            <li data-lines="35-36" data-title="하위 문맥">팔레트·배율만 바꾼 문맥을 <code>derive_draw_context</code>가 짓는다. 나머지 필드는 그대로 옮긴다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>역할을 고쳐 쓰는 것이라 hover·눌림·비활성 그림이 그대로 바뀐 색으로 선다.</li>
+            <li>중첩하면 안쪽 함수가 바깥이 바꾼 팔레트를 받는다.</li>
+            <li>키보드 초점 테는 tree가 바깥 팔레트로 마지막에 긋는다. 가지 안에서도 초점 색이 같다.</li>
+            <li>가지는 아무것도 그리지 않는다. 내용이 slot 전체를 받고, 원하는 크기도 내용의 것이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-custom">
+        <header class="sec-head">
+          <h2>만들기: 커스텀 그리기에서 역할 쓰기</h2>
+          <p class="lede">앱의 element도 <code>draw</code>에서 <code>context.palette</code>의 칸을 고른다. 구체 색을 박지 않는다.</p>
+        </header>
+        <div class="prose"><p>모바일 데모의 색 견본 element다. 견본의 채움은 카탈로그의 대표색(내용의 색), 고른 표시의 고리는 <code>primary_foreground</code> 역할이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/theme_page.cpp:22-61" data-path="examples/mobile_demo/theme_page.cpp" data-start="22"><script type="text/plain">
+        // 키 컬러 하나를 고르는 색 동그라미다.
+        // 대표색은 테마와 무관한 값이라 팔레트가 아니라 카탈로그에서 온다.
+        class swatch_element final : public luil::ui_element
+        {
+        public:
+            swatch_element(const luil::ui_element_id id, const luil::ui_color color, const bool selected) noexcept
+                : ui_element { id }
+                , color_ { color }
+                , selected_ { selected }
+            {
+            }
+
+            void arrange(const luil::arrange_context& context) override
+            {
+                set_bounds(context.slot);
+            }
+
+            void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override
+            {
+                const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+                const luil::rect_f box { bounds() };
+                const float radius { box.width * 0.5f };
+                const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
+                context.canvas.drawRRect(SkRRect::MakeRectXY(shape, radius, radius), luil::solid_paint(color_));
+
+                // 고른 것과 포인터가 올라간 것을 테두리 굵기로 구분한다.
+                if (selected_ == false && interaction.hovered != id())
+                    return;
+                SkPaint ring { luil::solid_paint(context.palette.primary_foreground) };
+                ring.setStyle(SkPaint::kStroke_Style);
+                ring.setStrokeWidth((selected_ ? 2.0f : 1.0f) * scale);
+                const float outset { 3.0f * scale };
+                const SkRect outline { SkRect::MakeXYWH(box.x - outset, box.y - outset, box.width + 2.0f * outset, box.height + 2.0f * outset) };
+                context.canvas.drawRRect(SkRRect::MakeRectXY(outline, radius + outset, radius + outset), ring);
+            }
+
+        private:
+            luil::ui_color color_ { 0 };
+            bool selected_ { false };
+        };
+</script></div>
+        <div class="prose"><p>데스크톱 데모의 파일 놓기 칸이다. 받는 동안은 강조 역할, 평소에는 입력 테두리·보조 글자 역할이고, hover 채움은 공용 도우미 <code>draw_hover_fill</code>이 그린다.</p></div>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/images_page.cpp:147-222" data-path="examples/demo/images_page.cpp" data-start="147"><script type="text/plain">
+        // 파일을 받는 자리다.
+        //
+        // 대시 테두리는 "여기는 놓는 자리"라는 관례라 이 element가 직접 그린다.
+        // 라이브러리로 올리지 않은 이유는 소비자가 이 데모 하나여서다 — 잊으면
+        // 조용히 틀리는 것이 없고(수락 판정·강조 대상은 이미 라이브러리가 답한다)
+        // 남는 것은 그림 하나뿐이다.
+        class drop_zone_element final : public luil::ui_element
+        {
+        public:
+            drop_zone_element(luil::ui_element_id id, std::u8string title, std::u8string hint)
+                : ui_element { std::move(id) }
+                , title_ { std::move(title) }
+                , hint_ { std::move(hint) }
+            {
+            }
+
+            void arrange(const luil::arrange_context& context) override
+            {
+                set_bounds(context.slot);
+            }
+
+            void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override
+            {
+                const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+                const luil::rect_f box { bounds() };
+                // 지금 이 자리 위에 놓을 수 있는가.
+                // 판정은 라이브러리가 이미 했다 — 수락한 대상의 id가 실려 온다.
+                const bool receiving { interaction.drag.has_value() && interaction.drag->hovered_drop_target == id() };
+                const float radius { 6.0f * scale };
+                const SkRect shape { SkRect::MakeXYWH(box.x, box.y, box.width, box.height) };
+
+                // 받는 동안의 바탕은 강조색이고, 평소의 hover·눌림은 공용 도우미가
+                // 그린다 — 앱 element도 라이브러리와 같은 겉모습을 쓴다.
+                if (receiving)
+                    context.canvas.drawRRect(SkRRect::MakeRectXY(shape, radius, radius), luil::solid_paint(luil::with_alpha(context.palette.accent_soft, 0.25f)));
+                else
+                    luil::draw_hover_fill(context, box, id(), interaction, enabled(), 6.0f);
+
+                SkPaint border { luil::solid_paint(receiving ? context.palette.accent : context.palette.input_border) };
+                border.setStyle(SkPaint::kStroke_Style);
+                border.setStrokeWidth((receiving ? 2.0f : 1.0f) * scale);
+                const SkScalar intervals[2] { 6.0f * scale, 4.0f * scale };
+                border.setPathEffect(SkDashPathEffect::Make({ intervals, 2 }, 0.0f));
+                // 획은 경로 위에 절반씩 걸치므로 그만큼 안으로 들인다.
+                // 그러지 않으면 테가 칸 밖으로 반 걸쳐 옆 자리를 침범한다.
+                const float inset { border.getStrokeWidth() * 0.5f };
+                context.canvas.drawRRect(SkRRect::MakeRectXY(shape.makeInset(inset, inset), radius, radius), border);
+
+                // 글리프 한 줄 + 글 두 줄을 칸 가운데에 쌓는다.
+                const float glyph_height { 30.0f * scale };
+                const float title_height { 20.0f * scale };
+                const float hint_height { 18.0f * scale };
+                const float spacing { 6.0f * scale };
+                const float total { glyph_height + spacing + title_height + hint_height };
+                float top { box.y + (box.height - total) * 0.5f };
+                if (top < box.y)
+                    top = box.y;
+
+                const SkPaint accent_text { luil::solid_paint(receiving ? context.palette.accent : context.palette.secondary_foreground) };
+                const SkFont glyph_font { sk_ref_sp(context.codicon_typeface), 24.0f * scale };
+                luil::draw_centered_glyph(context.canvas, receiving ? luil::codicons::icon_cloud_upload : luil::codicons::icon_file_media,
+                    { box.x, top, box.width, glyph_height }, glyph_font, accent_text);
+                top += glyph_height + spacing;
+
+                const float padding { 12.0f * scale };
+                const float text_x { box.x + padding };
+                const float text_width { box.width - padding * 2.0f };
+                draw_centered_line(context, title_, { text_x, top, text_width, title_height }, 12.0f, luil::solid_paint(context.palette.primary_foreground));
+                top += title_height;
+                draw_centered_line(context, hint_, { text_x, top, text_width, hint_height }, 11.0f, accent_text);
+            }
+
+        private:
+            std::u8string title_ {};
+            std::u8string hint_ {};
+        };
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>181행의 <code>with_alpha(context.palette.accent_soft, 0.25f)</code>는 앱 코드가 알파를 지은 자리다. 같은 값이 팔레트에 <code>soft_button_background</code>(기본 tone 0.25)로 이미 있다. 역할을 쓰면 앱 스타일의 tone과 고대비 접기를 함께 따른다.</li>
+            <li>고대비를 묻는 그리기는 <code>context.theme</code>을 본다. 바탕이 어두운지는 이름이 아니라 <code>is_dark_background(context.palette.window_background)</code>가 답한다.</li>
+            <li>element를 짓지 않고 판·단추의 색만 바꾸려면 선택자를 쓴다. 갤러리의 위·아래 변 판이다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:606-613" data-path="examples/demo/gallery_page.cpp" data-start="606"><script type="text/plain">
+        // 변을 고른 테두리: 위·아래만 그어 목록 띠처럼 앞뒤 내용과 가른다.
+        luil::panel_config strip {};
+        strip.background = [](const luil::ui_color_palette& palette) { return palette.window_background; };
+        strip.border = [](const luil::ui_color_palette& palette) { return palette.divider; };
+        strip.border_sides = { .top = true, .right = false, .bottom = true, .left = false };
+        auto strip_panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_layout, u8"gallery/border-strip" }, std::move(strip)) };
+        strip_panel->set_content(make_label({ kind_text, u8"gallery/border-strip-text" }, u8"위·아래 변만 긋는 판입니다.", 12.0f, luil::label_color_role::primary));
+        page.add(std::move(strip_panel), 32.0f);
+</script></div>
+      </section>
+
+      <section class="sec" id="build-notify">
+        <header class="sec-head">
+          <h2>만들기: OS 바뀜을 알고, 앱이 팔레트를 쥘 때</h2>
+          <p class="lede">그리기는 host가 맡으므로 대개 필요 없다. 앱 상태가 OS 값에 따라 달라져야 할 때만 delegate 훅을 넓힌다.</p>
+        </header>
+        <div class="prose"><p>동영상 예제는 투명 효과가 꺼졌거나 고대비면 자막 덮개를 불투명하게 바꾼다. 훅은 <code>system_appearance</code>를 그대로 메시지로 싸고, logic thread의 <code>handle</code>이 받는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/video/main.cpp:315-318" data-path="examples/video/main.cpp" data-start="315"><script type="text/plain">
+            luil::app_message make_system_appearance_message(const luil::system_appearance& appearance) override
+            {
+                return luil::app_message { appearance };
+            }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/video/main.cpp:88-89" data-path="examples/video/main.cpp" data-start="88"><script type="text/plain">
+                if (const auto* appearance { message.get<luil::system_appearance>() }; appearance != nullptr)
+                    translucent_overlays_ = appearance->transparency && appearance->high_contrast == false;
+</script></div>
+        <div class="prose"><p>훅의 기본 구현은 빈 메시지다. 넓히지 않으면 앱 inbox에 아무것도 오지 않는다. 앱이 팔레트 값을 손에 쥐어야 하면(웹뷰에 넘길 색, 내보낼 그림의 색) host와 같은 갈래를 밟는다. 고대비 갈래에서 OS 시스템 색을 쓰는 것이 요점이다.</p></div>
+        <div class="code" data-lang="cpp" data-label="host와 같은 팔레트 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/theme/appearance.h"
+#include "luil/theme/ui_style.h"
+#include "luil/theme/ui_theme.h"
+
+namespace sample {
+    // 앱이 팔레트를 손에 쥐어야 할 때다 (웹뷰에 넘길 색, 그림 파일로 내보낼 색 등).
+    // host의 `frame_palette`와 같은 갈래를 밟는다: 고대비면 OS 색, 아니면 스타일 + 키 컬러.
+    [[nodiscard]] luil::ui_color_palette app_palette(const luil::appearance_settings& settings, const luil::ui_style& style)
+    {
+        const luil::system_appearance system { luil::current_system_appearance() };
+        const luil::color_theme theme { luil::resolve_color_theme(settings.theme, system.high_contrast, system.prefers_light) };
+        if (theme == luil::color_theme::high_contrast)
+            return luil::high_contrast_palette_for(system.contrast_colors);
+        return luil::color_palette_for(style, theme, luil::accent_for(settings.accent_id));
+    }
+}
+</script></div>
+        <div class="prose"><p><code>current_system_appearance()</code>는 어느 thread에서나 부른다. 첫 관찰 전에는 기본값이고, host는 첫 관찰을 첫 frame 전에 한다. 배경 효과가 선 창의 캡션 바꿈은 이 계산에 들지 않는다.</p></div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문과 칸 표다. 모든 기호는 <a class="xref" href="api.html#ui-color-palette">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="appearance.h">
+            <div class="code" data-lang="cpp" data-src="include/luil/theme/appearance.h:10-50" data-path="include/luil/theme/appearance.h" data-start="10"><script type="text/plain">
+    // 화면 테마 선호다.
+    // `system`은 OS 설정을 따르며, 실제 팔레트 선택은 표시 계층이 고대비 여부와 함께 해석한다.
+    enum class theme_preference
+    {
+        system,
+        light,
+        dark,
+    };
+
+    // 앱 단위 외양 설정이다.
+    // 외양은 사용자·기기 단위 값이라 이것이 기준 계층이고,
+    // 더 좁은 범위는 `appearance_overrides`로만 덮어쓴다.
+    struct appearance_settings
+    {
+        theme_preference theme { theme_preference::system };
+        // 키 컬러 id다.
+        // 표시 계층의 목록(assets/accents.json)에 없으면
+        // 그쪽이 기본색으로 물러서고 저장된 값은 그대로 둔다.
+        std::u8string accent_id { default_accent_id };
+
+        [[nodiscard]] bool operator==(const appearance_settings&) const noexcept = default;
+    };
+
+    // 좁은 범위가 덮어쓴 외양만 담는다.
+    // 값이 없는 항목은 앱 설정을 따르며, 직렬화할 때도 정의된 키만 남는다.
+    struct appearance_overrides
+    {
+        std::optional<theme_preference> theme {};
+        // 빈 문자열은 정의로 보지 않는다.
+        //  - 고를 수 있는 색은 항상 id가 있다.
+        std::optional<std::u8string> accent_id {};
+
+        [[nodiscard]] bool operator==(const appearance_overrides&) const noexcept = default;
+        // 모든 항목이 "앱 설정 따름"이다.
+        // 저장 측이 외양 항목을 통째로 생략할지 정하는 판정이다.
+        [[nodiscard]] bool empty() const noexcept;
+    };
+
+    // 앱 단위 외양 위에 override를 얹은 유효 값이다.
+    // 표시 계층은 이 결과만 본다.
+    [[nodiscard]] appearance_settings apply_overrides(const appearance_settings& base, const appearance_overrides& overrides);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>칸</th><th>형</th><th>기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>appearance_settings::theme</code></td><td><code>theme_preference</code></td><td><code>system</code></td><td>테마 선호. 고대비는 선호가 아니라 OS 상태다</td></tr>
+                  <tr><td><code>appearance_settings::accent_id</code></td><td><code>std::u8string</code></td><td><code>default_accent_id</code> (빌드 기본 <code>mint</code>)</td><td>키 컬러 id. 목록에 없으면 그리기만 기본색이고 값은 그대로</td></tr>
+                  <tr><td><code>appearance_overrides::theme</code> · <code>accent_id</code></td><td><code>std::optional</code></td><td>빈 값</td><td>좁은 범위의 덮어쓰기. 값 있는 칸만 <code>apply_overrides</code>가 바꾼다. 빈 글의 <code>accent_id</code>도 덮어쓴다(아래 함정)</td></tr>
+                  <tr><td><code>font_settings::ui_family</code> · <code>code_family</code></td><td><code>std::u8string</code></td><td>빈 글 (= 내장 글꼴)</td><td>UI·고정폭 글꼴 가족. 설치되지 않은 이름도 값은 그대로 두고 표시만 내장 글꼴</td></tr>
+                  <tr><td><code>font_overrides</code></td><td><code>std::optional</code> 둘</td><td>빈 값</td><td>빈 글도 정의다("여기서는 내장 글꼴")</td></tr>
+                  <tr><td><code>theme_preference_name</code> · <code>parse_theme_preference</code></td><td>함수</td><td>—</td><td>JSON에 적는 이름 <code>"system"</code>·<code>"light"</code>·<code>"dark"</code>의 왕복. 모르는 이름이면 거짓이고 대상은 그대로</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose"><p><code>appearance_overrides</code>·<code>font_overrides</code>·<code>apply_overrides</code>는 저장소의 라이브러리·예제·test 어디에서도 쓰지 않는다. <code>ui_frame</code>에도 보조 창 <code>ui_window</code>에도 덮어쓰기 칸이 없다 — 앱이 합친 결과를 <code>ui_frame::appearance</code>에 싣는 데 쓴다.</p></div>
+          </section>
+          <section data-tab="색 형식·함수">
+            <div class="code" data-lang="cpp" data-src="include/luil/theme/ui_theme.h:11-42" data-path="include/luil/theme/ui_theme.h" data-start="11"><script type="text/plain">
+    using ui_color = std::uint32_t;
+
+    enum class color_theme
+    {
+        dark,
+        // 밝은 바탕이다.
+        // 설정의 선호나 OS 설정이 고른다.
+        light,
+        high_contrast,
+    };
+
+    [[nodiscard]] constexpr ui_color make_ui_color(const std::uint8_t red, const std::uint8_t green, const std::uint8_t blue, const std::uint8_t alpha = 255) noexcept
+    {
+        return static_cast<ui_color>(alpha) << 24U | static_cast<ui_color>(red) << 16U | static_cast<ui_color>(green) << 8U | static_cast<ui_color>(blue);
+    }
+
+    // 색의 알파만 바꾼다 (0~1, 범위 밖은 잘라 낸다).
+    // 팔레트 합성이 accent 위에 tone을 얹는 자리이자 그리기가 역할색을 겹치는 자리다 —
+    // 같은 함수라야 "합성이 만든 색"과 "그리기가 만든 색"이 같은 바이트다.
+    [[nodiscard]] constexpr ui_color with_alpha(const ui_color color, const float alpha) noexcept
+    {
+        const float clamped { alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha) };
+        const auto value { static_cast<std::uint32_t>(clamped * 255.0f + 0.5f) };
+        return (color & 0x00ffffffU) | (value << 24U);
+    }
+
+    // sRGB 상대 밝기다 (0=검정, 1=흰색). 알파는 보지 않는다.
+    // 바탕이 어두운지 밝은지를 **색 자체로** 판정한다 — 앱이 세운 중립 팔레트는
+    // "dark 테마"라는 이름과 무관하게 밝을 수 있어, 이름이 아니라 값이 답이어야 한다.
+    [[nodiscard]] float relative_luminance(ui_color color) noexcept;
+    // 그 바탕 위에는 밝은 글자가 맞는가다 (창 테두리·OS 그림의 명암을 고를 때).
+    [[nodiscard]] bool is_dark_background(ui_color color) noexcept;
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/theme/ui_theme.h:56-124" data-path="include/luil/theme/ui_theme.h" data-start="56"><script type="text/plain">
+    // 키 컬러 하나가 한 테마에서 맡는 네 역할이다.
+    // 값은 assets/accents.json에서 빌드 시점에 들어온다.
+    struct accent_color_set
+    {
+        // 채움·테두리·상태 표시의 기본 색이다.
+        ui_color accent { 0 };
+        // 위 요소의 hover다.
+        ui_color hover { 0 };
+        // 낮은 알파로 겹치는 옅은 강조 바탕이다 (배지·토글 트랙·선택 행).
+        ui_color soft { 0 };
+        // 바탕 위 강조 글자다 (설정 행 제목·강조 버튼 라벨).
+        ui_color emphasis_foreground { 0 };
+
+        [[nodiscard]] bool operator==(const accent_color_set&) const noexcept = default;
+    };
+
+    // 고를 수 있는 키 컬러 하나다.
+    // 문자열은 생성 표를 가리키는 정적 수명이다.
+    struct accent_definition
+    {
+        std::u8string_view id {};
+        std::u8string_view label {};
+        // 설정의 색 동그라미다.
+        // 테마와 무관한 대표색이다.
+        ui_color swatch { 0 };
+        accent_color_set dark {};
+        accent_color_set light {};
+
+        [[nodiscard]] const accent_color_set& for_theme(color_theme theme) const noexcept;
+    };
+
+    // 앱 설정이 모르는 id를 담고 있을 때 물러설 기본 키 컬러다.
+    // default_accent_id는 LUIL_DEFAULT_ACCENT_ID로 구성하며 appearance.h가 제공한다.
+
+    // 빌드 시점에 내장된 키 컬러 목록이다.
+    // 순서는 JSON 그대로다.
+    [[nodiscard]] std::span<const accent_definition> accent_catalog() noexcept;
+    // id로 찾는다.
+    // 없으면 기본 키 컬러다.
+    //  - 저장된 값은 지우지 않는다.
+    // 참조가 아니라 값이다 — 참조는 답의 수명을 정적 표에 묶는 계약이라,
+    // 표 밖에서 합성되는 항목이 설 수 없다.
+    [[nodiscard]] accent_definition accent_for(std::u8string_view id) noexcept;
+    // 목록에 그 id가 있는지다.
+    // 설정을 읽을 때 경고를 남길지 판정한다.
+    [[nodiscard]] bool accent_exists(std::u8string_view id) noexcept;
+    // 키 컬러의 이름을 라이브러리 언어(`set_text_languages`)로 고른다. 카탈로그에 그 언어가 없으면 `label`이다.
+    //  - 프레임마다 견본 수만큼 부르므로 라이브러리 표에서 고른 언어를 잠금 없이 읽는다. 표에 없는 언어는 고르지 않는다.
+    [[nodiscard]] std::u8string_view accent_label(const accent_definition& accent) noexcept;
+
+    // 실행 시점 항목이 쓰는 예약 id다.
+    // 정적 목록(assets/accents.json)은 이 id를 가질 수 없다 — 생성이 거른다.
+    inline constexpr std::u8string_view system_accent_id { u8"system" };
+
+    // OS가 알려 준 키 컬러 하나로 시스템 accent 항목을 합성한다.
+    // 입력의 알파는 무시하고 역할은 전부 불투명이다.
+    // 내장 표와 같은 OKLCH 자리(고정 밝기 사다리·색상 보존·채도 상한)에 세우므로
+    // 정적 항목들 곁에 두어도 다른 규칙으로 만든 색처럼 보이지 않는다.
+    [[nodiscard]] accent_definition make_system_accent(ui_color key) noexcept;
+
+    // 실행 시점 항목을 세우거나 거둔다.
+    // platform이 OS accent를 읽어 부른다. 빈 값은 "OS가 답하지 않았다"이고 항목이 내려간다.
+    // 어느 스레드에서든 안전하다 — 키 하나만 원자로 바꾸고, 조회가 그때마다 합성한다.
+    //  - 항목을 통째로 저장하면 읽는 중에 바뀌는 자리가 생긴다.
+    void set_system_accent(std::optional<ui_color> key) noexcept;
+    // 실행 시점 항목이다. 서 있지 않으면 빈 값이다.
+    // 정적 목록(accent_catalog)에는 넣지 않는다 — span은 정적 수명·연속 배열의
+    // 계약이라 실행 시점 항목이 낄 수 없다. 목록을 보여 주는 쪽이 곁에 세운다.
+    [[nodiscard]] std::optional<accent_definition> system_accent() noexcept;
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/theme/ui_theme.h:193-218" data-path="include/luil/theme/ui_theme.h" data-start="193"><script type="text/plain">
+    // accent 4역할 위에 얹어 파생 역할을 만드는 알파들이다 (0~1).
+    // element마다 흩어져 있던 숫자(0.70·0.25·0.35·0.18·0.30·0.22·0.42…)를 한 표로 모았다.
+    // 어느 accent 역할에 얹는지는 `compose_palette`가 정하고, 여기에는 **양**만 있다.
+    struct accent_tones
+    {
+        // 채운 강조 버튼을 누르는 동안이다 (`accent`에 얹는다).
+        float pressed { 0.70f };
+        // 옅은 강조 버튼의 쉼과 hover다 (`soft`·`hover`에 얹는다).
+        float soft_button { 0.25f };
+        float soft_button_hover { 0.35f };
+        // 켜진 토글 버튼의 바탕이다 (`soft`에 얹는다).
+        float active_toggle { 0.22f };
+        // 텍스트 입력의 고른 구간이다 (`soft`에 얹는다).
+        float selection { 0.35f };
+        // 고른 목록 행의 옅은 채움이다 (`soft`에 얹는다).
+        float row_selection { 0.18f };
+        // 끌어다 놓을 자리의 채움이다 (`accent`에 얹는다).
+        float drop_target { 0.30f };
+        // 옅은 위험 버튼의 쉼·hover·눌림이다 (`error_accent`에 얹는다 — 오류색에는
+        // hover·soft 짝이 없어 역할 하나를 알파로 층 짓는다).
+        float danger_button { 0.20f };
+        float danger_button_hover { 0.32f };
+        float danger_button_pressed { 0.42f };
+
+        [[nodiscard]] bool operator==(const accent_tones&) const noexcept = default;
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/theme/ui_theme.h:317-380" data-path="include/luil/theme/ui_theme.h" data-start="317"><script type="text/plain">
+    // 고대비 팔레트를 합성할 시스템 색이다.
+    // 고대비는 사용자가 색을 직접 고르는 접근성 설정이라(검정 바탕만이 아니라
+    // 흰 바탕 테마·사용자 지정 색이 있다) 라이브러리가 색을 정하지 않고
+    // platform이 OS에서 읽어 채운다 (Win32는 GetSysColor).
+    // 기본값은 OS를 읽을 수 없을 때 물러설 검정 바탕이다.
+    struct high_contrast_colors
+    {
+        ui_color window_background { make_ui_color(0, 0, 0) };
+        ui_color window_foreground { make_ui_color(255, 255, 255) };
+        // 선택·hover의 바탕과 글자다 (COLOR_HIGHLIGHT 계열).
+        ui_color highlight_background { make_ui_color(255, 255, 255) };
+        ui_color highlight_foreground { make_ui_color(0, 0, 0) };
+        // 링크·강조의 색이다 (COLOR_HOTLIGHT).
+        ui_color emphasis { make_ui_color(255, 255, 255) };
+        // 버튼·caption 표면과 글자다 (COLOR_BTNFACE 계열).
+        ui_color button_background { make_ui_color(0, 0, 0) };
+        ui_color button_foreground { make_ui_color(255, 255, 255) };
+        // 비활성 글자다 (COLOR_GRAYTEXT).
+        ui_color disabled_foreground { make_ui_color(0, 255, 0) };
+
+        [[nodiscard]] bool operator==(const high_contrast_colors&) const = default;
+    };
+
+    struct system_appearance
+    {
+        bool prefers_light { false };
+        bool high_contrast { false };
+        high_contrast_colors contrast_colors {};
+        std::optional<ui_color> accent {};
+        bool reduce_motion { false };
+        bool transparency { true };
+
+        [[nodiscard]] bool operator==(const system_appearance&) const noexcept = default;
+    };
+
+    // host가 마지막으로 읽은 값이다. 첫 관찰 전에는 기본값이다.
+    [[nodiscard]] system_appearance current_system_appearance() noexcept;
+
+    // 시스템 색으로 고대비 팔레트를 합성한다.
+    // 키 컬러도 앱의 중립 색도 쓰지 않고, 강조·선택은 시스템의 hotlight·highlight가 맡는다.
+    [[nodiscard]] ui_color_palette high_contrast_palette_for(const high_contrast_colors& colors) noexcept;
+
+    // 채운 바탕 위의 글자색이다. 흰색과 거의 검정 가운데 그 바탕에 대고 대비가 큰 쪽이다
+    // (`is_dark_background`의 경계). `compose_palette`가 채운 강조·오류 바탕의 글자를 이것으로 짓는다.
+    [[nodiscard]] ui_color foreground_on(ui_color background) noexcept;
+
+    // 중립 색 위에 accent 4역할을 얹고 tone으로 파생 역할을 만든다.
+    // **동적 합성의 진입점이다.** 테마 이름을 묻지 않는다 — 어떤 중립 색과 어떤 accent를
+    // 짝지을지는 부르는 쪽의 일이고, 여기는 그 둘을 한 팔레트로 접기만 한다.
+    // 실행 시점에 색을 계산하는 앱은 이것으로 팔레트를 세우고 `ui_style`로 싣는다.
+    [[nodiscard]] ui_color_palette compose_palette(const neutral_color_palette& neutral, const accent_color_set& accent, const accent_tones& tones = {}) noexcept;
+
+    // 내장 스타일(assets/style.json)의 중립 색 위에 키 컬러를 얹은 팔레트다.
+    // 고대비는 키 컬러를 무시하고 기본 시스템 색(검정 바탕 fallback)으로
+    // 합성한다 — 실제 시스템 색을 아는 platform은 `high_contrast_palette_for`를 쓴다.
+    // 앱이 세운 스타일로 합성하는 오버로드는 ui_style.h에 있다.
+    [[nodiscard]] ui_color_palette color_palette_for(color_theme theme, const accent_definition& accent) noexcept;
+    // 기본 키 컬러(mint)를 쓰는 팔레트다.
+    // 설정을 아직 모르는 경로가 쓴다.
+    [[nodiscard]] ui_color_palette color_palette_for(color_theme theme) noexcept;
+
+    // 설정의 선호를 실제 팔레트 선택으로 바꾼다.
+    // 고대비가 가장 세고, `system`은 OS의 밝은 앱 설정(`system_prefers_light`)을 따른다.
+    [[nodiscard]] color_theme resolve_color_theme(theme_preference preference, bool high_contrast, bool system_prefers_light) noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>tone (<code>accent_tones</code>)</th><th>기본값</th><th>JSON 키</th><th>얹는 역할 → 만드는 칸</th><th>알파 바이트</th></tr></thead>
+                <tbody>
+                  <tr><td><code>pressed</code></td><td>0.70</td><td><code>pressed</code></td><td><code>accent</code> → <code>accent_pressed</code></td><td>179</td></tr>
+                  <tr><td><code>soft_button</code></td><td>0.25</td><td><code>softButton</code></td><td><code>soft</code> → <code>soft_button_background</code></td><td>64</td></tr>
+                  <tr><td><code>soft_button_hover</code></td><td>0.35</td><td><code>softButtonHover</code></td><td><code>hover</code> → <code>soft_button_hover_background</code></td><td>89</td></tr>
+                  <tr><td><code>active_toggle</code></td><td>0.22</td><td><code>activeToggle</code></td><td><code>soft</code> → <code>active_toggle_background</code></td><td>56</td></tr>
+                  <tr><td><code>selection</code></td><td>0.35</td><td><code>selection</code></td><td><code>soft</code> → <code>selection_background</code></td><td>89</td></tr>
+                  <tr><td><code>row_selection</code></td><td>0.18</td><td><code>rowSelection</code></td><td><code>soft</code> → <code>row_selection_background</code></td><td>46</td></tr>
+                  <tr><td><code>drop_target</code></td><td>0.30</td><td><code>dropTarget</code></td><td><code>accent</code> → <code>drop_target_background</code></td><td>77</td></tr>
+                  <tr><td><code>danger_button</code></td><td>0.20</td><td><code>dangerButton</code></td><td><code>error_accent</code> → <code>danger_button_background</code></td><td>51</td></tr>
+                  <tr><td><code>danger_button_hover</code></td><td>0.32</td><td><code>dangerButtonHover</code></td><td><code>error_accent</code> → <code>danger_button_hover_background</code></td><td>82</td></tr>
+                  <tr><td><code>danger_button_pressed</code></td><td>0.42</td><td><code>dangerButtonPressed</code></td><td><code>error_accent</code> → <code>danger_button_pressed_background</code></td><td>107</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose"><p>알파 바이트는 컴파일한 <code>with_alpha</code>의 출력이다(<code>alpha * 255 + 0.5</code>를 버림). 합성에 박힌 0.12와 0.35는 31과 89다.</p></div>
+          </section>
+          <section data-tab="팔레트 역할">
+            <div class="prose"><p><code>ui_color_palette</code>는 그리기가 보는 팔레트다. 중립 색 + 키 컬러 4역할 + 둘에서 파생한 역할이다. element는 여기의 역할만 고르고 알파를 발명하지 않는다. 필드는 51개다 — <code>ui_color</code>(<code>0xAARRGGBB</code>, 기본 0) 50개와 색 여섯을 담은 <code>caption</code> 묶음 하나. 실제 값은 위 <a class="xref" href="#lab">실습</a>에서 테마·키 컬러를 골라 본다.</p></div>
+<div class="table-wrap"><table class="t roles-ref">
+<thead><tr><th>역할</th><th>뜻</th><th>합성 (<code>compose_palette</code>)</th><th>고대비 (<code>high_contrast_palette_for</code>)</th></tr></thead>
+<tbody>
+<tr class="grp"><th colspan="4">바탕 <span class="n">8</span></th></tr>
+<tr><td><code>window_background</code></td><td>창 바탕</td><td><code>neutral.window_background</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>surface_background</code></td><td>표면(판·목록·입력 영역)의 바탕</td><td><code>neutral.surface_background</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>input_background</code></td><td>입력칸(텍스트 박스·드롭다운)의 표면</td><td><code>neutral.input_background</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>raised_background</code></td><td>한 단 올라온 중립 바탕 — 배지·고정 머리행·토스트의 몸. 불투명</td><td><code>neutral.raised_background</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>thumb_background</code></td><td>트랙 위에 뜬 판 — 선택 묶음의 고른 칸. 트랙보다 밝아야 한다</td><td><code>neutral.thumb_background</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>notice_background</code></td><td>notice 배너의 바탕</td><td><code>neutral.notice_background</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>tooltip_background</code></td><td>tooltip의 바탕</td><td><code>neutral.tooltip_background</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>backdrop_background</code></td><td>배경 효과가 실제로 선 창의 바탕. 알파가 효과를 얼마나 비출지다</td><td><code>neutral.backdrop_background</code></td><td><code>colors.window_background</code></td></tr>
+<tr class="grp"><th colspan="4">글자 <span class="n">3</span></th></tr>
+<tr><td><code>primary_foreground</code></td><td>본문 글자</td><td><code>neutral.primary_foreground</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>secondary_foreground</code></td><td>흐린 보조 글자 — 아이콘·설명·머리행 제목</td><td><code>neutral.secondary_foreground</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>disabled_foreground</code></td><td>비활성 글자·글리프</td><td><code>neutral.disabled_foreground</code></td><td><code>colors.disabled_foreground</code></td></tr>
+<tr class="grp"><th colspan="4">선 <span class="n">5</span></th></tr>
+<tr><td><code>divider</code></td><td>1px 구분선</td><td><code>neutral.divider</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>input_border</code></td><td>입력칸의 테두리</td><td><code>neutral.input_border</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>control_border</code></td><td>꺼진 체크 상자·라디오 고리의 선 (입력칸 테두리보다 진하다)</td><td><code>neutral.control_border</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>group_border</code></td><td>접히는 그룹의 둘레 선</td><td><code>neutral.group_border</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>tooltip_border</code></td><td>tooltip·popup 표면의 테</td><td><code>neutral.tooltip_border</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr class="grp"><th colspan="4">키 컬러 4역할 <span class="n">4</span></th></tr>
+<tr><td><code>accent</code></td><td>채움·테두리·정상 상태 표시. 키보드 초점 테도 이 색이다</td><td><code>accent.accent</code></td><td><code>colors.emphasis</code></td></tr>
+<tr><td><code>accent_hover</code></td><td>위 요소의 hover</td><td><code>accent.hover</code></td><td><code>colors.emphasis</code></td></tr>
+<tr><td><code>accent_soft</code></td><td>옅은 강조 바탕의 원색 (파생 역할이 알파로 얹는다)</td><td><code>accent.soft</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>accent_emphasis_foreground</code></td><td>옅은 강조 바탕(고른 토글, 옅은 강조 단추) 위의 글자</td><td><code>accent.emphasis_foreground</code></td><td><code>colors.highlight_foreground</code></td></tr>
+<tr class="grp"><th colspan="4">채운 바탕 위 글자 <span class="n">2</span></th></tr>
+<tr><td><code>accent_foreground</code></td><td>채운 강조 바탕 위의 글자·기호 — 기본 단추, 체크 표시, 켜진 스위치 손잡이</td><td><code>foreground_on(accent.accent)</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>error_foreground</code></td><td>채운 오류색 바탕 위의 글자 — 위험 단추의 hover</td><td><code>foreground_on(neutral.error_accent)</code></td><td><code>colors.window_background</code></td></tr>
+<tr class="grp"><th colspan="4">키 컬러 파생 (tone) <span class="n">8</span></th></tr>
+<tr><td><code>accent_pressed</code></td><td>채운 강조 단추를 누르는 동안</td><td><code>with_alpha(accent.accent, tones.pressed)</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>soft_button_background</code></td><td>옅은 강조 단추의 쉼</td><td><code>with_alpha(accent.soft, tones.soft_button)</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>soft_button_hover_background</code></td><td>옅은 강조 단추의 hover</td><td><code>with_alpha(accent.hover, tones.soft_button_hover)</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>active_toggle_background</code></td><td>켜진 토글 단추의 바탕</td><td><code>with_alpha(accent.soft, tones.active_toggle)</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>selection_background</code></td><td>텍스트 입력의 고른 구간</td><td><code>with_alpha(accent.soft, tones.selection)</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>selection_foreground</code></td><td>고른 구간 위의 글자 (고대비에서만 본문과 다르다)</td><td><code>neutral.primary_foreground</code></td><td><code>colors.highlight_foreground</code></td></tr>
+<tr><td><code>row_selection_background</code></td><td>고른 목록 행의 옅은 채움 (왼쪽 표식은 accent)</td><td><code>with_alpha(accent.soft, tones.row_selection)</code></td><td><code>make_ui_color(0, 0, 0, 0)</code></td></tr>
+<tr><td><code>drop_target_background</code></td><td>끌어다 놓을 자리의 채움</td><td><code>with_alpha(accent.accent, tones.drop_target)</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr class="grp"><th colspan="4">뜻 있는 색 <span class="n">5</span></th></tr>
+<tr><td><code>warning_accent</code></td><td>경고</td><td><code>neutral.warning_accent</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>error_accent</code></td><td>오류·되돌릴 수 없는 동작</td><td><code>neutral.error_accent</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>danger_button_background</code></td><td>옅은 위험 단추의 쉼</td><td><code>with_alpha(neutral.error_accent, tones.danger_button)</code></td><td><code>colors.button_background</code></td></tr>
+<tr><td><code>danger_button_hover_background</code></td><td>옅은 위험 단추의 hover</td><td><code>with_alpha(neutral.error_accent, tones.danger_button_hover)</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>danger_button_pressed_background</code></td><td>옅은 위험 단추의 눌림</td><td><code>with_alpha(neutral.error_accent, tones.danger_button_pressed)</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr class="grp"><th colspan="4">일반 단추·그림자 <span class="n">4</span></th></tr>
+<tr><td><code>button_hover_background</code></td><td>caption 밖 일반 단추(도구 막대·목록 항목)의 hover</td><td><code>neutral.button_hover_background</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>button_hover_foreground</code></td><td>그 hover의 글자</td><td><code>neutral.button_hover_foreground</code></td><td><code>colors.highlight_foreground</code></td></tr>
+<tr><td><code>button_pressed_background</code></td><td>일반 단추의 눌림</td><td><code>neutral.button_pressed_background</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>content_shadow</code></td><td>상단 막대 아래로 내용이 지나갈 때의 그림자 (알파는 그리는 쪽이 거리로 낮춘다)</td><td><code>neutral.content_shadow</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr class="grp"><th colspan="4">caption <span class="n">1</span></th></tr>
+<tr><td><code>caption</code></td><td>창 caption 줄 (아래 표)</td><td><code>neutral.caption</code></td><td>단추 표면·highlight 짝 (288–295행)</td></tr>
+<tr class="grp"><th colspan="4">문서 비교·찾기 <span class="n">5</span></th></tr>
+<tr><td><code>document_added_background</code></td><td>차이 보기의 더한 줄</td><td><code>with_alpha(accent.accent, 0.12f)</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>document_removed_background</code></td><td>지운 줄</td><td><code>with_alpha(neutral.error_accent, 0.12f)</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>document_changed_background</code></td><td>바뀐 줄</td><td><code>with_alpha(neutral.warning_accent, 0.12f)</code></td><td><code>colors.window_background</code></td></tr>
+<tr><td><code>document_search_background</code></td><td>찾기 강조의 바탕</td><td><code>with_alpha(accent.soft, 0.35f)</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>document_search_foreground</code></td><td>찾기 강조의 글자</td><td><code>neutral.primary_foreground</code></td><td><code>colors.highlight_foreground</code></td></tr>
+<tr class="grp"><th colspan="4">구문 색 <span class="n">6</span></th></tr>
+<tr><td><code>syntax_keyword</code></td><td>구문 색: keyword</td><td><code>neutral.syntax_keyword</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>syntax_string</code></td><td>string</td><td><code>neutral.syntax_string</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>syntax_comment</code></td><td>comment</td><td><code>neutral.syntax_comment</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>syntax_number</code></td><td>number</td><td><code>neutral.syntax_number</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>syntax_type</code></td><td>type</td><td><code>neutral.syntax_type</code></td><td><code>colors.window_foreground</code></td></tr>
+<tr><td><code>syntax_function</code></td><td>function</td><td><code>neutral.syntax_function</code></td><td><code>colors.window_foreground</code></td></tr>
+</tbody></table></div>
+            <h4><code>caption_color_palette</code></h4>
+<div class="table-wrap"><table class="t">
+<thead><tr><th><code>caption_color_palette</code></th><th>JSON 키</th><th>dark</th><th>light</th><th>고대비</th></tr></thead>
+<tbody>
+<tr><td><code>background</code></td><td><code>background</code></td><td><code>#252526</code></td><td><code>#f0f0f0</code></td><td><code>colors.button_background</code></td></tr>
+<tr><td><code>foreground</code></td><td><code>foreground</code></td><td><code>#ffffff</code></td><td><code>#1f1f1f</code></td><td><code>colors.button_foreground</code></td></tr>
+<tr><td><code>button_hover_background</code></td><td><code>buttonHoverBackground</code></td><td><code>#3f3f40</code></td><td><code>#dadada</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>button_hover_foreground</code></td><td><code>buttonHoverForeground</code></td><td><code>#ffffff</code></td><td><code>#1f1f1f</code></td><td><code>colors.highlight_foreground</code></td></tr>
+<tr><td><code>close_button_hover_background</code></td><td><code>closeButtonHoverBackground</code></td><td><code>#c42b1c</code></td><td><code>#c42b1c</code></td><td><code>colors.highlight_background</code></td></tr>
+<tr><td><code>close_button_hover_foreground</code></td><td><code>closeButtonHoverForeground</code></td><td><code>#ffffff</code></td><td><code>#ffffff</code></td><td><code>colors.highlight_foreground</code></td></tr>
+</tbody></table></div>
+          </section>
+          <section data-tab="중립 색·style.json">
+            <div class="prose"><p><code>neutral_color_palette</code>는 키 컬러와 무관한 한 테마의 중립 색이다. <code>ui_color_palette</code>의 같은 이름 칸으로 그대로 옮겨진다. JSON 키는 camelCase이고 필드 차례가 곧 생성물의 지정 초기화 차례다. 값은 내장 <code>assets/style.json</code>이다.</p></div>
+<div class="table-wrap"><table class="t">
+<thead><tr><th>JSON 키</th><th>필드</th><th>빠지면</th><th>dark</th><th>light</th></tr></thead>
+<tbody>
+<tr><td><code>windowBackground</code></td><td><code>window_background</code></td><td>필수</td><td><code>#1e1e1e</code></td><td><code>#f8f8f8</code></td></tr>
+<tr><td><code>surfaceBackground</code></td><td><code>surface_background</code></td><td>필수</td><td><code>#2d2d30</code></td><td><code>#ffffff</code></td></tr>
+<tr><td><code>primaryForeground</code></td><td><code>primary_foreground</code></td><td>필수</td><td><code>#ffffff</code></td><td><code>#1f1f1f</code></td></tr>
+<tr><td><code>secondaryForeground</code></td><td><code>secondary_foreground</code></td><td>필수</td><td><code>#ffffffbf</code></td><td><code>#1f1f1fbf</code></td></tr>
+<tr><td><code>disabledForeground</code></td><td><code>disabled_foreground</code></td><td>필수</td><td><code>#ffffff73</code></td><td><code>#1f1f1f73</code></td></tr>
+<tr><td><code>divider</code></td><td><code>divider</code></td><td>필수</td><td><code>#ffffff1f</code></td><td><code>#1f1f1f1f</code></td></tr>
+<tr><td><code>inputBackground</code></td><td><code>input_background</code></td><td>필수</td><td><code>#ffffff14</code></td><td><code>#1f1f1f14</code></td></tr>
+<tr><td><code>inputBorder</code></td><td><code>input_border</code></td><td>필수</td><td><code>#ffffff59</code></td><td><code>#1f1f1f59</code></td></tr>
+<tr><td><code>controlBorder</code></td><td><code>control_border</code></td><td>필수</td><td><code>#ffffff8c</code></td><td><code>#1f1f1f8c</code></td></tr>
+<tr><td><code>groupBorder</code></td><td><code>group_border</code></td><td>필수</td><td><code>#ffffff40</code></td><td><code>#1f1f1f40</code></td></tr>
+<tr><td><code>warningAccent</code></td><td><code>warning_accent</code></td><td>필수</td><td><code>#dcaa2d</code></td><td><code>#9a6700</code></td></tr>
+<tr><td><code>errorAccent</code></td><td><code>error_accent</code></td><td>필수</td><td><code>#e06c75</code></td><td><code>#c0303a</code></td></tr>
+<tr><td><code>buttonHoverBackground</code></td><td><code>button_hover_background</code></td><td>필수</td><td><code>#ffffff1a</code></td><td><code>#00000014</code></td></tr>
+<tr><td><code>buttonHoverForeground</code></td><td><code>button_hover_foreground</code></td><td>필수</td><td><code>#ffffff</code></td><td><code>#1f1f1f</code></td></tr>
+<tr><td><code>buttonPressedBackground</code></td><td><code>button_pressed_background</code></td><td>필수</td><td><code>#ffffff2d</code></td><td><code>#00000024</code></td></tr>
+<tr><td><code>tooltipBackground</code></td><td><code>tooltip_background</code></td><td>필수</td><td><code>#252526</code></td><td><code>#ffffff</code></td></tr>
+<tr><td><code>tooltipBorder</code></td><td><code>tooltip_border</code></td><td>필수</td><td><code>#5a5a5c</code></td><td><code>#c8c8c8</code></td></tr>
+<tr><td><code>contentShadow</code></td><td><code>content_shadow</code></td><td>필수</td><td><code>#000000</code></td><td><code>#000000</code></td></tr>
+<tr><td><code>noticeBackground</code></td><td><code>notice_background</code></td><td>필수</td><td><code>#422427</code></td><td><code>#fde7e9</code></td></tr>
+<tr><td><code>raisedBackground</code></td><td><code>raised_background</code></td><td>빠지면 <code>noticeBackground</code></td><td><code>#38383c</code></td><td><code>#f0f0f0</code></td></tr>
+<tr><td><code>thumbBackground</code></td><td><code>thumb_background</code></td><td>빠지면 <code>buttonPressedBackground</code></td><td><code>#ffffff29</code></td><td><code>#ffffff</code></td></tr>
+<tr><td><code>backdropBackground</code></td><td><code>backdrop_background</code></td><td>빠지면 <code>windowBackground</code></td><td><code>#1e1e1e59</code></td><td><code>#f8f8f866</code></td></tr>
+<tr><td><code>syntaxKeyword</code></td><td><code>syntax_keyword</code></td><td>빠지면 <code>primaryForeground</code></td><td><code>#6cb2f2</code></td><td><code>#0000ff</code></td></tr>
+<tr><td><code>syntaxString</code></td><td><code>syntax_string</code></td><td>빠지면 <code>primaryForeground</code></td><td><code>#dba184</code></td><td><code>#a31515</code></td></tr>
+<tr><td><code>syntaxComment</code></td><td><code>syntax_comment</code></td><td>빠지면 <code>primaryForeground</code></td><td><code>#8dbb78</code></td><td><code>#006b00</code></td></tr>
+<tr><td><code>syntaxNumber</code></td><td><code>syntax_number</code></td><td>빠지면 <code>primaryForeground</code></td><td><code>#b5cea8</code></td><td><code>#0a6b4a</code></td></tr>
+<tr><td><code>syntaxType</code></td><td><code>syntax_type</code></td><td>빠지면 <code>primaryForeground</code></td><td><code>#4ec9b0</code></td><td><code>#1d6c84</code></td></tr>
+<tr><td><code>syntaxFunction</code></td><td><code>syntax_function</code></td><td>빠지면 <code>primaryForeground</code></td><td><code>#dcdcaa</code></td><td><code>#6e5320</code></td></tr>
+<tr><td><code>caption</code></td><td><code>caption</code></td><td>필수 (여섯 키 모두)</td><td colspan="2">아래 caption 표</td></tr>
+</tbody></table></div>
+            <div class="prose">
+              <ul>
+                <li>구문 색 여섯의 내장값은 창·표면·입력칸 바탕 위에서 대비 4.5:1 이상이다. test가 그 기준이다.</li>
+                <li><code>thumb_background</code>는 트랙(<code>input_background</code>)보다 밝아야 한다. 어두우면 고른 칸이 눌려 들어가 꺼진 것으로 읽힌다.</li>
+                <li><code>raised_background</code>는 뜻이 없는 불투명 중립색이고 notice와 갈린다.</li>
+              </ul>
+            </div>
+            <div class="code" data-lang="json" data-src="assets/style.json:78-117" data-path="assets/style.json" data-start="78"><script type="text/plain">
+    "tones": {
+        "pressed": 0.70,
+        "softButton": 0.25,
+        "softButtonHover": 0.35,
+        "activeToggle": 0.22,
+        "selection": 0.35,
+        "rowSelection": 0.18,
+        "dropTarget": 0.30,
+        "dangerButton": 0.20,
+        "dangerButtonHover": 0.32,
+        "dangerButtonPressed": 0.42
+    },
+    "metrics": {
+        "bodyFontSize": 12,
+        "smallFontSize": 11,
+        "controlCornerRadius": 3,
+        "rowCornerRadius": 4,
+        "fontWeights": {
+            "bodyText": "regular",
+            "smallText": "regular",
+            "buttonText": "regular",
+            "selectedTab": "regular",
+            "selectedChoice": "semibold",
+            "title": "regular"
+        }
+    },
+    "tabBar": {
+        "variant": "underline",
+        "closeVisibility": "always",
+        "indicatorPlacement": "iconCorner",
+        "barBackground": "windowBackground",
+        "selectedBackground": "surfaceBackground"
+    },
+    "popup": {
+        "corner": "system"
+    },
+    "text": {
+        "lineBreak": "space"
+    }
+}
+</script></div>
+          </section>
+          <section data-tab="ui_style.h">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/theme/ui_style.h:16-58" data-path="include/luil/theme/ui_style.h" data-start="16"><script type="text/plain">
+    struct ui_font_weights
+    {
+        // 본문 글자(`body_font_size`)다 — 목록 행·메뉴·탭·드롭다운·체크 라벨·표 칸·toast.
+        font_weight body_text { font_weight::regular };
+        // 작은 글자(`small_font_size`)다 — 머리행 제목·tooltip·끌기 ghost.
+        font_weight small_text { font_weight::regular };
+        // 글 단추(`text_button`)의 이름이다.
+        font_weight button_text { font_weight::regular };
+        // 고른 탭의 이름이다. 고르지 않은 탭은 `body_text`다.
+        //  - 탭의 자리는 이름 폭으로 정하지 않아 굵기를 바꿔도 탭이 들썩이지 않는다. 좁은 탭에서는 이름이 먼저 줄어든다.
+        font_weight selected_tab { font_weight::regular };
+        // 선택지 묶음(`choice_group_element`)에서 고른 칸의 이름이다. 칸 폭은 이 굵기와 `body_text` 중 넓은 쪽으로 잰다 —
+        // 고른 칸이 바뀌어도 칸이 들썩이지 않는다.
+        font_weight selected_choice { font_weight::semibold };
+        // 제목이다 — dialog·app bar·caption 줄·묶음 틀의 제목.
+        font_weight title { font_weight::regular };
+
+        [[nodiscard]] bool operator==(const ui_font_weights&) const noexcept = default;
+    };
+
+    // 라이브러리가 그리기 안에 박아 두었던 논리 픽셀 치수다.
+    // element config에 이미 열린 값(`label_config::font_size`·`button_config::corner_radius`
+    // 같은 것)은 앱이 element마다 정하므로 여기 담지 않는다 — 여기 담는 것은 config에
+    // 자리가 없어 앱이 손댈 수 없던 값들이다.
+    //  - 배치 상수(행 높이·간격, `check_row_height` 같은 `inline constexpr`)는 담지 않는다.
+    //    앱이 tree를 짓는 산수에 쓰는 값이라 실행 시점 값이 되면 그 산수가 전부 함수 호출이 된다.
+    //  - 텍스트 입력의 글꼴 크기도 담지 않는다. 포인터 자리를 caret으로 옮기는 계산이
+    //    그리기 밖에서 같은 글꼴을 재므로 draw context가 닿지 않는다.
+    struct ui_metrics
+    {
+        // 목록 행·메뉴·탭·버튼·드롭다운·체크 라벨의 본문 글자다.
+        float body_font_size { 12.0f };
+        // 머리행 제목·tooltip·끌기 ghost의 작은 글자다.
+        float small_font_size { 11.0f };
+        // 버튼·입력칸·메뉴 항목·hover 채움의 모서리다.
+        float control_corner_radius { 3.0f };
+        // 고른 행의 채움·그룹 틀의 모서리다.
+        float row_corner_radius { 4.0f };
+        // 컴포넌트 글의 굵기다. JSON에서 빠져도 된다 — 빠진 칸은 이 기본값이다.
+        ui_font_weights font_weights {};
+
+        [[nodiscard]] bool operator==(const ui_metrics&) const noexcept = default;
+    };
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/theme/ui_style.h:60-146" data-path="include/luil/theme/ui_style.h" data-start="60"><script type="text/plain">
+    // 팔레트의 역할 하나를 이름으로 가리킨다.
+    // 컴포넌트 스타일이 "어느 역할로 칠할지"를 값으로 고르는 자리다 — 색 자체가 아니라 역할이라 테마 전환과
+    // 고대비가 그대로 따라온다. 선택자(`std::function`)와 달리 비교되고 JSON에 적힌다.
+    //  - 바탕으로 칠할 만한 역할만 둔다. 글자·선 역할은 그 자리의 뜻이 정해져 있어 고를 일이 없다.
+    enum class palette_role
+    {
+        window_background,
+        surface_background,
+        input_background,
+        tooltip_background,
+        notice_background,
+        caption_background,
+        button_hover_background,
+        accent_soft,
+    };
+
+    // 역할이 그 팔레트에서 갖는 색이다.
+    [[nodiscard]] ui_color palette_color(const ui_color_palette& palette, palette_role role) noexcept;
+
+    // 탭 막대를 어떤 모양으로 그리는가다.
+    enum class tab_bar_variant
+    {
+        // 선택된 탭 바탕 + 아래 강조선이다 (처음부터의 모양).
+        underline,
+        // 선택된 탭을 아래 내용 영역과 한 판으로 잇는다. 위 모서리는 둥글고 아래 끝은 바깥으로 휜다.
+        connected,
+        // 탭을 세로 칸막이로 맞붙인다. 선택된 칸은 위 강조선을 긋고 내용 바탕으로 아래가 열린다.
+        flat,
+    };
+
+    // 탭의 닫기 단추를 언제 보이는가다. 숨어도 자리는 지켜 이름이 들썩이지 않는다.
+    enum class tab_close_visibility
+    {
+        always,
+        // 선택된 탭과 포인터가 올라간 탭에서만 보인다.
+        selected_or_hovered,
+    };
+
+    // 탭 상태 표시(`tab_indicator`)를 어디에 두는가다.
+    enum class tab_indicator_placement
+    {
+        // 아이콘의 오른쪽 아래 모서리다. 진행 중이면 아이콘을 감싸는 호다.
+        icon_corner,
+        // 닫기 단추 자리다. 포인터를 단추에 올리거나 초점이 가면 닫기 단추로 바뀐다.
+        close_slot,
+    };
+
+    // 자기 창을 갖는 popup(메뉴·목록·떠 있는 판)의 모서리다 (`ui_popup::corner`).
+    //  - 둥근 모서리는 OS가 창을 잘라 내는 것이다 (Windows 11의 DWM). 그것을 못 하는 OS·환경(Windows 10 이하,
+    //    원격 데스크톱)에서는 모두 직각으로 물러서고 처음부터의 모양(창 그림자 + 1px 선)이다.
+    //  - 고른 모서리의 실제 반지름은 `popup_corner_radius`가 답한다 (app_host.h).
+    enum class popup_corner
+    {
+        // 이 OS가 popup에 쓰는 모양이다. Windows 11은 메뉴·tooltip처럼 작게 둥글다.
+        system,
+        round,
+        round_small,
+        // 직각이다. 꼬리 달린 말풍선처럼 모양을 직접 그리는 popup이 고른다.
+        square,
+    };
+
+    // popup의 앱 스타일이다 (`ui_style::popup`). popup마다 적지 않으면 이 값이다.
+    struct popup_style
+    {
+        popup_corner corner { popup_corner::system };
+
+        [[nodiscard]] bool operator==(const popup_style&) const noexcept = default;
+    };
+
+    // 탭 막대의 앱 스타일이다 (`ui_style::tab_bar`).
+    //  - 막대마다 config에 적지 않고 앱이 한 번 정하면 그 앱의 모든 탭 막대가 같은 모양이다. 한 막대만 달라야
+    //    하면 `tab_bar_config::style`이 통째로 덮는다.
+    //  - 값은 enum과 역할뿐이다 — 비교되고 JSON(`assets/style.json`의 `tabBar`)에 적힌다.
+    struct tab_bar_style
+    {
+        tab_bar_variant variant { tab_bar_variant::underline };
+        tab_close_visibility close_visibility { tab_close_visibility::always };
+        tab_indicator_placement indicator_placement { tab_indicator_placement::icon_corner };
+        // 이어지는 두 모양(`connected`·`flat`)의 막대 바탕과 선택된 탭 바탕이다.
+        //  - 선택된 탭 바탕은 막대 아래 내용 영역과 같은 역할이어야 한 판으로 이어 보인다.
+        //  - 두 역할이 같은 색이 되면(고대비는 창 바탕과 표면이 같다) 선택된 탭에 테를 둘러 선택을 남긴다.
+        //  - `underline`은 막대 바탕을 칠하지 않는다 (처음부터의 모양).
+        palette_role bar_background { palette_role::window_background };
+        palette_role selected_background { palette_role::surface_background };
+
+        [[nodiscard]] bool operator==(const tab_bar_style&) const noexcept = default;
+    };
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/theme/ui_style.h:148-220" data-path="include/luil/theme/ui_style.h" data-start="148"><script type="text/plain">
+    // 한 줄 도우미(`draw_text`·`measure_text`)가 글 안의 줄바꿈을 어떻게 다루는가다.
+    // 라벨·버튼·표 칸처럼 baseline 하나를 받고 폭 하나를 돌려주는 자리에 여러 줄 글(프로세스 출력·커밋 제목·
+    // 붙여 넣은 값)이 오면, 전에는 shaping 구성이 줄을 아래로 내려 칸을 벗어나고 끈 구성은 .notdef 네모를
+    // 그려 두 구성이 서로 다른 그림을 냈다. 어느 값이든 **두 구성이 같은 그림과 폭**을 낸다.
+    //  - 줄바꿈 하나는 CR, LF, 또는 CRLF 짝(한 번으로 센다)이다.
+    //  - 여러 줄을 offset과 함께 다루는 자리(`make_text_layout`·텍스트 입력·문서 보기)는 이 값을 보지 않는다.
+    enum class single_line_break
+    {
+        // 줄바꿈마다 공백 하나로 그리고 잰다 (기본). 한 줄 칸이 무너지지 않는다.
+        space,
+        // 줄바꿈마다 보이는 되돌림 표시(U+21B5 "↵")로 그린다. 줄바꿈이 있다는 사실 자체가 내용인 로그·값 보기의 자리다.
+        symbol,
+        // 문단마다 첫 줄 아래로 한 줄씩 내려 그리고(글꼴의 줄 간격만큼), 가장 넓은 줄의 폭을 잰다.
+        //  - 도우미는 높이를 알려 주지 않는다. 줄 수만큼 높은 칸은 부르는 쪽이 마련해야 하고, 그렇지 않으면
+        //    아래 줄이 이웃을 덮는다.
+        paragraphs,
+    };
+
+    // 글의 앱 스타일이다 (`ui_style::text`). 앱은 구조체 값으로 여러 줄 정책을 지정할 수 있다.
+    struct text_style
+    {
+        // 한 줄 도우미의 줄바꿈 처리다 (JSON `text.lineBreak`).
+        //  - popup처럼 host가 frame의 스타일(`ui_frame::style`)에서 읽어 한 줄 도우미에 건다(`set_single_line_break`).
+        //    도우미에는 문맥 인자가 없어 배치 문맥으로는 닿지 않는다.
+        single_line_break line_break { single_line_break::space };
+        // 여러 줄 글이 config에 정책을 적지 않았을 때의 정책이다 (docs/wrap-policy-key-design.md).
+        //  - label·markdown·여러 줄 칸·`text_block_style`의 `line_break`가 비면 이 값이다. 배치·측정은
+        //    `measure_context::style`로, 그리기에서 접는 길은 `draw_context::wrap_policy`로 받는다.
+        //  - config에 적은 값이 이것보다 앞선다. 한 칸만 어절로 두려면 그 칸에 적는다.
+        line_break_policy wrap_policy { line_break_policy::hangul_words };
+
+        [[nodiscard]] bool operator==(const text_style&) const noexcept = default;
+    };
+
+    // 앱이 정하는 스타일이다 — 두 테마의 중립 색, accent tone, 치수.
+    // 키 컬러(accent)와 테마 선호는 여기 없다. 그 둘은 사용자 설정(`appearance_settings`)이고,
+    // 이것은 **앱의 것**이라 계층이 다르다: 설정이 바뀌어도 스타일은 그대로다.
+    //
+    // 내장값은 assets/style.json에서 빌드 시점에 만들어진다 (`default_ui_style`).
+    // 앱은 (1) 자기 JSON으로 내장값을 바꿔치거나(LUIL_STYLE), (2) 실행 시점에 값을 세워
+    // `ui_frame::style`로 싣는다. 둘 다 같은 자리로 온다.
+    struct ui_style
+    {
+        neutral_color_palette dark {};
+        neutral_color_palette light {};
+        accent_tones tones {};
+        ui_metrics metrics {};
+        // 컴포넌트 스타일이다. 컴포넌트마다 한 칸이고, 그 컴포넌트가 그리기에서 읽는다
+        // (`arrange_context::app_style`). 막대 config의 `style`이 비어 있으면 이 값이다.
+        tab_bar_style tab_bar {};
+        // popup 창의 모양이다. popup은 tree가 아니라 host가 만드는 창이라 배치 문맥이 아니라 frame의 스타일
+        // (`ui_frame::style`)에서 읽는다.
+        popup_style popup {};
+        // 글의 스타일이다. 한 줄 도우미의 줄바꿈 처리(`line_break`)는 popup과 같이 host가 frame의 스타일에서 읽고,
+        // 여러 줄 글의 정책(`wrap_policy`)은 배치 문맥(`arrange_context::style`)과 그리기 문맥(`draw_context::wrap_policy`)으로 닿는다.
+        text_style text {};
+
+        // 테마의 중립 색이다.
+        // 고대비는 중립 색을 쓰지 않으므로 dark를 돌려준다 — 부르는 쪽이 고대비를
+        // 먼저 걸러야 하고(`color_palette_for`가 그렇게 한다), 여기서는 답이 비지 않는다.
+        [[nodiscard]] const neutral_color_palette& neutral_for(color_theme theme) const noexcept;
+
+        [[nodiscard]] bool operator==(const ui_style&) const noexcept = default;
+    };
+
+    // 빌드 시점에 내장된 스타일이다 (assets/style.json 또는 LUIL_STYLE이 가리킨 파일).
+    [[nodiscard]] const ui_style& default_ui_style() noexcept;
+
+    // 스타일의 중립 색 위에 키 컬러를 얹은 팔레트다.
+    // 고대비는 스타일을 무시하고 기본 시스템 색(검정 바탕 fallback)으로 합성한다 —
+    // 접근성 설정은 앱의 스타일보다 세다. 실제 시스템 색을 아는 platform은
+    // `high_contrast_palette_for`를 쓴다.
+    [[nodiscard]] ui_color_palette color_palette_for(const ui_style& style, color_theme theme, const accent_definition& accent) noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>칸</th><th>기본값</th><th>JSON</th></tr></thead>
+                <tbody>
+                  <tr><td><code>ui_metrics::body_font_size</code> · <code>small_font_size</code></td><td>12 · 11</td><td><code>metrics.bodyFontSize</code> · <code>smallFontSize</code> (필수)</td></tr>
+                  <tr><td><code>ui_metrics::control_corner_radius</code> · <code>row_corner_radius</code></td><td>3 · 4</td><td><code>controlCornerRadius</code> · <code>rowCornerRadius</code> (필수)</td></tr>
+                  <tr><td><code>ui_font_weights</code> 여섯 칸</td><td>모두 <code>regular</code>, <code>selected_choice</code>만 <code>semibold</code></td><td><code>metrics.fontWeights</code> (빠져도 된다). 이름은 <code>thin</code>…<code>black</code></td></tr>
+                  <tr><td><code>tab_bar_style</code></td><td><code>underline</code>·<code>always</code>·<code>icon_corner</code>·<code>window_background</code>·<code>surface_background</code></td><td><code>tabBar</code> (빠져도 된다)</td></tr>
+                  <tr><td><code>popup_style::corner</code></td><td><code>system</code></td><td><code>popup.corner</code>: <code>system</code>·<code>round</code>·<code>roundSmall</code>·<code>square</code></td></tr>
+                  <tr><td><code>text_style::line_break</code></td><td><code>space</code></td><td><code>text.lineBreak</code>: <code>space</code>·<code>symbol</code>·<code>paragraphs</code></td></tr>
+                  <tr><td><code>text_style::wrap_policy</code></td><td><code>hangul_words</code></td><td><strong>없음</strong> — JSON에 적으면 빌드가 선다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="palette_scope_element.h">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/palette_scope_element.h:9-40" data-path="include/luil/ui/palette_scope_element.h" data-start="9"><script type="text/plain">
+    // 감싼 가지가 그릴 팔레트다 (palette-scope-design.md).
+    struct palette_scope_config
+    {
+        // 바깥 팔레트와 그 테마를 받아 가지의 팔레트를 돌려준다. 비어 있으면 바깥 팔레트 그대로다.
+        //  - 역할을 고쳐 쓰는 것이라 hover·눌림·초점·비활성 그림은 그대로 그 역할의 바뀐 색으로 선다.
+        std::function<ui_color_palette(const ui_color_palette& palette, color_theme theme)> palette {};
+        // 고대비에서도 바꾼다. 기본(거짓)은 고대비면 바꾸지 않는다 — 사용자가 OS에서 고른 시스템 색을 앱이 옅게
+        // 하거나 바꿔 대비를 무너뜨리지 않는다.
+        bool in_high_contrast { false };
+    };
+
+    // 감싼 가지(내용 하나)를 바뀐 팔레트로 그리는 컨테이너다.
+    // 기본 컨트롤을 옅게(미리 보기·잠긴 판) 또는 다른 역할로(위험 구역) 그릴 때 컨트롤마다 색 선택자를 달지 않는다.
+    //  - 내용은 slot 전체를 받는다. 자기는 아무것도 그리지 않는다.
+    //  - 중첩하면 안쪽 함수가 바깥 함수가 바꾼 팔레트를 받는다.
+    //  - 키보드 초점 테는 tree가 바깥 팔레트로 마지막에 긋는다. 가지 안에서도 초점이 늘 같은 색으로 보인다.
+    //  - 고른 테마가 바뀌면 다음 frame에 바뀐 테마의 팔레트로 함수가 다시 불린다 (그리기마다 부른다).
+    class palette_scope_element final : public ui_element
+    {
+    public:
+        palette_scope_element(ui_element_id id, palette_scope_config config);
+
+        void set_content(std::unique_ptr<ui_element> content);
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
+
+    private:
+        palette_scope_config config_ {};
+        ui_element* content_ { nullptr };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>칸</th><th>기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>palette_scope_config::palette</code></td><td>빈 함수 (= 바깥 팔레트 그대로)</td><td>바깥 팔레트와 그 테마 → 가지의 팔레트</td></tr>
+                  <tr><td><code>palette_scope_config::in_high_contrast</code></td><td><code>false</code></td><td>고대비에서도 바꾸는가</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="고르기">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/theme_picker_element.h:14-71" data-path="include/luil/ui/theme_picker_element.h" data-start="14"><script type="text/plain">
+    struct theme_picker_config
+    {
+        std::u8string owner {};
+        theme_preference selected { theme_preference::system };
+        // 묶음의 접근 이름이다. 비면 기본 문구("테마")다.
+        std::u8string name {};
+        // 밝게·시스템·어둡게 순서다. 표시 언어는 앱이 정한다. 칸마다 비면 기본 낱말이라 하나만 덮어도 된다.
+        std::array<std::u8string, 3> labels {};
+        std::function<input_action(theme_preference)> select {};
+        std::u8string accent_id { default_accent_id };
+        // 카드 한 장의 폭과 미리 보기 높이, 카드 사이 간격이다 (논리 픽셀).
+        //  - 카드는 이 크기로 고정이다. 받은 폭이 넓어도 늘어나지 않고 왼쪽부터 놓인다 — 미리 보기의 비율이
+        //    창 폭에 따라 일그러지지 않는다.
+        //  - 세 장이 한 줄에 들지 않으면 다음 줄로 넘어간다. 한 장도 들지 않으면 받은 폭으로 줄인다.
+        float card_width { 112.0f };
+        float preview_height { 70.0f };
+        float gap { 12.0f };
+    };
+
+    // 밝은 화면·시스템(대각선 분할)·어두운 화면을 카드로 고르는 배타 선택이다.
+    // Tab에서는 한 자리이고 방향키로 카드를 오간다. 값은 앱이 소유한다.
+    // 카드는 고정 크기이고 낮은 폭에서는 다음 줄로 넘어간다.
+    class theme_picker_element final : public ui_element
+    {
+    public:
+        explicit theme_picker_element(theme_picker_config config);
+        [[nodiscard]] static float height_for(const theme_picker_config& config, float width) noexcept;
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] access_info accessibility() const override;
+
+    private:
+        theme_picker_config config_ {};
+    };
+    struct accent_picker_config
+    {
+        std::u8string owner {};
+        std::u8string selected { default_accent_id };
+        // 묶음의 접근 이름이다. 비면 기본 문구("강조색")다.
+        std::u8string name {};
+        bool include_system { true };
+        std::function<input_action(const std::u8string&)> select {};
+    };
+
+    // 카탈로그와 시스템 강조색을 고르는 색상 견본이다. 충분한 클릭 영역과 선택 표시를 제공한다.
+    // 받은 폭에 드는 만큼 한 줄에 놓되 줄마다 개수를 고르게 나눈다 — 마지막 줄에 한두 개만 남지 않는다.
+    class accent_picker_element final : public ui_element
+    {
+    public:
+        explicit accent_picker_element(accent_picker_config config);
+        [[nodiscard]] static float height_for(const accent_picker_config& config, float width) noexcept;
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] access_info accessibility() const override;
+
+    private:
+        accent_picker_config config_ {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>칸</th><th>기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>theme_picker_config::owner</code></td><td>빈 글</td><td>카드 id는 <code>owner/light</code>·<code>owner/system</code>·<code>owner/dark</code></td></tr>
+                  <tr><td><code>theme_picker_config::selected</code></td><td><code>system</code></td><td>고른 카드 (앱 상태)</td></tr>
+                  <tr><td><code>theme_picker_config::name</code> · <code>labels</code></td><td>빈 글 → "테마" · 밝게·시스템·어둡게</td><td>묶음의 접근 이름과 카드 낱말. 칸마다 판정</td></tr>
+                  <tr><td><code>theme_picker_config::select</code></td><td>빈 함수 (누를 수 없다)</td><td>고르라는 메시지</td></tr>
+                  <tr><td><code>theme_picker_config::accent_id</code></td><td><code>default_accent_id</code></td><td>카드 미리 보기에 칠할 키 컬러. 미리 보기는 내장 스타일로 칠한다</td></tr>
+                  <tr><td><code>card_width</code> · <code>preview_height</code> · <code>gap</code></td><td>112 · 70 · 12</td><td>카드 폭(최소 48)·미리 보기 높이(최소 32, 이름 줄 26이 더해진다)·간격</td></tr>
+                  <tr><td><code>accent_picker_config::owner</code></td><td>빈 글</td><td>견본 id는 <code>owner/&lt;id&gt;</code></td></tr>
+                  <tr><td><code>accent_picker_config::selected</code></td><td><code>default_accent_id</code></td><td>고른 id (앱 상태)</td></tr>
+                  <tr><td><code>accent_picker_config::name</code></td><td>빈 글 → "강조색"</td><td>묶음의 접근 이름</td></tr>
+                  <tr><td><code>accent_picker_config::include_system</code></td><td><code>true</code></td><td>서 있는 시스템 항목을 맨 앞에</td></tr>
+                  <tr><td><code>accent_picker_config::select</code></td><td>빈 함수</td><td>고른 id를 담은 메시지</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="키 컬러 25">
+            <div class="prose"><p>내장 카탈로그 <code>assets/accents.json</code>이다. "밝기 → 글자"는 그 테마 <code>accent</code>의 상대 밝기와 <code>foreground_on</code>의 답이다 (컴파일한 출력). dark는 25개 모두 검정, light는 25개 모두 흰색이다. 기본 id <code>mint</code>는 22번째다.</p></div>
+<div class="table-wrap"><table class="t accents">
+<thead><tr><th>#</th><th>id</th><th>이름 (ko / en)</th><th>swatch</th><th>dark: accent · hover · soft · emphasisFg</th><th>dark 밝기 → 글자</th><th>light: accent · hover · soft · emphasisFg</th><th>light 밝기 → 글자</th></tr></thead>
+<tbody>
+<tr><td>1</td><td><code>blue</code></td><td>블루 / Blue</td><td><span class="sw" style="background:#a2cfff"></span> <code>#a2cfff</code></td><td><code>#3f7ebb</code> · <code>#5392d1</code> · <code>#a2cfff</code> · <code>#c6e1ff</code></td><td>0.1957 → 검정</td><td><code>#0062ab</code> · <code>#005391</code> · <code>#00487f</code> · <code>#00487f</code></td><td>0.1168 → 흰색</td></tr>
+<tr><td>2</td><td><code>slate</code></td><td>슬레이트 / Slate</td><td><span class="sw" style="background:#b6cde7"></span> <code>#b6cde7</code></td><td><code>#607d9d</code> · <code>#7390b2</code> · <code>#b6cde7</code> · <code>#d0e0f3</code></td><td>0.1959 → 검정</td><td><code>#416389</code> · <code>#325378</code> · <code>#2a486a</code> · <code>#2a486a</code></td><td>0.1185 → 흰색</td></tr>
+<tr><td>3</td><td><code>indigo</code></td><td>인디고 / Indigo</td><td><span class="sw" style="background:#b8c8ff"></span> <code>#b8c8ff</code></td><td><code>#6375be</code> · <code>#7588d4</code> · <code>#b8c8ff</code> · <code>#d2ddff</code></td><td>0.1909 → 검정</td><td><code>#4657af</code> · <code>#38479d</code> · <code>#303d8b</code> · <code>#303d8b</code></td><td>0.1121 → 흰색</td></tr>
+<tr><td>4</td><td><code>violet</code></td><td>바이올렛 / Violet</td><td><span class="sw" style="background:#c7c2ff"></span> <code>#c7c2ff</code></td><td><code>#786eba</code> · <code>#8a82cf</code> · <code>#c7c2ff</code> · <code>#dcd9ff</code></td><td>0.1869 → 검정</td><td><code>#5f4faa</code> · <code>#503f98</code> · <code>#453687</code> · <code>#453687</code></td><td>0.1093 → 흰색</td></tr>
+<tr><td>5</td><td><code>lavender</code></td><td>라벤더 / Lavender</td><td><span class="sw" style="background:#d5bef9"></span> <code>#d5bef9</code></td><td><code>#8769b3</code> · <code>#9b7cc8</code> · <code>#d5bef9</code> · <code>#e5d6ff</code></td><td>0.1851 → 검정</td><td><code>#7049a1</code> · <code>#603890</code> · <code>#54307f</code> · <code>#54307f</code></td><td>0.1078 → 흰색</td></tr>
+<tr><td>6</td><td><code>mauve</code></td><td>모브 / Mauve</td><td><span class="sw" style="background:#d7c2de"></span> <code>#d7c2de</code></td><td><code>#896f92</code> · <code>#9d83a6</code> · <code>#d7c2de</code> · <code>#e7d8ec</code></td><td>0.1876 → 검정</td><td><code>#72537b</code> · <code>#62446b</code> · <code>#553a5e</code> · <code>#553a5e</code></td><td>0.1119 → 흰색</td></tr>
+<tr><td>7</td><td><code>orchid</code></td><td>오키드 / Orchid</td><td><span class="sw" style="background:#e7b8e9"></span> <code>#e7b8e9</code></td><td><code>#9c61a0</code> · <code>#b174b4</code> · <code>#e7b8e9</code> · <code>#f3d1f4</code></td><td>0.1816 → 검정</td><td><code>#863f8b</code> · <code>#762f7b</code> · <code>#67276c</code> · <code>#67276c</code></td><td>0.1049 → 흰색</td></tr>
+<tr><td>8</td><td><code>magenta</code></td><td>마젠타 / Magenta</td><td><span class="sw" style="background:#f1b5dc"></span> <code>#f1b5dc</code></td><td><code>#a75d90</code> · <code>#bc71a4</code> · <code>#f1b5dc</code> · <code>#facfeb</code></td><td>0.1806 → 검정</td><td><code>#923a79</code> · <code>#802a69</code> · <code>#71225c</code> · <code>#71225c</code></td><td>0.1052 → 흰색</td></tr>
+<tr><td>9</td><td><code>pink</code></td><td>핑크 / Pink</td><td><span class="sw" style="background:#f9b4cb"></span> <code>#f9b4cb</code></td><td><code>#af5b7b</code> · <code>#c56e8f</code> · <code>#f9b4cb</code> · <code>#ffcfde</code></td><td>0.1803 → 검정</td><td><code>#9b3661</code> · <code>#892552</code> · <code>#781e47</code> · <code>#781e47</code></td><td>0.1047 → 흰색</td></tr>
+<tr><td>10</td><td><code>rose</code></td><td>로즈 / Rose</td><td><span class="sw" style="background:#fdb4bc"></span> <code>#fdb4bc</code></td><td><code>#b35b68</code> · <code>#c96e7b</code> · <code>#fdb4bc</code> · <code>#ffd0d5</code></td><td>0.1807 → 검정</td><td><code>#9f364b</code> · <code>#8d243c</code> · <code>#7c1d33</code> · <code>#7c1d33</code></td><td>0.1052 → 흰색</td></tr>
+<tr><td>11</td><td><code>rosewood</code></td><td>로즈우드 / Rosewood</td><td><span class="sw" style="background:#e6c0c0"></span> <code>#e6c0c0</code></td><td><code>#9b6c6d</code> · <code>#af7f80</code> · <code>#e6c0c0</code> · <code>#f2d6d6</code></td><td>0.1880 → 검정</td><td><code>#854f51</code> · <code>#744042</code> · <code>#663638</code> · <code>#663638</code></td><td>0.1117 → 흰색</td></tr>
+<tr><td>12</td><td><code>salmon</code></td><td>살몬 / Salmon</td><td><span class="sw" style="background:#fdb6a9"></span> <code>#fdb6a9</code></td><td><code>#b45e4f</code> · <code>#ca7162</code> · <code>#fdb6a9</code> · <code>#ffd2c9</code></td><td>0.1827 → 검정</td><td><code>#a0392a</code> · <code>#8e281a</code> · <code>#7d2014</code> · <code>#7d2014</code></td><td>0.1057 → 흰색</td></tr>
+<tr><td>13</td><td><code>coral</code></td><td>코럴 / Coral</td><td><span class="sw" style="background:#fbb99e"></span> <code>#fbb99e</code></td><td><code>#b2623e</code> · <code>#c77551</code> · <code>#fbb99e</code> · <code>#ffd3c1</code></td><td>0.1855 → 검정</td><td><code>#9e3f05</code> · <code>#873300</code> · <code>#762c00</code> · <code>#762c00</code></td><td>0.1084 → 흰색</td></tr>
+<tr><td>14</td><td><code>peach</code></td><td>피치 / Peach</td><td><span class="sw" style="background:#f4be92"></span> <code>#f4be92</code></td><td><code>#ab6829</code> · <code>#c07b3e</code> · <code>#f4be92</code> · <code>#fdd5b7</code></td><td>0.1872 → 검정</td><td><code>#8e4e00</code> · <code>#794100</code> · <code>#693800</code> · <code>#693800</code></td><td>0.1120 → 흰색</td></tr>
+<tr><td>15</td><td><code>mocha</code></td><td>모카 / Mocha</td><td><span class="sw" style="background:#dfc5ad"></span> <code>#dfc5ad</code></td><td><code>#937354</code> · <code>#a88767</code> · <code>#dfc5ad</code> · <code>#eddac9</code></td><td>0.1910 → 검정</td><td><code>#7d5732</code> · <code>#6d4822</code> · <code>#5f3e1b</code> · <code>#5f3e1b</code></td><td>0.1141 → 흰색</td></tr>
+<tr><td>16</td><td><code>amber</code></td><td>앰버 / Amber</td><td><span class="sw" style="background:#e8c58b"></span> <code>#e8c58b</code></td><td><code>#9e7112</code> · <code>#b2852e</code> · <code>#e8c58b</code> · <code>#f3dab2</code></td><td>0.1912 → 검정</td><td><code>#7e5900</code> · <code>#6b4a00</code> · <code>#5d4000</code> · <code>#5d4000</code></td><td>0.1158 → 흰색</td></tr>
+<tr><td>17</td><td><code>lemon</code></td><td>레몬 / Lemon</td><td><span class="sw" style="background:#d7cc8b"></span> <code>#d7cc8b</code></td><td><code>#8a7b13</code> · <code>#9e8f2f</code> · <code>#d7cc8b</code> · <code>#e7e0b2</code></td><td>0.1962 → 검정</td><td><code>#6e6100</code> · <code>#5d5200</code> · <code>#514700</code> · <code>#514700</code></td><td>0.1186 → 흰색</td></tr>
+<tr><td>18</td><td><code>olive</code></td><td>올리브 / Olive</td><td><span class="sw" style="background:#c7cfaf"></span> <code>#c7cfaf</code></td><td><code>#777f57</code> · <code>#8a9369</code> · <code>#c7cfaf</code> · <code>#dce1ca</code></td><td>0.1979 → 검정</td><td><code>#5d6634</code> · <code>#4e5625</code> · <code>#434b1e</code> · <code>#434b1e</code></td><td>0.1208 → 흰색</td></tr>
+<tr><td>19</td><td><code>lime</code></td><td>라임 / Lime</td><td><span class="sw" style="background:#bad69a"></span> <code>#bad69a</code></td><td><code>#668736</code> · <code>#799b4a</code> · <code>#bad69a</code> · <code>#d2e6bc</code></td><td>0.2042 → 검정</td><td><code>#4b6d00</code> · <code>#3f5c00</code> · <code>#365000</code> · <code>#365000</code></td><td>0.1243 → 흰색</td></tr>
+<tr><td>20</td><td><code>green</code></td><td>그린 / Green</td><td><span class="sw" style="background:#a8daa9"></span> <code>#a8daa9</code></td><td><code>#4a8c4e</code> · <code>#5ea061</code> · <code>#a8daa9</code> · <code>#c6e9c6</code></td><td>0.2076 → 검정</td><td><code>#1a7426</code> · <code>#006317</code> · <code>#005612</code> · <code>#005612</code></td><td>0.1285 → 흰색</td></tr>
+<tr><td>21</td><td><code>sage</code></td><td>세이지 / Sage</td><td><span class="sw" style="background:#b7d2c3"></span> <code>#b7d2c3</code></td><td><code>#618371</code> · <code>#749784</code> · <code>#b7d2c3</code> · <code>#d1e3d8</code></td><td>0.1997 → 검정</td><td><code>#416b55</code> · <code>#325b46</code> · <code>#2a4f3c</code> · <code>#2a4f3c</code></td><td>0.1230 → 흰색</td></tr>
+<tr><td>22</td><td><code>mint</code></td><td>민트 / Mint</td><td><span class="sw" style="background:#91ddc2"></span> <code>#91ddc2</code></td><td><code>#009070</code> · <code>#2ca483</code> · <code>#91ddc2</code> · <code>#b7ecd8</code></td><td>0.2112 → 검정</td><td><code>#007258</code> · <code>#00604a</code> · <code>#005440</code> · <code>#005440</code></td><td>0.1274 → 흰색</td></tr>
+<tr><td>23</td><td><code>teal</code></td><td>티얼 / Teal</td><td><span class="sw" style="background:#87ddd3"></span> <code>#87ddd3</code></td><td><code>#008d83</code> · <code>#00a398</code> · <code>#87ddd3</code> · <code>#b1ece4</code></td><td>0.2069 → 검정</td><td><code>#007068</code> · <code>#005e57</code> · <code>#00524c</code> · <code>#00524c</code></td><td>0.1259 → 흰색</td></tr>
+<tr><td>24</td><td><code>aqua</code></td><td>아쿠아 / Aqua</td><td><span class="sw" style="background:#84dbe5"></span> <code>#84dbe5</code></td><td><code>#008b96</code> · <code>#00a0ad</code> · <code>#84dbe5</code> · <code>#b0eaf1</code></td><td>0.2067 → 검정</td><td><code>#006e77</code> · <code>#005d65</code> · <code>#005058</code> · <code>#005058</code></td><td>0.1248 → 흰색</td></tr>
+<tr><td>25</td><td><code>skyblue</code></td><td>스카이블루 / Sky blue</td><td><span class="sw" style="background:#8ed6f6"></span> <code>#8ed6f6</code></td><td><code>#0086af</code> · <code>#289bc4</code> · <code>#8ed6f6</code> · <code>#b5e7fe</code></td><td>0.2015 → 검정</td><td><code>#006a8b</code> · <code>#005a76</code> · <code>#004e67</code> · <code>#004e67</code></td><td>0.1217 → 흰색</td></tr>
+</tbody></table></div>
+          </section>
+          <section data-tab="frame·문맥·CMake">
+            <div class="code" data-lang="cpp" data-src="include/luil/app/app_host.h:490-499" data-path="include/luil/app/app_host.h" data-start="490"><script type="text/plain">
+        // 외양·글꼴의 유효 선호다.
+        // 실제 팔레트는 UI thread가 OS 상태(고대비·밝은 모드)와 함께 해석한다.
+        appearance_settings appearance {};
+        font_settings fonts {};
+        // 앱의 스타일이다 (두 테마의 중립 색·accent tone·치수).
+        // 비어 있으면 내장 스타일(assets/style.json)이다. 앱이 한 번 세워 두고 매 frame
+        // 같은 포인터를 실으면 되고, 바꾸면 다음 frame부터 새 값이다.
+        //  - 선호(`appearance`)가 아니라 여기 있는 이유: 사용자 설정이 아니라 **앱의
+        //    것**이라 계층이 다르다 (ui_style.h).
+        std::shared_ptr<const ui_style> style {};
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>칸·변수</th><th>기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>draw_context::palette</code></td><td>—</td><td>이 그리기의 팔레트 (참조)</td></tr>
+                  <tr><td><code>draw_context::metrics</code></td><td>struct 기본값</td><td>스타일 치수</td></tr>
+                  <tr><td><code>draw_context::wrap_policy</code></td><td><code>hangul_words</code></td><td>스타일의 여러 줄 정책</td></tr>
+                  <tr><td><code>draw_context::reduce_motion</code></td><td><code>false</code></td><td>움직임 줄이기</td></tr>
+                  <tr><td><code>draw_context::theme</code></td><td><code>dark</code></td><td>이 팔레트가 난 테마 (고대비 판정)</td></tr>
+                  <tr><td><code>arrange_context::style</code> · <code>measure_context::style</code></td><td>빈 포인터 (= 내장)</td><td>배치·측정이 읽는 앱 스타일</td></tr>
+                  <tr><td><code>LUIL_ACCENT_CATALOG</code></td><td><code>assets/accents.json</code></td><td>내장할 키 컬러 카탈로그</td></tr>
+                  <tr><td><code>LUIL_DEFAULT_ACCENT_ID</code></td><td><code>mint</code></td><td>기본 키 컬러 id</td></tr>
+                  <tr><td><code>LUIL_STYLE</code></td><td><code>assets/style.json</code></td><td>내장할 스타일</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">OS 외양의 바뀜은 모든 host가 같은 관찰기를 지난다. 바뀐 때만, 첫 값은 첫 frame 전에 알린다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="src/host/app_delegate.cpp:14-33" data-path="src/host/app_delegate.cpp" data-start="14"><script type="text/plain">
+    system_appearance current_system_appearance() noexcept
+    {
+        const std::lock_guard lock { appearance_mutex };
+        return latest_appearance;
+    }
+
+    app_message system_appearance_observer::observe(system_appearance value, app_delegate* const delegate)
+    {
+        if (value.high_contrast == false)
+            value.contrast_colors = {};
+        if (last_ == value)
+            return {};
+        last_ = value;
+        {
+            const std::lock_guard lock { appearance_mutex };
+            latest_appearance = value;
+            set_system_accent(value.accent);
+        }
+        return delegate != nullptr ? delegate->make_system_appearance_message(value) : app_message {};
+    }
+</script></div>
+        <div class="prose">
+          <ol>
+            <li>고대비가 꺼져 있으면 대비 색을 기본값으로 지운다.</li>
+            <li>지난번과 같으면 아무 일도 없다.</li>
+            <li>프로세스의 최신 값(<code>current_system_appearance</code>)과 시스템 키 컬러를 먼저 세우고 delegate 훅을 부른다.</li>
+            <li>훅이 돌려준 메시지가 비지 않았으면 logic thread의 app inbox로 간다. 첫 관찰의 메시지는 첫 <code>make_frame</code> 전에 처리된다.</li>
+          </ol>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>host</th><th>다시 읽는 계기</th></tr></thead>
+            <tbody>
+              <tr><td>Win32</td><td><code>WM_SETTINGCHANGE</code>·<code>WM_SYSCOLORCHANGE</code>·<code>WM_DWMCOLORIZATIONCOLORCHANGED</code>·<code>WM_THEMECHANGED</code>를 한 갈래에서 받아 모두 다시 읽고 표면 전체를 다시 칠한다</td></tr>
+              <tr><td>macOS</td><td><code>NSApp.effectiveAppearance</code> 관찰, 접근성 표시 옵션 알림, 시스템 색 알림</td></tr>
+              <tr><td>Android</td><td>구성 변경(어두운 모드·회전)과 재개. 대비 설정은 구성 변경으로 오지 않아 설정 앱에서 돌아올 때 읽는다</td></tr>
+              <tr><td>iOS</td><td>trait 바뀜(iOS 17부터 등록, 15·16은 <code>traitCollectionDidChange:</code>)과 앞으로 올 때</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>나오는 것</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>OS 밝은 모드·고대비·키 컬러가 바뀜</td><td><code>make_system_appearance_message(appearance)</code>가 돌려준 메시지 (넓혔을 때만)</td><td>대개 없다. 그리기는 host가 다시 푼다</td></tr>
+              <tr><td>테마 카드를 누름 · 보조 기술 Select</td><td><code>theme_picker_config::select(value)</code></td><td>선호를 바꿔 다음 frame의 <code>selected</code>와 <code>ui_frame::appearance</code>에 싣는다</td></tr>
+              <tr><td>키 컬러 견본을 누름</td><td><code>accent_picker_config::select(id)</code></td><td><code>accent_id</code>를 바꾼다</td></tr>
+              <tr><td>움직임 줄이기가 바뀜</td><td><code>window_metrics::reduce_motion</code>이 실린 metrics 메시지 (<code>make_metrics_message</code>를 넓혔을 때)</td><td>새 전환에 <code>motion_duration</code>을 거친다 (<a class="xref" href="motion.html">움직임</a>)</td></tr>
+              <tr><td>라이브러리 언어가 바뀜</td><td>메시지 없음</td><td>다음에 짓는 카드 낱말·견본 이름이 새 언어다 (<a class="xref" href="i18n.html">다국어</a>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>접근성</h2>
+          <p class="lede">고대비는 사용자가 OS에서 고른 시스템 색으로 팔레트 전체를 접는다. 채운 바탕 위의 글자는 밝기로 고른다. 움직임 줄이기는 element와 앱 둘 다에 닿는다.</p>
+        </header>
+        <h3>고대비 (Windows 대비 테마, 웹의 강제 색과 같은 생각)</h3>
+        <div class="prose">
+          <ul>
+            <li><strong>알파를 섞지 않는다.</strong> 보조 글자·구분선·테두리도 온전한 창 글자색이고 비활성만 <code>GRAYTEXT</code>다.</li>
+            <li><strong>키 컬러와 앱 스타일을 쓰지 않는다.</strong> 강조는 hotlight(<code>emphasis</code>), 선택·hover는 highlight 짝이다.</li>
+            <li><strong>고른 행의 채움을 접는다</strong>(알파 0). 행의 글자는 앱이 그려 highlight 글자로 바꿀 수 없으니, 온전한 highlight를 깔면 글이 사라진다. 왼쪽 표식(<code>accent</code>)이 남는다.</li>
+            <li><strong>구문 색 여섯을 창 글자색 하나로 접는다.</strong> 렉서는 굵기·기울임으로도 가른다.</li>
+            <li><strong>색만으로 뜻을 싣지 않는다.</strong> 심각도는 글리프가 함께 말하고, 배지의 <code>warning</code>·<code>error</code> tone은 글리프를 붙인다.</li>
+            <li>가지 팔레트는 기본으로 바꾸지 않는다. Win32는 DWM 창 명암·테두리를 건드리지 않고, 배경 효과를 깔지 않는다.</li>
+          </ul>
+        </div>
+        <h3>채운 강조 위의 글자 — 0.179 규칙</h3>
+        <div class="code" data-lang="cpp" data-src="src/theme/ui_theme.cpp:149-168" data-path="src/theme/ui_theme.cpp" data-start="149"><script type="text/plain">
+    float relative_luminance(const ui_color color) noexcept
+    {
+        const double red { linear_channel(static_cast<double>((color >> 16U) & 0xFFU) / 255.0) };
+        const double green { linear_channel(static_cast<double>((color >> 8U) & 0xFFU) / 255.0) };
+        const double blue { linear_channel(static_cast<double>(color & 0xFFU) / 255.0) };
+        return static_cast<float>(0.2126 * red + 0.7152 * green + 0.0722 * blue);
+    }
+
+    bool is_dark_background(const ui_color color) noexcept
+    {
+        // 흰 글자와의 대비가 검은 글자와의 대비 이상이면 어두운 바탕이다
+        // (WCAG 대비식 (L1+0.05)/(L2+0.05)에서 두 대비가 같아지는 밝기가 0.179다).
+        return relative_luminance(color) <= 0.179f;
+    }
+
+    ui_color foreground_on(const ui_color background) noexcept
+    {
+        // 검정을 조금이라도 띄우면 중간 밝기 바탕에서 대비가 크게 준다 (20/255만 띄워도 4.9:1이 4.3:1이 된다).
+        return is_dark_background(background) ? make_ui_color(255, 255, 255) : make_ui_color(0, 0, 0);
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>WCAG 대비식 <code class="free">(L1+0.05)/(L2+0.05)</code>에서 흰 글자와 검은 글자의 대비가 같아지는 밝기가 0.179다. 그 이하면 흰색 <code>#ffffff</code>, 아니면 검정 <code>#000000</code>이다.</li>
+            <li><strong>고른 바탕 위에서는 늘 약 4.58:1 이상이다.</strong> 경계의 흰 글자가 1.05/0.229 ≈ 4.585:1, 경계 바로 위의 검은 글자가 0.229/0.05 ≈ 4.58:1이다. 회색 256단계의 최솟값은 <code>#757575</code> 위의 흰 글자 4.61:1이었다. 경계 짝: <code>#757575</code>(밝기 0.1779)는 흰 글자, <code>#767676</code>(0.1812)은 검은 글자다.</li>
+            <li>내장 카탈로그에서 dark의 채운 강조 위 글자는 25개 모두 <strong>검정</strong>, light는 25개 모두 흰색이다. dark 밝기는 0.1803(pink)~0.2112(mint), light는 0.1047(pink)~0.1285(green)다. 카탈로그 25개 × 두 테마와 시스템 키 셋에서 4.5:1 이상인 것을 test가 잠근다.</li>
+          </ul>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">상태가 바뀐 바탕은 덮지 않는다 — 누르는 동안 약 3.1~3.7:1 (셈)</span>글자는 <code>accent</code>에 대고 한 번 고르는데, 기본 단추는 hover면 <code>accent_hover</code>, 눌림이면 <code>accent_pressed</code> 위에 같은 글자를 그린다. <code>accent_pressed</code>는 <code>accent</code>의 알파 0.70이라 단추 아래 바탕과 섞인다. 내장 25색으로 셈하면 쉼의 최솟값은 dark 4.61·light 5.88, hover는 dark 6.00·light 7.51인데 <strong>눌림은 창·표면 바탕 위에서 dark 3.09~3.63, light 3.18~3.69</strong>다. luil이 셈하는 값이 아니라 이 문서가 그 색을 바탕에 알파로 얹어(test의 <code>composite_over</code> 꼴) 셈한 값이고, 화면에서 잰 값이 아니다. 위 실습의 "눌림"이 같은 셈이다. 카탈로그를 바꾼 앱의 hover 색이 0.179 반대쪽에 서면 hover의 대비도 보장되지 않는다 — 생성기는 이것을 검사하지 않는다.</div></div>
+        <div class="code" data-lang="cpp" data-src="src/ui/dialog_elements.cpp:210-218,238-245" data-path="src/ui/dialog_elements.cpp" data-start="210"><script type="text/plain">
+    ui_color text_button_background(const text_button_fill fill, const text_button_state& state, const ui_color_palette& palette) noexcept
+    {
+        const bool down { state.enabled && state.pressed };
+        const bool over { state.enabled && state.hovered };
+        // 채운 버튼의 hover·눌림은 **자기 색 안에서** 움직인다.
+        // 중립색으로 갈아 끼우면 누르는 동안만 주 동작이 아닌 것처럼 보인다.
+        ui_color background { palette.input_background };
+        if (fill == text_button_fill::solid_accent)
+            background = down ? palette.accent_pressed : (over ? palette.accent_hover : palette.accent);
+⋯@238
+    ui_color text_button_label_color(const text_button_config& config, const text_button_fill fill, const text_button_state& state, const ui_color_palette& palette)
+    {
+        const bool hot { state.enabled && (state.pressed || state.hovered) };
+        ui_color label_color { palette.primary_foreground };
+        // 채운 바탕 위의 글자는 그 바탕을 위해 만든 색이어야 읽힌다. 채운 강조와 옅은 강조는 바탕의 밝기가
+        // 달라 글자 역할도 다르다.
+        if (fill == text_button_fill::solid_accent)
+            label_color = palette.accent_foreground;
+</script></div>
+        <h3>움직임 줄이기와 투명 효과</h3>
+        <div class="prose">
+          <ul>
+            <li>움직임 줄이기는 시스템의 것이다. element는 <code>draw_context::reduce_motion</code>·<code>update_context::reduce_motion</code>을, 앱은 <code>window_metrics::reduce_motion</code>을 받는다. 앱이 든 전환은 시작할 때 <code>motion_duration(duration, reduce_motion)</code>을 거친다. 참이면 길이 0이라 언제 물어도 끝값이다 (<a class="xref" href="motion.html">움직임</a>).</li>
+            <li>투명 효과가 꺼지면(<code>system_appearance::transparency</code>가 거짓) 배경 효과를 깔지 않는다. Android에는 그 설정이 없어 늘 참이다.</li>
+          </ul>
+        </div>
+        <h3>고르기의 키보드와 보조 기술</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>요소</th><th>역할</th><th>키</th></tr></thead>
+            <tbody>
+              <tr><td>테마 카드 묶음</td><td><code>radio_group</code> (이름 "테마"/"Theme")</td><td>Tab에서 한 자리. 방향키로 카드를 오간다. 한 줄에 카드가 하나면 세로 묶음</td></tr>
+              <tr><td>카드</td><td><code>radio_button</code> (이름 = 카드 낱말, <code>selected</code>)</td><td>클릭·Space·Enter·보조 기술 Select가 <code>select</code></td></tr>
+              <tr><td>견본 묶음</td><td><code>radio_group</code> (이름 "강조색"/"Accent color")</td><td>가로 묶음</td></tr>
+              <tr><td>견본</td><td><code>radio_button</code> (이름 = <code>accent_label</code>, 툴팁과 같은 글)</td><td>클릭이 <code>select(id)</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">host 넷이 같은 <code>system_appearance</code>를 채우지만 출처와 빈칸이 다르다. 아래는 소스에서 확인한 것이고, 각 OS에서 돌려 보지 않았다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>항목</th><th>Win32</th><th>macOS</th><th>Android</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td>밝은 모드</td><td>레지스트리 <code>AppsUseLightTheme</code>. 못 읽으면 어둡다</td><td><code>NSApp.effectiveAppearance</code>를 Aqua·DarkAqua로 맞춰 본다</td><td>구성의 UI 모드 night 비트</td><td><code>userInterfaceStyle</code></td></tr>
+              <tr><td>고대비 여부</td><td><code>SPI_GETHIGHCONTRAST</code></td><td>대비 증가(<code>accessibilityDisplayShouldIncreaseContrast</code>)</td><td>API 34+의 <code>UiModeManager.getContrast()</code>가 높음. 13 이하는 늘 거짓</td><td>더 어두운 시스템 색 또는 높은 대비 trait</td></tr>
+              <tr><td>고대비 색</td><td><code>GetSysColor</code> 여덟 — 사용자의 대비 테마 그대로</td><td><strong>채우지 않는다.</strong> 밝은 모드에서도 검정 바탕 기본값이다</td><td>밝은 모드면 흰 바탕, 아니면 검정 바탕의 고정 색</td><td>Android와 같은 고정 색</td></tr>
+              <tr><td>OS 키 컬러</td><td><code>DwmGetColorizationColor()</code> (창 색소)</td><td><code>controlAccentColor</code>를 sRGB로</td><td>Android 12+의 동적 색 <code>system_accent1_500</code>. 11 이하는 없다</td><td><strong>없다</strong> — 시스템 항목을 늘 거둔다</td></tr>
+              <tr><td>견본의 시스템 칸</td><td>선다</td><td>선다</td><td>Android 12부터</td><td>서지 않는다</td></tr>
+              <tr><td>움직임 줄이기</td><td><code>SPI_GETCLIENTAREAANIMATION</code></td><td>움직임 줄이기 설정</td><td><code>animator_duration_scale</code>이 0</td><td>움직임 줄이기 설정</td></tr>
+              <tr><td>투명 효과</td><td>레지스트리 <code>EnableTransparency</code></td><td>투명도 줄이기의 반대</td><td>늘 참</td><td>투명도 줄이기의 반대</td></tr>
+              <tr><td>OS 그림의 명암</td><td>DWM 어두운 모드·테두리를 <strong>바탕의 밝기</strong>로 (고대비면 건드리지 않는다)</td><td>창의 외양을 앱 테마로 맞추는 호출을 찾지 못했다</td><td>상태·내비게이션 막대 아이콘을 <strong>테마 이름</strong>으로 (고대비면 OS 밝은 모드)</td><td>상태 표시줄은 테마 이름, 화면 키보드는 <strong>OS</strong> 밝은 모드</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>Windows의 고대비는 검정 바탕만이 아니다(흰 바탕 테마·사용자 지정 색). 색을 하드코딩하면 "고대비 흰색" 사용자에게 정반대 화면이 나온다. luil은 그래서 OS 색을 그대로 옮긴다.</li>
+            <li>같은 OS 키 컬러라도 합성 규칙(밝기 사다리)은 모든 OS에서 같다. OS가 준 색의 밝기는 쓰이지 않고 색상과 채도만 쓰인다.</li>
+            <li>macOS의 고대비 색과 iOS의 키보드 명암은 코드에서 확인한 동작이고, 그 OS에서 돌려 보지 않았다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>실행 중 스타일 JSON 읽기를 찾지 않는다.</strong> 이 체크아웃에는 스타일 파서도 파일 핫 리로드도 없다. 코드로 지은 <code>ui_style</code>만 실행 중에 바꿀 수 있다.</li>
+          <li><strong>스타일 JSON에 <code>text.wrapPolicy</code>를 적지 않는다.</strong> 빌드가 <code>Unknown key in text: wrapPolicy</code>로 선다. <code>text_style::wrap_policy</code>는 코드로만 정한다.</li>
+          <li><strong><code>ui_frame::style</code>만 바꾸고 배치에는 주지 않으면</strong> 팔레트·그리기 치수는 바뀌지만 탭 막대 모양·줄 나눔 정책·잰 글 폭은 내장 스타일이다. 글 크기를 바꾸면 잰 폭과 그린 글이 어긋난다. <code>make_arranged_tree</code>에도 같은 포인터를 준다.</li>
+          <li><strong><code>ui_style {}</code>로 시작하지 않는다.</strong> 중립 색이 모두 0(투명 검정)이다. <code>default_ui_style()</code>을 복사해 시작한다.</li>
+          <li><strong>빈 accent override는 "앱 설정 따름"이 아니다.</strong> 헤더 주석은 빈 문자열을 정의로 보지 않는다고 하지만 <code>apply_overrides</code>와 <code>empty()</code>는 값이 있는지만 본다. <code>accent_id = u8""</code>인 override는 유효 id를 빈 글로 바꾸고, 그리기는 기본색 <code>mint</code>로 물러선다 (실행해 확인했다).</li>
+          <li><strong><code>accent_definition::label</code>을 화면에 쓰면 늘 한국어다.</strong> 두 데모의 테마 페이지가 그렇다. <code>accent_label</code>을 쓴다.</li>
+          <li><strong>카탈로그 이름에 언어를 더해도 라이브러리 표에 그 언어가 없으면 고르지 않는다.</strong> <code>accent_label</code>은 라이브러리 표에서 고른 언어로만 찾는다.</li>
+          <li><strong>앱이 공개 <code>color_palette_for</code>로 팔레트를 쥐면 고대비가 검정 fallback이다.</strong> 사용자의 고대비 색이 아니다. <code>current_system_appearance().contrast_colors</code>로 <code>high_contrast_palette_for</code>를 부른다.</li>
+          <li><strong>테마 카드 미리 보기는 앱 스타일을 따르지 않는다.</strong> 카드는 내장 스타일로 칠하므로 실행 중 바꾼 중립 색이 카드에 없다.</li>
+          <li><strong>기본 단추를 누르는 동안 글자 대비가 떨어진다.</strong> 글자는 <code>accent</code>에 대고 골랐는데 눌림 바탕은 알파 0.70이라 아래 바탕과 섞인다. 내장 25색에서 약 3.1~3.7:1로 셈한다(화면에서 잰 값이 아니다).</li>
+          <li><strong>어두운 테마의 기본 단추 글자는 검정이다.</strong> 내장 25색의 dark <code>accent</code>는 밝기가 모두 0.179를 넘는다. 버그가 아니라 대비 선택이다.</li>
+          <li><strong>밝은 테마에서 <code>palette_role::accent_soft</code>를 불투명 바탕으로 고르면 진한 판이 된다.</strong> light의 <code>soft</code>는 진한 색(mint <code>#005440</code>)이고 dark에서는 옅은 색(<code>#91ddc2</code>)이다. 값에서 나오는 결과이고 화면으로 확인하지 않았다.</li>
+          <li><strong>고대비에서 가지 팔레트가 먹지 않는다.</strong> 기본이 "고대비면 바꾸지 않는다"이다. 뜻이 있는 바꿈만 <code>in_high_contrast</code>를 켠다.</li>
+          <li><strong>가지 팔레트 함수가 앱 상태를 참조로 잡지 않는다.</strong> 함수는 UI thread에서 그리기마다 불린다. 값으로 캡처한다.</li>
+          <li><strong><code>system</code>을 골랐는데 기본색이 나온다.</strong> OS가 키 컬러를 주지 않았다 — iOS는 늘, Android 11 이하, 읽기 실패. 저장 값은 그대로이고 그리기만 기본색이다.</li>
+          <li><strong>카탈로그를 바꾸면 기본 id도 함께 준다.</strong> 바꾼 파일에 <code>mint</code>가 없으면 빌드가 선다. 카탈로그 색은 <code>#rrggbb</code>만 받는다.</li>
+          <li><strong>frame마다 <code>appearance</code>를 싣는다.</strong> frame은 매번 새 값이다. 빠뜨린 frame은 기본값(<code>system</code>·<code>mint</code>)으로 그린다.</li>
+          <li><strong>보조 창 하나만 다른 테마로 할 수 없다.</strong> <code>ui_window</code>에 외양 칸이 없다. 모든 창이 주 frame의 선호·스타일을 쓴다.</li>
+          <li><strong>macOS의 대비 증가는 밝은 모드에서도 검정 바탕 고대비다.</strong> host가 대비 색을 채우지 않는다 (코드에서 확인, macOS에서 돌려 보지 않았다).</li>
+          <li><strong>앱 코드가 <code>with_alpha</code>로 옅은 색을 짓지 않는다.</strong> 고대비에서 접히지 않고 앱 스타일의 tone을 따르지 않는다. 같은 뜻의 역할이 있으면 역할을 쓴다.</li>
+          <li><strong>문서 비교·찾기 칸의 알파는 tone으로 바꿀 수 없다.</strong> <code>document_*</code>의 0.12·0.35는 합성에 박혀 있어 <code>accent_tones</code>에 없다.</li>
+          <li><strong>고대비에서 앱이 그린 고른 행이 사라진다.</strong> <code>row_selection_background</code>가 알파 0이다. 왼쪽 표식(<code>accent</code>)을 함께 그린다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>다크 모드는 어떻게 켜나?</summary><div class="faq-a"><p class="faq-short"><code>appearance_settings::theme = theme_preference::dark</code>를 <code>ui_frame::appearance</code>에 싣는다.</p><p>고대비만 이것보다 세다 (<a class="xref" href="#build-dark">늘 어둡게</a>).</p></div></details>
+          <details class="faq"><summary>OS의 다크 모드를 따르게 하려면 무엇을 처리하나?</summary><div class="faq-a"><p class="faq-short">아무것도. 기본 선호가 <code>system</code>이다.</p><p>host가 frame마다 OS 값으로 풀고, OS가 바뀌면 다시 읽어 다시 칠한다 (<a class="xref" href="#build-system">시스템 테마 따르기</a>).</p></div></details>
+          <details class="faq"><summary>OS 테마가 바뀐 순간을 앱이 알 수 있나?</summary><div class="faq-a"><p class="faq-short"><code>app_delegate::make_system_appearance_message</code>를 넓혀 메시지로 받는다.</p><p>바뀐 때만 오고 첫 값은 첫 frame 전에 온다. 아무 thread에서나 <code>current_system_appearance()</code>로도 읽는다.</p></div></details>
+          <details class="faq"><summary>고대비에서 내 브랜드 색이 사라진다. 버그인가?</summary><div class="faq-a"><p class="faq-short">의도다. 고대비는 앱 스타일과 키 컬러를 무시하고 사용자가 고른 시스템 색을 쓴다.</p><p>접근성 설정은 앱의 스타일보다 세다. 위험 구역처럼 뜻이 있는 바꿈만 <code>palette_scope_config::in_high_contrast</code>로 고대비에서도 켠다.</p></div></details>
+          <details class="faq"><summary>키 컬러를 브랜드 색으로 바꾸려면?</summary><div class="faq-a"><p class="faq-short">빌드 때 카탈로그(<code>LUIL_ACCENT_CATALOG</code>)에 항목을 두고 <code>LUIL_DEFAULT_ACCENT_ID</code>를 그 id로 한다.</p><p>실행 중에 임의의 색을 키 컬러로 등록하는 공개 함수는 없다. 실행 시점 항목은 OS가 채우는 <code>system</code> 하나뿐이고 host가 OS 값으로 덮어쓴다 (<a class="xref" href="#build-style-json">스타일 JSON과 카탈로그</a>).</p></div></details>
+          <details class="faq"><summary>사용자가 고른 키 컬러의 이름을 영어로 보이려면?</summary><div class="faq-a"><p class="faq-short"><code>accent_label(accent_for(id))</code>를 쓴다.</p><p>라이브러리 언어(<code>set_text_languages</code>)를 따른다. <code>accent_definition::label</code>은 늘 한국어다.</p></div></details>
+          <details class="faq"><summary>element에 색(hex)을 직접 줄 수 있나?</summary><div class="faq-a"><p class="faq-short">없다. 역할로 말한다.</p><p>역할로 안 되는 모양은 선택자 네 자리(판의 바탕·테, 아이콘 단추 다섯 칸, 글 단추의 채움·글자, modal scrim)다. 가지 전체는 <code>palette_scope_element</code>다. 잉크 획·색 고르기의 색처럼 문서 내용인 색만 예외다.</p></div></details>
+          <details class="faq"><summary>화면 일부만 옅게(잠긴 판) 그리려면?</summary><div class="faq-a"><p class="faq-short"><code>palette_scope_element</code>로 그 가지의 글자·강조 역할에 알파를 얹는다.</p><p>hover·눌림도 그 색에서 선다 (<a class="xref" href="#build-scope">가지 팔레트</a>).</p></div></details>
+          <details class="faq"><summary>스타일을 실행 중에 바꾸거나 파일에서 다시 읽을 수 있나?</summary><div class="faq-a"><p class="faq-short">바꾸는 것은 된다. 파일 읽기·감시는 이 체크아웃에 없다.</p><p><code>ui_style</code> 값을 지어 <code>ui_frame::style</code>과 <code>make_arranged_tree</code>에 같은 포인터를 준다 (<a class="xref" href="#build-runtime-style">실행 중 스타일</a>).</p></div></details>
+          <details class="faq"><summary>기본 단추 글자가 어두운 테마에서 검정이다. 흰색으로 바꾸려면?</summary><div class="faq-a"><p class="faq-short">글자 색은 바탕의 밝기로 정해진다(0.179 이하면 흰색).</p><p>흰 글자를 원하면 그 경계 아래로 어두운 <code>accent</code>를 카탈로그에 둔다. 단추 하나만이면 <code>text_button_config::label_color</code> 선택자가 있으나 대비 보장이 사라진다.</p></div></details>
+          <details class="faq"><summary>글자 크기·모서리·굵기를 앱 전체에서 바꾸려면?</summary><div class="faq-a"><p class="faq-short"><code>ui_style::metrics</code>다. JSON이면 <code>metrics</code>와 <code>metrics.fontWeights</code>다.</p><p>본문 12·작은 글자 11·모서리 3·4 논리 픽셀이 기본이다. 글꼴 가족은 스타일이 아니라 <code>ui_frame::fonts</code>(<code>font_settings</code>)다.</p></div></details>
+          <details class="faq"><summary>Windows의 강조색(시스템 키 컬러)을 따르려면?</summary><div class="faq-a"><p class="faq-short"><code>accent_id</code>를 <code>system</code>으로 한다.</p><p>견본에 시스템 칸을 보이려면 <code>accent_picker_config::include_system</code>(기본 참)이다. iOS에는 없고 Android는 12부터다.</p></div></details>
+          <details class="faq"><summary>커스텀 element에서 지금 테마가 어두운지 알려면?</summary><div class="faq-a"><p class="faq-short"><code>context.theme</code>(고대비 포함)을 본다.</p><p>바탕이 어두운지는 이름이 아니라 <code>is_dark_background(context.palette.window_background)</code>가 답한다. 앱 스타일이 "dark"에 밝은 바탕을 둘 수 있기 때문이다.</p></div></details>
+          <details class="faq"><summary>테마를 바꿀 때 전환 효과가 있나?</summary><div class="faq-a"><p class="faq-short">라이브러리에는 없다.</p><p>팔레트는 frame마다 새로 지어 그 frame에 바로 바뀐다 (코드에서 확인).</p></div></details>
+          <details class="faq"><summary>보조 창만 밝은 테마로 할 수 있나?</summary><div class="faq-a"><p class="faq-short">창마다 외양 칸이 없다.</p><p>그 창의 tree를 <code>palette_scope_element</code>로 감싸 역할을 바꿀 수는 있지만, 창 바탕을 칠하는 일은 tree 밖이라 그대로다 (코드에서 확인).</p></div></details>
+          <details class="faq"><summary>탭 막대 모양을 앱 전체에서 바꾸려면?</summary><div class="faq-a"><p class="faq-short"><code>ui_style::tab_bar</code>다.</p><p>JSON <code>tabBar</code>나 실행 중 값이고, 배치에 그 스타일을 준다. 막대 하나만은 <code>tab_bar_config::style</code>이다 (<a class="xref" href="tabs.html">탭</a>).</p></div></details>
+          <details class="faq"><summary>웹뷰가 뜨는 동안 흰 판이 번쩍이지 않나?</summary><div class="faq-a"><p class="faq-short">host가 웹뷰 바닥을 팔레트의 <code>window_background</code>로 깐다.</p><p>테마를 따르므로 앱이 할 일은 없다.</p></div></details>
+          <details class="faq"><summary>caption 바의 색을 바꾸려면?</summary><div class="faq-a"><p class="faq-short">스타일의 <code>caption</code> 객체 여섯 칸이다.</p><p>닫기 단추 hover의 붉은색(<code>#c42b1c</code>)도 거기 있다. 고대비에서는 단추 표면·highlight 짝이다.</p></div></details>
+          <details class="faq"><summary><code>palette_role</code>에는 왜 글자 색이 없나?</summary><div class="faq-a"><p class="faq-short">바탕으로 칠할 만한 역할만 둔다.</p><p>글자·선 역할은 그 자리의 뜻이 정해져 있어 고를 일이 없다.</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/theme/appearance.h" target="_blank" rel="noopener">include/luil/theme/appearance.h</a><span class="n">최상위 기호 8</span></div>
+            <div class="hdr-syms"><a href="api.html#theme-preference" title="열거형"><span class="kb e">E</span>theme_preference</a><a href="api.html#appearance-settings" title="구조체"><span class="kb t">S</span>appearance_settings</a><a href="api.html#appearance-overrides" title="구조체"><span class="kb t">S</span>appearance_overrides</a><a href="api.html#apply-overrides" title="함수"><span class="kb f">f</span>apply_overrides</a><a href="api.html#font-settings" title="구조체"><span class="kb t">S</span>font_settings</a><a href="api.html#font-overrides" title="구조체"><span class="kb t">S</span>font_overrides</a><a href="api.html#theme-preference-name" title="함수"><span class="kb f">f</span>theme_preference_name</a><a href="api.html#parse-theme-preference" title="함수"><span class="kb f">f</span>parse_theme_preference</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/theme/ui_style.h" target="_blank" rel="noopener">include/luil/theme/ui_style.h</a><span class="n">최상위 기호 15</span></div>
+            <div class="hdr-syms"><a href="api.html#line-break-policy" title="별칭"><span class="kb t">=</span>line_break_policy</a><a href="api.html#ui-font-weights" title="구조체"><span class="kb t">S</span>ui_font_weights</a><a href="api.html#ui-metrics" title="구조체"><span class="kb t">S</span>ui_metrics</a><a href="api.html#palette-role" title="열거형"><span class="kb e">E</span>palette_role</a><a href="api.html#palette-color" title="함수"><span class="kb f">f</span>palette_color</a><a href="api.html#tab-bar-variant" title="열거형"><span class="kb e">E</span>tab_bar_variant</a><a href="api.html#tab-close-visibility" title="열거형"><span class="kb e">E</span>tab_close_visibility</a><a href="api.html#tab-indicator-placement" title="열거형"><span class="kb e">E</span>tab_indicator_placement</a><a href="api.html#popup-corner" title="열거형"><span class="kb e">E</span>popup_corner</a><a href="api.html#popup-style" title="구조체"><span class="kb t">S</span>popup_style</a><a href="api.html#tab-bar-style" title="구조체"><span class="kb t">S</span>tab_bar_style</a><a href="api.html#single-line-break" title="열거형"><span class="kb e">E</span>single_line_break</a><a href="api.html#text-style" title="구조체"><span class="kb t">S</span>text_style</a><a href="api.html#ui-style" title="구조체"><span class="kb t">S</span>ui_style</a><a href="api.html#default-ui-style" title="함수"><span class="kb f">f</span>default_ui_style</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/theme/ui_theme.h" target="_blank" rel="noopener">include/luil/theme/ui_theme.h</a><span class="n">최상위 기호 28</span></div>
+            <div class="hdr-syms"><a href="api.html#ui-color" title="별칭"><span class="kb t">=</span>ui_color</a><a href="api.html#color-theme" title="열거형"><span class="kb e">E</span>color_theme</a><a href="api.html#make-ui-color" title="함수"><span class="kb f">f</span>make_ui_color</a><a href="api.html#with-alpha" title="함수"><span class="kb f">f</span>with_alpha</a><a href="api.html#relative-luminance" title="함수"><span class="kb f">f</span>relative_luminance</a><a href="api.html#is-dark-background" title="함수"><span class="kb f">f</span>is_dark_background</a><a href="api.html#caption-color-palette" title="구조체"><span class="kb t">S</span>caption_color_palette</a><a href="api.html#accent-color-set" title="구조체"><span class="kb t">S</span>accent_color_set</a><a href="api.html#accent-definition" title="구조체"><span class="kb t">S</span>accent_definition</a><a href="api.html#accent-catalog" title="함수"><span class="kb f">f</span>accent_catalog</a><a href="api.html#accent-for" title="함수"><span class="kb f">f</span>accent_for</a><a href="api.html#accent-exists" title="함수"><span class="kb f">f</span>accent_exists</a><a href="api.html#accent-label" title="함수"><span class="kb f">f</span>accent_label</a><a href="api.html#system-accent-id" title="상수"><span class="kb ">k</span>system_accent_id</a><a href="api.html#make-system-accent" title="함수"><span class="kb f">f</span>make_system_accent</a><a href="api.html#set-system-accent" title="함수"><span class="kb f">f</span>set_system_accent</a><a href="api.html#system-accent" title="함수"><span class="kb f">f</span>system_accent</a><a href="api.html#neutral-color-palette" title="구조체"><span class="kb t">S</span>neutral_color_palette</a><a href="api.html#accent-tones" title="구조체"><span class="kb t">S</span>accent_tones</a><a href="api.html#ui-color-palette" title="구조체"><span class="kb t">S</span>ui_color_palette</a><a href="api.html#high-contrast-colors" title="구조체"><span class="kb t">S</span>high_contrast_colors</a><a href="api.html#system-appearance" title="구조체"><span class="kb t">S</span>system_appearance</a><a href="api.html#current-system-appearance" title="함수"><span class="kb f">f</span>current_system_appearance</a><a href="api.html#high-contrast-palette-for" title="함수"><span class="kb f">f</span>high_contrast_palette_for</a><a href="api.html#foreground-on" title="함수"><span class="kb f">f</span>foreground_on</a><a href="api.html#compose-palette" title="함수"><span class="kb f">f</span>compose_palette</a><a href="api.html#color-palette-for" title="함수"><span class="kb f">f</span>color_palette_for</a><a href="api.html#resolve-color-theme" title="함수"><span class="kb f">f</span>resolve_color_theme</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/palette_scope_element.h" target="_blank" rel="noopener">include/luil/ui/palette_scope_element.h</a><span class="n">최상위 기호 2</span></div>
+            <div class="hdr-syms"><a href="api.html#palette-scope-config" title="구조체"><span class="kb t">S</span>palette_scope_config</a><a href="api.html#palette-scope-element" title="클래스"><span class="kb t">C</span>palette_scope_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<script src="assets/thememodel.js"></script>
+<script src="assets/theming-lab.js"></script>
+<script>
+  LuilThemingLab.setup(document.getElementById("th-lab"));
+</script>
+</body>
+</html>

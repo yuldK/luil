@@ -1,0 +1,2067 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>메뉴와 메뉴 막대 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — menu_element·make_menu_popup·menu_bar_element로 컨텍스트 메뉴, 하위 메뉴, 체크·라디오 항목, 메뉴 막대와 접근 키를 만들고, popup 표면의 앵커와 닫힘을 다루는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  /* 표면 그림 — 주 창 위에 popup 사슬이 따로 선다 */
+  .surfaces { display: grid; gap: 10px; }
+  @media (min-width: 900px) { .surfaces { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; } }
+  .surf-stage { position: relative; min-height: 230px; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--bg); overflow: hidden; font-size: 12px; }
+  .surf-win { position: absolute; left: 12px; top: 12px; right: 30%; bottom: 12px; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--panel); }
+  .surf-win .cap { height: 22px; border-bottom: 1px solid var(--line); padding: 3px 8px; color: var(--fg-3); font-family: var(--font-code); font-size: 11px; }
+  .surf-pop { position: absolute; border: 1px solid var(--line-3); border-radius: var(--r-row); background: var(--panel-2); box-shadow: 0 4px 14px var(--line-2); padding: 4px 0; min-width: 104px; }
+  .surf-pop .row { padding: 2px 10px; color: var(--fg-2); white-space: nowrap; }
+  .surf-pop .row.on { background: var(--accent-wash); color: var(--fg); }
+  .surf-pop .tag-id { position: absolute; top: -18px; left: 0; font-family: var(--font-code); font-size: 10.5px; color: var(--accent-ink); white-space: nowrap; }
+  .surf-notes { margin: 0; padding-left: 1.2em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 6px; }
+</style>
+</head>
+<body data-page="menus">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>메뉴와 메뉴 막대</h1>
+      <p class="summary">luil의 메뉴는 앱이 열림을 쥔 popup 하나에 실은 <code>menu_element</code>다. 메뉴는 항목을 그리고 고른 키를 메시지로 낼 뿐이다. 떠 있는지, 하위 메뉴가 어디까지 열렸는지, 메뉴 막대가 어느 항목에 섰는지는 모두 앱 상태다. 키보드 탐색은 input thread의 controller가, 닫힘 계기는 UI thread의 표면이 맡는다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>menu_element.h</code>·<code>menu_bar_element.h</code>·<code>menu_popup.h</code>·<code>app_host.h</code>(popup)</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="messaging.html">스레드 경계 메시징</a> · <a class="xref" href="input.html">입력과 초점</a></dd></div>
+          <div><dt>이어 읽기</dt><dd><a class="xref" href="popups.html">드롭다운·콤보·팝업</a> · <a class="xref" href="buttons.html">단추와 명령</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>메뉴·드롭다운·콤보·안내 풍선·tooltip 가운데 무엇을 쓸지 고른다.</li>
+            <li>컨텍스트 메뉴와 하위 메뉴를 popup으로 짓고, 열림과 열림 경로를 앱 상태로 다룬다.</li>
+            <li>메뉴 막대의 상태와 Alt·F10·접근 키가 내는 메시지를 앱에 잇는다.</li>
+            <li>닫힘 계기와 Esc가 지나는 차례를 알고 <code>dismiss</code>를 쓴다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 것을 쓰나</h2>
+          <p class="lede">겹쳐 뜨는 판은 여섯 가지다. 고르는 기준은 모양이 아니라 어디에 그리는가, 열림을 누가 쥐는가, 키보드 초점이 어디에 있는가다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB94;</i><code>menu_element</code> + <code>make_menu_popup</code></h4>
+            <ul>
+              <li>우클릭·길게 누르기·Shift+F10으로 여는 명령 목록이다.</li>
+              <li>popup 표면에 그린다. Windows·macOS에서는 창 밖으로 나갈 수 있다.</li>
+              <li>하위 메뉴, 체크·라디오, 구분선, 오른쪽 단축키 열.</li>
+              <li>열린 동안에도 키보드 초점은 연 자리에 남는다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB7F;</i><code>menu_bar_element</code></h4>
+            <ul>
+              <li>창 위의 "파일·편집·보기" 줄이다. 막대는 주 tree에, 메뉴는 popup에 선다.</li>
+              <li>막대의 상태 <code>menu_bar_state</code>도 앱 상태다.</li>
+              <li>Alt 단독·F10·Alt+글자·←/→로 메뉴 사이를 오간다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB17;</i><code>dropdown_element</code></h4>
+            <ul>
+              <li>고른 값 하나를 보이는 닫힌 칸이다.</li>
+              <li>열린 목록은 앱이 popup에 실은 <code>menu_element</code>다.</li>
+              <li><a class="xref" href="popups.html#build-dropdown">드롭다운 만들기</a>에서 다룬다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA6D;</i><code>combo_box_element</code></h4>
+            <ul>
+              <li>글을 치면서 후보를 고른다. 후보는 늦게 와도 된다.</li>
+              <li>후보 popup은 메뉴가 아니다. 초점은 글 칸에 남는다.</li>
+              <li><a class="xref" href="popups.html#build-combo">콤보 만들기</a>에서 다룬다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB21;</i><code>teaching_tip_element</code></h4>
+            <ul>
+              <li>한 요소를 꼬리로 가리키는 상주 안내다. 단추가 있다.</li>
+              <li>popup이 아니다. 주 tree 안에 겹쳐 그린다.</li>
+              <li>덮개(modal)와 비modal 둘 중 하나다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA74;</i><code>set_tooltip</code></h4>
+            <ul>
+              <li>포인터를 올리면 잠깐 뜨는 설명이다.</li>
+              <li>표면의 tree가 직접 그린다. 앱은 열림도 시계도 들지 않는다.</li>
+              <li>hover로만 선다. 터치에는 없다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>판</th><th>그리는 곳</th><th>열림을 쥐는 쪽</th><th>열린 동안 키보드 초점</th><th>닫는 길</th></tr></thead>
+            <tbody>
+              <tr><td>컨텍스트 메뉴</td><td>popup 표면 (<code>ui_frame::popups</code>)</td><td>앱</td><td>연 자리에 남는다</td><td>popup의 <code>dismiss</code>가 낸 메시지, 고른 뒤의 <code>after_select</code></td></tr>
+              <tr><td>메뉴 막대의 메뉴</td><td>막대는 주 tree, 메뉴는 popup</td><td>앱 (<code>menu_bar_state</code>)</td><td>연 자리에 남는다</td><td><code>make_menu_bar_popup</code>이 채운 <code>dismiss</code>·<code>after_select</code></td></tr>
+              <tr><td>드롭다운 목록</td><td>칸은 주 tree, 목록은 popup</td><td>앱 (<code>dropdown_config::open</code>)</td><td>칸에 남는다</td><td>목록 popup의 <code>dismiss</code>, 고름, 칸 다시 누름</td></tr>
+              <tr><td>콤보 후보</td><td>칸은 주 tree, 후보는 popup</td><td>앱 (<code>combo_box_config::open</code>)</td><td>글 칸에 남는다 (후보를 눌러도)</td><td>모든 닫힘 계기에 <code>set_open(false)</code>, Esc, 초점 떠남</td></tr>
+              <tr><td>안내 풍선</td><td>주 tree 안 (root 끝의 겹)</td><td>앱</td><td>덮개면 풍선 안에 가둔다. 비modal이면 그대로</td><td><code>teaching_tip_config::dismiss</code> (닫기 단추·덮개 누름·Esc·뒤로 가기)</td></tr>
+              <tr><td>tooltip</td><td>표면 tree가 직접 그린다</td><td>controller (hover)</td><td>상관없다</td><td>포인터가 떠나면 거둔다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>카드의 우클릭 메뉴 (가장 작게)</td><td><code>ui_popup</code> + <code>menu_element</code></td><td><a class="xref" href="#build-context">가장 작은 컨텍스트 메뉴</a></td></tr>
+              <tr><td>체크 항목, 단추로 여는 같은 메뉴</td><td><code>make_menu_popup</code></td><td><a class="xref" href="#build-menu-popup">make_menu_popup</a></td></tr>
+              <tr><td>"정렬 ›" 같은 하위 메뉴, 라디오 항목</td><td><code>open_submenu</code> · <code>depth</code> · <code>parent_surface</code></td><td><a class="xref" href="#build-submenu">하위 메뉴</a></td></tr>
+              <tr><td>둘 이상 깊어지는 하위 메뉴</td><td>열림 경로 하나</td><td><a class="xref" href="#build-deep">여러 단계</a></td></tr>
+              <tr><td>파일·편집·보기 막대, 접근 키</td><td><code>menu_bar_element</code> + <code>make_menu_bar_popup</code></td><td><a class="xref" href="#build-menubar">메뉴 막대</a></td></tr>
+              <tr><td>명령표에서 항목과 단축키 글 짓기</td><td><code>menu_item_from</code></td><td><a class="xref" href="#build-commands">명령표</a></td></tr>
+              <tr><td>단추 바로 아래에 붙는 메뉴 (분할 버튼)</td><td><code>menu_popup_config::below</code></td><td><a class="xref" href="#build-below">필드 아래 메뉴</a></td></tr>
+              <tr><td>보조 창 안에서 여는 메뉴</td><td><code>menu_popup_config::anchor</code></td><td><a class="xref" href="#build-window">보조 창</a></td></tr>
+              <tr><td>둥근 모서리, 아크릴 바탕</td><td><code>corner</code> · <code>border</code> · <code>backdrop</code></td><td><a class="xref" href="#build-look">모양</a></td></tr>
+              <tr><td>키보드·터치로 컨텍스트 메뉴 열기</td><td><code>right_click</code> 액션 하나</td><td><a class="xref" href="#build-open">여는 손</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>드롭다운·콤보·안내 풍선·tooltip은 <a class="xref" href="popups.html">드롭다운·콤보·팝업</a>에서 다룬다. popup 표면 자체의 규칙(앵커·닫힘 계기·Esc의 차례)은 이 문서의 <a class="xref" href="#concepts">개념</a> 조각이 정본이다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: popup은 frame의 별도 표면이다</h2>
+          <p class="lede">메뉴는 주 tree의 자식이 아니다. 앱이 frame마다 원하는 popup 목록을 선언하면, UI thread가 그 목록에 맞춰 표면을 만들고 옮기고 지운다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>임자</th><th>싣는 자리</th></tr></thead>
+            <tbody>
+              <tr><td>메뉴가 떠 있는가</td><td>앱</td><td><code>ui_frame::popups</code>에 싣는 동안만 있다</td></tr>
+              <tr><td>하위 메뉴의 열림 경로</td><td>앱</td><td><code>menu_config::opened_key</code> · 메시지 <code>open_submenu</code>·<code>close_submenu</code></td></tr>
+              <tr><td>체크·라디오 표시</td><td>앱</td><td><code>menu_item_config::checked</code></td></tr>
+              <tr><td>막대의 선 항목·열림·키보드 진입</td><td>앱</td><td><code>menu_bar_config::state</code> · 메시지 <code>set_state</code></td></tr>
+              <tr><td>키보드 강조 항목과 그 표면</td><td>input thread의 controller</td><td>— (<code>interaction_snapshot::menu_highlight</code>·<code>menu_surface</code>)</td></tr>
+              <tr><td>하위 메뉴를 여는 hover 시계</td><td>controller</td><td>— (지연은 <code>menu_config::hover_delay</code>)</td></tr>
+              <tr><td>popup 창의 화면 자리, 모니터 안으로 밀기, 긴 popup의 스크롤</td><td>UI thread(host)</td><td>— 앱이 준 x·y는 바꾸지 않는다</td></tr>
+              <tr><td>메뉴 요소 자신</td><td>아무것도 기억하지 않는다</td><td>그 frame의 설정을 그리고 factory를 부를 뿐이다</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>우클릭 한 번이 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>카드를 우클릭한다. 터치는 600ms 길게 누르기, 키보드는 Shift+F10이다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller가 카드의 <code>right_click</code> 액션을 실행한다. 액션은 누른 자리(물리 픽셀)를 담은 앱 메시지를 만든다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱의 <code>handle</code>이 "열림"과 자리를 상태에 적는다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span><code>make_frame()</code>이 <code>menu_config</code>를 짓고 popup으로 싸서 <code>frame-&gt;popups</code>에 싣는다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>host가 popup 표면을 만들어 그린다. 표면은 활성화되지 않는다. 키보드 초점은 연 창에 그대로 있다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>↑/↓는 controller의 강조만 옮긴다. Enter·클릭은 <code>select(key)</code>를, 있으면 이어서 <code>after_select</code>를 낸다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱이 명령을 실행하고 열림을 지운다. 다음 frame에 popup이 빠지면 표면이 사라진다.</span></div>
+        </div>
+        <div class="prose">
+          <p>factory는 logic thread 밖에서 불린다. <code>select</code>·<code>open_submenu</code>·<code>set_state</code>는 input thread(포인터·키)나 UI thread(보조 기술)에서, <code>dismiss</code>는 UI thread에서 불린다. 그래서 값만 캡처한 람다여야 하고, 앱 상태는 logic thread의 <code>handle</code>에서만 바꾼다.</p>
+        </div>
+
+        <h3>표면이 따로 선다</h3>
+        <div class="surfaces">
+          <div class="surf-stage" role="img" aria-label="주 창 위에 popup 둘이 선 모습: 부모 메뉴 popup은 주 창에, 하위 메뉴 popup은 부모 popup에 앵커한다">
+            <div class="surf-win"><div class="cap">주 창 · anchor ""</div></div>
+            <div class="surf-pop" style="left: 30%; top: 64px;"><span class="tag-id">workbench-menu</span><div class="row">스테이지</div><div class="row">스테이지 취소</div><div class="row on">정렬 ›</div><div class="row">변경 버리기</div></div>
+            <div class="surf-pop" style="left: calc(30% + 106px); top: 112px;"><span class="tag-id">workbench-sort-menu</span><div class="row">• 경로</div><div class="row">상태</div><div class="row">크기</div></div>
+          </div>
+          <ol class="surf-notes">
+            <li>popup은 자기 (0,0)에서 시작하는 분리 tree를 가진다. <code>make_menu_popup</code>이 메뉴 하나짜리 tree를 짓는다.</li>
+            <li><code>anchor</code>가 비면 주 창이다. 보조 창 id나 같은 frame의 다른 popup id도 된다. 위 그림의 하위 메뉴는 부모 popup id에 앵커했다.</li>
+            <li><code>x</code>·<code>y</code>·<code>width</code>·<code>height</code>는 앵커 표면 client의 <strong>논리 픽셀</strong>이다. 하위 메뉴의 <code>x</code>는 부모 메뉴의 폭이다.</li>
+            <li>Windows·macOS에서는 popup마다 활성화되지 않는 창이 서고, Android·iOS에서는 주 표면 위에 겹쳐 그린다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><strong>선언이다.</strong> 앱이 원하는 popup 전체를 <code>ui_frame::popups</code>에 싣는다. 목록에 있으면 서고, 빠지면 지워진다. UI thread는 열림 상태를 따로 들지 않는다.</li>
+            <li><strong>id는 frame 안에서 유일하고 비어 있지 않아야 한다.</strong> 보조 창 id와 같은 이름 공간이다. 빈 id, 겹친 id, 크기가 0 이하인 popup은 <strong>오류 없이 서지 않는다</strong> — 겹친 id는 둘 다 서지 않는다 (코드에서 확인한 동작).</li>
+            <li><strong>대조.</strong> 같은 id·같은 앵커면 자리·크기·tree·<code>dismiss</code>를 갱신한다. 앵커가 바뀌면 지웠다가 다시 만든다. 부모 popup을 먼저 만드는 순서는 라이브러리가 정하고, 없는 앵커나 순환은 만들지 않는다.</li>
+            <li><strong>활성화하지 않는다.</strong> Windows의 popup 창은 <code>WS_EX_NOACTIVATE</code>이고 누름에도 <code>MA_NOACTIVATE</code>로 답한다. 키는 앵커 창에서 온다. 메뉴 항목은 Tab 자리가 아니어서, 메뉴가 열려도 키보드 초점은 연 자리에 남고 강조는 초점과 따로 선다.</li>
+          </ul>
+        </div>
+
+        <h3>앵커와 자리</h3>
+        <div class="prose">
+          <ul>
+            <li>우클릭 액션의 <code>ui_action_context::x</code>·<code>y</code>는 그 표면 tree의 <strong>물리 픽셀</strong>이다. popup의 <code>x</code>·<code>y</code>에는 배율로 나눠 넣는다. 나누지 않으면 고배율에서 메뉴가 엉뚱한 곳에 선다.</li>
+            <li><code>menu_popup_config::below</code>(<code>field_popup_anchor</code>)를 주면 <code>make_menu_popup</code>이 폭·높이를 잰 뒤 <code>place_field_popup</code>으로 자리를 정한다. 아래가 모자라면 위로 뒤집는다. 그때 <code>x</code>·<code>y</code>는 쓰지 않는다. 규칙은 <a class="xref" href="popups.html#lab">필드 popup 자리 실습</a>에서 해 볼 수 있다.</li>
+            <li>화면 좌표로 바꾸고 모니터 작업 영역 안으로 미는 일은 UI thread가 한다. Windows는 하위 메뉴가 작업 영역 오른쪽을 넘으면 부모의 왼쪽으로 뒤집은 뒤 안으로 민다. macOS도 같은 규칙이다.</li>
+            <li>작업 영역보다 긴 popup은 작업 영역 높이로 줄고 내용을 흘린다. Windows에는 위·아래 화살표 칸(16 논리 픽셀)이 서고 키보드 강조가 칸에 가리지 않게 따라간다. macOS에는 화살표 칸이 없고 휠로만 흘린다.</li>
+            <li>다듬은 최종 자리가 필요하면 <code>ui_popup::placed</code>를 준다. 앵커 기준 논리 픽셀로, 처음 서거나 바뀔 때만 온다. <code>make_menu_popup</code>은 이 칸을 채우지 않는다.</li>
+          </ul>
+        </div>
+
+        <h3>닫힘 계기</h3>
+        <div class="prose">
+          <p><code>ui_popup::dismiss</code>는 계기(<code>popup_dismiss_reason</code>)를 받아 메시지 하나를 돌려주는 factory다. UI thread는 계기를 감지해 그 메시지만 낸다. popup을 빼는 것은 앱이다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>계기</th><th>뜻</th></tr></thead>
+            <tbody>
+              <tr><td><code>pointer_press_outside</code></td><td>popup 밖을 눌렀다. 캡션·테두리를 잡은 것도 이것이다. 누름 자체는 막지 않고 그대로 진행한다</td></tr>
+              <tr><td><code>wheel_scrolled</code></td><td>앵커가 있던 내용이 휠로 흘렀다</td></tr>
+              <tr><td><code>escape_key</code></td><td>Esc. 아래 "Esc가 지나는 차례"를 본다. Android는 뒤로 가기도 이것이다</td></tr>
+              <tr><td><code>surface_moved</code></td><td>창 하나가 움직였다. 남는 popup은 자기 앵커를 따라 옮겨진다</td></tr>
+              <tr><td><code>surface_resized</code></td><td>창 하나의 크기가 바뀌었다</td></tr>
+              <tr><td><code>activation_changed</code></td><td>창 활성이 바뀌었다 (Alt+Tab, 다른 창 클릭)</td></tr>
+              <tr><td><code>anchor_closed</code></td><td>앵커 popup이 사라졌다. 자식도 자기 닫힘 상태를 정리한다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><strong>빈 액션 <code>luil::input_action {}</code>은 "이 계기에는 닫지 않는다"이다.</strong> 검색 칸이 있는 popup이 창 이동·활성 전환에는 남고 바깥 누름에는 닫히는 식으로 계기마다 가른다. factory가 없으면 어느 계기에도 아무것도 내지 않는다.</li>
+            <li><strong>한 frame에 한 번.</strong> 한 번 닫자고 한 popup은 같은 frame의 다음 계기에 다시 내지 않는다. 새 frame이 그 popup을 계속 실으면 표식이 풀린다.</li>
+            <li>popup 안의 누름은 바깥 누름이 아니다.</li>
+            <li><strong>여는 요소를 다시 누르는 경쟁.</strong> 열린 메뉴를 연 단추를 다시 누르면 바깥 누름 닫힘과 클릭이 함께 온다. 표면이 그 누름에 "popup을 닫았다"를 싣고, controller는 누를 때 펼쳐 있던 요소의 클릭을 <strong>누를 때의 tree</strong>에서 꺼낸다. 그래서 다시 누름이 메뉴를 도로 열지 않는다.</li>
+          </ul>
+        </div>
+
+        <h3>Esc가 지나는 차례</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">UI thread</span><span>IME가 조합 중이면 입력기가 먼저 먹는다. 메뉴 막대가 선 동안은 입력기에 주지 않는다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>표면이 Esc를 controller보다 <strong>먼저</strong> popup에 묻는다. 사슬(앵커가 popup인 popup)이 있으면 가장 깊은 popup 하나에만 묻고, 사슬이 없으면 모든 popup에 묻는다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>누구든 메시지를 냈으면 Esc는 거기서 삼켜진다. 가장 깊은 popup이 빈 액션을 내면 다른 popup에는 묻지 않고 Esc를 controller로 보낸다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller의 메뉴 경로가 받는다. 깊이 &gt; 0이면 그 메뉴의 <code>close_submenu</code>, 깊이 0이면 정책의 <code>close_menu()</code>다 (막대의 메뉴면 막대 상태).</span></div>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">Esc의 뜻은 앱의 dismiss가 먼저 정한다</span>하위 메뉴 popup의 <code>dismiss</code>가 Esc에 "메뉴 전체 닫기"를 내면 Esc 한 번에 사슬이 다 닫힌다. "하위 메뉴만 닫기"를 내거나 빈 액션을 돌려주면 한 단계만 닫힌다 — 앞의 것은 앱 메시지로, 뒤의 것은 controller의 <code>close_submenu</code>로. 데모 작업대는 앞의 방식(전부)이고, 데모 셸의 메뉴 막대는 한 단계 방식이다.</div></div>
+
+        <h3>비modal이지만 열린 동안 키를 독점한다</h3>
+        <div class="prose">
+          <ul>
+            <li>메뉴는 초점 가둠이 아니다. 뒤 화면을 누르면 그 누름은 그대로 진행하고, popup은 <code>pointer_press_outside</code>로 닫자고 할 뿐이다.</li>
+            <li>그러나 controller는 메뉴 kind의 container가 어느 표면 tree에든 서 있으면 "메뉴가 열렸다"로 본다. 메뉴가 쓰지 않은 키는 <strong>삼킨다</strong>. 예외는 그 메뉴 표면 안에서 초점을 가진 글 칸(검색 칸)이 쓰는 편집 키다. 앱 정책의 <code>on_key</code>로는 흐르지 않는다.</li>
+            <li>여러 메뉴가 서 있으면 <code>menu_config::depth</code>가 가장 큰 것이 키를 받는다.</li>
+            <li>메뉴 요소는 hit를 흡수한다. 항목 사이 여백이나 구분선을 눌러도 아래 요소로 새지 않는다.</li>
+          </ul>
+        </div>
+
+        <h3>메뉴 막대의 세 상태</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>상태 (<code>menu_bar_state</code>)</th><th>언제</th><th>모양</th></tr></thead>
+            <tbody>
+              <tr><td>쉼 <code>{}</code></td><td>처음, 메뉴를 고른 뒤, 막대 밖 누름</td><td>바탕 없음, 밑줄 없음</td></tr>
+              <tr><td>섬 <code>{ key, false, keyboard }</code></td><td>Alt 단독·F10 (<code>keyboard</code>가 참), 열린 메뉴에서 깊이 0의 Esc (<code>keyboard</code>는 그대로)</td><td>선 항목에 hover 바탕. <code>keyboard</code>면 모든 항목의 접근 키 글자에 밑줄</td></tr>
+              <tr><td>열림 <code>{ key, true, keyboard }</code></td><td>항목 클릭 (<code>keyboard</code>가 거짓), Alt+글자·선 막대의 ↓·Enter (참)</td><td>선 항목에 눌림 바탕, 그 아래 메뉴 popup. 밑줄 규칙은 섬과 같다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p><code>current</code>가 비면 쉬는 막대다. <code>open</code>이면 <code>current</code>의 메뉴가 떠 있다. <code>keyboard</code>면 키보드로 들어온 것이라 밑줄을 보이고 연 메뉴의 첫 활성 항목을 강조한다. 막대는 이 값을 그리고, 바꿀 상태를 <code>set_state</code>로 낼 뿐이다.</p></div>
+      </section>
+
+      <section class="sec" id="build-context">
+        <header class="sec-head">
+          <h2>만들기: 가장 작은 컨텍스트 메뉴</h2>
+          <p class="lede"><code>examples/widgets</code>는 <code>make_menu_popup</code> 없이 <code>ui_popup</code>을 손으로 조립한다. 메뉴가 무엇으로 이루어지는지 가장 잘 보인다.</p>
+        </header>
+        <div class="prose">
+          <p>걸음은 늘 같다. ① 여는 계기가 앱 메시지를 낸다. ② <code>handle</code>이 열림과 자리를 적는다. ③ 열린 동안 <code>make_frame</code>이 popup을 싣는다. ④ 고름·닫힘 메시지에서 앱이 열림을 지운다. ⑤ 정책의 <code>menu()</code>가 키보드 탐색을 켠다.</p>
+        </div>
+        <h3>메시지와 상태</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:133-149" data-path="examples/widgets/app.h" data-start="133"><script type="text/plain">
+    // popups: 카드를 우클릭했다 (터치는 길게 눌렀다). 자리는 주 tree 좌표의 물리 픽셀이다.
+    struct card_menu_intent
+    {
+        float x { 0.0f };
+        float y { 0.0f };
+    };
+
+    // popups: 카드 메뉴에서 골랐다.
+    struct card_menu_select_intent
+    {
+        std::u8string key {};
+    };
+
+    // popups: 떠 있는 popup을 모두 닫는다 (바깥 누름·Esc·뒤로 가기 등).
+    struct popup_close_intent
+    {
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:198-203" data-path="examples/widgets/app.h" data-start="198"><script type="text/plain">
+        // popup은 앱 상태다: 열려 있으면 frame에 싣고, 닫으면 뺀다.
+        std::u8string sort { u8"이름순" };
+        bool sort_open { false };
+        bool card_menu_open { false };
+        float card_menu_x { 0.0f };
+        float card_menu_y { 0.0f };
+</script></div>
+        <h3>여는 계기: 우클릭 액션</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/popups_section.cpp:50-56" data-path="examples/widgets/popups_section.cpp" data-start="50"><script type="text/plain">
+        // 우클릭(터치는 길게 누르기)으로 컨텍스트 메뉴를 여는 카드다.
+        luil::panel_config surface {};
+        surface.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
+        surface.corner_radius = 6.0f;
+        auto card { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_card }, std::move(surface)) };
+        card->set_action(luil::ui_trigger::right_click,
+            [](const luil::ui_action_context& context) -> std::vector<luil::input_action> { return { luil::make_app_action(card_menu_intent { context.x, context.y }) }; });
+</script></div>
+        <div class="prose">
+          <p>터치의 길게 누르기와 펜의 배럴 버튼도 <code>right_click</code>이다. 키보드의 Shift+F10은 초점 요소에서 위로 올라가며 이 액션을 찾아 요소 한가운데 좌표로 실행한다. 액션 하나로 세 입력이 함께 선다.</p>
+        </div>
+        <h3>열린 동안 popup을 짓는다</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/popups_section.cpp:107-132" data-path="examples/widgets/popups_section.cpp" data-start="107"><script type="text/plain">
+        if (state.card_menu_open)
+        {
+            luil::menu_config menu {};
+            menu.owner = u8"card";
+            menu.items.push_back({ u8"열기", u8"열기", luil::codicons::icon_go_to_file });
+            menu.items.push_back({ u8"복사", u8"경로 복사", luil::codicons::icon_copy });
+            luil::menu_item_config remove {};
+            remove.key = u8"지우기";
+            remove.label = u8"지우기";
+            remove.icon = luil::codicons::icon_trash;
+            remove.enabled = false;
+            remove.separator_above = true;
+            menu.items.push_back(std::move(remove));
+            menu.select = [](const std::u8string& key) { return luil::make_app_action(card_menu_select_intent { key }); };
+
+            luil::ui_popup popup {};
+            popup.id = u8"card-menu";
+            popup.x = state.card_menu_x / scale;
+            popup.y = state.card_menu_y / scale;
+            popup.width = card_menu_width;
+            popup.height = luil::menu_element::height_for(menu);
+            auto root { std::make_unique<luil::menu_element>(std::move(menu)) };
+            popup.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, popup.width * scale, popup.height * scale }, scale));
+            popup.dismiss = close_on_any;
+            popups.push_back(std::move(popup));
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>자리는 물리 픽셀(<code>card_menu_x</code>)을 배율로 나눈 논리 픽셀이다. 높이는 <code>menu_element::height_for</code>가 준다. tree는 물리 크기로 배치한다.</li>
+            <li>항목 <code>{ key, label, icon }</code>은 집합 초기화다. <code>menu_item_config</code>의 칸 차례가 <code>key</code>, <code>label</code>, <code>icon</code>, <code>enabled</code>, <code>separator_above</code>…이기 때문이다.</li>
+            <li>비활성 항목(<code>remove.enabled = false</code>)은 흐리게 그리고, 눌리지 않고, 키보드 탐색이 건너뛴다.</li>
+            <li><code>close_on_any</code>는 어느 계기에서든 닫자는 factory다 (같은 파일 75–76행).</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:229-233" data-path="examples/widgets/app.cpp" data-start="229"><script type="text/plain">
+        auto frame { std::make_shared<luil::win32::ui_frame>() };
+        frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
+        // popup의 자리는 배치가 끝난 tree에서 잰다. tree가 frame에 담긴 뒤에도 element는 그대로다.
+        frame->popups = build_popups(state_, dropdown, scale);
+        return frame;
+</script></div>
+        <h3><code>handle</code>의 갈래와 정책</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:131-151" data-path="examples/widgets/app.cpp" data-start="131"><script type="text/plain">
+        if (const auto* const card { message.get<card_menu_intent>() }; card != nullptr)
+        {
+            state_.card_menu_open = true;
+            state_.card_menu_x = card->x;
+            state_.card_menu_y = card->y;
+            state_.sort_open = false;
+            return;
+        }
+        if (const auto* const choice { message.get<card_menu_select_intent>() }; choice != nullptr)
+        {
+            // 선택이 메뉴를 닫는 것도 앱 몫이다. 고른 것은 토스트로 알린다.
+            state_.card_menu_open = false;
+            handle(luil::app_message { toast_intent { u8"메뉴: " + choice->key, luil::toast_severity::info } });
+            return;
+        }
+        if (message.get<popup_close_intent>() != nullptr)
+        {
+            state_.sort_open = false;
+            state_.card_menu_open = false;
+            return;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:298-306" data-path="examples/widgets/app.cpp" data-start="298"><script type="text/plain">
+    std::optional<luil::menu_kinds> widgets_policy::menu() const
+    {
+        return luil::menu_kinds { luil::ui_element_kind::menu, luil::ui_element_kind::menu_item };
+    }
+
+    std::vector<luil::input_action> widgets_policy::close_menu() const
+    {
+        return { luil::make_app_action(popup_close_intent {}) };
+    }
+</script></div>
+        <div class="prose">
+          <p>고른 뒤 닫는 것도 앱이다. <code>menu()</code>가 메뉴 kind 짝을 돌려줘야 ↑/↓/Enter가 메뉴의 것이 된다. 기본 구현은 <code>std::nullopt</code>라서, 재정의하지 않으면 메뉴가 떠도 키가 뒤 화면으로 간다. <code>close_menu()</code>는 Esc가 controller의 메뉴 경로까지 왔을 때만 쓰인다. popup의 <code>dismiss</code>가 Esc에 메시지를 내면 여기까지 오지 않는다.</p>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">고른 뒤 caret이 사라진다</span>메뉴 항목을 <strong>마우스로</strong> 누르면 키보드 초점이 지워진다. 메뉴 항목은 Tab 자리가 아니고 누름에 초점을 지키지도 않아서, 누를 때 controller가 초점을 비운다. 글 칸에서 연 메뉴라면 고른 뒤 caret이 없다. Enter·접근 키로 고르면 초점은 그대로다. 코드에서 확인한 동작이고 test가 잠그지 않았다. 되돌려야 하면 앱이 <code>ui_frame::focus</code>에 <code>focus_request</code>를 싣는다.</div></div>
+      </section>
+
+      <section class="sec" id="build-menu-popup">
+        <header class="sec-head">
+          <h2>만들기: <code>make_menu_popup</code>, 체크 항목, 단추로 열기</h2>
+          <p class="lede">데모의 "메뉴와 팝업" 페이지는 같은 일을 <code>make_menu_popup</code>으로 한다. 폭·높이·배율·분리 tree를 한 번에 조립하고, 폭은 비우면 글로 잰다.</p>
+        </header>
+        <h3>여는 계기 둘: 우클릭과 단추</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:503-510" data-path="examples/demo/popups_page.cpp" data-start="503"><script type="text/plain">
+            panel.border = [](const luil::ui_color_palette& palette) { return palette.control_border; };
+            auto card { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_card }, std::move(panel)) };
+            card->set_access_name(u8"보고서.md");
+            card->set_cursor(luil::ui_cursor::hand);
+            card->set_tooltip(u8"클릭해서 미리 보기 · 우클릭 또는 Shift+F10으로 문서 작업");
+            card->set_action(luil::ui_trigger::left_click, luil::make_message_action(card_menu_select_intent { u8"열기" }));
+            card->set_action(luil::ui_trigger::right_click,
+                [](const luil::ui_action_context& context) { return std::vector<luil::input_action> { luil::make_app_action(card_menu_intent { context.x, context.y }) }; });
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:487-494" data-path="examples/demo/popups_page.cpp" data-start="487"><script type="text/plain">
+        luil::text_button_config menu_button_config { .text = deleted_ ? u8"문서 복원" : u8"문서 작업…", .glyph = luil::codicons::icon_ellipsis };
+        auto menu_button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"card-menu-button" }, std::move(menu_button_config)) };
+        menu_button->set_cursor(luil::ui_cursor::hand);
+        if (deleted_)
+            menu_button->set_action(luil::ui_trigger::left_click, luil::make_message_action(card_menu_select_intent { u8"복원" }));
+        else
+            menu_button->set_action(luil::ui_trigger::left_click,
+                [](const luil::ui_action_context& context) { return std::vector<luil::input_action> { luil::make_app_action(card_menu_intent { context.x, context.y }) }; });
+</script></div>
+        <div class="prose">
+          <p>카드의 우클릭과 "문서 작업…" 단추가 같은 메시지를 낸다. 단추를 Enter·Space로 누르면 액션의 좌표는 단추의 한가운데다. 그래서 키보드로 열어도 메뉴가 단추 위에 선다.</p>
+        </div>
+        <h3>열기·닫기·고르기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:447-458" data-path="examples/demo/popups_page.cpp" data-start="447"><script type="text/plain">
+        if (const auto* const open { message.get<card_menu_intent>() }; open != nullptr)
+        {
+            show_popup(u8"card");
+            menu_x_ = open->x;
+            menu_y_ = open->y;
+            return true;
+        }
+        if (message.get<card_menu_close_intent>() != nullptr)
+        {
+            close_popup(u8"card");
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:238-252" data-path="examples/demo/popups_page.cpp" data-start="238"><script type="text/plain">
+        if (const auto* const select { message.get<card_menu_select_intent>() }; select != nullptr)
+        {
+            close_popup(u8"card");
+            if (select->key == u8"열기")
+                preview_ = !preview_;
+            if (select->key == u8"즐겨찾기")
+                pinned_ = !pinned_;
+            if (select->key == u8"편집 잠금")
+                locked_ = !locked_;
+            if (select->key == u8"지우기" && locked_ == false)
+                deleted_ = true;
+            if (select->key == u8"복원")
+                deleted_ = false;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>이 페이지는 "한 번에 popup 하나만"을 열린 임자 하나(<code>open_popup_</code>)로 지킨다. <code>show_popup</code>은 그 값을 갈아 끼울 뿐이라 앞의 popup은 다음 frame에 저절로 빠진다. popup 목록이 앱 상태라서 라이브러리는 이것을 강제하지 못한다.</p>
+        </div>
+        <h3>메뉴 popup</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:777-805" data-path="examples/demo/popups_page.cpp" data-start="777"><script type="text/plain">
+        if (open_popup_ == u8"card")
+        {
+            luil::menu_config menu {};
+            menu.owner = u8"card";
+            menu.items.push_back({ u8"열기", u8"열기", luil::codicons::icon_go_to_file });
+            menu.items.push_back({ u8"복사", u8"경로 복사", luil::codicons::icon_copy });
+            luil::menu_item_config remove {};
+            remove.key = u8"지우기";
+            remove.label = u8"지우기";
+            remove.icon = luil::codicons::icon_trash;
+            remove.enabled = locked_ == false;
+            remove.separator_above = true;
+            menu.items.push_back({ .key = u8"즐겨찾기", .label = u8"즐겨찾기", .kind = luil::menu_item_kind::check, .checked = pinned_ });
+            menu.items.push_back({ .key = u8"편집 잠금", .label = u8"편집 잠금", .kind = luil::menu_item_kind::check, .checked = locked_ });
+            menu.items.push_back(std::move(remove));
+            // 선택이 메뉴를 닫는 것도 앱 몫이다.
+            // 셸이 이 메시지를 받아 토스트 알림으로 잇는다.
+            menu.select = [](const std::u8string& key) { return luil::make_app_action(card_menu_select_intent { key }); };
+
+            luil::menu_popup_config popup {};
+            popup.id = u8"card-menu";
+            popup.x = menu_x_ / scale;
+            popup.y = menu_y_ / scale;
+            popup.scale = scale;
+            popup.dismiss = [](const luil::popup_dismiss_reason) { return luil::make_app_action(card_menu_close_intent {}); };
+            popup.corner = corner_;
+            popup.border = popup_border_;
+            popups.push_back(luil::make_menu_popup(std::move(menu), std::move(popup)));
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>체크 항목은 <code>kind = menu_item_kind::check</code>와 <code>checked</code>다. 라디오는 <code>radio</code>다. 실행 메시지는 셋 다 같은 <code>select</code>이고, 다음 frame의 <code>checked</code>를 앱이 정한다.</li>
+            <li>체크 항목은 <code>checked</code>일 때 체크 글리프를, 라디오는 점을 그린다. 이 둘은 <code>icon</code>을 그리지 않는다.</li>
+            <li>구분선은 항목이 아니라 그 아래 항목의 <code>separator_above</code>다. 9 논리 픽셀 띠의 한가운데에 선을 긋는다.</li>
+            <li><code>corner</code>·<code>border</code>는 이 페이지의 모양 설정을 popup에 넘긴다 (<a class="xref" href="#build-look">모양</a>).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-submenu">
+        <header class="sec-head">
+          <h2>만들기: 하위 메뉴와 라디오 항목</h2>
+          <p class="lede">하위 메뉴는 라이브러리가 띄우지 않는다. 부모 메뉴가 <code>open_submenu(key)</code>를 내면 앱이 열림 경로를 적고, 자식 메뉴를 실은 두 번째 popup을 부모 popup에 앵커해 짓는다.</p>
+        </header>
+        <div class="prose">
+          <p>데모의 변경 작업대는 행 메뉴에 "정렬" 하위 메뉴를 둔다. 라디오 항목이 지금 정렬 열을, 체크 항목이 방향을 보인다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.h:147-168" data-path="examples/demo/workbench_page.h" data-start="147"><script type="text/plain">
+    // 행을 우클릭했다. 메뉴는 그 자리에 선다 (물리 픽셀).
+    struct workbench_menu_intent
+    {
+        std::u8string key {};
+        float x { 0.0f };
+        float y { 0.0f };
+    };
+
+    struct workbench_menu_close_intent
+    {
+    };
+
+    struct workbench_menu_select_intent
+    {
+        std::u8string command {};
+    };
+
+    // 행 메뉴의 하위 메뉴를 연다. 빈 키면 닫는다 (열림 경로는 앱 상태다).
+    struct workbench_submenu_intent
+    {
+        std::u8string key {};
+    };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1416-1465" data-path="examples/demo/workbench_page.cpp" data-start="1416"><script type="text/plain">
+        // 정렬 하위 메뉴다. 라디오 항목이 지금 정렬 열을, 체크 항목이 방향을 보인다.
+        std::vector<luil::menu_item_config> sort_items {
+            { .key = u8"sort:path", .label = u8"경로", .kind = luil::menu_item_kind::radio, .checked = sort_column_ == u8"path" },
+            { .key = u8"sort:status", .label = u8"상태", .kind = luil::menu_item_kind::radio, .checked = sort_column_ == u8"status" },
+            { .key = u8"sort:size", .label = u8"크기", .kind = luil::menu_item_kind::radio, .checked = sort_column_ == u8"size" },
+        };
+        const bool descending { sort_direction_ == luil::sort_direction::descending };
+        sort_items.push_back({ .key = u8"sort-descending", .label = u8"내림차순", .separator_above = true, .kind = luil::menu_item_kind::check, .checked = descending });
+
+        luil::menu_config menu {};
+        menu.owner = u8"workbench-menu";
+        menu.items.push_back({ u8"stage", u8"스테이지", luil::codicons::icon_add });
+        menu.items.push_back({ u8"unstage", u8"스테이지 취소", luil::codicons::icon_remove });
+        menu.items.push_back({ .key = std::u8string { sort_submenu }, .label = u8"정렬", .separator_above = true, .children = sort_items });
+        menu.items.push_back({ .key = u8"discard", .label = u8"변경 버리기", .icon = luil::codicons::icon_trash, .separator_above = true });
+        menu.select = [](const std::u8string& command) { return luil::make_app_action(workbench_menu_select_intent { command }); };
+        // 하위 메뉴의 열림 경로는 앱 상태다. 오른쪽·Enter·hover가 열고 왼쪽·Esc가 한 단계만 닫는다 (popup-anchor-design.md).
+        menu.open_submenu = [](const std::u8string& key) { return luil::make_app_action(workbench_submenu_intent { key }); };
+        menu.close_submenu = luil::make_message_action(workbench_submenu_intent {});
+        menu.opened_key = submenu_;
+
+        // 하위 메뉴는 부모 popup 기준 자리에 선다. 붙는 항목의 위 끝까지의 높이를 앞 항목들로 센다.
+        float submenu_y { luil::menu_padding };
+        for (const luil::menu_item_config& item : menu.items)
+        {
+            if (item.separator_above)
+                submenu_y += luil::menu_separator_height;
+            if (item.key == sort_submenu)
+                break;
+            submenu_y += luil::menu_row_height();
+        }
+
+        const auto dismiss = [](luil::win32::popup_dismiss_reason) { return luil::make_app_action(workbench_menu_close_intent {}); };
+        popups.push_back(luil::make_menu_popup(
+            std::move(menu), { .id = u8"workbench-menu", .x = menu_x_ / scale, .y = menu_y_ / scale, .width = workbench_menu_width, .scale = scale, .dismiss = dismiss }));
+        if (submenu_ == sort_submenu)
+        {
+            luil::menu_config child {};
+            child.owner = u8"workbench-sort-menu";
+            child.items = std::move(sort_items);
+            child.select = [](const std::u8string& command) { return luil::make_app_action(workbench_menu_select_intent { command }); };
+            child.close_submenu = luil::make_message_action(workbench_submenu_intent {});
+            child.depth = 1;
+            child.parent_surface = u8"workbench-menu";
+            child.anchor_key = std::u8string { sort_submenu };
+            popups.push_back(luil::make_menu_popup(std::move(child),
+                { .id = u8"workbench-sort-menu", .anchor = u8"workbench-menu", .x = workbench_menu_width, .y = submenu_y - luil::menu_padding, .scale = scale, .dismiss = dismiss }));
+        }
+        return popups;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1416-1423" data-title="하위 항목">라디오 셋과 체크 하나다. <code>checked</code>는 앱 상태에서 바로 계산한다. 체크 항목은 <code>separator_above</code>로 라디오 묶음과 가른다.</li>
+            <li data-lines="1425-1435" data-title="부모 메뉴">"정렬" 항목에 <code>children</code>을 준다. 그러면 오른쪽에 ›를 그리고 클릭·Enter·→·hover가 <code>select</code> 대신 <code>open_submenu(key)</code>를 낸다. <code>opened_key</code>는 앱이 든 열림 경로다 — 그 항목은 강조로 그려지고 보조 기술에 펼침으로 읽힌다.</li>
+            <li data-lines="1437-1446" data-title="자식의 y">붙을 항목 줄의 위 끝을 센다. <code>menu_padding</code>에서 시작해 구분선마다 <code>menu_separator_height</code>, 앞 항목마다 <code>menu_row_height()</code>를 더한다. 상수 <code>menu_item_height</code>가 아니라 함수를 써야 큰 글자에서 어긋나지 않는다.</li>
+            <li data-lines="1448-1450" data-title="부모 popup">컨텍스트 메뉴답게 자리는 우클릭 좌표 ÷ 배율이다. <code>dismiss</code> 하나를 부모와 자식이 함께 쓴다. 어느 계기든 메뉴 전체를 닫는다.</li>
+            <li data-lines="1451-1463" data-title="자식 popup">자식 메뉴에는 <code>depth = 1</code>, <code>parent_surface</code>(부모 popup id), <code>anchor_key</code>(연 항목 키), <code>close_submenu</code>를 준다. popup의 <code>anchor</code>는 부모 popup id이고, <code>x</code>는 부모 폭, <code>y</code>는 줄의 위 끝에서 <code>menu_padding</code>을 뺀 값이다. 그래야 자식의 첫 줄이 부모의 그 줄과 나란하다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:722-765" data-path="examples/demo/workbench_page.cpp" data-start="722"><script type="text/plain">
+        if (const auto* const menu { message.get<workbench_menu_intent>() }; menu != nullptr)
+        {
+            // 고르지 않은 행을 우클릭하면 그 행 하나를 고르고 연다 (탐색기의 규칙).
+            if (luil::selection_contains(selection_, menu->key) == false)
+                selection_ = luil::selection_pick(selection_, change_items(), menu->key, {});
+            menu_open_ = true;
+            submenu_.clear();
+            menu_x_ = menu->x;
+            menu_y_ = menu->y;
+            return true;
+        }
+        if (message.get<workbench_menu_close_intent>() != nullptr)
+        {
+            menu_open_ = false;
+            submenu_.clear();
+            return true;
+        }
+        if (const auto* const submenu { message.get<workbench_submenu_intent>() }; submenu != nullptr)
+        {
+            submenu_ = submenu->key;
+            return true;
+        }
+        if (const auto* const select { message.get<workbench_menu_select_intent>() }; select != nullptr)
+        {
+            menu_open_ = false;
+            submenu_.clear();
+            if (select->command.starts_with(u8"sort:"))
+            {
+                const std::vector<luil::virtual_list_item> previous { change_items() };
+                sort_column_ = select->command.substr(5);
+                reconcile(previous);
+            }
+            else if (select->command == u8"sort-descending")
+            {
+                const std::vector<luil::virtual_list_item> previous { change_items() };
+                sort_direction_ = sort_direction_ == luil::sort_direction::descending ? luil::sort_direction::ascending : luil::sort_direction::descending;
+                reconcile(previous);
+            }
+            else if (select->command == u8"stage" || select->command == u8"unstage")
+                stage_selection(select->command == u8"stage");
+            else if (select->command == u8"discard")
+                discard_selection();
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>controller는 <code>depth</code>(부모 + 1)·<code>parent_surface</code>(부모 popup id)·<code>anchor_key</code>(부모의 <code>opened_key</code>) 셋이 다 맞는 메뉴를 "부모가 연 자식"으로 본다. 하나라도 어긋나면 잎 형제 위에 멎었을 때의 hover 닫힘이 그 자식을 찾지 못해, 자식이 계속 선다.</li>
+            <li>자식이 있는 항목은 고른 것이 아니라서 <code>after_select</code>를 내지 않는다. 이미 연 항목을 다시 눌러도 <code>open_submenu</code>다 (닫지 않는다).</li>
+            <li>라디오 항목이 하나라도 있는 메뉴는 보조 기술에 선택 container로 읽힌다.</li>
+            <li>이 데모의 자식 popup은 Esc에도 메뉴 전체를 닫는다. 주석은 "왼쪽·Esc가 한 단계만 닫는다"고 적지만, 표면이 Esc를 가장 깊은 popup의 <code>dismiss</code>에 먼저 묻고 그 답이 "전부 닫기"라서다 (<a class="xref" href="#concepts">Esc가 지나는 차례</a>). ←는 controller의 <code>close_submenu</code>로 가서 한 단계만 닫는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-deep">
+        <header class="sec-head">
+          <h2>만들기: 여러 단계의 하위 메뉴</h2>
+          <p class="lede">저장소의 예는 모두 깊이 1까지다. 깊이 2 이상도 규칙이 같다. 열림 경로를 키의 목록으로 들고, 깊이 d의 메뉴가 <code>open_submenu</code>로 <code class="free">path[d]</code>를 바꾸고 <code>close_submenu</code>로 자기를 닫는다.</p>
+        </header>
+        <div class="code tall" data-lang="cpp" data-label="열림 경로 하나로 짓는 popup 사슬 (직접 작성)" data-compile="pre-deep"><script type="text/plain">
+// 컨텍스트 메뉴를 연다 (우클릭·길게 누르기·Shift+F10). 자리는 누른 표면의 물리 픽셀이다.
+struct menu_open_intent
+{
+    float x { 0.0f };
+    float y { 0.0f };
+};
+
+// 메뉴를 모두 닫는다 (바깥 누름·창 이동·고른 뒤 등).
+struct menu_close_intent
+{
+};
+
+// 깊이 `depth`의 메뉴가 `key` 항목의 하위 메뉴를 연다. 빈 `key`는 깊이 `depth`부터 아래를 닫는다.
+struct menu_path_intent
+{
+    std::size_t depth { 0 };
+    std::u8string key {};
+};
+
+struct menu_pick_intent
+{
+    std::u8string key {};
+};
+
+// 앱 상태다. `path[d]`는 깊이 d 메뉴가 연 항목의 키다.
+struct menu_state
+{
+    bool open { false };
+    float x { 0.0f };
+    float y { 0.0f };
+    std::vector<std::u8string> path {};
+    std::u8string last {};
+};
+
+void handle(menu_state& state, const luil::app_message& message)
+{
+    if (const auto* const open { message.get<menu_open_intent>() }; open != nullptr)
+        state = { .open = true, .x = open->x, .y = open->y, .last = state.last };
+    else if (message.get<menu_close_intent>() != nullptr)
+    {
+        state.open = false;
+        state.path.clear();
+    }
+    else if (const auto* const path { message.get<menu_path_intent>() }; path != nullptr)
+    {
+        // 그 깊이부터 아래를 버리고, 키가 있으면 그 자리에 둔다. 같은 메시지가 거듭 와도 결과가 같다.
+        if (state.path.size() > path->depth)
+            state.path.resize(path->depth);
+        if (path->key.empty() == false && state.path.size() == path->depth)
+            state.path.push_back(path->key);
+    }
+    else if (const auto* const pick { message.get<menu_pick_intent>() }; pick != nullptr)
+        state.last = pick->key; // 닫기는 `after_select`가 따로 보낸다.
+}
+
+// 깊이 d 메뉴의 popup id다.
+[[nodiscard]] std::u8string popup_id(const std::size_t depth)
+{
+    return u8"ctx-menu-" + std::u8string(1, static_cast<char8_t>(u8'0' + depth));
+}
+
+// 그 항목 줄의 위 끝이 메뉴 popup 안에서 서는 높이다 (논리 픽셀). 데모 셸과 같은 셈이다.
+[[nodiscard]] float row_top(const std::vector<luil::menu_item_config>& items, const std::u8string& key)
+{
+    float y { luil::menu_padding };
+    for (const luil::menu_item_config& item : items)
+    {
+        if (item.separator_above)
+            y += luil::menu_separator_height;
+        if (item.key == key)
+            break;
+        y += luil::menu_row_height();
+    }
+    return y - luil::menu_padding;
+}
+
+// 열림 경로대로 popup 사슬을 짓는다. 자식 popup의 앵커는 부모 popup이고 자리는 부모 기준이다.
+[[nodiscard]] std::vector<luil::ui_popup> make_menus(const menu_state& state, const std::vector<luil::menu_item_config>& root_items, const float scale)
+{
+    std::vector<luil::ui_popup> popups {};
+    if (state.open == false)
+        return popups;
+    const std::vector<luil::menu_item_config>* items { &root_items };
+    float parent_width { 0.0f };
+    float anchor_y { 0.0f };
+    for (std::size_t depth = 0; items != nullptr; ++depth)
+    {
+        luil::menu_config menu {};
+        menu.owner = popup_id(depth);
+        menu.items = *items;
+        menu.select = [](const std::u8string& key) { return luil::make_app_action(menu_pick_intent { key }); };
+        menu.after_select = luil::make_message_action(menu_close_intent {});
+        menu.open_submenu = [depth](const std::u8string& key) { return luil::make_app_action(menu_path_intent { depth, key }); };
+        menu.opened_key = state.path.size() > depth ? state.path[depth] : std::u8string {};
+        menu.depth = depth;
+        if (depth > 0)
+        {
+            // controller가 부모·자식을 찾는 세 칸이다 (`open_child_menu`).
+            menu.parent_surface = popup_id(depth - 1);
+            menu.anchor_key = state.path[depth - 1];
+            // ←·Esc가 이 메뉴만 닫는다.
+            menu.close_submenu = luil::make_message_action(menu_path_intent { depth - 1, {} });
+        }
+
+        luil::menu_popup_config popup {};
+        popup.id = popup_id(depth);
+        popup.scale = scale;
+        if (depth == 0)
+        {
+            popup.x = state.x / scale;
+            popup.y = state.y / scale;
+            popup.dismiss = [](const luil::popup_dismiss_reason) { return luil::make_app_action(menu_close_intent {}); };
+        }
+        else
+        {
+            popup.anchor = popup_id(depth - 1);
+            popup.x = parent_width;
+            popup.y = anchor_y;
+            // 플랫폼은 Esc를 가장 깊은 popup에만 묻는다. 그 popup은 한 단계만 닫는다.
+            popup.dismiss = [depth](const luil::popup_dismiss_reason reason) {
+                return reason == luil::popup_dismiss_reason::escape_key ? luil::make_app_action(menu_path_intent { depth - 1, {} })
+                                                                       : luil::make_app_action(menu_close_intent {});
+            };
+        }
+        luil::ui_popup built { luil::make_menu_popup(menu, std::move(popup)) };
+        parent_width = built.width;
+        popups.push_back(std::move(built));
+
+        // 이 깊이가 연 항목이 있으면 그 자식이 다음 깊이다.
+        const std::vector<luil::menu_item_config>* next { nullptr };
+        if (state.path.size() > depth)
+            for (const luil::menu_item_config& item : *items)
+                if (item.key == state.path[depth] && item.children.empty() == false)
+                {
+                    anchor_y = row_top(*items, item.key);
+                    next = &item.children;
+                }
+        items = next;
+    }
+    return popups;
+}
+
+// 메뉴 키보드 탐색을 켜는 정책이다. Esc가 controller까지 오면(어느 popup도 Esc를 쓰지 않았다) 모두 닫는다.
+class menu_policy final : public luil::interaction_policy
+{
+public:
+    [[nodiscard]] std::optional<luil::menu_kinds> menu() const override
+    {
+        return luil::menu_kinds { luil::ui_element_kind::menu, luil::ui_element_kind::menu_item };
+    }
+
+    [[nodiscard]] std::vector<luil::input_action> close_menu() const override
+    {
+        return { luil::make_app_action(menu_close_intent {}) };
+    }
+};
+
+// 보기 > 정렬 > (이름·날짜) 처럼 두 단계가 있는 항목들이다.
+[[nodiscard]] std::vector<luil::menu_item_config> view_items()
+{
+    luil::menu_item_config by_name { .key = u8"sort.name", .label = u8"이름", .kind = luil::menu_item_kind::radio, .checked = true };
+    luil::menu_item_config by_date { .key = u8"sort.date", .label = u8"날짜", .kind = luil::menu_item_kind::radio };
+    luil::menu_item_config sort { .key = u8"view.sort", .label = u8"정렬", .children = { by_name, by_date } };
+    luil::menu_item_config view { .key = u8"view", .label = u8"보기", .children = { sort } };
+    luil::menu_item_config refresh { .key = u8"refresh", .label = u8"새로 고침", .separator_above = true, .shortcut_text = u8"F5" };
+    return { view, refresh };
+}
+</script></div>
+        <script type="text/plain" id="pre-deep" data-prelude>
+#include "luil/app/menu_popup.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/ui_interaction.h"
+#include <cstddef>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li>열림 경로 메시지 <code class="free">menu_path_intent { depth, key }</code>는 "깊이 d부터 아래를 버리고, 키가 있으면 그 자리에 둔다"는 절대 명령이다. 같은 메시지가 거듭 와도 결과가 같다. 빈 키가 곧 "깊이 d의 자식을 닫아라"다.</li>
+            <li>자식 메뉴의 <code>parent_surface</code>는 부모 <strong>popup id</strong>이고, <code>anchor_key</code>는 부모의 <code>opened_key</code>와 같아야 한다. 그래야 hover 닫힘이 그 자식을 찾는다.</li>
+            <li>깊이 d popup의 <code>dismiss</code>가 Esc에 "깊이 d만 닫기"를 내므로 Esc가 한 단계씩 닫는다. 표면이 가장 깊은 popup에만 Esc를 묻기 때문이다. 사슬이 짧아지면 controller가 강조를 부모의 그 항목에 되돌린다.</li>
+            <li>키보드(→·Enter·접근 키)로 연 자식은 첫 활성 항목이 강조된 채 서고, hover로 연 자식은 강조 없이 선다. 강조가 없는 자식에서 첫 ↓는 첫 활성 항목으로 간다.</li>
+            <li>앱의 <code>make_frame</code>은 <code class="free">frame-&gt;popups = make_menus(state_, view_items(), scale)</code>처럼 싣고, 정책에는 <code class="free">menu_policy</code>를 쓴다. 고르면 <code>after_select</code>가 따로 닫기 메시지를 보낸다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-menubar">
+        <header class="sec-head">
+          <h2>만들기: 메뉴 막대 (파일·편집·보기, 접근 키)</h2>
+          <p class="lede">막대는 주 tree에 서는 <code>menu_bar_element</code>이고, 열린 메뉴는 <code>make_menu_bar_popup</code>이 그 항목 아래에 짓는 popup이다. 막대의 상태 <code>menu_bar_state</code>는 앱이 들고 <code>set_state</code> 메시지로만 바뀐다.</p>
+        </header>
+        <div class="prose">
+          <p>데모 셸의 <code>shell_menu</code>가 막대 하나와 그 메뉴를 모두 짓는 완결된 예다. 상태·메시지·막대·popup이 한 클래스에 있다.</p>
+        </div>
+        <h3>메시지와 상태</h3>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/shell_menu.h:15-85" data-path="examples/demo/shell_menu.h" data-start="15"><script type="text/plain">
+namespace demo {
+    // 셸 메뉴 막대의 상태를 이것으로 하라는 메시지다 (`menu_bar_config::set_state`).
+    struct shell_menu_state_intent
+    {
+        luil::menu_bar_state state {};
+    };
+
+    // 막대 메뉴에서 고른 명령이다. 키는 `file.new`처럼 메뉴 이름과 명령을 점으로 잇는다.
+    struct shell_menu_select_intent
+    {
+        std::u8string key {};
+    };
+
+    // 보기 메뉴의 하위 메뉴("테마")를 연다. 빈 키는 닫는다.
+    struct shell_menu_submenu_intent
+    {
+        std::u8string key {};
+    };
+
+    // 셸이 실행할 명령의 키다. 나머지 명령은 마지막 명령 label만 바꾼다.
+    inline constexpr std::u8string_view shell_menu_sidebar { u8"view.sidebar" };
+    inline constexpr std::u8string_view shell_menu_theme_light { u8"theme.light" };
+    inline constexpr std::u8string_view shell_menu_theme_system { u8"theme.system" };
+    inline constexpr std::u8string_view shell_menu_theme_dark { u8"theme.dark" };
+    // 보기 메뉴의 "페이지 전환" 라디오다 (docs/page-transition-design.md의 확인 절). 키 앞부분이 같아 셸이 한 갈래로 받는다.
+    inline constexpr std::u8string_view shell_menu_page_transition_prefix { u8"page-transition." };
+    inline constexpr std::u8string_view shell_menu_page_transition_none { u8"page-transition.none" };
+    inline constexpr std::u8string_view shell_menu_page_transition_slide { u8"page-transition.slide" };
+    inline constexpr std::u8string_view shell_menu_page_transition_fade { u8"page-transition.fade" };
+    inline constexpr std::u8string_view shell_menu_page_transition_zoom { u8"page-transition.zoom" };
+    inline constexpr std::u8string_view shell_menu_page_transition_spring { u8"page-transition.spring" };
+
+    // 창 위의 "파일(F)·편집(E)·보기(V)" 막대다 (docs/menu-bar-design.md의 확인 절).
+    //  - 열림·선 자리·하위 메뉴는 이 상태가 든다. 막대와 popup은 frame마다 이 상태로 새로 짓는다.
+    //  - 막대 오른쪽 label 둘이 상태("파일 · 키보드")와 마지막 명령을 그려 UIA가 이름으로 되읽는다.
+    //  - 고른 명령 중 셸의 것(사이드바, 테마, 페이지 전환)은 `take_command`로 넘긴다. 이 상태는 셸을 모른다.
+    class shell_menu
+    {
+    public:
+        // 막대 메시지면 참이다.
+        bool handle(const luil::app_message& message);
+        // 고른 셸 명령이다 (`shell_menu_sidebar` 같은 것). 한 번 꺼내면 빈다.
+        [[nodiscard]] std::optional<std::u8string> take_command();
+
+        [[nodiscard]] const luil::menu_bar_state& state() const noexcept
+        {
+            return state_;
+        }
+
+        [[nodiscard]] luil::menu_bar_config bar_config() const;
+        [[nodiscard]] std::unique_ptr<luil::menu_bar_element> make_bar() const;
+        // "메뉴 막대: 쉼", "파일 · 키보드", "편집 열림 · 포인터"다.
+        [[nodiscard]] std::u8string state_text() const;
+        // "마지막 메뉴 명령: 새로 만들기"다. 고른 적이 없으면 "없음"이다.
+        [[nodiscard]] std::u8string last_command_text() const;
+        // 막대 오른쪽의 label 둘이다 (owner `shell-menu-state`·`shell-menu-last`).
+        [[nodiscard]] std::unique_ptr<luil::label_element> make_state_label() const;
+        [[nodiscard]] std::unique_ptr<luil::label_element> make_last_label() const;
+
+        // 열린 메뉴와 하위 메뉴다. `bar`는 이번 frame에 배치한 막대이고 `limit`은 주 창 client(물리 픽셀)다.
+        //  - 보기 메뉴의 체크와 라디오는 셸 상태(`sidebar_visible`, `theme`, `page_transition`)를 그대로 그린다.
+        //  - `page_transition`은 고른 페이지 전환의 키다 (`shell_menu_page_transition_slide` 같은 것). 비면 어느 것도 고르지 않은 것이다.
+        [[nodiscard]] std::vector<luil::ui_popup> make_popups(
+            const luil::menu_bar_element& bar, float scale, const luil::rect_f& limit, bool sidebar_visible, luil::theme_preference theme, std::u8string_view page_transition = {}) const;
+
+    private:
+        luil::menu_bar_state state_ {};
+        std::u8string submenu_ {};
+        std::u8string last_command_ {};
+        std::optional<std::u8string> pending_ {};
+    };
+</script></div>
+        <h3>항목: 접근 키와 단축키 글</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/shell_menu.cpp:73-82" data-path="examples/demo/shell_menu.cpp" data-start="73"><script type="text/plain">
+        // 주 단축키 수정자 조합의 글이다. Windows는 "Ctrl+S", macOS는 "⌘S"다 (`luil::shortcut_label`).
+        [[nodiscard]] std::u8string primary(const luil::key_code key)
+        {
+            return luil::shortcut_label(luil::key_chord { key, true });
+        }
+
+        [[nodiscard]] luil::menu_item_config command(const std::u8string_view key, const char32_t access_key, std::u8string shortcut = {})
+        {
+            return { .key = std::u8string { key }, .label = std::u8string { label_of(key) }, .shortcut_text = std::move(shortcut), .access_key = access_key };
+        }
+</script></div>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/shell_menu.cpp:84-137" data-path="examples/demo/shell_menu.cpp" data-start="84"><script type="text/plain">
+        [[nodiscard]] std::vector<luil::menu_item_config> items_of(const std::u8string_view menu, const bool sidebar_visible, const luil::theme_preference theme, const std::u8string_view page_transition)
+        {
+            if (menu == u8"file")
+                return { command(u8"file.new", U'n', primary(luil::key_code::key_n)), command(u8"file.open", U'o', primary(luil::key_code::key_o)), command(u8"file.save", U's', primary(luil::key_code::key_s)) };
+            if (menu == u8"edit")
+            {
+                std::vector<luil::menu_item_config> items { command(u8"edit.undo", U'u', primary(luil::key_code::key_z)), command(u8"edit.redo", U'r', primary(luil::key_code::key_y)) };
+                luil::menu_item_config cut { command(u8"edit.cut", U't', primary(luil::key_code::key_x)) };
+                cut.separator_above = true;
+                items.push_back(std::move(cut));
+                items.push_back(command(u8"edit.copy", U'c', primary(luil::key_code::key_c)));
+                items.push_back(command(u8"edit.paste", U'p', primary(luil::key_code::key_v)));
+                return items;
+            }
+            if (menu != u8"view")
+                return {};
+            luil::menu_item_config sidebar { command(shell_menu_sidebar, U's', primary(luil::key_code::key_b)) };
+            sidebar.kind = luil::menu_item_kind::check;
+            sidebar.checked = sidebar_visible;
+            const auto radio = [theme](const std::u8string_view key, const char32_t access_key, const luil::theme_preference value) {
+                luil::menu_item_config item { command(key, access_key) };
+                item.kind = luil::menu_item_kind::radio;
+                item.checked = theme == value;
+                return item;
+            };
+            luil::menu_item_config themes {};
+            themes.key = std::u8string { theme_submenu };
+            themes.label = u8"테마";
+            themes.access_key = U't';
+            themes.children = {
+                radio(shell_menu_theme_light, U'l', luil::theme_preference::light),
+                radio(shell_menu_theme_system, U's', luil::theme_preference::system),
+                radio(shell_menu_theme_dark, U'd', luil::theme_preference::dark),
+            };
+            // 페이지를 바꿀 때의 전환이다. 고른 것이 라디오로 선다.
+            const auto transition = [page_transition](const std::u8string_view key, const char32_t access_key) {
+                luil::menu_item_config item { command(key, access_key) };
+                item.kind = luil::menu_item_kind::radio;
+                item.checked = page_transition == key;
+                return item;
+            };
+            luil::menu_item_config transitions {};
+            transitions.key = std::u8string { page_transition_submenu };
+            transitions.label = u8"페이지 전환";
+            transitions.access_key = U'p';
+            transitions.children = {
+                transition(shell_menu_page_transition_none, U'n'),
+                transition(shell_menu_page_transition_slide, U's'),
+                transition(shell_menu_page_transition_fade, U'f'),
+                transition(shell_menu_page_transition_zoom, U'z'),
+                transition(shell_menu_page_transition_spring, U'p'),
+            };
+            return { std::move(sidebar), std::move(themes), std::move(transitions) };
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>단축키 글은 <code>shortcut_label</code>이 플랫폼에 맞게 쓴다. Windows는 "Ctrl+S", macOS는 "⌘S"다. <code>shortcut_text</code>는 그리기만 한다 — 실행은 <a class="xref" href="#build-commands">명령표</a>의 몫이다.</li>
+            <li><code>access_key</code>는 영문자나 숫자 하나다. 라벨에 그 글자가 없으면 "새로 만들기(N)"처럼 덧붙여 그린다. 접근 키는 막대에서 연 메뉴에서만 먹는다.</li>
+          </ul>
+        </div>
+        <h3><code>handle</code>과 막대 설정</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/shell_menu.cpp:140-163" data-path="examples/demo/shell_menu.cpp" data-start="140"><script type="text/plain">
+    bool shell_menu::handle(const luil::app_message& message)
+    {
+        if (const auto* const next { message.get<shell_menu_state_intent>() }; next != nullptr)
+        {
+            // 막대가 쉬거나 다른 메뉴로 옮기면 열린 하위 메뉴도 닫는다.
+            if (next->state.open == false || next->state.current != state_.current)
+                submenu_.clear();
+            state_ = next->state;
+            return true;
+        }
+        if (const auto* const submenu { message.get<shell_menu_submenu_intent>() }; submenu != nullptr)
+        {
+            submenu_ = submenu->key;
+            return true;
+        }
+        if (const auto* const select { message.get<shell_menu_select_intent>() }; select != nullptr)
+        {
+            last_command_ = select->key;
+            if (select->key == shell_menu_sidebar || select->key.starts_with(u8"theme.") || select->key.starts_with(shell_menu_page_transition_prefix))
+                pending_ = select->key;
+            return true;
+        }
+        return false;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/shell_menu.cpp:170-183" data-path="examples/demo/shell_menu.cpp" data-start="170"><script type="text/plain">
+    luil::menu_bar_config shell_menu::bar_config() const
+    {
+        luil::menu_bar_config config {};
+        config.owner = u8"shell-menu";
+        // 한글 라벨에는 글자가 없어 "파일(F)"로 그린다. 접근 이름은 "파일"이고 키는 AccessKey로 읽힌다.
+        config.items = {
+            { .key = u8"file", .label = u8"파일", .access_key = U'f' },
+            { .key = u8"edit", .label = u8"편집", .access_key = U'e' },
+            { .key = u8"view", .label = u8"보기", .access_key = U'v' },
+        };
+        config.state = state_;
+        config.set_state = [](const luil::menu_bar_state& state) { return luil::make_app_action(shell_menu_state_intent { state }); };
+        return config;
+    }
+</script></div>
+        <div class="prose">
+          <p>막대가 쉬거나 다른 메뉴로 옮기면 열린 하위 메뉴도 앱이 닫는다. 한글 라벨에는 접근 키 글자가 없어 "파일(F)"로 그린다. 접근 이름은 "파일" 그대로이고 키는 "Alt+F"로 따로 읽힌다.</p>
+        </div>
+        <h3>열린 메뉴와 하위 메뉴 popup</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/shell_menu.cpp:216-280" data-path="examples/demo/shell_menu.cpp" data-start="216"><script type="text/plain">
+    std::vector<luil::ui_popup> shell_menu::make_popups(
+        const luil::menu_bar_element& bar, const float scale, const luil::rect_f& limit, const bool sidebar_visible, const luil::theme_preference theme, const std::u8string_view page_transition) const
+    {
+        std::vector<luil::ui_popup> popups {};
+        if (state_.open == false || state_.current.empty())
+            return popups;
+        std::vector<luil::menu_item_config> items { items_of(state_.current, sidebar_visible, theme, page_transition) };
+        if (items.empty())
+            return popups;
+
+        const auto select = [](const std::u8string& key) { return luil::make_app_action(shell_menu_select_intent { key }); };
+        luil::menu_config menu {};
+        menu.items = items;
+        menu.select = select;
+        // 하위 메뉴의 열림 경로는 앱 상태다. 오른쪽·Enter·hover·접근 키가 열고 왼쪽·Esc가 한 단계만 닫는다.
+        menu.open_submenu = [](const std::u8string& key) { return luil::make_app_action(shell_menu_submenu_intent { key }); };
+        menu.close_submenu = luil::make_message_action(shell_menu_submenu_intent {});
+        menu.opened_key = submenu_;
+        // 고르면 막대가 쉰다 (`make_menu_bar_popup`이 `after_select`를 채운다).
+        luil::menu_popup_config config {};
+        config.id = std::u8string { bar_popup_id };
+        config.scale = scale;
+        luil::ui_popup top { luil::make_menu_bar_popup(bar, std::move(menu), std::move(config), limit) };
+
+        if (submenu_.empty() == false)
+        {
+            // 하위 메뉴는 부모 popup 기준 자리에 선다. 붙는 항목의 위 끝까지의 높이를 앞 항목들로 센다.
+            float submenu_y { luil::menu_padding };
+            for (const luil::menu_item_config& item : items)
+            {
+                if (item.separator_above)
+                    submenu_y += luil::menu_separator_height;
+                if (item.key == submenu_ && item.children.empty() == false)
+                {
+                    const std::u8string popup_id { submenu_popup_id(item.key) };
+                    luil::menu_config child {};
+                    child.owner = popup_id;
+                    child.items = item.children;
+                    child.select = select;
+                    // 고르면 하위 메뉴와 막대가 함께 닫힌다.
+                    child.after_select = luil::make_message_action(shell_menu_state_intent {});
+                    child.close_submenu = luil::make_message_action(shell_menu_submenu_intent {});
+                    child.depth = 1;
+                    child.parent_surface = std::u8string { bar_popup_id };
+                    child.anchor_key = item.key;
+                    luil::menu_popup_config child_popup {};
+                    child_popup.id = popup_id;
+                    child_popup.anchor = std::u8string { bar_popup_id };
+                    child_popup.x = top.width;
+                    child_popup.y = submenu_y - luil::menu_padding;
+                    child_popup.scale = scale;
+                    // Esc는 하위 메뉴만 닫는다. 그 밖의 닫힘은 막대도 쉬게 한다.
+                    child_popup.dismiss = [](const luil::popup_dismiss_reason reason) {
+                        return reason == luil::popup_dismiss_reason::escape_key ? luil::make_app_action(shell_menu_submenu_intent {}) : luil::make_app_action(shell_menu_state_intent {});
+                    };
+                    popups.push_back(std::move(top));
+                    popups.push_back(luil::make_menu_popup(std::move(child), std::move(child_popup)));
+                    return popups;
+                }
+                submenu_y += luil::menu_row_height();
+            }
+        }
+        popups.push_back(std::move(top));
+        return popups;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="219-224" data-title="열렸을 때만">막대가 열렸고(<code>open</code>) 선 항목이 있을 때만 짓는다. 메뉴 항목은 <code>current</code>로 고른다.</li>
+            <li data-lines="226-233" data-title="메뉴 설정">고름, 하위 메뉴 열기·닫기, 열림 경로. 컨텍스트 메뉴와 똑같다. <code>owner</code>는 비워 둔다 — <code>make_menu_bar_popup</code>이 막대의 <code>current</code>로 채운다.</li>
+            <li data-lines="234-238" data-title="막대 popup">id와 배율만 준다. <code>make_menu_bar_popup</code>이 그 항목 아래 자리(<code>below</code>, 간격 0), Esc와 그 밖의 닫힘, 고른 뒤 막대를 쉬게 하는 <code>after_select</code>를 채운다. <code>limit</code>은 주 창 client(물리 픽셀)다.</li>
+            <li data-lines="240-250" data-title="자식의 y">붙을 항목 줄의 위 끝을 센다. 앞 항목의 구분선도 더한다.</li>
+            <li data-lines="251-260" data-title="자식 메뉴">고르면 하위 메뉴와 막대가 함께 닫히도록 <code>after_select</code>에 쉬는 상태를 준다. <code>depth</code>·<code>parent_surface</code>·<code>anchor_key</code>로 부모와 짝을 짓는다.</li>
+            <li data-lines="261-270" data-title="한 단계씩 닫는 Esc">자식 popup의 <code>dismiss</code>는 Esc에 "하위 메뉴만 닫기"를, 그 밖의 계기에 "막대 쉬기"를 낸다. 표면이 Esc를 가장 깊은 popup에 먼저 묻기 때문에 이 답이 곧 Esc의 뜻이다.</li>
+            <li data-lines="271-279" data-title="순서">부모를 먼저, 자식을 뒤에 싣는다. 목록의 뒤가 위다.</li>
+          </ol>
+        </div>
+        <h3>셸에 잇기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:869-886" data-path="examples/demo_main.cpp" data-start="869"><script type="text/plain">
+                // 막대와 그 오른쪽 상태 label 둘이다. 막대는 메뉴 popup의 자리를 정하므로 아래에서 다시 읽는다.
+                const luil::menu_bar_element* menu_bar { nullptr };
+                {
+                    constexpr float state_label_width { 150.0f };
+                    constexpr float last_label_width { 220.0f };
+                    constexpr float label_gap { 12.0f };
+                    const float labels_width { (state_label_width + last_label_width + label_gap * 2.0f) * scale };
+                    auto bar { shell_menu_.make_bar() };
+                    bar->arrange({ .slot = { 0.0f, menu_bar_top, std::max(0.0f, width - labels_width), menu_bar_row }, .scale = scale, .style = style });
+                    menu_bar = bar.get();
+                    root->add(std::move(bar));
+                    auto state { shell_menu_.make_state_label() };
+                    state->arrange({ { width - labels_width + label_gap * scale, menu_bar_top, state_label_width * scale, menu_bar_row }, scale });
+                    root->add(std::move(state));
+                    auto last { shell_menu_.make_last_label() };
+                    last->arrange({ { width - (last_label_width + label_gap) * scale, menu_bar_top, last_label_width * scale, menu_bar_row }, scale });
+                    root->add(std::move(last));
+                }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:959-962" data-path="examples/demo_main.cpp" data-start="959"><script type="text/plain">
+                // 메뉴 막대의 메뉴는 이번 frame에 배치한 항목 아래에 선다. 보기 메뉴는 사이드바와 테마의 지금 상태를 그린다.
+                if (menu_bar != nullptr)
+                    for (luil::win32::ui_popup& popup : shell_menu_.make_popups(*menu_bar, scale, { 0.0f, 0.0f, width, height }, sidebar_collapsed_ == false, theme_.appearance().theme, page_transition_mode_))
+                        frame->popups.push_back(std::move(popup));
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:688-708" data-path="examples/demo_main.cpp" data-start="688"><script type="text/plain">
+                // 메뉴 막대다. 막대가 고른 셸 명령(사이드바·테마)은 단축키·팔레트와 같은 메시지로 잇는다.
+                if (shell_menu_.handle(message))
+                {
+                    if (const std::optional<std::u8string> command { shell_menu_.take_command() }; command.has_value())
+                    {
+                        if (*command == shell_menu_sidebar)
+                            handle(luil::app_message { sidebar_toggle_intent {} });
+                        else if (*command == shell_menu_theme_light)
+                            static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::light } }));
+                        else if (*command == shell_menu_theme_system)
+                            static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::system } }));
+                        else if (*command == shell_menu_theme_dark)
+                            static_cast<void>(theme_.handle(luil::app_message { theme_intent { luil::theme_preference::dark } }));
+                        else if (command->starts_with(shell_menu_page_transition_prefix))
+                        {
+                            page_transition_mode_ = *command;
+                            page_motion_ = {};
+                        }
+                    }
+                    return;
+                }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>막대를 이번 frame에 배치해 두고 그 포인터로 같은 frame의 popup 자리를 잰다. 포인터는 그 frame이 게시되기 전까지만 쓴다.</li>
+            <li>막대 항목은 Tab 자리가 아니고, 눌러도 글 칸의 초점을 가져가지 않는다.</li>
+            <li>막대가 키를 받으려면 보이고, 켜져 있고, <code>set_state</code>가 있고, 초점 가둠(대화 상자) 밖이 아니어야 한다. 대화 상자가 떠 있으면 Alt에 반응하지 않는다.</li>
+            <li>메뉴를 고르면 <code>make_menu_bar_popup</code>이 채운 <code>after_select</code>가 <code>set_state({})</code>를 내 막대가 쉰다. 키보드 탐색은 컨텍스트 메뉴와 같은 정책의 <code>menu()</code>로 켠다.</li>
+          </ul>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl"><code>make_menu_bar_popup</code>은 앱의 dismiss를 덮어쓴다</span>막대에 <code>set_state</code>가 있으면 popup의 <code>dismiss</code>를 "Esc면 <code>{ current, false, keyboard }</code>, 그 밖이면 <code>{}</code>"로 바꾸고, 비어 있는 <code>after_select</code>를 <code>set_state({})</code>로 채운다. 넘긴 <code>popup.dismiss</code>는 쓰이지 않는다. 막대 메뉴의 닫힘을 바꾸려면 돌려받은 <code>ui_popup</code>의 <code>dismiss</code>를 다시 단다.</div></div>
+      </section>
+
+      <section class="sec" id="build-commands">
+        <header class="sec-head">
+          <h2>만들기: 명령표에서 항목과 단축키 열을 짓기</h2>
+          <p class="lede"><code>menu_item_config::shortcut_text</code>는 <strong>표시만 하는 열</strong>이다. 단축키를 실행하는 일치 판정은 명령표(<code>app_command</code>·<code>match_command</code>)가 한다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:445-455" data-path="examples/demo/tabs_page.cpp" data-start="445"><script type="text/plain">
+            for (const luil::app_command& command : tab_commands())
+            {
+                if (command.id != u8"new" && command.id != u8"reopen")
+                    continue;
+                luil::menu_item_config item { luil::menu_item_from(command) };
+                item.separator_above = command.id == u8"new";
+                item.enabled = command.id != u8"reopen" || closed_.empty() == false;
+                menu.items.push_back(std::move(item));
+            }
+            menu.items.front().shortcut_text = luil::shortcut_label(luil::key_chord { luil::key_code::key_w, true });
+            menu.select = [](const std::u8string& command) { return luil::make_app_action(tab_menu_command_intent { command }); };
+</script></div>
+        <div class="prose">
+          <p><code>menu_item_from</code>은 명령 하나를 항목으로 옮긴다. 라벨·활성·체크와, 실제로 쓰는 첫 단축키의 글을 채운다. 같은 명령표를 앱 정책의 마지막 키 단계에서 맞춘다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:613-620" data-path="examples/demo/tabs_page.cpp" data-start="613"><script type="text/plain">
+    std::vector<luil::input_action> tabs_page::route_key(const luil::ui_tree* const tree, const luil::key_pressed_event& event)
+    {
+        if (tree == nullptr || tree->focus_trap() != nullptr || event.surface.empty() == false || tree->find({ luil::ui_element_kind::tab_bar, std::u8string { bar_owner } }) == nullptr)
+            return {};
+        if (const auto command { luil::match_command(tab_commands(), event, luil::command_scope::window) }; command.has_value())
+            return { luil::make_app_action(tab_menu_command_intent { *command }) };
+        return {};
+    }
+</script></div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">메뉴가 열린 동안에는 단축키가 오지 않는다</span>메뉴가 쓰지 않은 키는 controller가 삼킨다. 그래서 메뉴가 떠 있을 때 Ctrl+W 같은 단축키는 <code>on_key</code>까지 가지 않는다. 메뉴 막대가 "선" 동안(열리지 않았어도)도 막대의 것이 아닌 키를 삼킨다. 단축키 글을 메뉴에 그렸다고 그 키가 메뉴 안에서 먹는 것은 아니다.</div></div>
+      </section>
+
+      <section class="sec" id="build-below">
+        <header class="sec-head">
+          <h2>만들기: 필드 아래에 붙는 메뉴</h2>
+          <p class="lede">분할 버튼과 드롭다운 단추의 메뉴다. <code>below</code>가 메뉴 크기를 잰 뒤 자리를 정하고, 아래가 창 밖으로 넘치면 위로 뒤집는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:90-109" data-path="examples/demo/popups_page.cpp" data-start="90"><script type="text/plain">
+        // 필드 아래에 놓는 메뉴 popup이다. 자리는 `below`가 메뉴 크기를 잰 뒤에 정하고, 아래가 창 밖으로 넘치면 위로 뒤집힌다.
+        [[nodiscard]] luil::win32::ui_popup make_field_menu(
+            std::u8string owner, std::vector<luil::menu_item_config> items, const luil::rect_f& field, const luil::rect_f& surface, const float scale, const luil::popup_corner corner, const bool border)
+        {
+            luil::menu_config menu {};
+            menu.owner = owner;
+            menu.items = std::move(items);
+            menu.select = [owner](const std::u8string& key) { return luil::make_app_action(field_menu_select_intent { owner, key }); };
+            // 고르면 닫힌다. 닫기는 절대 메시지라 바깥 누름 닫기와 겹쳐 두 번 와도 같다.
+            menu.after_select = luil::make_message_action(field_menu_intent { owner, false });
+
+            luil::menu_popup_config popup {};
+            popup.id = owner + u8"-menu";
+            popup.scale = scale;
+            popup.below = luil::field_popup_anchor { .field = field, .limit = surface };
+            popup.dismiss = [owner](const luil::popup_dismiss_reason) { return luil::make_app_action(field_menu_intent { owner, false }); };
+            popup.corner = corner;
+            popup.border = border;
+            return luil::make_menu_popup(std::move(menu), std::move(popup));
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>field</code>는 이번 frame에 배치한 필드의 <code>bounds()</code>(물리 픽셀), <code>limit</code>은 앵커 표면의 client 사각형이다. 간격은 기본 2 논리 픽셀이다.</li>
+            <li><code>after_select</code>가 고른 뒤의 닫기 메시지를 따로 낸다. 잎 항목에서만 낸다.</li>
+            <li>닫기 메시지는 절대 상태(<code>field_menu_intent { owner, false }</code>)라 바깥 누름 닫기와 겹쳐 두 번 와도 결과가 같다.</li>
+            <li>자리 규칙(아래 기본, 위로 뒤집기, 가로 맞춤과 밀기)은 <a class="xref" href="popups.html#lab">필드 popup 자리 실습</a>에서 원본을 옮긴 함수로 해 볼 수 있다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-window">
+        <header class="sec-head">
+          <h2>만들기: 보조 창에 앵커한 메뉴</h2>
+          <p class="lede"><code>anchor</code>가 보조 창 id면 자리는 그 창 client 기준 논리 픽셀이고, 배율도 그 창의 것이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/windows_page.cpp:1379-1415" data-path="examples/demo/windows_page.cpp" data-start="1379"><script type="text/plain">
+    std::vector<luil::win32::ui_popup> windows_page::make_popups() const
+    {
+        std::vector<luil::win32::ui_popup> popups {};
+        if (tool_menu_open_ == false || tool_menu_button_ == nullptr)
+            return popups;
+
+        // 배율은 도구 창의 것이다 (주 창과 다른 모니터에 있을 수 있다).
+        const float scale { tool_metrics_.scale > 0.0f ? tool_metrics_.scale : 1.0f };
+        const luil::text_input_view search { luil::make_text_input_view(menu_search_, composition_, target_tool_menu_search) };
+        luil::menu_config menu {};
+        menu.owner = u8"tool";
+        menu.items = narrow_menu_items(tool_menu_items(), search);
+        menu.select = [](const std::u8string& key) { return luil::make_app_action(tool_menu_select_intent { key }); };
+        // OS 기본 모서리의 popup이다. 둥근 창이면 메뉴의 사각 선은 끄고 경계를 OS 테두리에 맡긴다.
+        menu.border = luil::popup_corner_radius(luil::popup_corner::system) <= 0.0f;
+
+        // 메뉴 버튼 바로 아래에 붙인다.
+        // 자리는 **도구 창 client** 기준 논리 픽셀이다 — 앵커가 그 창이기 때문이다.
+        const luil::rect_f button { tool_menu_button_->bounds() };
+        luil::win32::ui_popup popup {};
+        popup.id = u8"tool-menu";
+        popup.anchor = u8"tool";
+        popup.width = tool_menu_width;
+        popup.height = search_menu_height(menu);
+        popup.x = button.x / scale;
+        popup.y = (button.y + button.height) / scale + 2.0f;
+        // 검색 칸의 조합은 **도구 창**의 IME session이 본다 — 앵커가 그 창이다.
+        popup.tree = make_search_menu_tree(std::move(menu), kind_tool_menu_search_input, search, u8"검색", popup.width, scale);
+        popup.dismiss = [](const luil::win32::popup_dismiss_reason reason) {
+            // 도구 창을 끌고 다녀도, 주 창을 잠깐 봐도 검색은 남는다.
+            if (search_popup_stays(reason))
+                return luil::input_action {};
+            return luil::make_app_action(tool_menu_toggle_intent { false });
+        };
+        popups.push_back(std::move(popup));
+        return popups;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>도구 창은 주 창과 다른 모니터에 있을 수 있다. 그래서 배율을 도구 창의 metrics에서 꺼낸다.</li>
+            <li>popup 안에 검색 칸이 있다. popup은 키보드 초점을 받지 못하지만, 검색 칸의 IME 조합은 앵커 창(도구 창)의 입력 session이 대신 본다.</li>
+            <li>검색 칸이 있는 popup은 창 이동·활성 전환에는 남는다(<code>search_popup_stays</code>). 남기는 계기에 빈 액션 <code>luil::input_action {}</code>을 돌려준다.</li>
+            <li><code>make_menu_popup</code>을 쓰지 않고 손으로 지은 popup이라 메뉴의 사각 선을 직접 끈다. <code>popup_corner_radius</code>는 그 모서리의 실제 반지름(논리 픽셀)이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-look">
+        <header class="sec-head">
+          <h2>만들기: popup 모양 — 모서리·경계·배경 효과</h2>
+          <p class="lede"><code>corner</code>·<code>border</code>·<code>backdrop</code>은 <code>menu_popup_config</code>에서 <code>ui_popup</code>으로 그대로 옮겨진다. 둥근 창이면 메뉴 자신의 사각 선은 꺼진다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/theme_page.cpp:211-235" data-path="examples/demo/theme_page.cpp" data-start="211"><script type="text/plain">
+    std::vector<luil::win32::ui_popup> theme_page::make_popups(const float scale) const
+    {
+        std::vector<luil::win32::ui_popup> popups {};
+        if (sample_menu_open_ == false || sample_menu_button_ == nullptr)
+            return popups;
+        luil::menu_config menu {};
+        menu.owner = u8"backdrop-menu";
+        menu.items = {
+            { u8"first", u8"메뉴 몸통이 효과를 비춥니다", luil::codicons::icon_color_mode },
+            { u8"second", u8"항목은 그대로 고를 수 있습니다", luil::codicons::icon_check },
+            { u8"close", u8"닫기", luil::codicons::icon_close },
+        };
+        menu.select = [](const std::u8string&) { return luil::make_app_action(sample_menu_toggle_intent { false }); };
+        const luil::rect_f button { sample_menu_button_->bounds() };
+        luil::menu_popup_config config {};
+        config.id = u8"backdrop-menu";
+        config.x = button.x / scale;
+        config.y = (button.y + button.height) / scale + 2.0f;
+        config.width = sample_menu_width;
+        config.scale = scale;
+        config.dismiss = [](const luil::win32::popup_dismiss_reason) { return luil::make_app_action(sample_menu_toggle_intent { false }); };
+        config.backdrop = sample_popup_backdrop_;
+        popups.push_back(luil::make_menu_popup(std::move(menu), std::move(config)));
+        return popups;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>배경 효과는 popup에서 <code>window_backdrop::acrylic</code>만 선다. 효과가 선 표면에서는 메뉴가 몸통을 칠하지 않아 효과가 비친다.</li>
+            <li><code>corner</code>를 비우면 <strong>내장 스타일</strong>의 <code>popup.corner</code>(기본 <code>popup_corner::system</code>)다. 실행 중에 스타일을 바꾼 앱(<code>ui_frame::style</code>)은 그 값을 넘긴다. 둥근 모서리를 쓸 수 없는 환경이면 무엇을 주든 직각이다.</li>
+            <li>폭을 재는 <code>font_size</code>·<code>weight</code>도 비우면 내장 스타일 값이다. 큰 본문 글자로 바꾼 앱이 넘기지 않으면 글이 잘린다.</li>
+            <li>Windows 11의 <code>system</code>은 작게 둥근 창(반지름 4)이고, 원격 세션처럼 둥근 모서리를 못 쓰면 직각으로 물러선다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-open">
+        <header class="sec-head">
+          <h2>만들기: 키보드와 터치로 컨텍스트 메뉴 열기</h2>
+          <p class="lede">우클릭 액션 하나만 달면 된다. Shift+F10과 길게 누르기가 같은 액션을 실행한다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="src/ui/ui_interaction.cpp:3629-3644" data-path="src/ui/ui_interaction.cpp" data-start="3629"><script type="text/plain">
+        // 키보드의 컨텍스트 메뉴도 오른쪽 클릭과 같은 액션을 실행한다.
+        // 초점이 자식 단추에 있어도 가장 가까운 메뉴 임자를 찾는다.
+        if (event.key == key_code::f10 && event.shift && event.shortcut_modifier_down() == false)
+        {
+            const ui_tree* const focused_tree { surface_tree(snapshot_.focused_surface) };
+            if (focused_tree != nullptr)
+                for (const ui_element* const element : focused_tree->ancestry_of(snapshot_.focused))
+                {
+                    if (focused_tree->within_focus_trap(element->id()) == false)
+                        break;
+                    if (element->enabled() == false || element->action(ui_trigger::right_click) == nullptr)
+                        continue;
+                    const rect_f box { element->bounds() };
+                    return run_trigger(*element, ui_trigger::right_click, box.x + box.width / 2.0f, box.y + box.height / 2.0f, modifiers_of(event));
+                }
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><strong>Shift+F10</strong>: controller가 초점 요소에서 root 쪽으로 올라가며 <code>right_click</code> 액션을 가진 첫 활성 조상을 찾아, 그 한가운데 좌표로 실행한다. 초점 가둠 밖으로는 올라가지 않는다. 그래서 초점이 카드 안의 단추에 있어도 카드의 메뉴가 열린다.</li>
+            <li>키보드의 메뉴 키(Application 키)를 키 이벤트로 옮기는 코드는 저장소에서 찾지 못했다. 확인되는 것은 Shift+F10뿐이다.</li>
+            <li><strong>터치</strong>: 움직이지 않고 <code>long_press_time</code>(기본 600ms) 동안 누르면 손을 떼기 전에 우클릭 액션이 나간다. 우클릭 액션이 없는 대상은 길게 눌러도 탭이다.</li>
+            <li>키보드로 연 컨텍스트 메뉴는 강조 없이 선다. 첫 ↓가 첫 활성 항목을, 첫 ↑가 끝 활성 항목을 고른다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 필드는 <a class="xref" href="api.html#menu-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="menu_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/menu_element.h:10-74" data-path="include/luil/ui/menu_element.h" data-start="10"><script type="text/plain">
+    // 메뉴 항목 하나의 설정이다.
+    enum class menu_item_kind { action, check, radio };
+
+    struct menu_item_config
+    {
+        // 항목을 가리키는 앱 정의 키다 (ui_element_id::owner 규약).
+        std::u8string key {};
+        std::u8string label {};
+        // 0이면 아이콘이 없다.
+        char32_t icon { 0 };
+        // 거짓이면 흐리게 그리고 눌리지 않으며 키보드 탐색이 건너뛴다.
+        bool enabled { true };
+        // 참이면 이 항목 위에 구분선을 긋는다.
+        bool separator_above { false };
+        menu_item_kind kind { menu_item_kind::action };
+        bool checked { false };
+        // 표시만 하는 열이다. 실행의 일치 판정은 명령표가 맡는다.
+        std::u8string shortcut_text {};
+        std::vector<menu_item_config> children {};
+        // 접근 키다. 영문자나 숫자 하나이고 대소문자를 가리지 않는다. 0이면 없다 (docs/menu-bar-design.md).
+        //  - 메뉴 막대에서 연 메뉴(하위 메뉴 포함)만 받는다. 수식 키 없는 그 글자 키가 이 항목을 고른다. 맞는 항목이
+        //    하나면 실행하고(하위 메뉴가 있으면 연다) 여럿이면 다음 것으로 강조만 옮긴다.
+        //  - 컨텍스트 메뉴·명령 팔레트에서는 쓰지 않는다. 그 글자는 문자 경로(검색 칸)의 것이다.
+        //  - 글자가 라벨에 없으면 라벨 뒤에 "(N)"을 붙여 그린다 (폭에도 든다). 밑줄은 막대가 선 동안
+        //    (`interaction_snapshot::menu_keys`)만 그 글자 아래에 긋는다. 접근 이름에는 붙이지 않는다.
+        char32_t access_key { 0 };
+    };
+
+    // 고른 항목의 키를 담은 메시지다.
+    using menu_message_factory = std::function<input_action(const std::u8string& key)>;
+
+    struct menu_config
+    {
+        // 같은 화면에 메뉴가 여럿일 때 구분하는 키다.
+        // 채워도 키보드 탐색은 그대로 붙는다 — 정책의 `menu_kinds`는 kind로만 찾는다.
+        std::u8string owner {};
+        std::vector<menu_item_config> items {};
+        // 없으면 항목이 눌리지 않는다.
+        menu_message_factory select {};
+        // 열림 경로는 앱 상태다. 자식이 있는 항목만 이 메시지를 낸다.
+        menu_message_factory open_submenu {};
+        ui_action close_submenu {};
+        std::size_t depth { 0 };
+        std::u8string opened_key {};
+        std::u8string parent_surface {};
+        std::u8string anchor_key {};
+        std::chrono::milliseconds hover_delay { 300 };
+        // 메뉴 둘레에 1px 선을 긋는다. 둥근 popup 창에 담을 때는 끈다 — 사각 선이 모서리에서 튀어나오고, OS가 같은
+        // 모양의 테두리를 긋는다 (`make_menu_popup`이 popup 모양에 맞춰 정한다).
+        bool border { true };
+        // 강조가 없거나 강조한 항목이 사라졌을 때 Enter가 고를 항목의 키다 (명령 팔레트의 첫 결과).
+        //  - 강조가 없는 동안 그 항목을 강조와 같은 바탕으로 그려 무엇이 실행될지 보인다.
+        //  - 비어 있으면 지금처럼 강조 없는 Enter는 아무것도 하지 않는다.
+        std::u8string default_key {};
+        // 끝 항목(하위 메뉴가 없는 것)을 고르면 `select` 다음에 함께 내는 메시지다 (고르면 닫히는 메뉴).
+        ui_action after_select {};
+    };
+
+    // 항목 한 줄의 높이, 구분선 줄의 높이, 메뉴 둘레 여백이다 (논리 픽셀).
+    inline constexpr float menu_item_height { 26.0f };
+    inline constexpr float menu_separator_height { 9.0f };
+    inline constexpr float menu_padding { 4.0f };
+    // 지금 글자 크기에서 항목 한 줄의 높이다 (논리 픽셀). 시스템이 글자를 키운 만큼 `menu_item_height`를 키운다.
+    //  - 줄을 그대로 두면 키운 글자가 줄을 넘어 이웃 항목에 닿는다. 메뉴 자리를 세는 쪽은 상수가 아니라 이것을 쓴다.
+    [[nodiscard]] float menu_row_height() noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>menu_item_config::key</code></td><td>빈 글</td><td>항목 id <code>{ menu_item, key }</code>의 owner다. 고르면 이 값이 <code>select</code>로 간다</td></tr>
+                  <tr><td><code>icon</code></td><td>0</td><td>아이콘이 없다. <strong>check·radio 항목은 아이콘을 그리지 않는다</strong></td></tr>
+                  <tr><td><code>enabled</code></td><td>참</td><td>거짓이면 흐리게 그리고, 눌리지 않고, 키보드 탐색과 접근 키가 건너뛴다</td></tr>
+                  <tr><td><code>separator_above</code></td><td>거짓</td><td>참이면 이 항목 위에 9 논리 픽셀 띠와 가운데 선</td></tr>
+                  <tr><td><code>kind</code> · <code>checked</code></td><td><code>action</code> · 거짓</td><td>check는 체크 글리프, radio는 점. 실행 메시지는 셋 다 <code>select</code>다</td></tr>
+                  <tr><td><code>shortcut_text</code></td><td>빈 글</td><td>오른쪽 열에 그리기만 한다. 실행하지 않는다</td></tr>
+                  <tr><td><code>children</code></td><td>빈 목록</td><td>비지 않으면 › 를 그리고 클릭이 <code>open_submenu</code>가 된다. 하위 메뉴 popup은 앱이 짓는다</td></tr>
+                  <tr><td><code>access_key</code></td><td>0</td><td>막대에서 연 메뉴에서만 먹는다. 라벨에 글자가 없으면 "(N)"을 붙여 그린다</td></tr>
+                  <tr><td><code>menu_config::select</code></td><td>없음</td><td>잎 항목이 눌리지 않는다</td></tr>
+                  <tr><td><code>open_submenu</code></td><td>없음</td><td>자식이 있어도 하위 메뉴를 열 수 없다</td></tr>
+                  <tr><td><code>close_submenu</code></td><td>없음</td><td>깊이 &gt; 0 메뉴를 ←·Esc(controller까지 왔을 때)·hover로 닫을 수 없다</td></tr>
+                  <tr><td><code>depth</code> · <code>parent_surface</code> · <code>anchor_key</code></td><td>0 · 빈 글 · 빈 글</td><td>자식 메뉴에 셋 다 준다. 키는 가장 깊은 메뉴가 받는다</td></tr>
+                  <tr><td><code>hover_delay</code></td><td>300ms</td><td>자식 있는 항목 위에 멎은 뒤 하위 메뉴를 여는(또는 형제의 열린 자식을 닫는) 지연</td></tr>
+                  <tr><td><code>default_key</code></td><td>빈 글</td><td>강조 없는 Enter가 아무것도 하지 않는다. 주면 그 항목을 강조처럼 그리고 Enter가 고른다</td></tr>
+                  <tr><td><code>after_select</code></td><td>없음</td><td>고른 뒤 메뉴가 그대로 떠 있다. 잎 항목에서만 <code>select</code> 다음에 낸다</td></tr>
+                  <tr><td><code>menu_row_height()</code></td><td>26 × 글자 배율</td><td>하위 메뉴 자리를 셀 때 상수 <code>menu_item_height</code> 대신 쓴다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="make_menu_popup">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/app/menu_popup.h:9-55" data-path="include/luil/app/menu_popup.h" data-start="9"><script type="text/plain">
+    struct menu_popup_config
+    {
+        std::u8string id {};
+        std::u8string anchor {};
+        // 앵커 표면의 논리 픽셀이다. 포인터 좌표라면 해당 표면 배율로 나눈다.
+        float x { 0.0f };
+        float y { 0.0f };
+        // 0이면 메뉴 글·아이콘·단축키 열을 측정해 정한다.
+        float width { 0.0f };
+        // 표면의 배율이다. tree를 이 배율로 배치하고, `width`가 0일 때 글 폭도 이 배율의 물리 글자 크기로 잰다
+        // (그리는 크기와 같아야 가장 긴 항목이 말줄임되지 않는다). 0 이하거나 유한하지 않으면 1로 본다.
+        float scale { 1.0f };
+        std::function<input_action(popup_dismiss_reason)> dismiss {};
+        // popup 창의 모서리다 (`ui_popup::corner`). 비어 있으면 내장 스타일의 값이다 — 실행 시점에 스타일을 세운 앱은
+        // 그 스타일의 `popup.corner`를 넘긴다.
+        //  - 둥근 창이 되면 메뉴의 사각 선을 끈다 (`menu_config::border`). 경계는 OS 테두리가 맡는다.
+        std::optional<popup_corner> corner {};
+        // popup의 경계다 (`ui_popup::border`). 끄면 메뉴 자신의 선도 긋지 않는다.
+        bool border { true };
+        // popup 뒤의 배경 효과다 (`ui_popup::backdrop`). 효과가 서면 메뉴 몸통이 효과를 비춘다. popup에는 `acrylic`만 선다.
+        window_backdrop backdrop { window_backdrop::none };
+        // 폭(`width`가 0일 때)을 잴 글 크기다 (논리 픽셀). 비어 있으면 내장 스타일의 본문 글자다 — 항목은 그리는
+        // 시점 스타일의 `metrics.body_font_size`로 그려지므로, 실행 시점에 스타일을 세운 앱은 그 값을 넘긴다.
+        // 넘기지 않으면 큰 글자에서 글이 잘린다.
+        std::optional<float> font_size {};
+        // 폭을 잴 글 굵기다. 비어 있으면 내장 스타일의 본문 굵기(`metrics.font_weights.body_text`)다 — `font_size`와 같은
+        // 까닭으로 실행 시점에 스타일을 세운 앱은 그 값을 넘긴다.
+        std::optional<font_weight> weight {};
+        // 폭을 잴 함수다. 비어 있으면 `weight`를 건 UI 글꼴이다 (`styled_text_measurer`). 넣으면 `weight`는 쓰지 않는다.
+        text_measurer measurer {};
+        // 닫힌 필드 아래에 놓을 때의 앵커다 (`place_field_popup`). 값이 있으면 `x`·`y`는 쓰지 않는다.
+        //  - 폭을 스스로 재는 곳이 `make_menu_popup`이라, 크기를 잰 뒤에 자리를 정한다. 앱이 같은 식을 되풀이하지 않는다.
+        //  - `scale`은 앵커의 물리 픽셀을 논리 좌표로 옮기는 배율이기도 하다.
+        std::optional<field_popup_anchor> below {};
+    };
+
+    // 메뉴 높이·배율·분리 tree를 한곳에서 조립한다. 열림 상태와 명령 실행은 앱의 몫이다.
+    // 반환한 popup을 ui_frame::popups에 싣고, 닫힘 메시지에서 목록에서 뺀다.
+    [[nodiscard]] ui_popup make_menu_popup(menu_config menu, menu_popup_config popup);
+
+    // 막대 항목 아래에 그 메뉴를 띄운다 (docs/menu-bar-design.md). 막대 상태의 `current`가 그 항목이다.
+    //  - `popup.below`는 항목 자리와 `limit`(앵커 표면의 client 사각형, 물리 픽셀)으로 채운다. 간격은 0이라 메뉴가
+    //    항목 바로 아래에 붙는다. 항목이 없으면 `popup.x`·`popup.y`를 그대로 쓴다.
+    //  - dismiss는 Esc면 { current, false, keyboard }, 그 밖의 계기면 {}다. `menu.after_select`가 비면 {}로 채운다.
+    //    막대에 `set_state`가 없으면 둘 다 건드리지 않는다.
+    //  - `menu.owner`는 항목 키다. 나머지는 `make_menu_popup`이다.
+    [[nodiscard]] ui_popup make_menu_bar_popup(const menu_bar_element& bar, menu_config menu, menu_popup_config popup, rect_f limit);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>빈 글</td><td>popup이 서지 않는다. 같은 frame에서 겹쳐도 서지 않는다</td></tr>
+                  <tr><td><code>anchor</code></td><td>빈 글</td><td>주 창. 보조 창 id나 다른 popup id면 그 표면 기준이다</td></tr>
+                  <tr><td><code>x</code> · <code>y</code></td><td>0</td><td>앵커 표면의 논리 픽셀. 포인터 좌표면 배율로 나눈다. <code>below</code>가 있으면 쓰지 않는다</td></tr>
+                  <tr><td><code>width</code></td><td>0</td><td>라벨·아이콘·단축키·› 열을 재서 정한다</td></tr>
+                  <tr><td><code>scale</code></td><td>1</td><td>tree 배치와 폭 재기의 배율. 0 이하나 무한이면 1</td></tr>
+                  <tr><td><code>dismiss</code></td><td>없음</td><td>어느 계기에도 닫자고 하지 않는다 (popup이 남는다)</td></tr>
+                  <tr><td><code>corner</code> · <code>font_size</code> · <code>weight</code></td><td>비어 있음</td><td><strong>내장 스타일</strong>의 값. 실행 중 스타일을 바꾼 앱은 그 값을 넘긴다</td></tr>
+                  <tr><td><code>border</code></td><td>참</td><td>끄면 메뉴 자신의 선도 끈다. 둥근 창이면 메뉴의 사각 선은 늘 꺼진다</td></tr>
+                  <tr><td><code>backdrop</code></td><td><code>none</code></td><td>popup에는 <code>acrylic</code>만 선다</td></tr>
+                  <tr><td><code>below</code></td><td>비어 있음</td><td>주면 크기를 잰 뒤 <code>place_field_popup</code>으로 필드 아래(모자라면 위)에 놓는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p><code>make_menu_bar_popup</code>은 여기에 더해 <code>menu.owner</code>를 막대의 <code>current</code>로 채우고, 막대에 <code>set_state</code>가 있으면 빈 <code>after_select</code>를 <code>set_state({})</code>로 채우고 <code>dismiss</code>를 덮어쓴다. 항목 자리가 있으면 <code>below = { 항목 자리, limit, 간격 0 }</code>이다.</p></div>
+          </section>
+          <section data-tab="menu_bar_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/menu_bar_element.h:16-58,94-101" data-path="include/luil/ui/menu_bar_element.h" data-start="16"><script type="text/plain">
+    // 막대 한 줄의 높이와 항목 글 양옆의 여백이다 (논리 픽셀).
+    inline constexpr float menu_bar_height { 28.0f };
+    inline constexpr float menu_bar_item_padding { 10.0f };
+
+    struct menu_bar_item_config
+    {
+        // 항목 owner이자 열린 메뉴의 이름이다 (`make_menu_bar_popup`이 메뉴 owner로 싣는다).
+        std::u8string key {};
+        std::u8string label {};
+        // 접근 키다. 영문자나 숫자 하나이고 대소문자를 가리지 않는다. 0이면 없다.
+        //  - 글자가 라벨에 있으면 그 글자에 밑줄을, 없으면 라벨 뒤에 "(F)"를 붙여 그린다.
+        //  - 그 밖의 글자는 접근 키가 아니다 (없는 것으로 본다).
+        char32_t access_key { 0 };
+        bool enabled { true };
+    };
+
+    // 막대의 상태다. 앱이 들고 `set_state`의 절대 메시지로 바꾼다 (docs/menu-bar-design.md의 표).
+    struct menu_bar_state
+    {
+        // 막대가 선 항목이다. 비면 막대가 쉰다.
+        std::u8string current {};
+        // current의 메뉴가 떠 있다.
+        bool open { false };
+        // 키보드로 들어왔다. 밑줄을 보이고 연 메뉴의 첫 항목을 강조한다.
+        bool keyboard { false };
+        [[nodiscard]] bool operator==(const menu_bar_state&) const = default;
+    };
+
+    struct menu_bar_config
+    {
+        // 막대 root의 owner다. 항목은 자기 키가 owner다.
+        std::u8string owner {};
+        std::vector<menu_bar_item_config> items {};
+        // 앱 상태다.
+        menu_bar_state state {};
+        // 막대를 이 상태로 하라는 절대 메시지다. 없으면 막대가 눌리지 않고 키도 받지 않는다.
+        std::function<input_action(const menu_bar_state&)> set_state {};
+        bool enabled { true };
+        // 거짓이면 F10은 앱 단축키로 흐르고 Alt 단독만 막대를 세운다.
+        bool f10_activates { true };
+        // 비면 기본 문구다 ("메뉴 막대").
+        std::u8string access_name {};
+    };
+⋯@94
+    // tree에서 키를 받을 수 있는 막대다. 숨었거나 꺼졌거나 `set_state`가 없거나 가둠 밖이면 nullptr다.
+    //  - 여럿이면 그리기 순서의 앞 것이다.
+    [[nodiscard]] const menu_bar_element* active_menu_bar(const ui_tree& tree);
+
+    // 막대 접근 키와 겹치는 Alt+글자 명령의 id다. 겹치면 막대가 이긴다 (Alt만 눌린 글자 키를 막대가 먼저 받는다).
+    //  - 명령이 실제로 쓰는 단축키(`effective_shortcuts`)를 본다. Ctrl·Shift가 함께인 단축키는 겹치지 않는다.
+    //  - 꺼진 막대 항목의 접근 키는 막대가 받지 않으므로 겹침이 아니다.
+    [[nodiscard]] std::vector<std::u8string> menu_bar_access_conflicts(const menu_bar_config& config, std::span<const app_command> commands);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>menu_bar_item_config::key</code></td><td>빈 글</td><td>항목 owner이자 <code>menu_bar_state::current</code>에 들어가는 값</td></tr>
+                  <tr><td><code>label</code></td><td>빈 글</td><td>접근 이름이다. 덧붙인 "(F)"는 이름에 넣지 않는다</td></tr>
+                  <tr><td><code>access_key</code></td><td>0</td><td>영문자·숫자 하나. 라벨에 있으면 그 글자에 밑줄, 없으면 "(F)". 보조 기술에는 "Alt+F"로 읽힌다</td></tr>
+                  <tr><td><code>enabled</code> (항목)</td><td>참</td><td>거짓이면 ←/→·hover·접근 키가 건너뛴다</td></tr>
+                  <tr><td><code>menu_bar_config::state</code></td><td><code>{}</code> (쉼)</td><td>앱 상태다</td></tr>
+                  <tr><td><code>set_state</code></td><td>없음</td><td>막대가 눌리지 않고 키도 받지 않는다</td></tr>
+                  <tr><td><code>enabled</code> (막대)</td><td>참</td><td>거짓이면 막대 전체가 키를 받지 않는다</td></tr>
+                  <tr><td><code>f10_activates</code></td><td>참</td><td>거짓이면 F10은 앱 단축키로 흐르고 Alt 단독만 막대를 세운다</td></tr>
+                  <tr><td><code>access_name</code></td><td>빈 글</td><td>기본 문구 "메뉴 막대"</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>막대 높이는 <code>menu_bar_height</code>(28), 항목 폭은 글 폭("(F)" 포함) + 양옆 <code>menu_bar_item_padding</code>(10)이다. 넘치면 오른쪽 항목이 잘리지만 키보드로는 닿는다. <code>menu_bar_access_conflicts</code>는 막대 접근 키와 겹치는 Alt+글자 명령의 id를 돌려준다 — 겹치면 막대가 이긴다.</p></div>
+          </section>
+          <section data-tab="ui_popup">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/app/app_host.h:103-167" data-path="include/luil/app/app_host.h" data-start="103"><script type="text/plain">
+    // 주 창 위에 띄우는 가벼운 popup 하나다 (메뉴·드롭다운·긴 tooltip).
+    // 열림·닫힘은 앱 상태다: frame에 실으면 창이 생기고 빼면 사라진다.
+    // 자리는 앵커 표면 client 좌표의 논리 픽셀이며, 화면 좌표 변환과 모니터 경계
+    // 다듬기는 UI thread가 한다 (앱은 모니터 배치를 모른다).
+    // tree는 popup 창의 (0,0)에서 시작하는 분리 tree다
+    // (popup-overlay-design.md).
+    struct ui_popup
+    {
+        // 같은 frame의 popup을 구분하는 앱 정의 키다.
+        std::u8string id {};
+        // 이 popup이 붙는 창 또는 popup id다. 같은 frame의 부모는 순서와 무관하게 먼저 만든다.
+        // 비어 있으면 주 창이다.
+        // 자리·소유자·배율이 전부 이 표면을 따르므로, 보조 창 안에서 연
+        // 메뉴는 그 창 기준 자리에 그 창 위로 뜬다
+        // (popup-anchor-design.md).
+        //  - 앵커 표면이 아직 없는 frame에서는 popup을 만들지 않는다.
+        std::u8string anchor {};
+        float x { 0.0f };
+        float y { 0.0f };
+        // 크기가 0 이하면 popup을 만들지 않는다.
+        float width { 0.0f };
+        float height { 0.0f };
+        std::shared_ptr<const ui_tree> tree {};
+        // 닫힘 계기에서 낼 메시지다. 어느 계기인지는 인자가 알려 준다.
+        // UI thread는 계기를 감지해 이 메시지만 내고, popup을 빼는 것은 앱이다.
+        // 없으면 계기를 감지해도 아무것도 내지 않는다 (popup이 계속 남는다).
+        //  - **빈 액션은 "이 계기에는 닫지 않는다"는 뜻이다.** 검색 칸이 있는
+        //    popup은 창 이동·활성 전환에 남기고 메뉴는 닫는 식으로 앱이 계기마다
+        //    가른다.
+        //  - 어느 popup도 닫자고 하지 않은 Esc는 삼켜지지 않고 앱의 키 라우팅으로
+        //    간다 — 남기로 한 popup이 Esc를 자기 뜻대로 쓰는 길이다.
+        std::function<input_action(popup_dismiss_reason)> dismiss {};
+        // popup 둘레에 경계를 둔다.
+        // popup은 다른 화면 위에 뜨는 판이라 경계가 있어야 아래 화면과 갈린다 — 그래서
+        // 기본이 참이다. 경계를 일부러 지우는 popup(꼬리 달린 말풍선)만 끈다.
+        //  - 직각 창이면 표면이 tree를 다 그린 뒤 1px `tooltip_border` 선을 긋는다 (처음부터의 모양).
+        //  - 둥근 창이면 사각 선을 긋지 않는다 — OS 테두리와 겹치고 모서리에서 사각으로 튀어나온다. 대신 OS가 긋는
+        //    테두리를 같은 색(`tooltip_border`)으로 맞춘다. 끄면 OS 테두리도 없앤다 (`DWMWA_COLOR_NONE`).
+        //  - 그림자는 여기 없다. popup은 자기 창이라 그림자를 밖으로 드리울 자리가 없고, 직각 창은 창 클래스의
+        //    drop shadow가, 둥근 창은 DWM이 같은 모양으로 맡는다 (popup-overlay-design.md).
+        bool border { true };
+        // 모서리다. 비어 있으면 앱 스타일(`ui_style::popup.corner`, 기본은 OS 기본)이다.
+        //  - 둥근 모서리를 못 쓰는 OS·환경에서는 무엇을 골라도 직각이다 (`ui_platform::rounded_popup_corners`).
+        //  - 같은 id의 popup이 둥근 창과 직각 창 사이를 오가면 host는 창을 다시 만든다. 그림자가 창 클래스의 것이라
+        //    만든 뒤 바꿀 수 없다.
+        std::optional<popup_corner> corner {};
+        // popup 뒤의 배경 효과다. 기본값이면 지금까지의 불투명한 popup이다.
+        //  - 서면 popup의 바탕(`draw_frame`의 전체 칠)이 `backdrop_background`가 된다. tree가 바탕을 따로 칠하면 그
+        //    칠이 효과를 덮는다 — 메뉴(`menu_element`)는 효과가 선 표면에서 몸통을 칠하지 않는다
+        //    (`draw_context::backdrop`).
+        //  - popup은 활성화되지 않는 표면이라 `acrylic`만 선다. `mica`·`mica_alt`는 서지 않는다.
+        //  - 상태를 알리지 않는다 (`win32::backdrop_report`). 서지 않는 OS 사정은 주 창 보고와 같다.
+        //  - 같은 id에서 이 값만 바뀌면 창을 다시 만들지 않고 효과만 다시 건다.
+        window_backdrop backdrop { window_backdrop::none };
+        // Win32에서 tree의 픽셀 알파로 창 모양과 입력 영역을 정한다.
+        bool transparent { false };
+        // 작업 영역에 맞춘 최종 자리다. x·y와 같은 앵커 기준 논리 픽셀이다.
+        std::function<app_message(const rect_f&)> placed {};
+    };
+
+    // 그 모서리 선택이 이 플랫폼에서 실제로 갖는 반지름이다 (논리 픽셀).
+    // popup 안의 tree가 창과 같은 반지름으로 바탕·선택 행을 그릴 때 쓴다. 둥근 모서리를 못 쓰면 0이다.
+    //  - `system`은 OS가 popup에 쓰는 모양이다 (Windows 11은 작게 둥근 4, 그 밖은 0).
+    //  - 반지름은 OS가 창을 자르는 값이다 (Windows 11: 둥글게 8, 작게 4). 화면 배율은 OS가 곱한다.
+    [[nodiscard]] float popup_corner_radius(popup_corner corner, const ui_platform& platform = current_ui_platform()) noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>빈 글</td><td>서지 않는다. 빈 표면 id는 주 창이라 쓸 수 없다</td></tr>
+                  <tr><td><code>anchor</code></td><td>빈 글 (주 창)</td><td>앵커 표면이 아직 없는 frame에서는 만들지 않는다</td></tr>
+                  <tr><td><code>width</code> · <code>height</code></td><td>0</td><td>0 이하면 만들지 않는다</td></tr>
+                  <tr><td><code>tree</code></td><td>없음</td><td>popup (0,0)에서 시작하는 분리 tree. 물리 크기로 배치한다</td></tr>
+                  <tr><td><code>dismiss</code></td><td>없음</td><td>계기를 감지해도 아무것도 내지 않는다 (popup이 남는다)</td></tr>
+                  <tr><td><code>border</code></td><td>참</td><td>직각 창은 1px <code>tooltip_border</code> 선, 둥근 창은 OS 테두리를 같은 색으로</td></tr>
+                  <tr><td><code>corner</code></td><td>비어 있음</td><td>앱 스타일의 <code>popup.corner</code>. 둥근↔직각이 바뀌면 창을 다시 만든다</td></tr>
+                  <tr><td><code>transparent</code></td><td>거짓</td><td>참이면 Windows에서 tree의 픽셀 알파로 창 모양과 입력 영역을 정한다</td></tr>
+                  <tr><td><code>placed</code></td><td>없음</td><td>다듬은 최종 자리를 알리지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="정책·강조">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_interaction.h:252-259,302-314" data-path="include/luil/ui/ui_interaction.h" data-start="252"><script type="text/plain">
+    // 컨텍스트 메뉴의 키보드 탐색에 필요한 kind 짝이다.
+    // container가 tree에 있으면 메뉴가 열린 것으로 보고 ↑/↓/Enter/Esc를 메뉴가 가져간다.
+    //  - owner는 보지 않는다. `menu_config::owner`로 구분한 메뉴도 같은 kind면 찾는다.
+    struct menu_kinds
+    {
+        ui_element_kind container { ui_element_kind::none };
+        ui_element_kind item { ui_element_kind::none };
+    };
+⋯@302
+        // 컨텍스트 메뉴 kind다.
+        // 값이 있어야 메뉴 키보드 탐색이 켜진다.
+        [[nodiscard]] virtual std::optional<menu_kinds> menu() const
+        {
+            return std::nullopt;
+        }
+
+        // 메뉴가 열린 채 Esc다.
+        // 통상 닫기 메시지를 돌려준다.
+        [[nodiscard]] virtual std::vector<input_action> close_menu() const
+        {
+            return {};
+        }
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element.h:1016-1025,1036-1040" data-path="include/luil/ui/ui_element.h" data-start="1016"><script type="text/plain">
+        // 컨텍스트 메뉴의 키보드(↑/↓) 강조 항목이다.
+        // 마우스 hover와 별개로 그려지고 Enter가 이 항목을 실행한다.
+        ui_element_id menu_highlight {};
+        // 그 강조가 사는 표면이다 (비어 있으면 주 창).
+        //  - **초점 표면도 hover 표면도 아니다.** 메뉴 항목은 `set_tab_stop(false)`라
+        //    초점을 받지 못해 초점은 메뉴를 연 자리(앵커 표면)에 남고, 포인터가
+        //    메뉴 밖에 있어도 ↑/↓는 돈다. 둘 중 하나에 매면 popup에 뜬 메뉴의
+        //    강조가 그냥 사라진다 — 그래서 강조는 자기 표식을 따로 든다
+        //    (multi-window-design.md).
+        std::u8string menu_surface {};
+⋯@1036
+        // 메뉴 막대가 서 있거나 열려 있다 (`menu_bar_state::current`가 비지 않았다, docs/menu-bar-design.md).
+        //  - 플랫폼이 읽는다. 키 잡기처럼 수식 키 없는 글자 키도 키로 보내고 입력기(TIP)에 먼저 주지 않는다. 같은 글자의
+        //    문자 입력은 controller가 버린다.
+        //  - 막대 상태는 tree로 오므로 tree를 받을 때도 다시 센다.
+        bool menu_keys { false };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>이름</th><th>기본</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>interaction_policy::menu()</code></td><td><code>std::nullopt</code></td><td>값이 있어야 메뉴 키보드 탐색이 켜진다. 라이브러리 메뉴는 <code>{ ui_element_kind::menu, ui_element_kind::menu_item }</code>이다</td></tr>
+                  <tr><td><code>interaction_policy::close_menu()</code></td><td>빈 목록</td><td>메뉴가 열린 채 controller까지 온 Esc(깊이 0, 막대가 쉬는 동안)의 메시지</td></tr>
+                  <tr><td><code>menu_highlight</code> · <code>menu_surface</code></td><td>—</td><td>키보드 강조 항목과 그 표면. 초점 표면도 hover 표면도 아니다</td></tr>
+                  <tr><td><code>menu_keys</code></td><td>—</td><td>막대가 서 있거나 열렸다. 플랫폼이 읽고 수식 키 없는 글자 키를 키로 보낸다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">메뉴는 콜백을 부르지 않는다. 앱이 준 factory가 메시지를 만들고, 메뉴·막대·표면은 그것을 돌려줄 뿐이다. 메시지는 모두 logic thread의 <code>handle</code>로 간다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사용자가 한 일</th><th>나는 것</th><th>만드는 thread</th></tr></thead>
+            <tbody>
+              <tr><td>요소 우클릭 · 터치 길게 누르기 · Shift+F10</td><td>요소의 <code>right_click</code> 액션이 만든 앱 메시지 (대개 자리 x·y)</td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>잎 항목 클릭 · 강조 후 Enter · 접근 키(하나 맞음)</td><td><code>select(key)</code>, 이어서 <code>after_select</code>가 있으면 그 메시지</td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>자식 있는 항목 클릭 · Enter · → · 접근 키</td><td><code>open_submenu(key)</code> (이미 열려 있어도 다시)</td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>자식 있는 항목 위에 <code>hover_delay</code>(300ms) 멎음</td><td><code>open_submenu(key)</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>하위 메뉴가 열린 채 잎·비활성 형제 위에 멎음</td><td>열린 자식의 <code>close_submenu</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>깊이 &gt; 0에서 ← · (controller까지 온) Esc</td><td>그 메뉴의 <code>close_submenu</code>. 강조는 부모 항목으로</td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>깊이 0에서 (controller까지 온) Esc, 막대가 쉼</td><td><code>interaction_policy::close_menu()</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>↑/↓ · 접근 키(여럿 맞음)</td><td>메시지 없음. 강조(<code>menu_highlight</code>)만 바뀐다</td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>popup 밖 누름 · 휠 · Esc · 창 이동·크기 · 활성 전환 · 앵커 닫힘</td><td><code>ui_popup::dismiss(reason)</code>의 메시지 (popup마다 frame당 한 번)</td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>막대: 클릭 · 열린 동안 다른 항목 hover · Alt·F10·Alt+글자 · ←/→ · Home/End · ↓ · Esc · 접근 키</td><td><code>set_state(새 상태)</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>열리지 않고 선 막대의 바깥 누름 · 막대 창의 비활성화</td><td>그 사건의 다른 액션 앞에 <code>set_state({})</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>막대 메뉴 popup의 닫힘 계기</td><td>Esc면 <code>{ current, false, keyboard }</code>, 그 밖이면 <code>{}</code> (<code>make_menu_bar_popup</code>이 채운 것)</td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>보조 기술: 메뉴 항목 펼치기</td><td><code>open_submenu(key)</code>. 부모 항목에서 접기는 낼 수 없다</td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>보조 기술: 막대 항목 펼치기 · 접기</td><td><code>{ key, true, false }</code> · <code>{}</code></td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>보조 기술: 항목 누르기·체크·고르기</td><td>클릭과 같은 액션. 자식 있는 항목은 누르기 대신 펼치기다</td><td><span class="thread-chip ui">UI</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>받은 메시지</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>여는 메시지 (우클릭·단추)</td><td>열림과 자리를 적는다. 다른 popup을 닫을지 정한다 (한 번에 하나는 앱이 지킨다)</td></tr>
+              <tr><td><code>select(key)</code></td><td>명령을 실행한다. check·radio면 다음 frame의 <code>checked</code>가 될 값을 바꾼다</td></tr>
+              <tr><td><code>after_select</code>의 메시지 · 닫기 메시지</td><td>열림과 열림 경로를 지운다. 절대 상태로 받으면 두 번 와도 같다</td></tr>
+              <tr><td><code>open_submenu(key)</code> · <code>close_submenu</code></td><td>열림 경로(<code>opened_key</code>가 될 값)를 바꾼다. 자식 popup은 다음 frame에 서거나 빠진다</td></tr>
+              <tr><td><code>dismiss(reason)</code>의 메시지</td><td>계기를 보고 닫는다. 남기려면 factory가 빈 액션을 돌려줘야 한다 — 메시지를 받고 무시하는 것과 다르다</td></tr>
+              <tr><td><code>set_state(state)</code></td><td>그 값을 그대로 상태로 둔다. 막대가 쉬거나 다른 메뉴로 옮기면 하위 메뉴 경로도 지운다</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">메뉴 키는 메뉴 요소가 아니라 input thread의 controller가 처리한다. 막대 키는 <code>menu_bar_element::handle_key</code>가, 열린 메뉴의 키는 controller의 메뉴 경로가 받는다.</p>
+        </header>
+        <h3>키가 지나는 차례</h3>
+        <div class="prose">
+          <ol>
+            <li>플랫폼 표면: IME 조합 중이면 입력기가 먼저 먹는다(막대가 선 동안은 주지 않는다). Esc는 popup의 <code>dismiss(escape_key)</code>에 먼저 묻는다 — 누가 메시지를 내면 키는 거기서 끝난다.</li>
+            <li>controller: 키 잡기 칸 → 메뉴 막대의 활성화 키(Alt 단독·F10·Alt+접근 키)와 열리지 않고 선 막대의 모든 키 → 열린 메뉴 → 그 메뉴 표면의 글 칸 → 나머지는 삼킨다.</li>
+            <li>그 뒤에야 Shift+F10 컨텍스트 메뉴, 실행 키·Tab·글 칸·값·묶음·키 처리기·가둠의 Esc·기본 단추, 끝으로 앱 정책의 <code>on_key</code>다.</li>
+          </ol>
+        </div>
+        <div class="tabs">
+          <section data-tab="열린 메뉴">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>동작</th></tr></thead>
+                <tbody>
+                  <tr><td>↓</td><td>다음 활성 항목. 강조가 없으면 첫 활성 항목. <strong>끝에서 돌지 않고 멈춘다</strong></td></tr>
+                  <tr><td>↑</td><td>앞 활성 항목. 강조가 없으면 끝 활성 항목. 처음에서 멈춘다</td></tr>
+                  <tr><td>Enter (Shift는 허용)</td><td>강조 항목에 하위 메뉴가 있으면 연다. 아니면 강조 항목을 클릭과 같은 길로 실행한다. 강조가 없거나 사라졌으면 <code>default_key</code>, 그것도 없으면 아무것도 하지 않는다. Ctrl·Alt·Meta와 함께면 메뉴의 키가 아니다</td></tr>
+                  <tr><td>Enter 자동 반복</td><td>삼킨다 (실행하지 않는다)</td></tr>
+                  <tr><td>→</td><td>강조 항목에 하위 메뉴가 있으면 연다(이미 열렸어도 메시지). hover로 연 자식이 서 있고 강조가 부모에 있으면 자식의 첫 활성 항목으로 들어간다. 막대 메뉴의 깊이 0이면 다음 막대 메뉴</td></tr>
+                  <tr><td>←</td><td>깊이 &gt; 0이면 이 메뉴를 닫고(<code>close_submenu</code>) 강조를 부모 항목으로. 막대 메뉴의 깊이 0이면 앞 막대 메뉴. 그 밖에는 삼킨다</td></tr>
+                  <tr><td>Esc (controller까지 왔을 때)</td><td>깊이 &gt; 0: <code>close_submenu</code>. 깊이 0·막대 메뉴: <code>{ current, false, keyboard }</code>(막대는 선 채). 깊이 0·막대 쉼: <code>close_menu()</code></td></tr>
+                  <tr><td>글자·숫자</td><td>막대가 선 동안만 접근 키다 (다음 탭). 컨텍스트 메뉴에는 글자로 항목을 찾는 기능이 없다</td></tr>
+                  <tr><td>Home · End · PageUp · PageDown · Tab · 그 밖</td><td>메뉴의 키가 아니다. 메뉴 표면의 글 칸에 초점이 있으면 그 칸이 받고, 아니면 <strong>삼킨다</strong></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>여러 메뉴가 서 있으면 <code>depth</code>가 가장 큰 메뉴가 키를 받는다. hover로 연 자식에는 강조가 없어서, 그 메뉴의 첫 키는 처음부터 센다. 강조가 이 메뉴에 없을 때의 Enter는 아무것도 실행하지 않는다.</p></div>
+          </section>
+          <section data-tab="메뉴 막대">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>막대</th><th>키</th><th>새 상태</th></tr></thead>
+                <tbody>
+                  <tr><td>어디서나</td><td>Alt 단독 · 수식 키 없는 F10 (<code>f10_activates</code>일 때)</td><td>쉼이면 <code>{ 첫 활성 항목, false, true }</code>, 아니면 <code>{}</code></td></tr>
+                  <tr><td>어디서나</td><td>Alt+접근 키 (Ctrl·Meta 없이)</td><td><code>{ 그 항목, true, true }</code>. 열린 동안이면 그 메뉴로 옮긴다. 맞지 않으면 앱 단축키로 흐른다</td></tr>
+                  <tr><td>어디서나</td><td>Shift+F10</td><td>막대가 받지 않는다 (컨텍스트 메뉴)</td></tr>
+                  <tr><td>쉼</td><td>그 밖</td><td>막대가 받지 않는다</td></tr>
+                  <tr><td>섬</td><td>← · →</td><td>이웃 활성 항목. 끝에서 돌고 꺼진 항목은 건너뛴다</td></tr>
+                  <tr><td>섬</td><td>Home · End</td><td>처음·끝 활성 항목</td></tr>
+                  <tr><td>섬</td><td>↓ · ↑ · Enter · Space</td><td><code>{ current, true, true }</code> (연다)</td></tr>
+                  <tr><td>섬</td><td>수식 키 없는 접근 키 글자</td><td><code>{ 그 항목, true, true }</code></td></tr>
+                  <tr><td>섬</td><td>Esc</td><td><code>{}</code></td></tr>
+                  <tr><td>섬</td><td>그 밖의 모든 키 (Ctrl+S 포함)</td><td><strong>삼킨다</strong>. 앱 정책까지 가지 않는다</td></tr>
+                  <tr><td>열림</td><td>메뉴가 쓰지 않은 ← · →</td><td>이웃 메뉴 <code>{ 이웃, true, true }</code>. →는 강조 항목의 하위 메뉴가 먼저다</td></tr>
+                  <tr><td>열림</td><td>깊이 0의 Esc</td><td><code>{ current, false, keyboard }</code></td></tr>
+                  <tr><td>열림</td><td>Alt 단독 · F10</td><td><code>{}</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>키보드로 연 막대 메뉴가 서거나 ←/→로 바뀌면 첫 활성 항목이 강조된다. 포인터로 연 메뉴는 강조 없이 선다. 막대가 선 동안의 글자 입력(문자)은 버린다 — 같은 키가 이미 키로 왔기 때문이다. Alt 단독을 알아보는 곳은 Windows host뿐이다 (<a class="xref" href="#platforms">플랫폼 차이</a>).</p></div>
+          </section>
+          <section data-tab="접근 키">
+            <div class="prose">
+              <ul>
+                <li><strong>글자.</strong> 영문자는 대문자로 올린다. 영문자·숫자가 아니면 접근 키가 없는 것으로 본다.</li>
+                <li><strong>맞추기는 키 이름으로 한다</strong> (<code>key_code</code>, 미국 배열의 자리). 한국어 입력기가 켜져 있어도 같은 키가 맞는다.</li>
+                <li><strong>표시.</strong> 라벨에 그 글자가 있으면(대소문자 무관, 첫 자리) 거기에 밑줄을 긋고, 없으면 라벨 뒤에 "(F)"를 붙여 그린다. "(F)"는 폭에도 든다. 막대 항목의 밑줄은 <code>state.keyboard</code>일 때만이고 "(F)"는 늘 그린다. 메뉴 항목의 밑줄은 <code>menu_keys</code>(막대가 서 있거나 열림)일 때만이라, 포인터로 연 막대 메뉴에도 선다.</li>
+                <li><strong>메뉴 안의 접근 키</strong>는 막대가 선 동안만, 수식 키 없이 받는다. 맞는 활성 항목이 하나면 실행한다(하위 메뉴면 키보드로 연 것처럼 연다). 여럿이면 지금 강조 다음 것으로 강조만 옮기고 끝에서 처음으로 돈다. 맞는 것이 없으면 삼킨다.</li>
+                <li><strong>컨텍스트 메뉴·명령 팔레트</strong>(막대가 쉬는 동안)에서는 접근 키를 쓰지 않는다. 그 글자는 검색 칸 같은 문자 경로의 것이다.</li>
+                <li><strong>Alt+글자</strong>가 막대 접근 키와 앱 명령에 함께 걸리면 막대가 이긴다. 키 처리기·앱 정책보다 앞서 받기 때문이다. <code>menu_bar_access_conflicts</code>로 미리 찾는다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="포인터·초점">
+            <div class="prose">
+              <ul>
+                <li>항목 hover·눌림과 키보드 강조는 같은 바탕으로 그린다. 하위 메뉴를 연 항목도 강조로 남는다.</li>
+                <li>자식 있는 항목에 <code>hover_delay</code> 동안 멎으면 연다. 열린 자식이 있으면 잎·비활성 형제 위에 멎었을 때 그 자식을 닫는다. 형제 위를 지나며 움직이면 시계를 다시 센다. 지연 전에 자식 표면에 닿으면 아무것도 내지 않는다.</li>
+                <li>메뉴 항목이 아닌 요소가 같은 키를 써도 하위 메뉴 시계가 서지 않는다.</li>
+                <li>막대가 열린 동안 다른 막대 항목에 마우스·펜이 오면 지연 없이 그 메뉴로 옮긴다. 터치에는 없다. 막대 항목 클릭은 닫힌 항목이면 <code>{ key, true, false }</code>, 열린 항목이면 <code>{}</code>다.</li>
+                <li><strong>초점.</strong> 메뉴 항목과 막대 항목은 Tab 자리가 아니다. 메뉴를 키보드로 다루는 동안 키보드 초점은 연 자리에 그대로 있다. 그래서 메뉴를 닫은 뒤 "초점을 돌려놓는" 일이 따로 없다.</li>
+                <li>막대와 막대 항목은 눌러도 글 칸의 초점을 가져가지 않는다(<code>set_preserve_pointer_focus(true)</code>). 그러나 <strong>메뉴 popup의 항목을 마우스로 누르면 초점이 지워진다</strong> — 코드에서 확인한 동작이다. 막대 소스의 주석은 "메뉴를 고르고 나면 글을 치던 자리로 돌아가야 한다"고 적지만, 메뉴 항목에는 그 설정이 없다. 콤보의 후보 popup은 모든 부품에 그 설정을 걸어 이것을 피한다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>요소</th><th>역할 (Windows UIA)</th><th>상태·패턴</th></tr></thead>
+                <tbody>
+                  <tr><td><code>menu_element</code></td><td><code>menu</code> (Menu). 라디오가 있으면 선택 container</td><td>—</td></tr>
+                  <tr><td>메뉴 항목</td><td><code>menu_item</code> (MenuItem), 이름 = <code>label</code></td><td>check: Toggle(<code>checked</code>). radio: SelectionItem(<code>selected</code>). 자식 있음: ExpandCollapse(Invoke 없음). 접근 키: 글자 하나</td></tr>
+                  <tr><td><code>menu_bar_element</code></td><td><code>menu_bar</code> (MenuBar), 이름 = <code>access_name</code> 또는 "메뉴 막대"</td><td>—</td></tr>
+                  <tr><td>막대 항목</td><td><code>menu_item</code>, 이름 = <code>label</code> ("(F)" 없이)</td><td>펼침 = <code>current == key &amp;&amp; open</code>. ExpandCollapse만(Invoke 없음). AccessKey "Alt+F"</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li>열린 메뉴 안에서 강조가 옮겨 갈 때의 UIA 초점 알림은 없다. 설계 문서가 범위 밖으로 둔다. 막대가 키보드로 선 동안은 막대 항목을 초점으로 알린다.</li>
+                <li>꺼진 항목은 접근 tree에 남고 <code>enabled = false</code>로 읽힌다.</li>
+                <li>macOS는 popup 판마다 VoiceOver 다리가 선다. Android에는 luil의 접근성 계층이 없다 (<a class="xref" href="accessibility.html">접근성</a>).</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">메뉴와 막대의 코드에는 플랫폼 분기가 없다. 차이는 popup 표면을 세우는 host와, 키를 나르는 플랫폼 입력에서 난다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th>Windows</th><th>macOS</th><th>Android · iOS</th></tr></thead>
+            <tbody>
+              <tr><td>popup 표면</td><td>popup마다 <code>WS_POPUP</code>·<code>WS_EX_NOACTIVATE</code>·<code>WS_EX_TOOLWINDOW</code> 창. 앵커의 최상위 창이 owner다</td><td>popup마다 테두리 없는 비활성화 판(<code>NSPanel</code>). 앵커 창의 자식 창이다</td><td>창이 없다. 같은 <code>ui_popup</code>을 주 표면 안의 layer로 겹쳐 그린다. 그림자·바탕·테두리도 표면이 그린다</td></tr>
+              <tr><td>창 밖으로</td><td>나간다. 가장 가까운 모니터 작업 영역 안으로만 민다</td><td>나간다. 작업 영역(메뉴 막대·Dock 제외) 안으로 민다</td><td>내용 영역 안으로 들인다</td></tr>
+              <tr><td>긴 popup</td><td>작업 영역 높이로 줄이고 위·아래 화살표 칸과 휠로 흘린다</td><td>화살표 칸 없이 휠로만</td><td>보이는 높이를 줄이고 host가 세로 스크롤을 지킨다</td></tr>
+              <tr><td>Esc 닫힘</td><td>가장 깊은 popup에 묻는다 (사슬이 없으면 모두에)</td><td>맨 위의 자식 popup에, 조합 중이 아닐 때</td><td>Esc와 <strong>뒤로 가기</strong>가 <code>escape_key</code>다. 아무 popup도 닫지 않으면 뒤로 가기는 앱의 <code>ui_frame::back</code>으로 간다</td></tr>
+              <tr><td><code>surface_moved</code></td><td>창 이동</td><td>창 이동</td><td>없다</td></tr>
+              <tr><td>막대의 Alt 단독</td><td>된다. Alt를 눌렀다 다른 키 없이 떼면 막대가 선다</td><td>코드에 없다. Alt 단독(<code>alt_tap</code>)을 내는 곳은 Windows뿐이다. 쉬는 막대에서 Option+글자는 키 이벤트가 아니라 입력기의 글자가 된다 — 코드에서 확인한 동작</td><td>Alt는 수식 키라 홀로는 키가 아니다. 외장 키보드의 Alt+글자·F10은 같은 controller 길이다</td></tr>
+              <tr><td>막대가 선 동안의 글자</td><td>입력기(TIP)를 건너뛰고 키로 보낸다</td><td><code>menu_keys</code>를 키 잡기처럼 본다</td><td>같다 (키 잡기)</td></tr>
+              <tr><td>OS 메뉴 막대</td><td>—</td><td>luil 막대를 화면 위 시스템 메뉴 막대로 옮기지 않는다. host는 앱 메뉴(종료)와 편집 메뉴 자리만 세운다</td><td>—</td></tr>
+              <tr><td>컨텍스트 메뉴를 여는 손</td><td>우클릭 · Shift+F10</td><td>같다</td><td>길게 누르기(600ms)가 우클릭이다. Android는 햅틱을 켜고 시작한다</td></tr>
+              <tr><td>모양</td><td>Windows 11은 작게 둥근 창(<code>system</code>). 둥근 모서리를 못 쓰면 직각</td><td>layer 모서리로 자른다</td><td>표면이 그린다</td></tr>
+              <tr><td>접근성</td><td>UIA (<a class="xref" href="#keyboard">보조 기술</a> 탭)</td><td>판마다 VoiceOver 다리</td><td>Android에는 luil 접근성 계층이 없다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>모바일 데모에는 메뉴 막대를 두지 않는다. test가 그것을 잠근다.</li>
+            <li>Android host는 우클릭 동작이 없는 글 칸을 길게 누르면 자기 편집 메뉴를 연다. Esc·뒤로 가기는 그 편집 메뉴를 먼저 닫는다.</li>
+            <li>macOS의 Option 동작과 Alt 단독의 부재는 실기기에서 돌려 보지 않았다. host 코드를 따라가 얻은 결론이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다. "코드에서 확인한 동작"은 test가 잠그지 않은 것을 소스로 따라간 결론이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>정책의 <code>menu()</code>를 재정의하지 않으면 메뉴가 키보드로 움직이지 않는다.</strong> 기본 구현이 <code>std::nullopt</code>다. 메뉴가 떠도 ↑/↓/Enter가 뒤 화면으로 간다.</li>
+          <li><strong>고르기가 메뉴를 닫지 않는다.</strong> 닫는 것은 앱이다. 잎 항목은 <code>after_select</code>로 닫기 메시지를 함께 낼 수 있고, 막대의 메뉴는 <code>make_menu_bar_popup</code>이 채운다.</li>
+          <li><strong>Esc의 뜻은 가장 깊은 popup의 <code>dismiss</code>가 먼저 정한다.</strong> 표면은 Esc를 controller보다 먼저 가장 깊은 popup의 <code>dismiss(escape_key)</code>에 묻고, 메시지가 나면 키를 삼킨다. 그러면 <code>close_submenu</code>·<code>close_menu()</code>는 불리지 않는다. 하위 메뉴 popup이 Esc에 "전부 닫기"를 내면 Esc 한 번에 메뉴가 다 닫힌다. 한 단계씩 닫으려면 그 popup이 "그 깊이만 닫기"를 내거나 빈 액션을 돌려준다.</li>
+          <li><strong>"남기기"는 <code>luil::input_action {}</code>이다.</strong> <code>luil::app_message {}</code>는 빈 액션이 아니라 메시지 하나로 나간다. 그 popup은 그 frame에 "닫자고 했다"로 표시되어 같은 frame의 다음 계기에 다시 묻지 않고, Esc라면 키가 삼켜진다. <code>examples/tool_window/main.cpp</code>의 미리보기 popup이 남기는 계기에 <code>luil::app_message {}</code>를 돌려준다 — 이 계약에서는 빈 액션이 아니다.</li>
+          <li><strong>마우스로 메뉴 항목을 고르면 키보드 초점이 지워진다</strong> (코드에서 확인한 동작). 메뉴 항목은 Tab 자리가 아니고 <code>preserves_pointer_focus()</code>도 거짓이라, 누를 때 controller가 초점을 비운다. 글 칸에서 연 메뉴라면 고른 뒤 caret이 없다. Enter·접근 키로 고르면 초점은 그대로다. 되돌려야 하면 앱이 <code>ui_frame::focus</code>를 싣는다. 이 경우를 잠근 test는 없다.</li>
+          <li><strong>메뉴가 열린 동안 앱 단축키는 오지 않는다.</strong> 메뉴가 쓰지 않은 키를 controller가 삼킨다. 메뉴 막대가 "선" 동안(열리지 않았어도)도 같다.</li>
+          <li><strong><code>shortcut_text</code>는 그림일 뿐이다.</strong> 그 단축키를 실행하려면 정책의 <code>on_key</code>에서 <code>match_command</code> 등으로 맞춘다.</li>
+          <li><strong>check·radio 항목에 <code>icon</code>을 주어도 그리지 않는다.</strong> 체크 글리프와 점이 그 자리를 쓴다.</li>
+          <li><strong>접근 키는 컨텍스트 메뉴에서 먹지 않는다.</strong> 막대에서 연 메뉴(<code>menu_keys</code>)에서만이다. 컨텍스트 메뉴의 글자는 뒤 글 칸·묶음으로 간다.</li>
+          <li><strong><code>make_menu_bar_popup</code>은 <code>popup.dismiss</code>와 빈 <code>after_select</code>를 덮어쓴다</strong> (막대에 <code>set_state</code>가 있을 때). 앱이 따로 단 dismiss는 쓰이지 않는다.</li>
+          <li><strong><code>menu_popup_config</code>의 <code>corner</code>·<code>font_size</code>·<code>weight</code>가 비면 내장 스타일 값이다.</strong> 실행 중 스타일(<code>ui_frame::style</code>)을 바꾼 앱은 그 값을 넘겨야 폭이 맞고 모서리가 같다.</li>
+          <li><strong>하위 메뉴 자리는 앱이 센다.</strong> 상수 <code>menu_item_height</code>(26)가 아니라 <code>menu_row_height()</code>로 세야 큰 글자에서 어긋나지 않는다. 앞 항목들의 구분선(9)도 더한다.</li>
+          <li><strong>자식 메뉴의 짝이 어긋나면 hover 닫힘이 그 자식을 찾지 못한다.</strong> <code>depth</code>는 부모 + 1, <code>parent_surface</code>는 부모 <strong>popup id</strong>, <code>anchor_key</code>는 부모의 <code>opened_key</code>여야 한다.</li>
+          <li><strong>popup의 x·y는 앵커 표면 기준 논리 픽셀이다.</strong> 우클릭 좌표(물리 픽셀)를 배율로 나누지 않으면 고배율에서 메뉴가 엉뚱한 곳에 선다.</li>
+          <li><strong>같은 frame에 같은 id의 popup이 둘이면 둘 다 서지 않는다.</strong> 빈 id, 크기 0, 창 id와 같은 id도 오류 없이 걸러진다. 모든 host가 같은 순서 함수를 쓴다. 하위 메뉴 popup id를 부모와 겹치지 않게 짓는다.</li>
+          <li><strong>필드·막대 포인터는 그 frame이 게시되기 전까지만 유효하다.</strong> build에서 남긴 <code>const ui_element*</code>로 같은 frame의 popup 자리만 잰다.</li>
+          <li><strong>"한 번에 하나만"은 앱이 지킨다.</strong> popup 목록이 앱 상태라 라이브러리가 강제하지 못한다.</li>
+          <li><strong>메뉴 막대는 대화 상자(초점 가둠)가 떠 있으면 키를 받지 않는다.</strong> <code>active_menu_bar</code>가 가둠 밖 막대를 거른다.</li>
+          <li><strong>Alt+글자 앱 명령은 같은 글자의 막대 접근 키에 진다.</strong> <code>menu_bar_access_conflicts</code>로 미리 찾는다.</li>
+          <li><strong>macOS에는 Alt 단독이 없다</strong> (코드에서 확인한 동작). 막대가 쉬는 동안 Command·Control 없는 글자 키는 입력기로 가므로, Option+글자도 키가 아니라 입력기의 글자가 되어 막대 접근 키에 닿지 않는다. 키보드로 막대를 세우는 길은 F10이 남는다. macOS를 겨냥하면 <code>f10_activates</code>를 끄지 않는다. 실기기에서 돌려 보지는 않았다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>메뉴가 열려 있는지는 누가 들고 있나?</summary><div class="faq-a"><p class="faq-short">앱이다. popup을 <code>ui_frame::popups</code>에 싣는 동안만 메뉴가 있다.</p><p>메뉴 요소는 고른 키를 메시지로 낼 뿐 아무것도 기억하지 않는다. 고른 뒤 닫는 것, 바깥 누름에 닫는 것 모두 앱이 상태를 지워서 일어난다 (<a class="xref" href="#concepts">개념</a>).</p></div></details>
+          <details class="faq"><summary>메뉴를 띄웠는데 ↑/↓가 안 먹는다.</summary><div class="faq-a"><p class="faq-short">정책의 <code>menu()</code>가 <code>{ ui_element_kind::menu, ui_element_kind::menu_item }</code>을 돌려줘야 한다.</p><p>기본 구현은 <code>std::nullopt</code>라 메뉴 키보드 탐색이 꺼져 있다. 재정의하면 메뉴 container가 어느 표면에든 서 있는 동안 ↑/↓/Enter/←/→가 메뉴의 것이 된다.</p></div></details>
+          <details class="faq"><summary>Esc를 눌렀는데 <code>close_menu()</code>가 불리지 않는다.</summary><div class="faq-a"><p class="faq-short">표면이 Esc를 먼저 popup의 <code>dismiss(escape_key)</code>에 묻고, 메시지가 나면 키를 삼키기 때문이다.</p><p>닫기는 dismiss에서 받으면 된다. <code>close_menu()</code>는 어느 popup도 Esc에 메시지를 내지 않았을 때(빈 액션)만 쓰인다 (<a class="xref" href="#concepts">Esc가 지나는 차례</a>).</p></div></details>
+          <details class="faq"><summary>Esc 한 번에 하위 메뉴만 닫고 부모는 남기려면?</summary><div class="faq-a"><p class="faq-short">하위 메뉴 popup의 <code>dismiss</code>가 Esc에 "그 깊이만 닫기" 메시지를 내게 한다.</p><p>표면은 가장 깊은 popup에만 Esc를 묻는다. 그 popup이 빈 액션을 돌려줘도 된다 — 그러면 Esc가 controller로 가서 그 메뉴의 <code>close_submenu</code>를 부른다. 데모 셸의 막대 메뉴가 앞의 방식이다 (<a class="xref" href="#build-menubar">메뉴 막대</a>).</p></div></details>
+          <details class="faq"><summary>고른 뒤 메뉴가 저절로 닫히게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>menu_config::after_select</code>에 닫기 메시지를 준다.</p><p>잎 항목을 고르면 <code>select</code> 다음에 함께 나간다. 하위 메뉴를 여는 항목에서는 나가지 않는다. 막대의 메뉴는 <code>make_menu_bar_popup</code>이 비어 있는 <code>after_select</code>를 "막대 쉬기"로 채운다.</p></div></details>
+          <details class="faq"><summary>구분선은 어떻게 넣나?</summary><div class="faq-a"><p class="faq-short">구분선 항목은 없다. 아래 항목의 <code>separator_above = true</code>다.</p><p>그 항목 위에 9 논리 픽셀(<code>menu_separator_height</code>) 띠가 서고 가운데에 선을 긋는다. 하위 메뉴 자리를 셀 때 이 높이도 더한다.</p></div></details>
+          <details class="faq"><summary>체크 표시가 있는 메뉴 항목은?</summary><div class="faq-a"><p class="faq-short"><code>kind = menu_item_kind::check</code>와 <code>checked</code>. 라디오는 <code>menu_item_kind::radio</code>다.</p><p>실행 메시지는 그대로 <code>select(key)</code>다. 표시는 앱이 다음 frame의 <code>checked</code>로 바꾼다. 이 두 종류는 <code>icon</code>을 그리지 않는다.</p></div></details>
+          <details class="faq"><summary>하위 메뉴는 라이브러리가 띄우나?</summary><div class="faq-a"><p class="faq-short">아니다. 앱이 <code>open_submenu</code>로 경로를 받아 자식 popup을 짓는다.</p><p>자식 메뉴에는 <code>depth</code>·<code>parent_surface</code>·<code>anchor_key</code>·<code>close_submenu</code>를, 자식 popup에는 부모 popup id를 <code>anchor</code>로 준다 (<a class="xref" href="#build-submenu">하위 메뉴</a>, <a class="xref" href="#build-deep">여러 단계</a>).</p></div></details>
+          <details class="faq"><summary>하위 메뉴 popup의 y는 어떻게 구하나?</summary><div class="faq-a"><p class="faq-short"><code>menu_padding</code>에서 시작해 앞 항목마다 <code>menu_row_height()</code>, 구분선마다 <code>menu_separator_height</code>를 더하고, 거기서 <code>menu_padding</code>을 뺀다.</p><p><code>x</code>는 부모 popup의 폭이다. 화면 오른쪽에 모자라면 Windows·macOS host가 부모 왼쪽으로 뒤집는다.</p></div></details>
+          <details class="faq"><summary>하위 메뉴가 너무 빨리(늦게) 열린다.</summary><div class="faq-a"><p class="faq-short"><code>menu_config::hover_delay</code>다. 기본 300ms.</p><p>같은 지연이 "잎 형제 위에 멎으면 열린 자식을 닫는" 데도 쓰인다. 형제 위를 지나며 움직이면 시계를 다시 센다.</p></div></details>
+          <details class="faq"><summary>메뉴에 단축키 글을 넣었는데 눌러도 실행되지 않는다.</summary><div class="faq-a"><p class="faq-short"><code>shortcut_text</code>는 표시 열이다. 정책의 <code>on_key</code>에서 명령표로 맞춘다.</p><p><code>menu_item_from</code>으로 명령에서 항목을 짓고, 같은 명령표를 <code>match_command</code>로 맞춘다 (<a class="xref" href="#build-commands">명령표</a>). 메뉴가 열린 동안에는 그 키가 오지 않는다.</p></div></details>
+          <details class="faq"><summary>컨텍스트 메뉴에서 글자로 항목을 고를 수 있나?</summary><div class="faq-a"><p class="faq-short">없다. 접근 키는 막대에서 연 메뉴에서만 먹는다.</p><p>검색이 필요하면 popup에 글 칸을 함께 둔다. 데모의 검색 메뉴가 그렇게 한다 (<a class="xref" href="popups.html#build-search">검색 칸이 있는 목록</a>).</p></div></details>
+          <details class="faq"><summary>한글 라벨에 접근 키를 어떻게 다나?</summary><div class="faq-a"><p class="faq-short"><code>access_key = U'f'</code>. 라벨에 F가 없으면 "파일(F)"로 그린다.</p><p>접근 이름은 "파일" 그대로이고, 보조 기술에는 "Alt+F"로 따로 읽힌다. 맞추기는 키 이름으로 하므로 한국어 입력기가 켜져 있어도 같은 키가 맞는다.</p></div></details>
+          <details class="faq"><summary>F10을 내 앱 단축키로 쓰고 싶다.</summary><div class="faq-a"><p class="faq-short"><code>menu_bar_config::f10_activates = false</code>.</p><p>Alt 단독은 그대로 막대를 세운다. 다만 Alt 단독은 Windows host에만 있고 macOS의 쉬는 막대는 Option+글자도 받지 못하므로, macOS에서 F10을 끄면 키보드로 막대를 세울 길이 없어진다 (코드에서 확인한 동작).</p></div></details>
+          <details class="faq"><summary>Alt+F로 등록한 앱 명령이 막대에 먹힌다.</summary><div class="faq-a"><p class="faq-short">막대가 이긴다. <code>menu_bar_access_conflicts</code>로 겹침을 찾는다.</p><p>막대의 Alt+접근 키는 키 처리기·앱 정책보다 앞서 받는다. Ctrl·Shift가 함께인 단축키나 꺼진 막대 항목은 겹침이 아니다.</p></div></details>
+          <details class="faq"><summary>키보드나 터치로 컨텍스트 메뉴를 열려면?</summary><div class="faq-a"><p class="faq-short">우클릭 액션만 달면 된다.</p><p>Shift+F10이 같은 액션을 요소 한가운데 좌표로 실행하고, 터치의 길게 누르기(기본 600ms)도 <code>right_click</code>이다 (<a class="xref" href="#build-open">여는 손</a>).</p></div></details>
+          <details class="faq"><summary>보조 창 안에서 연 메뉴의 좌표 기준은?</summary><div class="faq-a"><p class="faq-short"><code>anchor</code>에 그 창 id를 주면 그 창 client 기준 논리 픽셀이다.</p><p>배율도 그 창의 것이다. 주 창과 다른 모니터에 있을 수 있으니 그 창의 metrics에서 배율을 꺼낸다 (<a class="xref" href="#build-window">보조 창</a>).</p></div></details>
+          <details class="faq"><summary>메뉴를 고른 뒤 글 칸의 caret이 사라졌다.</summary><div class="faq-a"><p class="faq-short">마우스로 고르면 초점이 지워진다. 코드에서 확인한 동작이다.</p><p>메뉴 항목은 Tab 자리가 아니고 누름에 초점을 지키지 않는다. 키보드로 고르면 초점이 남는다. 되돌리려면 <code>ui_frame::focus</code>로 글 칸을 다시 요청한다.</p></div></details>
+          <details class="faq"><summary>메뉴 막대가 macOS 화면 위 시스템 메뉴 막대에 들어가나?</summary><div class="faq-a"><p class="faq-short">들어가지 않는다. 창 안에 그린다.</p><p>macOS host는 시스템 막대에 앱 메뉴와 편집 메뉴 자리만 세운다.</p></div></details>
+          <details class="faq"><summary>대화 상자 안에서 메뉴 막대가 Alt에 반응하지 않는다.</summary><div class="faq-a"><p class="faq-short">초점 가둠 밖의 막대는 키를 받지 않는다.</p><p><code>active_menu_bar</code>가 보이고, 켜져 있고, <code>set_state</code>가 있고, 가둠 안인 막대만 고른다.</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/menu_popup.h" target="_blank" rel="noopener">include/luil/app/menu_popup.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#menu-popup-config" title="구조체"><span class="kb t">S</span>menu_popup_config</a><a href="api.html#make-menu-popup" title="함수"><span class="kb f">f</span>make_menu_popup</a><a href="api.html#make-menu-bar-popup" title="함수"><span class="kb f">f</span>make_menu_bar_popup</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/menu_bar_element.h" target="_blank" rel="noopener">include/luil/ui/menu_bar_element.h</a><span class="n">최상위 기호 8</span></div>
+            <div class="hdr-syms"><a href="api.html#menu-bar-height" title="상수"><span class="kb ">k</span>menu_bar_height</a><a href="api.html#menu-bar-item-padding" title="상수"><span class="kb ">k</span>menu_bar_item_padding</a><a href="api.html#menu-bar-item-config" title="구조체"><span class="kb t">S</span>menu_bar_item_config</a><a href="api.html#menu-bar-state" title="구조체"><span class="kb t">S</span>menu_bar_state</a><a href="api.html#menu-bar-config" title="구조체"><span class="kb t">S</span>menu_bar_config</a><a href="api.html#menu-bar-element" title="클래스"><span class="kb t">C</span>menu_bar_element</a><a href="api.html#active-menu-bar" title="함수"><span class="kb f">f</span>active_menu_bar</a><a href="api.html#menu-bar-access-conflicts" title="함수"><span class="kb f">f</span>menu_bar_access_conflicts</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/menu_element.h" target="_blank" rel="noopener">include/luil/ui/menu_element.h</a><span class="n">최상위 기호 9</span></div>
+            <div class="hdr-syms"><a href="api.html#menu-item-kind" title="열거형"><span class="kb e">E</span>menu_item_kind</a><a href="api.html#menu-item-config" title="구조체"><span class="kb t">S</span>menu_item_config</a><a href="api.html#menu-message-factory" title="별칭"><span class="kb t">=</span>menu_message_factory</a><a href="api.html#menu-config" title="구조체"><span class="kb t">S</span>menu_config</a><a href="api.html#menu-item-height" title="상수"><span class="kb ">k</span>menu_item_height</a><a href="api.html#menu-separator-height" title="상수"><span class="kb ">k</span>menu_separator_height</a><a href="api.html#menu-padding" title="상수"><span class="kb ">k</span>menu_padding</a><a href="api.html#menu-row-height" title="함수"><span class="kb f">f</span>menu_row_height</a><a href="api.html#menu-element" title="클래스"><span class="kb t">C</span>menu_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>

@@ -1,0 +1,2552 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>배치 요소 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — stack·wrap·grid·layer·strip·panel·group·root·sidebar·split_handle·dock·pager로 화면을 짜는 법: 고르는 기준, 상태와 메시지, 조리법, 키보드, 함정.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .doc-head .meta dd code { white-space: nowrap; }
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  /* 도킹 처음 배치 — dock_layout.cpp를 돌린 결과를 그대로 옮긴 나무 */
+  .dock-tree { margin: 0; padding: 12px 14px; list-style: none; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); font-size: var(--fs-sm); display: grid; gap: 4px; }
+  .dock-tree ul { list-style: none; margin: 4px 0 0; padding-left: 18px; border-left: 1px dashed var(--line-2); display: grid; gap: 4px; }
+  .dock-tree .k { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .dock-tree .d { color: var(--fg-3); font-size: var(--fs-xs); }
+  /* 실습 공통 */
+  .cl-stage { position: relative; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); overflow: hidden; min-width: 0; }
+  .cl-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--fs-xs); color: var(--fg-3); }
+  .cl-legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -2px; margin-right: 5px; }
+  .cl-nums { width: 72px; }
+  .cl-out { display: grid; gap: 4px; }
+  .cl-out .bad { color: var(--error); }
+  .cl-out .good { color: var(--ok, var(--accent-ink)); }
+  /* 격자 열 계산기 */
+  .gl-tracks td, .gl-tracks th { vertical-align: middle; white-space: nowrap; }
+  .gl-tracks input[type="number"] { width: 72px; min-height: 26px; padding: 2px 6px; }
+  .gl-tracks select { min-height: 26px; font-size: var(--fs-xs); }
+  .gl-tracks input:disabled { opacity: .45; }
+  .gl-track-row output { font-family: var(--font-code); font-size: var(--fs-xs); }
+  .gl-stage { height: 92px; }
+  .gl-box { position: absolute; top: 10px; height: 50px; border: 1px dashed var(--line-3); border-radius: 3px; }
+  .gl-bar { position: absolute; top: 16px; height: 38px; border-radius: 3px; display: flex; align-items: center; justify-content: center; overflow: hidden; font-family: var(--font-code); font-size: 11px; color: var(--fg); white-space: nowrap; box-sizing: border-box; }
+  .gl-bar.fixed { background: var(--panel-2); border: 1px solid var(--line-3); }
+  .gl-bar.fit { background: var(--t-ui-wash); border: 1px solid var(--t-ui); }
+  .gl-bar.flexible { background: var(--accent-wash); border: 1px solid var(--accent); }
+  .gl-bar.min { background: var(--warn-wash); border: 1px solid var(--warn); }
+  .gl-bar.over { outline: 2px solid var(--error); outline-offset: -2px; }
+  .gl-ruler { position: absolute; left: 0; right: 0; bottom: 6px; height: 16px; font-family: var(--font-code); font-size: 10.5px; color: var(--fg-3); }
+  .gl-ruler span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+  /* 줄바꿈 칸 수 */
+  .wl-stage { height: 230px; }
+  .wl-box { position: absolute; left: 8px; top: 8px; border: 1px dashed var(--line-3); border-radius: 3px; }
+  .wl-tile { position: absolute; border-radius: 3px; background: var(--accent-wash); border: 1px solid var(--accent); box-sizing: border-box; font-family: var(--font-code); font-size: 10px; color: var(--fg-2); display: grid; place-items: center; overflow: hidden; }
+  .wl-tile.over { background: var(--error-wash, var(--warn-wash)); border-color: var(--error); }
+  /* 창 폭 등급 */
+  .wc-class { font-size: var(--fs-sm); }
+  .wc-class b { font-family: var(--font-code); font-size: var(--fs-md, 15px); color: var(--accent-ink); }
+  .wc-panes { display: flex; gap: 6px; height: 74px; }
+  .wc-pane { border: 1px solid var(--line-2); border-radius: 4px; background: var(--panel-2); display: grid; place-items: center; font-size: var(--fs-xs); color: var(--fg-2); min-width: 0; overflow: hidden; text-align: center; padding: 2px; }
+  .wc-pane.page { flex: 1 1 auto; background: var(--accent-wash); border-color: var(--accent); }
+</style>
+</head>
+<body data-page="containers">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>배치 요소</h1>
+      <p class="summary">배치 요소는 자식에게 자리를 나눠 주는 그릇이다. 측정 단계가 없어 길이는 담는 쪽이 정하고, 접힘·폭·흘린 양·도킹 배치·페이지 위치는 모두 앱 상태다. 요소는 그 값을 받아 그리고, 바꾸자는 메시지만 낸다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>stack_element.h</code>·<code>wrap_element.h</code>·<code>grid_element.h</code>·<code>layer_element.h</code>·<code>strip_element.h</code>·<code>panel_element.h</code>·<code>group_element.h</code>·<code>root_element.h</code>·<code>sidebar_element.h</code>·<code>split_handle_element.h</code>·<code>dock_element.h</code>·<code>pager_element.h</code>·<code>layout_metrics.h</code></dd></div>
+          <div><dt>실습</dt><dd>격자 열 계산기, 줄바꿈 칸 수, 창 폭 등급</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="layout.html">배치</a> · <a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="threads.html">스레드 모델</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>할 일에 맞는 배치 요소를 고르고, 넘친 자식이 잘리는지 아닌지 안다.</li>
+            <li>도구 막대·폼·겹침·접이식 섹션·사이드바·나눈 판·도킹·넘기는 페이지를 짓는다.</li>
+            <li>접힘·폭·흘린 양·도킹 배치·페이지 위치를 앱 상태로 들고, 오는 메시지로 바꾼다.</li>
+            <li>창 폭 등급으로 한 판·두 판을 고른다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 배치 요소를 쓰나</h2>
+          <p class="lede">첫 질문은 "넘친 것을 잘라야 하는가", 둘째는 "사용자가 배치를 바꾸는가"다. 바꾼다면 그 값은 앱이 든다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>요소</th><th>하는 일</th><th>넘친 자식</th><th>흘리는 축</th><th>상태의 임자</th></tr></thead>
+            <tbody>
+              <tr><td><code>stack_element</code></td><td>한 축으로 쌓는다 — 고정·유연·맞춤 길이, 하한·상한</td><td>넘친다</td><td>없음</td><td>없음 (길이는 담는 코드에 적는다)</td></tr>
+              <tr><td><code>wrap_element</code></td><td>같은 크기 항목을 줄을 넘겨 놓는다</td><td>아래로 넘친다</td><td>없음</td><td>없음</td></tr>
+              <tr><td><code>grid_element</code></td><td>행·열 칸에 놓는다 (폼의 라벨 열·입력 열)</td><td>칸 밖으로 넘친다</td><td>없음</td><td>없음</td></tr>
+              <tr><td><code>layer_element</code></td><td>같은 자리에 겹친다 (배지·안내 글·떠 있는 판)</td><td>넘친다</td><td>없음</td><td>없음</td></tr>
+              <tr><td><code>panel_element</code></td><td>바탕·테두리·그림자를 칠하고 내용 하나를 담는다</td><td>넘친다 (둥근 모서리도 자르지 않는다)</td><td>없음</td><td>없음</td></tr>
+              <tr><td><code>root_element</code></td><td>창 전체의 뿌리. 가지는 호출자가 각자 배치해 담는다</td><td>—</td><td>없음</td><td>없음</td></tr>
+              <tr><td><code>strip_element</code></td><td>가로로 긴 내용 하나를 흘려 보인다</td><td><strong>자른다</strong></td><td>가로</td><td>앱 — <code>scroll_offset</code></td></tr>
+              <tr><td><code>group_element</code></td><td>제목 줄을 눌러 접는 섹션</td><td>넘친다</td><td>없음</td><td>앱 — <code>collapsed</code></td></tr>
+              <tr><td><code>sidebar_element</code></td><td>접었다 펴는 옆 판 (토글 단추·폭 손잡이)</td><td>넘친다</td><td>없음</td><td>앱 — <code>collapsed</code>·<code>width</code>·<code>expanded_width</code></td></tr>
+              <tr><td><code>split_handle_element</code></td><td>판 사이를 끌어 한쪽 길이를 바꾸는 손잡이</td><td>(자식 없음)</td><td>없음</td><td>앱 — 판의 길이</td></tr>
+              <tr><td><code>dock_element</code></td><td>분할·탭 묶음·가장자리 놓기·떠 있는 패널 (IDE식 도킹)</td><td><strong>자른다</strong></td><td>없음</td><td>앱 — <code>dock_layout</code> 전체</td></tr>
+              <tr><td><code>pager_element</code></td><td>한 장씩 가로로 넘기는 페이지</td><td><strong>자른다</strong></td><td>가로 (페이지 단위)</td><td>앱 — <code>offset</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p><code>layout_metrics.h</code>는 요소가 아니다. 여럿이 같은 식을 써야 하는 값과 순수 함수 — 창 폭 등급(<code>classify_window_width</code>), 여백(<code>edge_insets</code>), 칸 안 정렬(<code>align_within</code>), 스크롤 다듬기(<code>clamp_scroll</code>) — 를 모은 곳이다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>머리 줄·몸통·양식으로 된 화면 뼈대</td><td>stack 안의 stack, 상한 있는 옆 판</td><td><a class="xref" href="#build-skeleton">화면 뼈대</a></td></tr>
+              <tr><td>제목은 왼쪽, 단추는 오른쪽인 도구 막대</td><td>가로 stack + <code>add_fit</code> + <code>add_flexible_gap</code></td><td><a class="xref" href="#build-toolbar">도구 막대</a></td></tr>
+              <tr><td>크기가 같은 견본·칩이 폭에 따라 줄을 넘김</td><td><code>wrap_element</code> + <code>wrap_height_for</code></td><td><a class="xref" href="#build-wrap">줄바꿈</a></td></tr>
+              <tr><td>가로로 넘치는 단추 줄을 쓸어 흘림</td><td><code>strip_element</code></td><td><a class="xref" href="#build-strip">가로로 흐르는 띠</a></td></tr>
+              <tr><td>라벨 열이 가장 긴 라벨 폭인 폼</td><td><code>grid_element</code> — <code>fit</code> 열 + <code>flexible</code> 열</td><td><a class="xref" href="#build-form">폼</a></td></tr>
+              <tr><td>폭에 따라 열 수가 바뀌는 카드 격자</td><td><code>grid_element</code> (열 수는 앱이 고른다)</td><td><a class="xref" href="#build-cards">카드 격자</a></td></tr>
+              <tr><td>그림 위 배지, 본문 위에 떠 있는 판</td><td><code>layer_element</code></td><td><a class="xref" href="#build-layer">겹치기</a></td></tr>
+              <tr><td>제목 줄을 눌러 접는 섹션</td><td><code>group_element</code></td><td><a class="xref" href="#build-group">접이식 섹션</a></td></tr>
+              <tr><td>caption·본문·오버레이를 한 창에</td><td><code>root_element</code></td><td><a class="xref" href="#build-root">최상위 조립</a></td></tr>
+              <tr><td>접는 내비게이션 판</td><td><code>sidebar_element</code></td><td><a class="xref" href="#build-side-panel">사이드바</a></td></tr>
+              <tr><td>판 둘의 경계를 끌어 옮김</td><td>stack 두 칸 사이의 <code>split_handle_element</code></td><td><a class="xref" href="#build-split">나눈 두 판</a></td></tr>
+              <tr><td>좁으면 한 판, 넓으면 두 판</td><td><code>window_metrics::width_class</code></td><td><a class="xref" href="#build-width">창 폭 등급</a></td></tr>
+              <tr><td>탭을 끌어 합치고 가장자리에 놓아 나누는 화면</td><td><code>dock_element</code> + <code>apply_dock_command</code></td><td><a class="xref" href="#build-dock-layout">도킹</a></td></tr>
+              <tr><td>손가락으로 넘기는 장들</td><td><code>pager_element</code> + <code>apply_pager_command</code></td><td><a class="xref" href="#build-pager">넘기는 페이지</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">이름이 비슷한 다른 것</span>세로로 흘리는 창은 <code>scroll_view_element</code>·<code>scroll_area_element</code>다 (<a class="xref" href="scrolling.html">스크롤과 확대</a>). 화면을 바꿀 때 밀고 옅어지는 움직임은 <code>page_transition_element</code>의 일이다 (<a class="xref" href="motion.html">움직임</a>). 운영 체제 화면 가장자리에 붙는 별도 창은 <code>ui_docked_surface</code>이고 <code>dock_element</code>와 관계가 없다 (<a class="xref" href="window.html">창과 셸 통합</a>). dock의 탭 묶음은 <code>tab_bar_element</code>다 (<a class="xref" href="tabs.html">탭</a>).</div></div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 길이는 담는 쪽이, 상태는 앱이</h2>
+          <p class="lede">부모가 slot을 주고 자식이 bounds를 확정한다. 측정 단계는 없고, 맞춤 자리만 자식에게 원하는 크기를 묻는다.</p>
+        </header>
+        <div class="prose">
+          <p>배치 계약과 픽셀 단위는 <a class="xref" href="layout.html#s3">arrange 계약</a>과 <a class="xref" href="layout.html#s2">두 가지 픽셀</a>이 설명한다. config의 길이는 논리 픽셀이고 요소가 배율을 곱해 물리 bounds를 만든다. stack과 grid가 남은 자리를 비율로 나누는 걸음은 <a class="xref" href="layout.html#s6">비율 분배</a>에 있다. 여기서는 쓸 때 알아야 할 세 가지만 추린다.</p>
+          <ul>
+            <li><strong>맞춤 자리만 묻는다.</strong> <code>add_fit</code>, <code>grid_track::fit</code>, <code>stretch</code>가 아닌 grid 칸·layer 자식이 자식의 <code>preferred_size</code>를 묻는다. 배치 요소 가운데 이 질문에 답하는 것은 stack·grid·layer뿐이다. 나머지는 답하지 않아 맞춤 자리에서 0이 된다.</li>
+            <li><strong>상태는 앱이 든다.</strong> tree는 frame마다 새로 서고 게시된 뒤에는 바뀌지 않는다. 그래서 접힘·폭·흘린 양은 요소가 기억할 수 없다.</li>
+            <li><strong>메시지는 대개 변화량이다.</strong> 손잡이는 "얼마나 끌었다", 띠는 "얼마나 흘리자", 페이지는 "몇 장 넘기자"를 낸다. tree가 다시 지어져도 끌기가 이어지고, 다음 frame 앞에 여럿이 와도 잃지 않는다.</li>
+          </ul>
+        </div>
+        <h3>상태는 누가 들고 있나</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>싣는 자리</th><th>바꾸는 메시지</th><th>범위 다듬기</th></tr></thead>
+            <tbody>
+              <tr><td>띠의 흘러간 양</td><td><code>strip_config::scroll_offset</code></td><td><code>scroll(delta)</code></td><td>arrange는 자기 사본만 다듬는다. 앱 상태는 앱이 <code>clamp_scroll</code>로 다듬는다</td></tr>
+              <tr><td>그룹의 접힘</td><td><code>group_config::collapsed</code></td><td><code>toggle</code> 또는 <code>set_collapsed(bool)</code></td><td>—</td></tr>
+              <tr><td>사이드바의 접힘·지금 폭·펼친 폭</td><td><code>sidebar_config::collapsed</code>·<code>width</code>·<code>expanded_width</code></td><td><code>toggle</code>, <code>resize(delta)</code>, <code>resize_finish()</code></td><td>폭 범위는 앱이 자른다</td></tr>
+              <tr><td>나눈 판의 길이</td><td>앱이 stack 칸 길이로 쓴다 (손잡이는 길이를 담지 않는다)</td><td><code>resize(delta)</code>, <code>finish()</code></td><td>길이를 가진 앱이 다듬는다</td></tr>
+              <tr><td>도킹 배치 전체</td><td><code>dock_config::layout</code></td><td><code>change(dock_command)</code></td><td><code>apply_dock_command</code>가 검증하고 정리한다</td></tr>
+              <tr><td>페이지 위치 (장 단위)</td><td><code>pager_config::offset</code></td><td><code>change(pager_command)</code></td><td><code>apply_pager_command</code>가 <code>[0, 장 수 − 1]</code>로 다듬는다</td></tr>
+              <tr><td>창 폭 등급</td><td><code>window_metrics::width_class</code> (host가 매겨 보낸다)</td><td>창 크기 메시지</td><td>기본 경계 600·840 논리 픽셀</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>손잡이를 한 번 끌 때 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>판 사이의 손잡이를 누른 채 오른쪽으로 10 물리 픽셀 끈다 (배율 2).</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller가 게시된 tree의 손잡이에 <code>pointer_drag_target::on_move</code>를 부른다. 손잡이는 10 ÷ 2 = 5 논리 픽셀로 바꾸고 <code>grows</code>로 부호를 맞춘다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>앱이 준 <code>resize(5)</code>가 <code>make_app_action(intent)</code>로 싼 앱 메시지를 만든다. 메시지는 app inbox로 간다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱의 <code>handle</code>이 판 길이에 5를 더하고 범위로 다듬는다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>다음 <code>make_frame()</code>이 새 길이로 stack을 <strong>처음부터 다시 짓는다</strong>. 손잡이도 새 경계에 선다.</span></div>
+          <div role="listitem"><span class="who">input · UI</span><span>손잡이는 포인터를 따라 옮겨 가도 끌기가 이어진다(<code>follows_pointer</code>). 손을 떼면 <code>finish()</code>가 한 번 온다.</span></div>
+        </div>
+        <div class="prose">
+          <p>factory는 어디서 불리느냐가 갈린다. 포인터·키·터치·휠이 부르는 factory는 <strong>input thread</strong>에서 돈다. 보조 기술의 실행(UIA의 Expand·Collapse·Invoke)은 <strong>UI thread</strong>에서 액션을 짓는다 — Windows는 UIA 호출을 창 thread로 모은다. 그래서 factory는 앱 상태를 참조로 잡지 말고 필요한 값을 복사해 잡는다. 예외가 하나 있다. <code>dock_config::content</code>는 <code>dock_element</code>의 생성자가 부르므로 tree를 짓는 <strong>logic thread</strong>에서 돈다. 스레드 사이의 다리는 <a class="xref" href="threads.html">스레드 모델</a>이 설명한다.</p>
+        </div>
+        <h3>크기와 자르기</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>요소</th><th>자기 bounds</th><th>자식에게 주는 자리</th><th>원하는 크기에 답하나</th></tr></thead>
+            <tbody>
+              <tr><td>stack</td><td>받은 slot</td><td><code>stack_item</code>대로 (<a class="xref" href="layout.html#s5">stack 읽기</a>)</td><td>답한다 — 고정·맞춤 길이 + 유연 항목의 하한 + 간격 + 여백</td></tr>
+              <tr><td>wrap</td><td>받은 slot</td><td>모두 <code>item_width × item_height</code></td><td>답하지 않는다 — 높이는 <code>wrap_height_for</code></td></tr>
+              <tr><td>grid</td><td>받은 slot</td><td>칸. 정렬이 <code>stretch</code>가 아니면 원하는 크기(칸보다 크지 않게)</td><td>답한다 — 유연 줄도 잰 크기로 본 합</td></tr>
+              <tr><td>layer</td><td>받은 slot</td><td>자식마다 <code>layer_item</code>대로</td><td>답한다 — 자식들 중 가장 큰 폭·높이</td></tr>
+              <tr><td>strip</td><td>받은 slot</td><td><code>{ x − offset × scale, y, max(content_width × scale, slot 폭), slot 높이 }</code></td><td>답하지 않는다</td></tr>
+              <tr><td>panel</td><td>받은 slot</td><td>받은 문맥 그대로 (안쪽 여백은 내용 stack의 padding으로)</td><td>답하지 않는다</td></tr>
+              <tr><td>root</td><td>받은 slot</td><td><strong>배치하지 않는다</strong> — 가지마다 호출자가 arrange해 담는다</td><td>답하지 않는다</td></tr>
+              <tr><td>group</td><td>폭은 slot, 높이는 <code>height_for(config)</code> × 배율 (slot 높이를 무시)</td><td>제목 줄 28, 그 아래 <code>content_height</code></td><td>답하지 않는다 — <code>height_for</code></td></tr>
+              <tr><td>sidebar</td><td><code>width_for(config)</code> × 배율, slot의 왼쪽 또는 오른쪽 끝</td><td>내용은 토글이 있으면 40 아래부터, 손잡이는 안쪽 가장자리에 절반씩 걸침</td><td>답하지 않는다 — <code>width_for</code></td></tr>
+              <tr><td>dock</td><td>받은 slot</td><td>분할은 비율과 최소 판, 떠 있는 그룹은 dock 자리 안으로 다듬은 자리</td><td>답하지 않는다</td></tr>
+              <tr><td>pager</td><td>받은 slot</td><td>장마다 slot 크기, <code>x + (장 번호 − offset) × slot 폭</code></td><td>답하지 않는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">넘친 자식은 그려지고 눌린다</span>자르지 않는 요소는 hit test에서도 자식 탐색을 자기 bounds로 막지 않는다. stack에서 넘친 단추는 옆 판 위에 그려지고 거기서 눌린다. 자르는 요소(strip·pager·dock)는 bounds 밖의 자식을 그리지도 누르지도 않고, 끌어 놓을 대상으로도 찾지 않는다. 요소마다의 지도는 <a class="xref" href="layout.html#s8">컨테이너 지도</a>에 있다.</div></div>
+        <h3>id</h3>
+        <div class="prose">
+          <ul>
+            <li>stack·wrap·grid·layer·strip·panel·split_handle·pager는 생성자에서 id를 받는다.</li>
+            <li>group·sidebar·root·dock은 config의 <code>owner</code>로 kind와 짝을 지어 스스로 id를 짓는다. 그룹은 <code>{ group, owner }</code>와 제목 줄 <code>{ group_header, owner }</code>, 사이드바는 판·토글·손잡이 셋이다. 같은 owner를 둘에 주면 id가 겹친다.</li>
+            <li>dock 안의 탭 하나는 <code>{ tab, 패널 key }</code>다 — dock의 owner가 붙지 않는다. dock 둘, 또는 dock과 다른 탭 막대가 같은 패널 key를 쓰면 탭 id가 겹친다.</li>
+            <li>빈 id <code>ui_element_id {}</code>도 중복으로 센다. 겹친 id는 첫 것이 이기고 뒤의 것은 <code>ui_tree::duplicate_ids()</code>에 남는다. <code>duplicate_ids()</code>와 <code>unarranged()</code>가 빈 tree만 게시하는 것이 계약이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-stack">
+        <header class="sec-head">
+          <h2>만들기: 쌓기와 줄바꿈</h2>
+          <p class="lede">stack 하나로 대부분의 화면이 선다. 같은 크기 항목이 줄을 넘기면 wrap, 가로로 넘쳐 흘려야 하면 strip이다.</p>
+        </header>
+        <h3 id="build-skeleton">화면 뼈대: stack 안의 stack</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1004-1034" data-path="examples/demo/workbench_page.cpp" data-start="1004"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> workbench_page::build(const float width, const float height, const float scale)
+    {
+        static_cast<void>(width);
+        static_cast<void>(height);
+        // 표의 커서가 옮겨 갔거나 행이 지워졌으면 보기도 따라간다.
+        refresh_diff();
+        author_combo_ = nullptr;
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(16.0f);
+        config.spacing = 12.0f;
+        auto root { std::make_unique<luil::stack_element>(workbench_id(u8"root"), config) };
+        // 머리 줄과 양식은 내용 크기로 담는다 — 버튼 글·라벨 폭이 언어와 글꼴에 따라 바뀌어도 손으로 고칠 길이가 없다.
+        root->add_fit(make_header(scale));
+        root->add_fit(make_history_bar());
+
+        luil::stack_config body_config {};
+        body_config.direction = luil::stack_direction::row;
+        body_config.spacing = 12.0f;
+        auto body { std::make_unique<luil::stack_element>(workbench_id(u8"body"), body_config) };
+        // 저장소 판은 창을 따라 넓어지되 300을 넘지 않는다. 남는 폭은 표와 변경 내용 보기가 갖는다 (stack 상한의 재분배).
+        body->add(make_tree_panel(), luil::stack_item { .weight = 1.0f, .minimum = 200.0f, .maximum = 300.0f });
+        luil::stack_config detail_config {};
+        detail_config.spacing = 12.0f;
+        auto detail { std::make_unique<luil::stack_element>(workbench_id(u8"detail"), detail_config) };
+        detail->add(make_changes_table(), luil::stack_item { .weight = 1.0f, .minimum = 120.0f });
+        detail->add(make_diff_panel(), luil::stack_item { .weight = 1.0f, .minimum = 160.0f });
+        body->add_flexible(std::move(detail), 3.0f);
+        root->add_flexible(std::move(body));
+        root->add_fit(make_form());
+        return root;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1011-1014" data-title="세로 뿌리">여백 16, 간격 12인 세로 stack이 화면 전체를 받는다.</li>
+            <li data-lines="1015-1017" data-title="맞춤 줄">머리 줄과 이력 줄은 <code>add_fit</code>으로 담는다. 버튼 글과 라벨 폭이 언어·글꼴에 따라 바뀌어도 손으로 고칠 길이가 없다.</li>
+            <li data-lines="1019-1024" data-title="상한 있는 옆 판">가로 stack의 저장소 판은 <code>{ .weight = 1, .minimum = 200, .maximum = 300 }</code>이다. 창이 넓어지면 300에서 멈춘다.</li>
+            <li data-lines="1025-1031" data-title="남는 폭">상한이 남긴 폭은 아직 걸리지 않은 유연 항목(<code>detail</code>, 비율 3)이 갖는다. <code>detail</code> 안의 두 판은 하한 120·160을 지킨다.</li>
+            <li data-lines="1032-1033" data-title="맞춤 양식">양식은 <code>grid_element</code>라서 grid가 원하는 높이를 답한다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>결과는 test가 잠근다: 창 폭 1600에서 저장소 판이 300, 700에서 200이다. 같은 화면의 tree에는 중복 id도 미배치 element도 없다. 유연 항목이 하한·상한을 지키며 나누는 걸음은 <a class="xref" href="layout.html#s4">stack 실험장</a>에서 직접 돌려 볼 수 있다.</p>
+        </div>
+
+        <h3 id="build-toolbar">도구 막대: 맞춤 항목·유연 간격·겹친 배지</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1036-1054,1069-1085" data-path="examples/demo/workbench_page.cpp" data-start="1036"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> workbench_page::make_header(const float scale)
+    {
+        static_cast<void>(scale);
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = 12.0f;
+        config.cross_alignment = luil::stack_alignment::center;
+        auto row { std::make_unique<luil::stack_element>(workbench_id(u8"header"), config) };
+        row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"title"), luil::label_config { .text = u8"변경 작업대", .font_size = 16.0f, .color = luil::label_color_role::primary }));
+        row->add_flexible_gap();
+
+        // 패치 파일은 공용 파일 대화상자로 고른다. 요청과 결과는 셸이 frame으로 나른다 (file-dialog-design.md).
+        luil::text_button_config import_config {};
+        import_config.text = u8"패치 불러오기…";
+        import_config.glyph = luil::codicons::icon_folder_opened;
+        auto import { std::make_unique<luil::text_button_element>(workbench_id(u8"import"), std::move(import_config)) };
+        import->set_action(luil::ui_trigger::left_click, luil::make_message_action(workbench_import_intent {}));
+        import->set_tooltip(u8".patch·.diff 파일을 골라 변경 내용 보기에 띄운다");
+        row->add_fit(std::move(import));
+⋯@1069
+        // 커밋 버튼 모서리에 스테이지한 수를 겹쳐 둔다 (겹침 배치).
+        const auto staged { std::count_if(changes_.begin(), changes_.end(), [](const change& item) { return item.staged; }) };
+        luil::text_button_config commit_config {};
+        commit_config.text = u8"커밋";
+        commit_config.visual = luil::text_button_visual::accent;
+        commit_config.glyph = luil::codicons::icon_check;
+        auto commit { std::make_unique<luil::text_button_element>(workbench_id(u8"commit"), std::move(commit_config)) };
+        commit->set_action(luil::ui_trigger::left_click, luil::make_message_action(workbench_commit_intent {}));
+        commit->set_enabled(staged > 0 && summary_.text.empty() == false);
+        commit->set_tooltip(u8"요약을 쓰고 스테이지한 파일을 커밋한다");
+        auto layer { std::make_unique<luil::layer_element>(workbench_id(u8"commit-layer")) };
+        layer->add(std::move(commit));
+        if (staged > 0)
+            layer->add(std::make_unique<luil::badge_element>(workbench_id(u8"commit-count"), luil::badge_config { .text = to_u8(static_cast<int>(staged)), .tone = luil::badge_tone::accent }),
+                { .horizontal = luil::layout_alignment::end, .vertical = luil::layout_alignment::start, .margin = { 0.0f, -8.0f, -8.0f, 0.0f } });
+        row->add_fit(std::move(layer));
+        return row;
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>가로 stack에 <code>cross_alignment = center</code>를 주면 맞춤 항목이 원하는 높이로 줄 가운데에 선다.</li>
+            <li><code>add_flexible_gap()</code>이 제목과 단추 무리 사이를 벌린다. 바깥에 남는 자리를 두는 것은 <code>main_alignment</code>, 항목 사이를 벌리는 것은 gap이다. 그래서 <code>stack_main_alignment</code>에는 <code>space_between</code>이 없다.</li>
+            <li>배지는 <code>layer_element</code>에 단추 다음으로 담아 위에 그려지고 먼저 눌린다. <code>margin = { 0.0f, -8.0f, -8.0f, 0.0f }</code>는 <code>edge_insets</code>의 위치 순서 <strong>(left, top, right, bottom)</strong>로 읽혀 위로 8, 오른쪽으로 8 바깥이다. layer는 자르지 않으므로 바깥으로 나간 배지도 그려진다.</li>
+          </ul>
+        </div>
+
+        <h3 id="build-wrap">같은 크기 타일 줄바꿈 (wrap)</h3>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/theme_page.cpp:118-135" data-path="examples/mobile_demo/theme_page.cpp" data-start="118"><script type="text/plain">
+        // 손가락으로 누를 견본이라 데스크톱(16)보다 크게 둔다. 한 줄에 안 들어가면 다음 줄로 넘긴다.
+        luil::wrap_config swatches {};
+        swatches.item_width = 40.0f;
+        swatches.item_height = 40.0f;
+        swatches.spacing = 10.0f;
+        swatches.line_spacing = 10.0f;
+        auto grid { std::make_unique<luil::wrap_element>(luil::ui_element_id { kind_layout, u8"accents" }, swatches) };
+        for (const luil::accent_definition& accent : accents)
+        {
+            std::u8string id { accent.id };
+            auto swatch { std::make_unique<swatch_element>(luil::ui_element_id { kind_accent, id }, accent.swatch, appearance_.accent_id == accent.id) };
+            swatch->set_tooltip(std::u8string { accent.label });
+            swatch->set_cursor(luil::ui_cursor::hand);
+            swatch->set_action(luil::ui_trigger::left_click, [id](const luil::ui_action_context&) -> std::vector<luil::input_action> { return { luil::make_app_action(accent_intent { id }) }; });
+            grid->add(std::move(swatch));
+        }
+        // 줄 수는 폭에서 나오는 산수라 tree를 짓기 전에 높이를 알 수 있다.
+        column.add(std::move(grid), luil::wrap_height_for(swatches, width - 2.0f * page_padding, accents.size()));
+</script></div>
+        <div class="prose">
+          <p>항목 크기는 항목마다가 아니라 컨테이너에 한 번 적는다. 그래서 줄 수가 폭에서 나오는 산수가 되고, <code>wrap_height_for(config, 폭, 개수)</code>가 tree를 짓기 <strong>전에</strong> 높이를 답한다. arrange도 같은 <code>wrap_columns_for</code>로 열을 세므로 둘이 어긋나지 않는다. 폭 인자는 wrap이 실제로 받을 논리 폭이어야 한다 — 예제는 페이지 여백을 뺀다. 칩을 세로로 흘리려면 wrap을 <code>scroll_view_element</code>의 내용으로 두고 같은 높이를 내용 높이로 넘긴다.</p>
+        </div>
+        <div class="lw" data-title="줄바꿈 칸 수" data-surface="wrap_columns_for · wrap_height_for 재현" data-reset id="wl-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <span class="field">예시</span>
+              <div class="seg" role="group" aria-label="예시" id="wl-preset">
+                <button type="button" data-v="swatch" aria-pressed="true">견본 40×40</button>
+                <button type="button" data-v="sheet">시트 단추 120×44</button>
+                <button type="button" data-v="test">test 20×10</button>
+              </div>
+            </div>
+            <div class="controls">
+              <label class="field" for="wl-width">폭</label><input type="range" id="wl-width" min="0" max="600" value="320"><output id="wl-width-out" for="wl-width">320</output>
+              <label class="field" for="wl-count">개수</label><input type="range" id="wl-count" min="0" max="40" value="12"><output id="wl-count-out" for="wl-count">12</output>
+            </div>
+            <div class="controls">
+              <label class="field" for="wl-iw">item_width</label><input class="cl-nums" type="number" id="wl-iw" min="-50" max="400" step="1" value="40">
+              <label class="field" for="wl-ih">item_height</label><input class="cl-nums" type="number" id="wl-ih" min="0" max="200" step="1" value="40">
+              <label class="field" for="wl-sp">spacing</label><input class="cl-nums" type="number" id="wl-sp" min="-200" max="60" step="1" value="10">
+              <label class="field" for="wl-ls">line_spacing</label><input class="cl-nums" type="number" id="wl-ls" min="0" max="60" step="1" value="10">
+            </div>
+            <div class="controls">
+              <label class="field"><input type="checkbox" id="wl-auto" checked> 칸 높이를 <code>wrap_height_for</code>로 잡는다</label>
+              <label class="field" for="wl-height">아니면 칸 높이</label><input class="cl-nums" type="number" id="wl-height" min="0" max="600" step="1" value="60" disabled>
+            </div>
+            <div class="cl-stage wl-stage" id="wl-stage" aria-hidden="true"></div>
+            <div class="cl-legend" aria-hidden="true"><span><i style="border:1px dashed var(--line-3)"></i>wrap의 slot</span><span><i style="background:var(--accent-wash);border:1px solid var(--accent)"></i>항목 칸</span><span><i style="border:1px solid var(--error)"></i>slot 밖으로 넘친 칸 (자르지 않는다)</span></div>
+            <div class="readout cl-out" id="wl-out" aria-live="polite"></div>
+          </div>
+          <div class="lw-foot">옮긴 것: <code>wrap_columns_for</code>·<code>wrap_height_for</code>(<code>wrap_element.h</code>)와 arrange가 칸을 놓는 식(<code>wrap_element.cpp</code>, 배율 1). 원본 헤더를 g++로 컴파일한 대조기와 무작위 입력 2만 5천 건을 float 값까지 같게 견주었고, 칸 자리는 <code>tests/wrap_element_tests.cpp</code>가 잠근 값과 견주었다. 해 볼 것: test 예시에서 폭 92와 91을 견주어 보라 — 마지막 항목 뒤에는 간격이 붙지 않아 92에서 넷이 든다. 칸 높이를 직접 줄이면 마지막 줄이 slot 밖으로 넘친다(wrap은 자르지 않는다). 그림은 재현이다.</div>
+        </div>
+
+        <h3 id="build-strip">가로로 흐르는 띠 (strip)</h3>
+        <div class="prose">
+          <p>가장 완전한 예는 휴대폰 데모의 별 열이다. 핸들(<code>handle</code>), 한계 계산(frame), strip 조립 순서로 읽는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/basics_page.cpp:204-208,376-382,620-630" data-path="examples/mobile_demo/basics_page.cpp" data-start="204"><script type="text/plain">
+        if (const auto* const scroll { message.get<rating_scroll_intent>() }; scroll != nullptr)
+        {
+            rating_scroll_ = std::clamp(rating_scroll_ + scroll->delta, 0.0f, rating_scroll_limit_);
+            return true;
+        }
+⋯@376
+        // 가로로 흐르는 창 안의 별 열이다. 쓸면 창이 흐르고, 잠깐 눌러 창이 흐르지 않게 된 뒤에 옮기면 별이 따라온다.
+        column.note(u8"rating-strip-title", u8"가로로 흐르는 창 안의 별 열 (쓸면 창이 흐릅니다)");
+        column.gap(4.0f);
+        const luil::rating_config strip_rating { make_strip_rating_config() };
+        rating_scroll_limit_ = std::max(0.0f, luil::rating_element::width_for(strip_rating) - (width - 2.0f * page_padding));
+        column.add(make_rating_strip(), luil::rating_element::height_for(strip_rating));
+        column.body(u8"rating-strip-value", u8"가로 창 별점: " + rating_text(rating_strip_, 10));
+⋯@620
+    std::unique_ptr<luil::ui_element> basics_page::make_rating_strip() const
+    {
+        luil::rating_config config { make_strip_rating_config() };
+        luil::strip_config strip {};
+        strip.content_width = luil::rating_element::width_for(config);
+        strip.scroll_offset = rating_scroll_;
+        strip.scroll = [](const float delta) { return luil::make_app_action(rating_scroll_intent { delta }); };
+        auto window { std::make_unique<luil::strip_element>(luil::ui_element_id { kind_layout, u8"rating-strip-window" }, std::move(strip)) };
+        window->set_content(std::make_unique<luil::rating_element>(std::move(config)));
+        return window;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/basics_page.h:96-100" data-path="examples/mobile_demo/basics_page.h" data-start="96"><script type="text/plain">
+    // 별 열을 담은 가로로 흐르는 창의 스크롤이다 (논리 픽셀, 양수는 내용이 왼쪽으로). 위치는 앱 상태다.
+    struct rating_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>content_width</code>는 담는 쪽이 알려 준다. 측정 단계가 없기 때문이다.</li>
+            <li><code>scroll</code>을 주면 넘칠 때 띠가 가로 흘림의 임자가 된다. 그러면 터치 끌기·휠·초점 되살리기가 이 메시지로 띠를 흘린다. 없으면 아무도 흘리지 않는다.</li>
+            <li>arrange는 화면에 쓸 값만 다듬는다. <strong>앱 상태는 앱이 다듬는다.</strong> 예제는 frame에서 한계(<code>content − viewport</code>)를 적고 handle에서 <code>std::clamp</code>한다. 같은 식이 <code>clamp_scroll</code>이다.</li>
+          </ul>
+        </div>
+        <div class="prose">
+          <p>데스크톱 데모의 단추 띠는 내용이 가로 stack이다. 내용 폭을 단추 폭과 간격의 합으로 센다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/network_page.cpp:704-742" data-path="examples/demo/network_page.cpp" data-start="704"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> network_page::make_preset_strip() const
+    {
+        constexpr float spacing { 6.0f };
+        luil::stack_config lane_config {};
+        lane_config.direction = luil::stack_direction::row;
+        lane_config.spacing = spacing;
+        auto lane { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"network-presets" }, lane_config) };
+
+        float content_width { 0.0f };
+        for (const preset_target& target : preset_targets)
+        {
+            const std::u8string path { target.path };
+            luil::text_button_config button_config {};
+            button_config.text = std::u8string { target.label };
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_network_target, path }, std::move(button_config)) };
+            button->set_cursor(luil::ui_cursor::hand);
+            button->set_tooltip(std::u8string { target.post ? u8"POST " : u8"GET " } + path);
+            // 서버가 서지 못했으면 과녁도 두지 않는다 — 눌러도 아무 일이 없는
+            // 단추는 화면에서 고장으로 보인다.
+            button->set_enabled(base_url_.empty() == false);
+            if (base_url_.empty() == false)
+                button->set_action(luil::ui_trigger::left_click, luil::make_message_action(network_send_intent { base_url_ + path, target.post }));
+            const float button_width { label_width(target.label) };
+            lane->add(std::move(button), button_width);
+            content_width += button_width + spacing;
+        }
+        if (content_width > 0.0f)
+            content_width -= spacing;
+
+        // 좁은 창에서는 띠가 흘러 준다 — 넘치는 단추가 사라지지 않는다.
+        luil::strip_config strip_config {};
+        strip_config.content_width = content_width;
+        strip_config.scroll_offset = strip_scroll_;
+        // 손가락으로 옆으로 쓸어 흘린다. 휠 표와 같은 메시지다.
+        strip_config.scroll = [](const float value) { return luil::make_app_action(network_strip_scroll_intent { value }); };
+        auto strip { std::make_unique<luil::strip_element>(luil::ui_element_id { kind_network_preview, u8"strip" }, strip_config) };
+        strip->set_content(std::move(lane));
+        return strip;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/network_page.cpp:419-425" data-path="examples/demo/network_page.cpp" data-start="419"><script type="text/plain">
+        if (const auto* const strip { message.get<network_strip_scroll_intent>() }; strip != nullptr)
+        {
+            strip_scroll_ += strip->delta;
+            if (strip_scroll_ < 0.0f)
+                strip_scroll_ = 0.0f;
+            return true;
+        }
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">아래 한계만 다듬으면</span>이 handle은 0 아래만 막는다. 끝을 넘은 값은 arrange가 화면에서만 잘라 보이고 앱 상태에는 쌓인다. 되돌려 흘릴 때 넘친 만큼이 먼저 소진되어 한동안 띠가 움직이지 않는다 (코드에서 확인한 동작). 휴대폰 데모처럼 양쪽을 다듬는다.</div></div>
+        <div class="prose">
+          <p>앱이 <code>interaction_policy</code>를 주면 휠과 초점 되살리기가 정책의 훅을 거친다. 기본 몸통은 빈 목록이라 표 없는 짝으로 넘겨야 한다. 휴대폰 데모의 정책이 그 꼴이다 — 표를 든 페이지를 먼저 묻고, 마지막에 표 없는 짝을 부른다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:431-449" data-path="examples/mobile_demo/app.cpp" data-start="431"><script type="text/plain">
+    std::vector<luil::input_action> mobile_policy::on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta)
+    {
+        // 표를 든 페이지가 먼저다. 표 없는 짝은 좌표를 덮는 아무 흘리는 창이나 답해, 순서를 뒤집으면
+        // 표가 이름 댄 것을 감싼 페이지 창이 휠을 먼저 삼킨다.
+        if (auto actions { lists_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
+            return actions;
+        if (auto actions { tabs_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
+            return actions;
+        return luil::route_wheel(tree, event, scroll_delta);
+    }
+
+    std::vector<luil::input_action> mobile_policy::on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused)
+    {
+        if (auto actions { lists_page::route_reveal(tree, focused) }; actions.empty() == false)
+            return actions;
+        if (auto actions { tabs_page::route_reveal(tree, focused) }; actions.empty() == false)
+            return actions;
+        return luil::route_reveal(tree, focused);
+    }
+</script></div>
+
+        <h3 id="build-strip-toolbar">넘침 단추가 붙은 도구 띠</h3>
+        <div class="prose">
+          <p>strip은 넘침 단추를 스스로 두지 않는다. "고정 폭 하나 + 나머지"는 가로 stack 두 칸이다. 저장소에는 이 조합의 예제가 없어 아래에 묶어 썼다. 앱 상태는 frame과 handle 양쪽에서 같은 <code>clamp_scroll</code>로 다듬는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="넘침 단추가 붙은 도구 띠 (직접 작성)" data-compile="pre-toolbar"><script type="text/plain">
+// ---- 앱 쪽 이름 ----
+constexpr luil::ui_element_kind kind_layout { luil::application_element_kind(0) };
+constexpr luil::ui_element_kind kind_tool { luil::application_element_kind(2) };
+
+struct tool_intent { std::u8string key {}; };
+struct tools_scroll_intent { float delta { 0.0f }; };   // 양수 = 내용이 왼쪽으로
+struct tools_more_intent {};
+
+struct toolbar_state
+{
+    float scroll { 0.0f };          // 띠의 흘러간 양 (논리 픽셀) — 앱 상태
+    float viewport_width { 0.0f };  // 지난 frame에서 띠에 준 폭 (논리 픽셀)
+    float content_width { 0.0f };   // 지난 frame의 내용 폭 (논리 픽셀)
+};
+
+constexpr float tool_width { 96.0f };
+constexpr float tool_spacing { 4.0f };
+constexpr float more_width { 32.0f };
+
+// logic thread — handle()에서. arrange가 화면 값은 다듬지만 앱 상태는 다듬지 않으므로 같은 식으로 다듬는다.
+inline void apply(toolbar_state& state, const luil::app_message& message)
+{
+    if (const auto* const scroll { message.get<tools_scroll_intent>() }; scroll != nullptr)
+        state.scroll = luil::clamp_scroll(state.content_width, state.viewport_width, state.scroll + scroll->delta);
+}
+
+// logic thread — make_frame()에서. `width`는 이 막대에 줄 폭이다 (논리 픽셀).
+inline std::unique_ptr<luil::ui_element> make_toolbar(toolbar_state& state, const std::vector<std::u8string>& keys, const float width)
+{
+    luil::stack_config lane_config {};
+    lane_config.direction = luil::stack_direction::row;
+    lane_config.spacing = tool_spacing;
+    auto lane { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tools-lane" }, lane_config) };
+    float content_width { 0.0f };
+    for (const std::u8string& key : keys)
+    {
+        auto tool { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool, key }, luil::text_button_config { .text = key }) };
+        tool->set_action(luil::ui_trigger::left_click, luil::make_message_action(tool_intent { key }));
+        lane->add(std::move(tool), tool_width);
+        content_width += tool_width + tool_spacing;
+    }
+    if (content_width > 0.0f)
+        content_width -= tool_spacing;
+
+    // 측정 단계가 없으므로 내용 폭은 담는 쪽이 알려 준다.
+    state.content_width = content_width;
+    state.viewport_width = width - more_width;
+    state.scroll = luil::clamp_scroll(state.content_width, state.viewport_width, state.scroll);
+
+    luil::strip_config strip {};
+    strip.content_width = content_width;
+    strip.scroll_offset = state.scroll;
+    // 있으면 넘칠 때 띠가 가로 흘림의 임자가 된다 — 터치 끌기·표 없는 휠·초점 되살리기.
+    strip.scroll = [](const float delta) { return luil::make_app_action(tools_scroll_intent { delta }); };
+    auto band { std::make_unique<luil::strip_element>(luil::ui_element_id { kind_layout, u8"tools-strip" }, std::move(strip)) };
+    band->set_content(std::move(lane));
+
+    // "고정 폭 하나 + 나머지"는 가로 stack 두 칸이다.
+    luil::stack_config bar_config {};
+    bar_config.direction = luil::stack_direction::row;
+    auto bar { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tools-bar" }, bar_config) };
+    bar->add_flexible(std::move(band));
+    auto more { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_tool, u8"more" }, luil::text_button_config { .text = u8"…" }) };
+    more->set_tooltip(u8"도구 더 보기");
+    more->set_action(luil::ui_trigger::left_click, luil::make_message_action(tools_more_intent {}));
+    bar->add(std::move(more), more_width);
+    return bar;
+}
+</script></div>
+        <script type="text/plain" id="pre-toolbar" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/dialog_elements.h"
+#include "luil/ui/layout_metrics.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/strip_element.h"
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p><code class="free">viewport_width</code>는 strip이 받을 논리 폭과 같아야 한다. 이 막대는 간격·여백이 없고 넘침 단추가 고정 폭이라 <code class="free">width - more_width</code>가 그 값이다. strip이 arrange 뒤에 돌려주는 <code>maximum_scroll()</code>도 같은 식이다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-forms">
+        <header class="sec-head">
+          <h2>만들기: 폼과 겹치기</h2>
+          <p class="lede">칸이 행·열로 맞아야 하면 grid, 한 자리에 둘 이상이 서면 layer다. panel은 바탕을, group은 접힘을, root는 창 전체를 맡는다.</p>
+        </header>
+        <h3 id="build-form">폼: 라벨 열은 맞춤, 입력 열은 유연</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1355-1405" data-path="examples/demo/workbench_page.cpp" data-start="1355"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> workbench_page::make_form()
+    {
+        // 라벨 열은 가장 긴 라벨 폭이다 (맞춤 열). 줄 높이는 입력 칸이 서는 28 이상이다.
+        luil::grid_config config {};
+        config.columns = { luil::grid_track::fit(), luil::grid_track::flexible() };
+        // 작성자 줄은 콤보가 검증 글을 칸 아래에 둘 자리만큼 높아진다.
+        const float author_height { author_error_.empty() ? 28.0f : 48.0f };
+        config.rows = { luil::grid_track::fit(28.0f), luil::grid_track::fixed(author_height), luil::grid_track::fit(28.0f) };
+        config.column_spacing = 12.0f;
+        config.row_spacing = 6.0f;
+        auto form { std::make_unique<luil::grid_element>(workbench_id(u8"form"), std::move(config)) };
+
+        const auto caption = [](std::u8string owner, std::u8string text) {
+            return std::make_unique<luil::label_element>(workbench_id(std::move(owner)), luil::label_config { .text = std::move(text), .color = luil::label_color_role::primary });
+        };
+
+        form->add(caption(u8"summary-label", u8"요약"), { .row = 0, .column = 0, .vertical = luil::layout_alignment::center });
+        form->add(std::make_unique<luil::text_input_element>(luil::ui_element_id { kind_workbench_summary_input }, luil::make_text_input_view(summary_, composition_, target_workbench_summary),
+                      luil::text_input_config { .placeholder = u8"무엇을 바꿨는지 한 줄로" }),
+            { .row = 0, .column = 1 });
+
+        // 작성자 칸은 편집형 콤보다. 치면 흉내 낸 서버에 후보를 묻고, 답이 오기 전에는 popup에 스피너가 돈다.
+        //  - 후보 밖의 글도 확정할 수 있다. 형식이 틀리면 앱이 검증 글을 칸 아래에 둔다.
+        //  - 닫힌 칸의 Esc는 마지막으로 확정한 작성자로 되돌린다.
+        form->add(caption(u8"author-label", u8"작성자"), { .row = 1, .column = 0, .vertical = author_error_.empty() ? luil::layout_alignment::center : luil::layout_alignment::start });
+        luil::combo_box_config combo {};
+        combo.input.placeholder = u8"이름 <메일>";
+        combo.suggestions = author_suggestions_;
+        combo.highlighted = author_highlight_;
+        combo.validation_message = author_error_;
+        combo.open = author_open_;
+        combo.popup_height = author_popup_height;
+        combo.set_open = [](const bool open) { return luil::make_app_action(workbench_author_open_intent { open }); };
+        combo.move = [](const std::u8string& key) { return luil::make_app_action(workbench_author_move_intent { key }); };
+        combo.select = [](const std::u8string& key) { return luil::make_app_action(workbench_author_select_intent { key }); };
+        combo.commit = [](const std::u8string& text) { return luil::make_app_action(workbench_author_commit_intent { text }); };
+        combo.restore = luil::make_message_action(workbench_author_restore_intent {});
+        combo.scroll_offset = author_scroll_;
+        combo.scroll = [](const float delta) { return luil::make_app_action(workbench_author_scroll_intent { delta }); };
+        combo.scroll_to = [](const float offset) { return luil::make_app_action(workbench_author_scroll_to_intent { offset }); };
+        const luil::text_input_view author_view { luil::make_text_input_view(author_, author_composition_, target_workbench_author) };
+        auto author { std::make_unique<luil::combo_box_element>(luil::ui_element_id { kind_workbench_author_input, u8"workbench-author" }, author_view, std::move(combo)) };
+        author->set_access_name(u8"작성자");
+        author_combo_ = author.get();
+        form->add(std::move(author), { .row = 1, .column = 1 });
+
+        form->add(caption(u8"last-label", u8"마지막 커밋"), { .row = 2, .column = 0, .vertical = luil::layout_alignment::center });
+        form->add(std::make_unique<luil::label_element>(workbench_id(u8"last"), luil::label_config { .text = last_commit_.empty() ? std::u8string { u8"아직 없음" } : last_commit_ }),
+            { .row = 2, .column = 1, .vertical = luil::layout_alignment::center });
+        return form;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1357-1359" data-title="열 규칙">열은 <code>{ fit(), flexible() }</code>이다. 라벨 열이 가장 긴 라벨 폭이 되고, 입력 열이 나머지를 갖는다.</li>
+            <li data-lines="1360-1364" data-title="행 규칙">행은 <code>{ fit(28), fixed(author_height), fit(28) }</code>이다. 맞춤 행의 하한 28이 입력 칸이 서는 높이를 지킨다. 작성자 줄은 검증 글이 서면 48로 늘린다.</li>
+            <li data-lines="1371-1374" data-title="칸에 놓기">라벨은 <code>vertical = center</code>로 칸 가운데에 원하는 높이로 선다. 입력은 기본 <code>stretch</code>라 칸을 채운다.</li>
+            <li data-lines="1379-1399" data-title="복잡한 칸">작성자 칸은 편집형 콤보다. grid는 칸이 무엇이든 같은 규칙으로 놓는다.</li>
+            <li data-lines="1401-1404" data-title="마지막 줄">담는 순서가 곧 Tab 순서다. 행 순서대로 담는다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>grid는 <strong>열 폭을 먼저, 행 높이를 나중에</strong> 정한다. 맞춤 행의 높이는 자식이 자기 칸 폭에서 원하는 높이라, 여러 줄 글이 열 폭에서 접힌 높이가 된다. 맞춤 줄은 그 줄 <strong>하나에만</strong> 놓인 자식만 잰다 — 두 열에 걸친 자식은 맞춤 열을 넓히지 않고 줄들이 정한 자리를 받는다. 선언보다 뒤의 칸에 놓은 자식이 있으면 모자란 줄은 맞춤 줄이다. 결과는 test가 잠근다: 고정 폭 가짜 측정기(UTF-8 바이트 하나 = 글꼴 크기의 절반)로 가장 긴 라벨 "마지막 커밋"(16바이트)의 열이 96, 첫 행이 28이다.</p>
+        </div>
+        <div class="lw" data-title="격자 열 계산기" data-surface="grid_element · resolve_tracks · distribute_flexible 재현" data-reset id="gl-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <span class="field">예시</span>
+              <div class="seg" role="group" aria-label="예시" id="gl-preset">
+                <button type="button" data-v="form" aria-pressed="true">폼</button>
+                <button type="button" data-v="minimum">하한 재분배</button>
+                <button type="button" data-v="tight">하한 넘침</button>
+                <button type="button" data-v="cards">카드 3열</button>
+                <button type="button" data-v="mixed">섞기</button>
+              </div>
+            </div>
+            <div class="controls">
+              <label class="field" for="gl-width">안쪽 폭</label><input type="range" id="gl-width" min="0" max="900" value="300"><output id="gl-width-out" for="gl-width">300</output>
+              <label class="field" for="gl-spacing">column_spacing</label><input type="range" id="gl-spacing" min="0" max="32" value="8"><output id="gl-spacing-out" for="gl-spacing">8</output>
+            </div>
+            <div class="table-wrap"><table class="t gl-tracks" id="gl-tracks"></table></div>
+            <div class="controls"><button class="btn sm" type="button" id="gl-add"><i class="ci" aria-hidden="true">&#xEA60;</i>열 더하기</button><button class="btn sm" type="button" id="gl-remove"><i class="ci" aria-hidden="true">&#xEABF;</i>마지막 열 빼기</button><span class="small muted">"내용 폭"은 그 열 하나에만 놓인 자식이 답한 원하는 폭 중 가장 큰 것이다.</span></div>
+            <div class="cl-stage gl-stage" id="gl-stage" aria-hidden="true"></div>
+            <div class="cl-legend" aria-hidden="true"><span><i style="border:1px dashed var(--line-3)"></i>안쪽 폭</span><span><i style="background:var(--panel-2);border:1px solid var(--line-3)"></i>fixed</span><span><i style="background:var(--t-ui-wash);border:1px solid var(--t-ui)"></i>fit</span><span><i style="background:var(--accent-wash);border:1px solid var(--accent)"></i>flexible</span><span><i style="background:var(--warn-wash);border:1px solid var(--warn)"></i>하한에 선 줄</span><span><i style="outline:2px solid var(--error)"></i>안쪽 폭 밖으로 넘침</span></div>
+            <div class="readout cl-out" id="gl-out" aria-live="polite"></div>
+          </div>
+          <div class="lw-foot">옮긴 것: 줄 길이를 정하는 <code>resolve_tracks</code>(<code>grid_element.cpp</code>)와 그것이 부르는 <code>distribute_flexible</code>(<code>flexible_lengths.h</code>), 줄 시작점, 그리고 grid가 맞춤 자리에서 답하는 원하는 폭(같은 함수를 무한대 폭으로). 옮기지 않은 것: 자식의 원하는 크기 재기("내용 폭"을 직접 넣는다), 걸친 칸, 행 높이, padding, 칸 안 정렬. 줄 길이와 그 합은 원본 <code>grid_element.cpp</code>를 g++로 대조기에 그대로 넣어 무작위 입력 2만 5천 건(유연 분배만 따로 2만 5천 건)을 float 값까지 같게 견주었다. 줄 시작점은 arrange 안의 람다라 같은 식을 대조기에 옮겨 적어 견주었다. 해 볼 것: <b>하한 재분배</b>에서 첫 열의 하한 200이 둘째 열의 몫을 줄이는 것, <b>하한 넘침</b>에서 하한들의 합이 폭을 넘을 때만 넘치는 것. 그림은 재현이다.</div>
+        </div>
+
+        <h3 id="build-cards">카드 격자: 열 수는 앱이 고른다</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:309-339" data-path="examples/demo/gallery_page.cpp" data-start="309"><script type="text/plain">
+        const float content_width { page_layout::content_width(width, overview_max_width) };
+        const std::size_t columns { content_width >= 720.0f ? 3u : (content_width >= 460.0f ? 2u : 1u) };
+        const std::size_t rows { (features.size() + columns - 1) / columns };
+        luil::grid_config config {};
+        config.column_spacing = 12.0f;
+        config.row_spacing = 12.0f;
+        config.columns.assign(columns, luil::grid_track::flexible());
+        config.rows.assign(rows, luil::grid_track::fixed(94.0f));
+        auto grid { std::make_unique<luil::grid_element>(luil::ui_element_id { kind_layout, u8"feature-index" }, config) };
+        for (std::size_t index = 0; index < features.size(); ++index)
+        {
+            const feature& item { features[index] };
+            const std::u8string key { item.page };
+            luil::panel_config card {};
+            card.corner_radius = 8.0f;
+            card.border = [](const luil::ui_color_palette& palette) { return palette.control_border; };
+            auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_layout, u8"feature/" + key }, std::move(card)) };
+            panel->set_access_name(std::u8string { item.title });
+            panel->set_search_label(std::u8string { item.title });
+            panel->set_cursor(luil::ui_cursor::hand);
+            panel->set_tooltip(std::u8string { item.description });
+            panel->set_action(luil::ui_trigger::left_click, luil::make_message_action(navigate_intent { key }));
+            luil::stack_config body_config {};
+            body_config.padding = luil::edge_insets::all(16.0f);
+            auto body { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"feature-body/" + key }, body_config) };
+            body->add(make_label({ kind_text, key + u8"/title" }, std::u8string { item.title }, 15.0f, luil::label_color_role::primary), 26.0f);
+            body->add(make_label({ kind_text, key + u8"/description" }, std::u8string { item.description }, 11.0f, luil::label_color_role::dim), 24.0f);
+            panel->set_content(std::move(body));
+            grid->add(std::move(panel), { .row = index / columns, .column = index % columns });
+        }
+        page.add(std::move(grid), static_cast<float>(rows) * 106.0f - 12.0f);
+</script></div>
+        <div class="prose">
+          <p>grid에는 "폭에 맞춰 열을 늘리는" 규칙이 없다. 열은 config의 <code>columns</code> 길이다. 갤러리는 폭이 720 이상이면 3열, 460 이상이면 2열을 앱이 고르고, 열은 모두 <code>flexible()</code>, 행은 모두 <code>fixed(94)</code>로 둔다. grid 전체 높이(<code>rows × 106 − 12</code>, 94 + 행 간격 12)도 앱이 센다. 카드는 <code>panel_element</code>에 <code>set_action</code>과 <code>set_access_name</code>을 주어 눌리는 단추로 읽힌다.</p>
+        </div>
+
+        <h3 id="build-layer">겹치기: 본문 위의 판, 화면 전체 오버레이</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/webview_page.cpp:436-470" data-path="examples/demo/webview_page.cpp" data-start="436"><script type="text/plain">
+        if (floating_)
+        {
+            // **겹침 배치 하나면 된다.** 본문을 먼저, 판을 나중에 담아 판이 위에 선다. 판의 자리는 정렬과 여백이
+            // 정하므로 본문 영역을 벗어나지 않는다 — 창 밖으로 나가는 popup 표면과 다른 점이다.
+            auto layers { std::make_unique<luil::layer_element>(luil::ui_element_id { kind_layout, u8"webview-floating-layers" }) };
+            layers->add(std::move(content));
+
+            // 판의 테두리 안쪽으로 한 칸 들여 자리표를 앉힌다. 자리표가 테두리까지 덮으면 아래층의 구멍이 테두리를 지운다.
+            luil::stack_config inner {};
+            inner.padding = luil::edge_insets::all(1.0f);
+            auto card { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"webview-floating-card" }, inner) };
+            luil::stack_config title_row {};
+            title_row.direction = luil::stack_direction::row;
+            title_row.padding = luil::edge_insets::symmetric(8.0f, 0.0f);
+            auto title { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"webview-floating-title-row" }, title_row) };
+            title->add_flexible(make_label(luil::ui_element_id { kind_text, u8"webview-floating-title" }, u8"떠 있는 웹뷰", 11.0f, luil::label_color_role::dim));
+            card->add(std::move(title), floating_title_height);
+            card->add_flexible(make_slot());
+            luil::panel_config surface {};
+            surface.border = [](const luil::ui_color_palette& palette) { return palette.control_border; };
+            surface.shadow = 0.5f;
+            auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_card, u8"webview-floating" }, std::move(surface)) };
+            panel->set_content(std::move(card));
+
+            luil::layer_item place {};
+            place.horizontal = floating_left_ ? luil::layout_alignment::start : luil::layout_alignment::end;
+            place.vertical = floating_top_ ? luil::layout_alignment::start : luil::layout_alignment::end;
+            place.width = floating_width;
+            place.height = std::min(floating_height, body_height - floating_margin * 2.0f);
+            place.margin = luil::edge_insets::all(floating_margin);
+            layers->add(std::move(panel), place);
+            column->add(std::move(layers), { .length = body_height });
+        }
+        else
+            column->add(std::move(content), { .length = body_height });
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="438-441" data-title="본문을 먼저">담은 순서가 그리는 순서다. 본문을 먼저 담아 판이 위에 선다. 뒤에 담은 것이 먼저 눌린다.</li>
+            <li data-lines="443-458" data-title="판 짓기">판은 테두리와 그림자가 있는 panel이다. 그림자는 바깥에 그릴 자리가 있을 때만 뜻이 있다 — 둘레에 본문이 있는 layer 안이 그 경우다.</li>
+            <li data-lines="460-466" data-title="자리 정하기">정렬(<code>start</code>/<code>end</code>), 고정 폭·높이, 여백이 판의 자리를 정한다. 고정 길이가 있으면 <code>stretch</code>에서도 그 길이로 칸의 처음에 선다.</li>
+            <li data-lines="467-470" data-title="담기">layer를 stack 칸에 담는다. 판의 자리가 본문 영역 안이라 창 밖으로 나가는 popup과 다르다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:511-525" data-path="examples/demo/toasts_page.cpp" data-start="511"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> toasts_page::make_overlay()
+    {
+        prune();
+        std::unique_ptr<luil::ui_element> tip { make_tip() };
+        std::unique_ptr<luil::ui_element> stack { make_toast_stack() };
+        if (tip == nullptr)
+            return stack;
+        if (stack == nullptr)
+            return tip;
+        // 둘 다 창 전체를 받는다. 풍선이 뒤라 위에 그려지고 Tab 순서의 끝이다.
+        auto layer { std::make_unique<luil::layer_element>(luil::ui_element_id { kind_layout, u8"toasts/overlay" }) };
+        layer->add(std::move(stack));
+        layer->add(std::move(tip));
+        return layer;
+    }
+</script></div>
+        <div class="prose">
+          <p>토스트 더미와 안내 풍선은 둘 다 기본 <code>layer_item {}</code>(양 축 <code>stretch</code>)이라 layer 전체를 받는다. 뒤에 담은 풍선이 위에 그려지고 Tab 순서의 끝이다. 결과 test: 여백 10인 layer에서 끝·처음 정렬 16×16 배지가 <code>x = 200 − 10 − 2 − 16</code>에 서고, 가운데 정렬 label은 원하는 폭으로 가운데에 서며, 배지 자리는 배지가 먼저 hit된다.</p>
+        </div>
+
+        <h3 id="build-panel">카드 바탕 (panel)</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/controls_section.cpp:132-149" data-path="examples/widgets/controls_section.cpp" data-start="132"><script type="text/plain">
+        // panel: 색 있는 바탕. 색은 구체 값이 아니라 팔레트의 역할로 고른다 —
+        // 테마(밝음·어둠·고대비)가 바뀌어도 이 코드는 그대로다.
+        luil::panel_config panel_config {};
+        panel_config.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
+        panel_config.corner_radius = 6.0f;
+        auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_panel, u8"controls" }, std::move(panel_config)) };
+
+        luil::stack_config inner_config {};
+        inner_config.padding = luil::edge_insets::all(12.0f);
+        auto inner { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"controls-panel" }, inner_config) };
+        luil::label_config note {};
+        note.text = u8"이 상자가 panel_element다. 배경색은 팔레트에서 고른다.";
+        note.font_size = 11.0f;
+        const float note_height { luil::label_element::height_for(note) };
+        inner->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"controls-note" }, note), note_height);
+        panel->set_content(std::move(inner));
+        const float panel_height { note_height + 24.0f };
+        column->add(std::move(panel), panel_height);
+</script></div>
+        <div class="prose">
+          <p>바탕색은 구체 색이 아니라 팔레트의 <strong>역할</strong>을 고르는 함수다. 비면 <code>surface_background</code>다. 내용은 panel의 slot 전체를 받으므로 안쪽 여백은 내용 stack의 <code>padding</code>이 준다. panel의 높이도 앱이 센다(<code>note_height + 24.0f</code> = 위아래 padding 12 × 2). 테두리는 내용 <strong>뒤에</strong> 그어 내용이 가장자리까지 채워도 카드의 경계가 남는다.</p>
+        </div>
+
+        <h3 id="build-group">접이식 섹션 (group)</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/groups_page.h:13-16" data-path="examples/demo/groups_page.h" data-start="13"><script type="text/plain">
+    struct group_collapse_intent
+    {
+        bool collapsed { false };
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/groups_page.cpp:11-17,37-62,74-80" data-path="examples/demo/groups_page.cpp" data-start="11"><script type="text/plain">
+    bool groups_page::handle(const luil::app_message& message)
+    {
+        if (const auto* const collapse { message.get<group_collapse_intent>() }; collapse != nullptr)
+        {
+            advanced_collapsed_ = collapse->collapsed;
+            return true;
+        }
+⋯@37
+        // 라디오 묶음이다: 접이식 섹션의 내용으로 넣는다.
+        luil::choice_group_config coffee {};
+        coffee.owner = u8"coffee";
+        coffee.style = luil::choice_style::radio;
+        coffee.items = { { u8"latte", u8"라떼" }, { u8"mocha", u8"모카" }, { u8"drip", u8"드립" } };
+        coffee.selected = coffee_;
+        coffee.select = [](const std::u8string& value) { return luil::make_app_action(coffee_intent { value }); };
+        // 묶음의 이름이 「무엇을 고르는 중인가」다. 화면의 머리글과 같은 말을 적는다.
+        coffee.name = u8"음료";
+        const float coffee_height { luil::choice_group_element::height_for(coffee) };
+
+        luil::stack_config inner_config {};
+        inner_config.padding = luil::edge_insets::all(8.0f);
+        auto inner { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"group-inner" }, inner_config) };
+        inner->add(std::make_unique<luil::choice_group_element>(std::move(coffee)), coffee_height);
+
+        luil::group_config advanced {};
+        advanced.owner = u8"advanced";
+        advanced.title = u8"음료 선택 (제목 줄을 누르면 접힌다)";
+        advanced.collapsed = advanced_collapsed_;
+        advanced.content_height = coffee_height + 16.0f;
+        // 절대 메시지 하나로 제목 줄 클릭(지금 상태의 반대)과 보조 기술의
+        // Expand·Collapse가 함께 선다.
+        advanced.set_collapsed = [](const bool collapsed) { return luil::make_app_action(group_collapse_intent { collapsed }); };
+        const float group_height { luil::group_element::height_for(advanced) };
+        auto group { std::make_unique<luil::group_element>(std::move(advanced), std::move(inner)) };
+⋯@74
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(24.0f);
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"groups" }, config) };
+        column->add(
+            make_label(luil::ui_element_id { kind_text, u8"groups-hint" }, u8"접힌 그룹의 내용은 tree에 없어 보이지도 눌리지도 않는다.", 11.0f, luil::label_color_role::dim), 18.0f);
+        column->add_gap(10.0f);
+        column->add(std::move(group), group_height);
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>접힘은 앱 상태(<code>advanced_collapsed_</code>)다. 그룹은 그것을 받아 그리고 메시지만 낸다.</li>
+            <li><code>set_collapsed</code> 하나로 제목 줄 클릭(지금 상태의 반대)과 보조 기술의 Expand·Collapse가 함께 선다. 절대 메시지라 오래된 발행본을 본 같은 명령이 두 번 와도 상태가 같다.</li>
+            <li>그룹은 재지 않는다. 펼친 내용 높이 <code>content_height</code>를 담는 쪽이 주고, <code>group_element::height_for(config)</code>를 stack 칸 길이로 쓴다. 예제는 내용 stack의 padding 8 × 2를 더한다.</li>
+            <li>접혀 있으면 내용을 tree에 아예 넣지 않는다. 생성자에 넘겨도 버린다 — 보이지 않는 내용이 눌리는 유령이 없다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/choices_section.cpp:39-48" data-path="examples/widgets/choices_section.cpp" data-start="39"><script type="text/plain">
+        // 접이식 그룹: 접힘 상태와 내용 높이를 설정으로 받는다.
+        // 접혀 있으면 내용이 tree에 들어가지 않아 보이지도 눌리지도 않는다.
+        luil::group_config advanced {};
+        advanced.owner = u8"choices";
+        advanced.title = state.choices_collapsed ? u8"과일 고르기 (접힘 — 눌러서 펼친다)" : u8"과일 고르기";
+        advanced.collapsed = state.choices_collapsed;
+        advanced.toggle = luil::make_message_action(collapse_intent {});
+        advanced.content_height = fruit_height;
+        const float group_height { luil::group_element::height_for(advanced) };
+        auto group { std::make_unique<luil::group_element>(advanced, state.choices_collapsed ? nullptr : std::move(fruit_group)) };
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">토글만 주면 보조 기술이 접지 못한다</span>위젯 예제처럼 <code>toggle</code>만 준 그룹은 클릭으로는 접히지만 보조 기술의 Expand·Collapse가 거절된다. 그 길은 절대 메시지 <code>set_collapsed</code>만 탄다.</div></div>
+
+        <h3 id="build-root">최상위 조립 (root): 가지마다 따로 배치해 담기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:180-195,245-268,286" data-path="examples/mobile_demo/app.cpp" data-start="180"><script type="text/plain">
+    std::shared_ptr<const luil::ui_frame> mobile_driver::make_frame()
+    {
+        // 이 frame을 지은 시각이다. 놓은 뒤 도는 시트의 지금 값과 다음 예고(`next_tick`)가 같은 시각에서 센다.
+        frame_time_ = std::chrono::steady_clock::now();
+        const float scale { metrics_.scale > 0.0f ? metrics_.scale : 1.0f };
+        const float width { metrics_.width > 0.0f ? metrics_.width : 480.0f };
+        const float height { metrics_.height > 0.0f ? metrics_.height : 800.0f };
+        // 폭 등급이 compact를 넘으면(600dp부터) 목록과 페이지를 나란히 둔다. 기기 방향이 아니라 창 폭으로 고르므로
+        // 휴대폰 가로·화면 분할·접는 기기·태블릿이 한 규칙이다.
+        const bool wide { metrics_.width_class != luil::window_width_class::compact };
+        // 좁은 화면에서 페이지를 열었으면 뒤로 갈 자리가 있다.
+        const bool nested { wide == false && page_.empty() == false };
+        const std::u8string shown { page_.empty() && wide ? std::u8string { page_basics } : page_ };
+
+        auto root { std::make_unique<luil::root_element>() };
+        root->arrange({ { 0.0f, 0.0f, width, height }, scale });
+⋯@245
+        std::unique_ptr<luil::ui_element> body {};
+        const luil::ui_element* moving { nullptr };
+        if (wide)
+        {
+            luil::stack_config row_config {};
+            row_config.direction = luil::stack_direction::row;
+            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"two-pane" }, row_config) };
+            row->add(make_navigation(navigation_width, body_height, scale, true), navigation_width);
+            auto pane { wrap(make_page(shown, body_width - navigation_width, body_height, scale)) };
+            moving = pane.get();
+            row->add_flexible(std::move(pane));
+            body = std::move(row);
+        }
+        else
+        {
+            body = wrap(make_body_page(page_, false, body_width, body_height, scale));
+            moving = body.get();
+        }
+        body->arrange({ .slot = { 0.0f, top, width, height - top }, .scale = scale, .style = style });
+        // 다음 이동에서 떠나는 화면을 이 자리와 배율로 짓는다.
+        motion_slot_ = moving->bounds();
+        motion_scale_ = scale;
+        motion_wide_ = wide;
+        root->add(std::move(body));
+⋯@286
+        frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>root_element::arrange</code>는 자기 bounds만 정한다. 가지(앱 바, 본문, 오버레이)는 호출자가 <strong>각자 arrange한 채로</strong> 담는다.</li>
+            <li>그래서 tree는 <code>make_arranged_tree</code>가 아니라 <code>ui_tree</code> 생성자로 감싼다. 빠뜨린 배치는 <code>unarranged()</code>가 드러낸다.</li>
+            <li>그릇 하나가 전체를 배치하면(stack이 뿌리) <code>make_arranged_tree(std::move(root), slot, scale)</code> 한 줄이다 — 넘기는 페이지 예제의 셸이 그렇다.</li>
+            <li>스타일을 바꾸는 앱은 배치 문맥의 <code>style</code>에 frame과 같은 포인터를 싣는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-screens">
+        <header class="sec-head">
+          <h2>만들기: 화면 짜기</h2>
+          <p class="lede">옆 판은 sidebar, 판 사이의 경계는 split_handle, 판의 수는 창 폭 등급이 정한다. 폭·길이·등급의 갈래는 모두 앱이 든다.</p>
+        </header>
+        <h3 id="build-side-panel">사이드바: 토글·폭 손잡이·전환 중의 폭</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/common.h:203-216" data-path="examples/demo/common.h" data-start="203"><script type="text/plain">
+    struct sidebar_toggle_intent
+    {
+    };
+
+    // 손잡이를 끈 만큼의 폭 변화다 (+가 넓어지는 쪽, 논리 픽셀).
+    struct sidebar_resize_intent
+    {
+        float delta { 0.0f };
+    };
+
+    // 손잡이 조절이 끝났다 (뗌·키 한 번). 끝난 폭을 저장할 자리다.
+    struct sidebar_resize_finish_intent
+    {
+    };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1151-1172,599-626,847-867" data-path="examples/demo_main.cpp" data-start="1151"><script type="text/plain">
+            // 접힘이 끝났을 때의 폭이다 (전환의 목표).
+            [[nodiscard]] float target_sidebar_width() const
+            {
+                return sidebar_collapsed_ ? sidebar_collapsed_width : sidebar_width_;
+            }
+
+            [[nodiscard]] luil::sidebar_config make_sidebar_config(const std::chrono::steady_clock::time_point now) const
+            {
+                luil::sidebar_config config {};
+                config.owner = u8"navigation";
+                config.expanded_width = sidebar_width_;
+                config.collapsed_width = sidebar_collapsed_width;
+                config.collapsed = sidebar_collapsed_;
+                // 지금 폭은 스프링이 답한다. 끝나 있으면 목표와 같은 값이다.
+                config.width = luil::spring_value(sidebar_motion_, now);
+                config.toggle_tooltip = sidebar_collapsed_ ? u8"펼친다" : u8"접는다";
+                config.toggle = luil::make_message_action(sidebar_toggle_intent {});
+                config.resize = [](const float delta) { return luil::make_app_action(sidebar_resize_intent { delta }); };
+                config.resize_finish = []() { return luil::make_app_action(sidebar_resize_finish_intent {}); };
+                config.handle_access_name = u8"내비게이션 폭 손잡이";
+                return config;
+            }
+⋯@599
+                if (message.get<sidebar_toggle_intent>() != nullptr)
+                {
+                    sidebar_collapsed_ = sidebar_collapsed_ == false;
+                    // **지금 폭과 속도에서** 새 목표로 이어 출발한다. 반쯤 접힌 채 다시
+                    // 눌러도 끝값으로 튀거나 멈칫하지 않는다 (spring_to의 몫이다).
+                    //  - 시계를 읽는 것은 앱이다. 라이브러리는 시각을 인자로 받을 뿐이다.
+                    sidebar_motion_ = luil::spring_to(sidebar_motion_, target_sidebar_width(), std::chrono::steady_clock::now(), luil::spring_smooth, metrics_.reduce_motion);
+                    return;
+                }
+                if (const auto* const resize { message.get<sidebar_resize_intent>() }; resize != nullptr)
+                {
+                    sidebar_width_ += resize->delta;
+                    if (sidebar_width_ < 150.0f)
+                        sidebar_width_ = 150.0f;
+                    if (sidebar_width_ > 360.0f)
+                        sidebar_width_ = 360.0f;
+                    // 손으로 끄는 동안은 전환하지 않는다 — 손이 이미 그 자리를 정하고
+                    // 있어서, 뒤따라오는 애니메이션은 지연으로만 느껴진다.
+                    sidebar_motion_ = luil::spring_at_rest(sidebar_width_);
+                    return;
+                }
+                if (message.get<sidebar_resize_finish_intent>() != nullptr)
+                {
+                    // 끄는 동안은 저장하지 않는다 — 끝났다는 알림이 올 때 한 번이다.
+                    saved_sidebar_width_ = sidebar_width_;
+                    ++sidebar_resize_finishes_;
+                    return;
+                }
+⋯@847
+                // 캡션 아래는 사이드바 + 현재 페이지의 가로 stack이다.
+                //  - 사이드바 폭은 이 frame을 지은 시각의 스프링 값이다. 다음 예고(`next_tick`)도 이 시각에서 센다.
+                frame_time_ = std::chrono::steady_clock::now();
+                const luil::sidebar_config sidebar_config { make_sidebar_config(frame_time_) };
+                const float sidebar_width { luil::sidebar_element::width_for(sidebar_config) };
+                const float content_width { width / scale - sidebar_width };
+                const float content_height { (height - caption_height - menu_bar_row) / scale };
+
+                luil::stack_config shell_config {};
+                shell_config.direction = luil::stack_direction::row;
+                auto shell { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"shell" }, shell_config) };
+                shell->add(std::make_unique<luil::sidebar_element>(sidebar_config, sidebar_collapsed_ ? nullptr : make_navigation()), sidebar_width);
+                // 페이지는 늘 화면 전환 요소로 감싼다. 떠나는 화면이 없으면 새 화면만 그리는 껍질이다.
+                auto page { std::make_unique<luil::page_transition_element>(luil::page_transition_config { u8"page", page_motion_ }, build_page(content_width, content_height, scale)) };
+                const luil::page_transition_element* const page_slot { page.get() };
+                shell->add_flexible(std::move(page));
+                shell->arrange({ .slot = { 0.0f, content_top, width, height - caption_height - menu_bar_row }, .scale = scale, .style = style });
+                // 다음 이동에서 떠나는 화면을 이 자리와 배율로 짓는다.
+                content_slot_ = page_slot->bounds();
+                content_scale_ = scale;
+                root->add(std::move(shell));
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1151-1155" data-title="목표 폭">접힘이 끝났을 때의 폭이다. 접히면 44, 펴면 앱이 든 폭이다.</li>
+            <li data-lines="1157-1172" data-title="config">목표 <code>collapsed</code>와 지금 폭 <code>width</code>(스프링의 지금 값)를 따로 싣는다. 토글·폭 손잡이·끝 알림 세 메시지를 단다. 손잡이의 접근 이름은 config가 유일한 자리다.</li>
+            <li data-lines="599-607" data-title="토글">목표를 뒤집고 스프링을 지금 폭·속도에서 새 목표로 출발시킨다. 반쯤 접힌 채 다시 눌러도 튀지 않는다.</li>
+            <li data-lines="608-619" data-title="폭 끌기">변화량을 더하고 150–360으로 자른다. 손으로 끄는 동안은 전환하지 않는다.</li>
+            <li data-lines="620-626" data-title="끝 알림">끄는 동안이 아니라 끝났을 때 한 번 저장한다.</li>
+            <li data-lines="847-867" data-title="frame">가로 stack의 첫 칸 길이에 <code>width_for(config)</code>를 쓰고, 접힌 동안은 내용 대신 <code>nullptr</code>를 넘긴다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><code>collapsed</code>는 <strong>목표</strong>, <code>width</code>는 <strong>지금</strong>이다. 전환이 끝나면 둘이 같아진다. <code>width</code>가 비면 목표가 곧 지금이다.</li>
+            <li>사이드바는 slot의 한쪽 끝에 붙어 <code>width_for</code>만큼만 차지한다. 담는 쪽이 같은 값을 stack 칸 길이로 쓴다.</li>
+            <li>손잡이는 펼쳐진 동안만 선다. 접힌 폭은 토글로만 오간다. 접힌 폭이 0이면 아무것도 짓지 않으므로 다시 펴는 수단은 앱이 밖에 둔다.</li>
+          </ul>
+        </div>
+
+        <h3 id="build-split">위아래로 나눈 두 판</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.h:104-109" data-path="examples/demo/lists_page.h" data-start="104"><script type="text/plain">
+    // 두 목록을 나눈 자리를 논리 픽셀만큼 옮긴다.
+    // +가 아래 판이 넓어지는 쪽이다 (부호는 손잡이가 맞춘다).
+    struct split_intent
+    {
+        float delta { 0.0f };
+    };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:27-33,189-195,284-338" data-path="examples/demo/lists_page.cpp" data-start="27"><script type="text/plain">
+        // 두 판이 반드시 받는 높이와, 나눈 자리를 잡는 손잡이의 두께다.
+        // 손잡이는 두 판 사이의 한 칸을 차지하며, 그 칸의 총량은 배치 계산에 포함된다.
+        constexpr float list_panel_minimum { 120.0f };
+        constexpr float grouped_minimum { 88.0f };
+        constexpr float split_handle_height { 16.0f };
+        // 두 판 밖에서 늘 자리를 차지하는 것들의 합이다 (여백·힌트·간격·손잡이).
+        constexpr float split_fixed { 2.0f * 24.0f + 18.0f + 8.0f + split_handle_height + 18.0f + 6.0f };
+⋯@189
+        if (const auto* const split { message.get<split_intent>() }; split != nullptr)
+        {
+            // 다듬지 않고 그대로 더한다. 한계가 담긴 자리에 달려 있어 build가 다듬고
+            // 그때 상태에 되돌려 준다 (사이드바는 한계가 상수라 여기서 자른다).
+            grouped_height_ += split->delta;
+            return true;
+        }
+⋯@284
+    std::unique_ptr<luil::ui_element> lists_page::build(const float width, const float height, const float scale)
+    {
+        static_cast<void>(width);
+        static_cast<void>(scale);
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(24.0f);
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"lists" }, config) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"lists-hint" },
+                        u8"왼쪽은 순서를 바꾸는 목록, 가운데는 접는 tree, 오른쪽은 만 줄이 넘는 가상 목록이다 (Tab으로 들어가 ↑↓·Page·Home/End·글자로 옮긴다). 판 사이를 끌면 자리를 나눈다.", 11.0f,
+                        luil::label_color_role::dim),
+            18.0f);
+        column->add_gap(8.0f);
+
+        // 두 목록이 나머지를 나눠 갖고, 나눈 자리는 손잡이가 옮긴다.
+        // 아래 판의 높이가 앱 상태이고 위 판이 나머지를 갖는다 (창이 커지면 위가 먹는다).
+        const float budget { height - split_fixed };
+        float grouped_height { grouped_height_ };
+        const float grouped_maximum { budget - list_panel_minimum };
+        if (grouped_height > grouped_maximum)
+            grouped_height = grouped_maximum;
+        if (grouped_height < grouped_minimum)
+            grouped_height = grouped_minimum;
+        // 다듬은 값을 상태에 되돌려 다음 끌기가 범위 밖에서 시작하지 않게 한다.
+        //  - 창이 너무 낮아 두 하한이 함께 설 수 없으면(범위가 빈다) 되쓰지 않는다.
+        //    그때 되쓰면 창을 다시 키워도 사용자가 정한 자리가 돌아오지 않는다 —
+        //    넘침은 화면에 보이지만 지워진 상태는 보이지 않는다.
+        if (grouped_maximum >= grouped_minimum)
+            grouped_height_ = grouped_height;
+        // 위 판의 하한은 넘침을 만든다 (아래로 밀려난다). stack의 하한과 같은 규칙이다.
+        float panel_height { budget - grouped_height };
+        if (panel_height < list_panel_minimum)
+            panel_height = list_panel_minimum;
+
+        column->add(make_top_row(panel_height - 2.0f * panel_inset), panel_height);
+        column->add(make_split_handle(), split_handle_height);
+        column->add(
+            make_label(luil::ui_element_id { kind_text, u8"grouped-hint" }, u8"그룹 머리행은 스크롤 중에도 위에 붙고 다음 머리행에 밀려난다.", 11.0f, luil::label_color_role::dim), 18.0f);
+        column->add_gap(6.0f);
+        column->add(make_grouped_section(grouped_height), grouped_height);
+        return column;
+    }
+
+    std::unique_ptr<luil::ui_element> lists_page::make_split_handle()
+    {
+        // 세로로 나눈 자리라 위아래로 끈다. 임자는 아래 판이므로 위로 끌 때 넓어진다.
+        luil::split_handle_config config {};
+        config.axis = luil::split_axis::vertical;
+        config.grows = luil::split_grows::toward_start;
+        config.resize = [](const float delta) { return luil::make_app_action(split_intent { delta }); };
+        // 위아래 판 사이를 가르는 다른 선이 없어 쉬는 동안에도 얇은 구분선을 긋는다.
+        config.resting_divider = true;
+        auto handle { std::make_unique<luil::split_handle_element>(luil::ui_element_id { kind_list_split }, config) };
+        handle->set_access_name(u8"그룹 목록 높이 손잡이");
+        return handle;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="27-33" data-title="한계">두 판이 반드시 받는 높이와 손잡이 두께다. 손잡이는 판 사이의 한 칸(16)을 차지한다.</li>
+            <li data-lines="189-195" data-title="handle">다듬지 않고 더하기만 한다. 한계가 담긴 자리에 달려 있어 frame이 다듬는다.</li>
+            <li data-lines="297-315" data-title="frame에서 다듬기">아래 판의 높이를 범위로 다듬고 상태에 되쓴다. 창이 너무 낮아 두 하한이 함께 설 수 없으면 되쓰지 않는다 — 창을 다시 키우면 사용자가 정한 자리가 돌아온다.</li>
+            <li data-lines="317-322" data-title="세 칸">위 판, 손잡이(16), 아래 판을 세로 stack에 차례로 담는다.</li>
+            <li data-lines="326-338" data-title="손잡이">세로로 나눈 자리라 <code>axis = vertical</code>, 길이의 임자가 아래 판이라 <code>grows = toward_start</code>(위로 끌면 아래 판이 넓어진다). 판을 가르는 다른 선이 없어 <code>resting_divider = true</code>다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>손잡이는 <strong>자기 자리를 정하지 않는다</strong>. 담는 쪽이 준 slot을 그대로 쓰므로 판 사이의 한 칸으로도, 가장자리에 절반씩 걸친 띠로도 선다. 길이를 담지 않고 변화량만 나르며, 하한·상한은 길이를 가진 앱에 있다.</p>
+        </div>
+
+        <h3 id="build-split-row">좌우로 나눈 두 판</h3>
+        <div class="prose">
+          <p>저장소의 가로 분할은 사이드바와 dock 안에만 있어 가로 stack 세 칸 <code>[앞 판 | 손잡이 | 뒤 판]</code>의 꼴을 묶어 썼다. 이번에는 범위를 handle에서 다듬고, 손을 뗄 때 한 번 저장한다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="좌우로 나눈 두 판 (직접 작성)" data-compile="pre-split"><script type="text/plain">
+// ---- 앱 쪽 이름 (kind·메시지·상태) ----
+constexpr luil::ui_element_kind kind_layout { luil::application_element_kind(0) };
+constexpr luil::ui_element_kind kind_split { luil::application_element_kind(1) };
+
+struct pane_resize_intent { float delta { 0.0f }; };   // + = 왼쪽 판이 넓어진다
+struct pane_resize_done_intent {};
+
+struct split_state
+{
+    float left_width { 280.0f };   // 왼쪽 판 폭 (논리 픽셀) — 앱 상태
+    float saved_width { 280.0f };  // 놓을 때 저장한 폭
+};
+
+constexpr float handle_width { 8.0f };   // 잡는 두께 (보이는 선은 1·2 px)
+constexpr float left_minimum { 160.0f };
+constexpr float right_minimum { 240.0f };
+
+// logic thread — logic_driver::handle()에서 부른다. 범위 다듬기는 길이를 가진 앱의 몫이다.
+inline void apply(split_state& state, const luil::app_message& message, const float body_width)
+{
+    if (const auto* const resize { message.get<pane_resize_intent>() }; resize != nullptr)
+    {
+        const float maximum { std::max(left_minimum, body_width - handle_width - right_minimum) };
+        state.left_width = std::clamp(state.left_width + resize->delta, left_minimum, maximum);
+    }
+    if (message.get<pane_resize_done_intent>() != nullptr)
+        state.saved_width = state.left_width;   // 끄는 동안이 아니라 끝났을 때 한 번 저장한다
+}
+
+// logic thread — make_frame()에서 부른다.
+inline std::unique_ptr<luil::ui_element> make_split(const split_state& state, std::unique_ptr<luil::ui_element> left, std::unique_ptr<luil::ui_element> right)
+{
+    luil::stack_config row_config {};
+    row_config.direction = luil::stack_direction::row;
+    auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"split-row" }, row_config) };
+
+    luil::split_handle_config handle {};
+    handle.axis = luil::split_axis::horizontal;      // 세로로 선 손잡이를 좌우로 끈다
+    handle.grows = luil::split_grows::toward_end;    // 앞(왼쪽) 판의 폭을 나른다
+    handle.resize = [](const float delta) { return luil::make_app_action(pane_resize_intent { delta }); };
+    handle.finish = [] { return luil::make_app_action(pane_resize_done_intent {}); };
+    handle.resting_divider = true;                   // 두 판 사이를 가르는 다른 선이 없다
+    auto divider { std::make_unique<luil::split_handle_element>(luil::ui_element_id { kind_split, u8"files" }, std::move(handle)) };
+    divider->set_access_name(u8"파일 목록 폭");      // 손잡이는 Tab의 자리라 이름을 준다
+
+    row->add(std::move(left), state.left_width);
+    row->add(std::move(divider), handle_width);
+    row->add_flexible(std::move(right));
+    return row;
+}
+</script></div>
+        <script type="text/plain" id="pre-split" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/split_handle_element.h"
+#include "luil/ui/stack_element.h"
+#include <algorithm>
+#include <memory>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p>앞(왼쪽) 판의 폭을 나르므로 <code>grows = toward_end</code>다. 손잡이가 앞 판의 끝을 따라 옮겨 가도 끌기는 끊기지 않는다. <code>finish</code>는 뗄 때 한 번, 키는 걸음마다 한 번 온다. 범위를 frame에서 다듬고 되쓰는 꼴(위 조각)도 된다. 어느 쪽이든 손잡이는 길이를 모른다.</p>
+        </div>
+
+        <h3 id="build-width">창 폭 등급으로 한 판·두 판 고르기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:461-464" data-path="examples/mobile_demo/app.cpp" data-start="461"><script type="text/plain">
+    luil::app_message make_metrics_message(const luil::window_metrics& metrics)
+    {
+        return luil::app_message { window_metrics_intent { metrics.width, metrics.height, metrics.scale, metrics.width_class, luil::window_surface(metrics), metrics.reduce_motion } };
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:37-47" data-path="examples/mobile_demo/app.cpp" data-start="37"><script type="text/plain">
+        if (const auto* const metrics { message.get<window_metrics_intent>() }; metrics != nullptr)
+        {
+            // 전환은 움직임 줄이기가 켜지거나 창 크기·배율·폭 등급이 바뀌면(회전·화면 분할) 놓는다 (page-transition-design.md 결정 5).
+            if ((metrics->reduce_motion && metrics_.reduce_motion == false) || metrics->width != metrics_.width || metrics->height != metrics_.height
+                || metrics->scale != metrics_.scale || metrics->width_class != metrics_.width_class)
+                page_motion_ = {};
+            metrics_ = *metrics;
+            // 시트 페이지는 metrics 메시지를 보지 못하므로 셸이 움직임 줄이기만 넘긴다.
+            sheets_.set_reduce_motion(metrics->reduce_motion);
+            return;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>등급은 host가 매긴다. <code>make_window_metrics</code>가 논리 폭(물리 폭 ÷ 배율)을 기본 경계 600·840으로 나눠 <code>window_metrics::width_class</code>에 싣는다.</li>
+            <li>등급이 오는 것은 delegate의 넓은 훅 <code>make_metrics_message(const window_metrics&amp;)</code>다. 기본 구현은 세 값짜리 <code>make_window_metrics_message</code>로 넘겨 등급을 버리므로, 등급이 필요한 앱은 넓은 쪽을 재정의한다.</li>
+            <li>frame은 <code>wide = width_class != compact</code>로 갈라, 넓으면 가로 stack <code>[목록 260 | 페이지 유연]</code>, 좁으면 페이지 하나를 짓는다 (<a class="xref" href="#build-root">최상위 조립</a>의 245–262줄). 기기 방향이 아니라 창 폭으로 고르므로 휴대폰 가로·화면 분할·접는 기기·태블릿이 한 규칙이다.</li>
+            <li>등급이 바뀌면 도는 화면 전환을 놓는 것도 앱의 몫이다.</li>
+          </ul>
+        </div>
+        <div class="lw" data-title="창 폭 등급" data-surface="make_window_metrics · classify_window_width 재현" data-reset id="wc-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <span class="field">예시</span>
+              <div class="seg" role="group" aria-label="예시" id="wc-preset">
+                <button type="button" data-v="portrait" aria-pressed="true">휴대폰 세로</button>
+                <button type="button" data-v="landscape">휴대폰 가로</button>
+                <button type="button" data-v="fold">접는 기기</button>
+                <button type="button" data-v="desktop">데스크톱</button>
+              </div>
+            </div>
+            <div class="controls">
+              <label class="field" for="wc-physical">물리 폭</label><input type="range" id="wc-physical" min="0" max="3200" value="1080"><output id="wc-physical-out" for="wc-physical">1080</output>
+              <label class="field" for="wc-scale">배율</label><select id="wc-scale"><option value="1">1</option><option value="1.25">1.25</option><option value="1.5">1.5</option><option value="2">2</option><option value="2.8125" selected>2.8125</option><option value="0">0 (모름)</option></select>
+            </div>
+            <div class="controls">
+              <label class="field" for="wc-medium">medium 경계</label><input class="cl-nums" type="number" id="wc-medium" min="0" max="2000" step="1" value="600">
+              <label class="field" for="wc-expanded">expanded 경계</label><input class="cl-nums" type="number" id="wc-expanded" min="0" max="2000" step="1" value="840">
+            </div>
+            <div class="readout cl-out" id="wc-out" aria-live="polite"></div>
+            <div class="wc-panes" id="wc-panes" aria-hidden="true"></div>
+          </div>
+          <div class="lw-foot">옮긴 것: <code>classify_window_width</code>(<code>layout_metrics.h</code>)와 <code>make_window_metrics</code>의 배율 다듬기(유한하고 0보다 커야 그 값, 아니면 1). 등급은 원본 헤더를 컴파일한 대조기와 무작위 입력 2만 5천 건(경계 바로 앞, 숫자가 아닌 값, ±∞ 포함)을 견주었고, 배율 다듬기는 <code>make_window_metrics</code>의 식을 대조기에 옮겨 적어 견주었다. 아래 판 그림은 라이브러리가 아니라 아래 "등급 경계 바꾸기" 예제의 갈래다 — compact 한 판, medium 목록 280 + 상세, expanded 목록 280 + 상세 + 속성 320. 휴대폰 데모는 기본 등급으로 compact면 한 판, 아니면 목록 260 + 페이지를 짓는다. 해 볼 것: 경계를 뒤집어(medium 900, expanded 700) 보라 — expanded가 서지 않는다.</div>
+        </div>
+
+        <h3 id="build-width-custom">등급 경계 바꾸기</h3>
+        <div class="prose">
+          <p><code>window_metrics::width_class</code>는 기본 경계로만 매겨 온다. 다른 경계를 쓰려면 앱이 논리 폭으로 <code>classify_window_width</code>를 다시 부른다. 경계가 뒤집힌 설정(<code>expanded &lt; medium</code>)은 추측해 고치지 않고 expanded를 세우지 않는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="등급 경계를 바꾼 세 판 (직접 작성)" data-compile="pre-width"><script type="text/plain">
+constexpr luil::ui_element_kind kind_layout { luil::application_element_kind(0) };
+
+// window_metrics::width_class는 기본 경계(600·840)로 매긴 값이다. 다른 경계를 쓰려면 논리 폭으로 다시 매긴다.
+inline luil::window_width_class panes_class(const luil::window_metrics& metrics)
+{
+    const float scale { metrics.scale > 0.0f ? metrics.scale : 1.0f };
+    return luil::classify_window_width(metrics.width / scale, { .medium = 480.0f, .expanded = 1024.0f });
+}
+
+// 등급마다 판의 수를 바꾼다: compact 한 판, medium 두 판, expanded 세 판.
+inline std::unique_ptr<luil::ui_element> make_body(const luil::window_width_class width_class, const bool showing_detail,
+    std::unique_ptr<luil::ui_element> list, std::unique_ptr<luil::ui_element> detail, std::unique_ptr<luil::ui_element> inspector)
+{
+    if (width_class == luil::window_width_class::compact)
+        return showing_detail ? std::move(detail) : std::move(list);
+
+    luil::stack_config row_config {};
+    row_config.direction = luil::stack_direction::row;
+    auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"panes" }, row_config) };
+    row->add(std::move(list), 280.0f);
+    row->add_flexible(std::move(detail));
+    if (width_class == luil::window_width_class::expanded)
+        row->add(std::move(inspector), 320.0f);
+    return row;
+}
+</script></div>
+        <script type="text/plain" id="pre-width" data-prelude>
+#include "luil/app/app_delegate.h"
+#include "luil/ui/layout_metrics.h"
+#include "luil/ui/stack_element.h"
+#include <memory>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+      </section>
+
+      <section class="sec" id="build-dock">
+        <header class="sec-head">
+          <h2>만들기: 도킹과 페이지</h2>
+          <p class="lede">dock은 배치 전체를, pager는 장 위치를 앱 상태로 받는다. 둘 다 명령을 앱이 순수 함수로 적용하는 꼴이다.</p>
+        </header>
+        <h3 id="build-dock-layout">도킹: 분할 tree·탭 묶음·떠 있는 패널</h3>
+        <div class="prose">
+          <p>처음 배치와 앱 상태다. <code>apply_dock_command</code> 세 번으로 분할 둘과 떠 있는 패널 하나를 만든다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/selected_nodes/scene.h:11-30" data-path="examples/selected_nodes/scene.h" data-start="11"><script type="text/plain">
+    [[nodiscard]] inline luil::dock_layout initial_layout()
+    {
+        luil::dock_layout layout {};
+        layout.root.panels = { u8"editor", u8"inspector", u8"console", u8"notes" };
+        layout.root.selected = u8"editor";
+        (void)luil::apply_dock_command(layout, { .panel = u8"inspector", .target = u8"root", .placement = luil::dock_placement::right });
+        (void)luil::apply_dock_command(layout, { .panel = u8"console", .target = u8"root", .placement = luil::dock_placement::bottom });
+        (void)luil::apply_dock_command(layout, { .operation = luil::dock_operation::detach, .panel = u8"notes", .bounds = { 40.0f, 48.0f, 280.0f, 180.0f } });
+        return layout;
+    }
+
+    struct scene_state
+    {
+        luil::dock_layout dock { initial_layout() };
+        float page { 0.0f };
+        luil::text::text_edit_state hour { .text = u8"23" };
+        luil::text::text_edit_state minute { .text = u8"45" };
+        luil::text::text_edit_state sample { .text = u8"office affine ffi — caret" };
+        std::optional<luil::text_composition_event> composition {};
+    };
+</script></div>
+        <div class="prose">
+          <p>element를 짓는다. <code>change</code>는 명령을 그대로 앱 메시지로 싸고, <code>content</code>는 고른 패널의 내용을 짓는다. handle은 한 줄이다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/selected_nodes/scene.cpp:15-29" data-path="examples/selected_nodes/scene.cpp" data-start="15"><script type="text/plain">
+        luil::dock_config dock {};
+        dock.owner = u8"selected";
+        dock.layout = state.dock;
+        dock.panels = { { u8"editor", u8"편집기" }, { u8"inspector", u8"속성" }, { u8"console", u8"콘솔" }, { u8"notes", u8"메모" } };
+        dock.change = [](luil::dock_command command) { return luil::make_app_action(std::move(command)); };
+        dock.content = [&state](const std::u8string& panel) -> std::unique_ptr<luil::ui_element> {
+            if (panel == u8"editor")
+                return std::make_unique<luil::text_input_element>(luil::ui_element_id { kind_sample }, luil::make_text_input_view(state.sample, state.composition, target_sample), luil::text_input_config {});
+            if (panel == u8"inspector")
+                return label(u8"탭을 끌어 합치거나 패널 가장자리에 놓아 분할합니다.");
+            if (panel == u8"notes")
+                return label(u8"떠 있는 패널입니다. 탭을 다른 그룹에 놓으면 다시 붙습니다.");
+            return label(u8"합자 caret: LUIL_ENABLE_TEXT_SHAPING을 켠 글꼴의 GDEF 좌표를 사용합니다.");
+        };
+        column->add_flexible(std::make_unique<luil::dock_element>(std::move(dock)));
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/selected_nodes/main.cpp:20-21" data-path="examples/selected_nodes/main.cpp" data-start="20"><script type="text/plain">
+                if (const auto* command { message.get<luil::dock_command>() }; command != nullptr)
+                    (void)luil::apply_dock_command(state_.dock, *command);
+</script></div>
+        <div class="prose">
+          <p><code>initial_layout()</code>이 만드는 구조다. <code>src/ui/dock_layout.cpp</code>를 g++로 짓고 같은 세 명령을 돌린 결과를 옮겼다 (순수 함수라 플랫폼과 무관하다).</p>
+        </div>
+        <ul class="dock-tree" aria-label="initial_layout()이 만드는 dock_layout">
+          <li><span class="k">dock-2</span> <span class="d">— 분할, 좌우 (root 자리)</span>
+            <ul>
+              <li><span class="k">dock-4</span> <span class="d">— 분할, 위아래</span>
+                <ul>
+                  <li><span class="k">root</span> <span class="d">— 탭 그룹: editor (원래 그룹이 자식으로 내려갔다)</span></li>
+                  <li><span class="k">dock-3</span> <span class="d">— 탭 그룹: console</span></li>
+                </ul>
+              </li>
+              <li><span class="k">dock-1</span> <span class="d">— 탭 그룹: inspector</span></li>
+            </ul>
+          </li>
+          <li><span class="k">dock-5</span> <span class="d">— 떠 있는 그룹: notes, 자리 (40, 48, 280, 180)</span></li>
+        </ul>
+        <div class="prose">
+          <ul>
+            <li>가장자리 놓기는 대상 그룹의 자리를 새 분할로 바꾸고, 원래 그룹과 새 그룹을 자식으로 둔다. 그래서 <strong><code>layout.root.key</code>가 "root"로 남지 않는다.</strong> 앱은 <code>"root"</code>를 박아 두지 말고 그때의 <code>layout.root.key</code>나, 패널이 든 그룹의 key를 읽는다.</li>
+            <li><code>content</code>는 생성자에서 그룹마다 <strong>고른 패널 하나만</strong> 짓는다. 고르지 않은 탭의 내용은 tree에 없다. 편집 초안은 factory 밖 앱 상태로 보존한다.</li>
+            <li>잘못된 명령은 <code>false</code>를 돌려주고 원본은 그대로다. 사본에서 바꾼 뒤 검증해 반영하므로 잘못된 목적지 때문에 패널이 사라지지 않는다.</li>
+            <li>이 예제의 내용 label은 모두 빈 id <code>ui_element_id {}</code>를 쓴다. 빈 id도 중복으로 잡히므로 실제 앱은 test처럼 패널 key를 owner로 쓴다.</li>
+          </ul>
+        </div>
+
+        <h3 id="build-dock-helpers">패널 닫기, 떠 있는 패널 앞으로·옮기기</h3>
+        <div class="prose">
+          <p><code>dock_operation</code>에는 닫기가 없고, 빈 그룹·한쪽만 남은 분할을 치우는 정리 함수는 공개되지 않았다. 떼어 띄우기(<code>detach</code>)가 원래 자리를 치운 뒤 그 패널만 든 떠 있는 그룹을 맨 뒤에 붙이므로, 그 그룹을 지우면 닫기가 된다. <code>raise</code>·<code>reposition</code>은 <code>dock_element</code>가 내지 않는 명령이라 앱이 자기 단추나 제목 줄에 잇는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="패널 닫기와 떠 있는 패널 명령 (직접 작성)" data-compile="pre-dock"><script type="text/plain">
+// 패널 하나를 layout에서 뺀다 (앱 쪽 함수).
+//  - dock_operation에 닫기가 없고, 빈 그룹·한쪽만 남은 분할을 치우는 정리는 공개 함수가 아니다.
+//  - 떼어 띄우기(detach)는 원래 자리를 치운 뒤 그 패널만 든 떠 있는 그룹을 맨 뒤에 붙인다.
+//    그 그룹을 지우면 "닫기"가 된다.
+inline bool close_dock_panel(luil::dock_layout& layout, const std::u8string& panel)
+{
+    luil::dock_layout next { layout };
+    if (luil::apply_dock_command(next, { .operation = luil::dock_operation::detach, .panel = panel }) == false)
+        return false;
+    next.floating.pop_back();
+    layout = std::move(next);
+    return true;
+}
+
+// dock_element는 raise·reposition을 내지 않는다. 앱이 자기 단추·제목 줄에 잇는다.
+inline luil::dock_command raise_floating(const std::u8string& group_key)
+{
+    return { .operation = luil::dock_operation::raise, .target = group_key };
+}
+
+// reposition의 bounds는 x·y 변화량이다 (dock 자리 안의 논리 픽셀).
+inline luil::dock_command move_floating(const std::u8string& group_key, const float dx, const float dy)
+{
+    return { .operation = luil::dock_operation::reposition, .target = group_key, .bounds = { dx, dy } };
+}
+</script></div>
+        <script type="text/plain" id="pre-dock" data-prelude>
+#include "luil/ui/dock_element.h"
+#include <string>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p>위 닫기 함수를 <code>src/ui/dock_layout.cpp</code>와 함께 짓고 처음 배치에 돌려 보았다. <code class="free">close_dock_panel(layout, u8"inspector")</code>는 참이고, 한쪽만 남은 분할 <code>dock-2</code>가 사라져 <code>dock-4</code>가 root가 되며, 결과는 <code>valid_dock_layout</code>을 통과한다. <code>raise</code>·<code>reposition</code>의 <code>target</code>은 떠 있는 그룹의 <strong>맨 위 node key</strong>다 — 떠 있는 자리에 분할이 생겼으면 그 분할의 key다.</p>
+        </div>
+
+        <h3 id="build-pager">넘기는 페이지 (pager)</h3>
+        <div class="code" data-lang="cpp" data-src="examples/selected_nodes/scene.cpp:42-60" data-path="examples/selected_nodes/scene.cpp" data-start="42"><script type="text/plain">
+        auto pages { std::make_unique<luil::stack_element>(luil::ui_element_id {}, luil::stack_config { .direction = luil::stack_direction::row, .spacing = 8.0f }) };
+        for (const int direction : { -1, 1 })
+        {
+            if (direction == 1)
+            {
+                luil::pager_config config {};
+                config.offset = state.page;
+                config.change = [](luil::pager_command command) { return luil::make_app_action(command); };
+                config.name = u8"넘기는 페이지";
+                auto pager { std::make_unique<luil::pager_element>(luil::ui_element_id { luil::ui_element_kind::pager, u8"pages" }, std::move(config)) };
+                for (const auto* text : { u8"첫 번째 장 — 터치로 넘기세요", u8"두 번째 장 — ← / → 키로도 넘깁니다", u8"세 번째 장 — 손을 떼면 페이지에 정착합니다" })
+                    pager->add_page(label(text));
+                pages->add_flexible(std::move(pager));
+            }
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { luil::application_element_kind(501), direction < 0 ? u8"previous" : u8"next" }, luil::text_button_config { .text = direction < 0 ? u8"이전" : u8"다음" }) };
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(luil::pager_command { .operation = luil::pager_operation::step, .delta = static_cast<float>(direction) }));
+            pages->add(std::move(button), 72.0f);
+        }
+        column->add(std::move(pages), 68.0f);
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/selected_nodes/main.cpp:22-23" data-path="examples/selected_nodes/main.cpp" data-start="22"><script type="text/plain">
+                if (const auto* command { message.get<luil::pager_command>() }; command != nullptr)
+                    state_.page = luil::apply_pager_command(state_.page, 3, *command);
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>offset</code>은 페이지 단위다. 1.25면 둘째 장에서 다음 장으로 1/4 넘긴 자리다. 끄는 동안은 offset이 움직이고, 손을 떼면 정착한 값이 온다. <code>apply_pager_command</code> 하나가 네 갈래(끌기·걸음·정착·고르기)를 모두 적용한다.</li>
+            <li>정착은 <code>round(지금 + clamp(속도 × 0.18초, −1, 1))</code>이다. 빠르게 튕기면 0.2만 넘겨도 다음 장이고, 아무리 빨라도 한 장까지다. 정착은 곧바로 서고, 부드러운 애니메이션은 앱이 붙인다.</li>
+            <li><strong><code>count</code>는 앱이 지은 장 수와 같아야 한다.</strong> 예제는 3을 handle과 장을 짓는 곳에 따로 적는다. element는 자기 자식 수로 다듬지만 앱 상태는 <code>count</code>로 다듬어진다.</li>
+            <li>이전·다음 단추는 앱이 <code>pager_command { .operation = step, .delta = ±1 }</code>을 같은 메시지 길로 보낸다. 장 표시 점은 라이브러리에 없다 — 앱이 offset으로 그린다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 필드는 <a class="xref" href="api.html#stack-config">API 찾아보기</a>에 있다. 길이는 모두 논리 픽셀이고, 없음은 언제나 0으로 말한다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="stack">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/stack_element.h:44-94" data-path="include/luil/ui/stack_element.h" data-start="44"><script type="text/plain">
+    struct stack_config
+    {
+        stack_direction direction { stack_direction::column };
+        // 자식 사이 간격이다 (논리 픽셀).
+        float spacing { 0.0f };
+        edge_insets padding {};
+        stack_alignment cross_alignment { stack_alignment::stretch };
+        // 남는 자리를 주축의 어디에 둘지다.
+        // `main_alignment`은 남는 공간을 항목 앞·뒤에 둔다.
+        // `add_flexible_gap()`은 항목 사이에 유연한 간격을 둔다.
+        stack_main_alignment main_alignment { stack_main_alignment::start };
+    };
+
+    // 한 항목의 배치 설정이다 (길이는 전부 논리 픽셀).
+    //
+    // 항목 쪽 값을 여기 모으는 이유는 **이름 없는 float가 늘면 부르는 쪽에서 무슨
+    // 값인지 읽을 수 없어서다.** 세 번째 인자였던 `cross_length`는 세로 stack의
+    // 습관인 (높이, 폭) 순서로 가로 stack의 두 자리에 적혀 있었고, 그 버튼들이 줄
+    // 밖으로 60px 넘게 삐져나간 채로 아무도 알아채지 못했다. 지정 초기화
+    // `{ .length = 96.0f, .cross_length = 30.0f }`는 그 오류를 애초에 쓸 수 없게 한다.
+    //
+    // **없음은 언제나 0으로 말한다.** `std::optional`을 섞지 않는다 — 한 구조체
+    // 안에서 없음을 말하는 법이 둘이 되면 안 된다.
+    struct stack_item
+    {
+        // 주축 길이다. `weight`가 0보다 크면 쓰지 않는다.
+        float length { 0.0f };
+        // 0보다 크면 고정 길이를 뺀 나머지를 이 비율로 나눠 갖는다.
+        float weight { 0.0f };
+        // 0보다 크면 교차축 길이도 정하고, 아니면 남는 폭을 다 채운다.
+        float cross_length { 0.0f };
+        // 유연 항목이 **반드시 받는** 주축 길이다. 0이면 하한이 없다.
+        // `weight`가 0보다 클 때만 뜻을 갖는다 — 고정 항목은 `length`가 이미
+        // 하한이자 상한이라, 배치가 그것을 다시 흥정하면 "길이는 담을 때 정한다"가
+        // 거짓이 된다.
+        //  - 하한에 걸려 늘어난 만큼은 **다른 유연 항목의 몫에서 나온다.** 하한에 걸린 항목은 하한에 서고 나머지
+        //    유연 항목이 남은 자리를 비율대로 다시 나눈다.
+        //  - 유연 하한들의 합이 남은 자리를 넘을 때만 컨테이너를 넘친다. 넘침을 자르는 것은 이 element의 일이 아니다.
+        //  - 예전에는 다른 항목에서 빼지 않아 하나가 하한에 걸리면 늘 넘쳤다. 이 필드의 뜻(반드시 받는 길이)은 그대로다.
+        float minimum { 0.0f };
+        // 유연 항목이 넘지 않는 주축 길이다. 0이면 상한이 없다.
+        //  - 상한에 걸린 항목이 남긴 자리는 **아직 걸리지 않은 유연 항목이** 비율대로 나눠 갖는다. 모두 걸렸으면
+        //    남는 자리가 되어 `main_alignment`이 둔다 (stack-expressiveness-design.md).
+        //  - 하한보다 작으면 하한이 이긴다.
+        float maximum { 0.0f };
+        // 주축 길이를 자식이 원하는 크기로 잰다 (`ui_element::preferred_size`). `length`와 `weight`는 쓰지 않는다.
+        //  - 가로 stack은 자식의 원하는 폭을, 세로 stack은 이 stack의 교차 폭에서 원하는 높이를 쓴다.
+        //  - 답하지 않는 자식은 0이다.
+        //  - `cross_length`가 0이고 교차축 정렬이 `stretch`가 아니면 교차축 길이도 원하는 크기다.
+        bool fit { false };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>spacing</code></td><td>0</td><td>항목 수 − 1번 들어가고 gap도 항목으로 센다</td></tr>
+                  <tr><td><code>padding</code></td><td>없음</td><td>slot보다 커서 안쪽이 음수가 되어도 다듬지 않는다</td></tr>
+                  <tr><td><code>cross_alignment</code></td><td><code>stretch</code></td><td><code>cross_length</code>를 준 항목은 늘리지 않고 <code>start</code>처럼 선다</td></tr>
+                  <tr><td><code>main_alignment</code></td><td><code>start</code></td><td>유연 항목이 없거나 <strong>모두 상한에 섰을 때만</strong> 남는 자리를 둔다</td></tr>
+                  <tr><td><code>weight</code></td><td>0 (고정)</td><td>&gt; 0이면 유연. 구조체로 담으면 다듬지 않는다 — 0 이하를 1로 고치는 것은 <code>add_flexible</code>뿐이다</td></tr>
+                  <tr><td><code>minimum</code> · <code>maximum</code></td><td>0 (없음)</td><td>유연 항목에만 뜻. 하한의 부족분은 다른 유연 항목의 몫에서 나온다. 하한이 상한보다 크면 하한이 이긴다</td></tr>
+                  <tr><td><code>fit</code></td><td>거짓</td><td>원하는 크기로 잰다. <code>length</code>·<code>weight</code>를 이긴다. 답하지 않는 자식은 0</td></tr>
+                  <tr><td><code>add_gap</code> · <code>add_flexible_gap</code></td><td>—</td><td>자식 없이 자리만 비운다. tree에 element가 늘지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="wrap">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/wrap_element.h:10-62" data-path="include/luil/ui/wrap_element.h" data-start="10"><script type="text/plain">
+    // 한 줄에 들어가지 않으면 다음 줄로 넘기는 배치의 설정이다.
+    //
+    // 항목은 **전부 같은 크기**다.
+    //  - 크기가 제각각이면 몇 줄이 될지를 담는 쪽이 미리 알 수 없는데, 측정 단계가
+    //    없어 물어볼 수도 없다. 같은 크기면 줄 수가 폭에서 나오는 산수라
+    //    `wrap_height_for`가 tree를 짓기 **전에** 답할 수 있다 — 이미 있는 정적
+    //    사이저(`height_for`)들과 같은 결이다.
+    //  - "길이는 담을 때 정한다"는 그대로다. 다만 그 길이가 항목마다가 아니라
+    //    컨테이너에 한 번 적혀 있다.
+    //
+    // 비율(weight)은 두지 않는다 — 남는 자리가 줄마다 달라 "전체에서 몇 분의 몇"
+    // 이라는 기준 자체가 사라진다.
+    // 여백도 정렬도 두지 않는다 — 여백이 필요하면 감싸는 stack이 준다.
+    struct wrap_config
+    {
+        // 항목 하나의 크기다 (논리 픽셀).
+        float item_width { 0.0f };
+        float item_height { 0.0f };
+        // 한 줄 안 항목 사이 간격이다 (논리 픽셀).
+        float spacing { 0.0f };
+        // 줄과 줄 사이 간격이다 (논리 픽셀).
+        float line_spacing { 0.0f };
+    };
+
+    // 한 줄에 들어가는 항목 수다 (논리 픽셀 입력). 적어도 1이다.
+    //  - `item_width`가 0보다 크지 않으면 1이다. **나누지 않으므로** 크기를 주지
+    //    않은 설정이 정의되지 않은 답을 내지 않는다.
+    //  - 항목이 slot보다 넓어도 한 줄에 하나다. 그만큼 넘치고, 넘침은 stack과 같이
+    //    이 element가 다루지 않는다.
+    [[nodiscard]] constexpr std::size_t wrap_columns_for(const wrap_config& config, const float available_width) noexcept
+    {
+        if (config.item_width <= 0.0f)
+            return 1;
+        const float step { config.item_width + config.spacing };
+        if (step <= 0.0f)
+            return 1;
+        // 마지막 항목 뒤에는 간격이 붙지 않으므로 폭에 간격 한 칸을 더해 나눈다.
+        const float fits { (available_width + config.spacing) / step };
+        return fits < 1.0f ? std::size_t { 1 } : static_cast<std::size_t>(fits);
+    }
+
+    // `count`개를 `available_width`에 담았을 때의 높이다 (전부 논리 픽셀).
+    // `count`가 0이면 0이다.
+    //  - `arrange`도 **같은 함수**로 열 수를 센다. 세는 식이 둘이면 담는 쪽이 잡은
+    //    높이와 실제 줄 수가 어긋나 마지막 줄이 조용히 잘린다.
+    [[nodiscard]] constexpr float wrap_height_for(const wrap_config& config, const float available_width, const std::size_t count) noexcept
+    {
+        if (count == 0)
+            return 0.0f;
+        const std::size_t columns { wrap_columns_for(config, available_width) };
+        const std::size_t rows { (count + columns - 1) / columns };
+        return static_cast<float>(rows) * config.item_height + static_cast<float>(rows - 1) * config.line_spacing;
+    }
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>item_width</code></td><td>0</td><td>0 이하면 한 줄에 하나 (나누지 않는다)</td></tr>
+                  <tr><td><code>spacing</code> · <code>line_spacing</code></td><td>0</td><td>한 줄 안 / 줄 사이 간격. 마지막 항목 뒤에는 간격이 붙지 않는다</td></tr>
+                  <tr><td><code>wrap_columns_for</code></td><td>—</td><td>적어도 1. 항목이 slot보다 넓어도 한 줄에 하나이고 그만큼 넘친다</td></tr>
+                  <tr><td><code>wrap_height_for</code></td><td>—</td><td>개수 0이면 0. arrange와 같은 열 계산이라 담는 칸 길이에 그대로 쓴다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="grid">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/grid_element.h:12-76" data-path="include/luil/ui/grid_element.h" data-start="12"><script type="text/plain">
+    // 표 배치의 열 하나 또는 행 하나의 길이 규칙이다.
+    enum class grid_track_kind
+    {
+        // `length`만큼이다.
+        fixed,
+        // 그 줄에 놓인 자식이 원하는 크기 중 가장 큰 것이다 (`ui_element::preferred_size`). 폼의 라벨 열이다.
+        fit,
+        // 고정·맞춤 줄을 뺀 나머지를 `weight` 비율로 나눠 갖는다.
+        flexible,
+    };
+
+    // 열·행 하나다 (길이는 전부 논리 픽셀).
+    //  - **없음은 언제나 0으로 말한다** (`stack_item`과 같은 규칙).
+    struct grid_track
+    {
+        grid_track_kind kind { grid_track_kind::fit };
+        // `fixed`의 길이다.
+        float length { 0.0f };
+        // `flexible`의 비율이다. 0 이하면 1로 본다.
+        float weight { 0.0f };
+        // 맞춤·유연 줄이 반드시 받는 길이다. 유연 줄의 부족분은 stack처럼 다른 유연 줄의 몫에서 나오고, 유연 줄
+        // 하한들의 합이 남은 자리를 넘을 때만 넘친다. 맞춤 줄의 하한은 고정 길이처럼 먼저 빠진다.
+        float minimum { 0.0f };
+
+        [[nodiscard]] static constexpr grid_track fixed(const float length) noexcept
+        {
+            return { .kind = grid_track_kind::fixed, .length = length };
+        }
+
+        [[nodiscard]] static constexpr grid_track fit(const float minimum = 0.0f) noexcept
+        {
+            return { .kind = grid_track_kind::fit, .minimum = minimum };
+        }
+
+        [[nodiscard]] static constexpr grid_track flexible(const float weight = 1.0f, const float minimum = 0.0f) noexcept
+        {
+            return { .kind = grid_track_kind::flexible, .weight = weight, .minimum = minimum };
+        }
+
+        [[nodiscard]] bool operator==(const grid_track&) const noexcept = default;
+    };
+
+    struct grid_config
+    {
+        // 열과 행의 규칙이다. 자식이 그 너머의 칸에 놓이면 모자란 줄은 맞춤 줄로 본다.
+        std::vector<grid_track> columns {};
+        std::vector<grid_track> rows {};
+        // 열 사이·행 사이 간격이다 (논리 픽셀).
+        float column_spacing { 0.0f };
+        float row_spacing { 0.0f };
+        edge_insets padding {};
+    };
+
+    // 자식 하나가 놓이는 칸이다.
+    struct grid_cell
+    {
+        std::size_t row { 0 };
+        std::size_t column { 0 };
+        // 걸치는 줄 수다. 0이면 1로 본다.
+        std::size_t row_span { 1 };
+        std::size_t column_span { 1 };
+        // 칸 안의 자리다. `stretch`가 아니면 자식이 원하는 크기에 선다 (답이 없으면 칸을 채운다).
+        layout_alignment horizontal { layout_alignment::stretch };
+        layout_alignment vertical { layout_alignment::stretch };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>grid_track::kind</code></td><td><code>fit</code></td><td><code>grid_track {}</code>는 맞춤 줄이다. 상한 필드는 없다</td></tr>
+                  <tr><td><code>grid_track::weight</code></td><td>0</td><td><code>flexible</code>의 비율. 0 이하면 1</td></tr>
+                  <tr><td><code>grid_track::minimum</code></td><td>0</td><td>맞춤 줄은 고정처럼 먼저 빠지고, 유연 줄은 부족분을 다른 유연 줄에서 받는다</td></tr>
+                  <tr><td><code>columns</code> · <code>rows</code></td><td>비어 있음</td><td>선언보다 뒤의 칸에 자식이 놓이면 모자란 줄은 맞춤 줄이다</td></tr>
+                  <tr><td><code>row_span</code> · <code>column_span</code></td><td>1</td><td>0이면 1. 걸친 자식은 맞춤 줄을 넓히지 않는다</td></tr>
+                  <tr><td><code>horizontal</code> · <code>vertical</code></td><td><code>stretch</code></td><td>아니면 원하는 크기(칸보다 크지 않게). 답이 없으면 칸을 채운다</td></tr>
+                  <tr><td><code>column_widths()</code> · <code>row_heights()</code></td><td>—</td><td>arrange가 정한 논리 픽셀. test와 진단용</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="layer">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/layer_element.h:11-42" data-path="include/luil/ui/layer_element.h" data-start="11"><script type="text/plain">
+    // 겹침 배치의 자식 하나가 서는 자리다 (길이는 논리 픽셀).
+    //  - **없음은 언제나 0으로 말한다** (`stack_item`과 같은 규칙).
+    struct layer_item
+    {
+        // 안쪽 영역 안의 자리다. `stretch`가 아니면 `width`·`height`, 없으면 자식이 원하는 크기에 선다
+        // (답이 없으면 채운다).
+        layout_alignment horizontal { layout_alignment::stretch };
+        layout_alignment vertical { layout_alignment::stretch };
+        // 0보다 크면 그 길이다 (`stretch`에서도 그 길이로 정렬의 처음에 선다).
+        float width { 0.0f };
+        float height { 0.0f };
+        // 안쪽 영역에서 이 자식만 더 들이는 여백이다 (모서리 배지·떠 있는 버튼의 거리).
+        edge_insets margin {};
+    };
+
+    // 자식들을 **같은 자리에 겹쳐** 놓는 배치 컨테이너다 (WPF 한 칸 `Grid`, Qt `QStackedLayout::StackAll`).
+    //
+    // 그림 위의 배지, 빈 목록 위의 안내 글, 내용 위에 떠 있는 버튼처럼 한 자리에 둘 이상이 서는 조립이다. stack은
+    // 자리를 나눠 갖고, 이것은 자리를 함께 쓴다.
+    //  - 담은 순서가 그리는 순서다. 뒤에 담은 것이 위에 그려지고 먼저 눌린다 (기본 hit test).
+    //  - 자식마다 자리를 따로 정한다. 겹친 자식끼리는 서로를 모른다.
+    class layer_element final : public ui_element
+    {
+    public:
+        layer_element(ui_element_id id, edge_insets padding = {});
+
+        void add(std::unique_ptr<ui_element> child, layer_item item = {});
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        // 자식들의 원하는 크기(정한 길이와 여백 포함) 중 가장 큰 폭·높이와 여백이다. 아무도 답하지 않으면 답하지 않는다.
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>horizontal</code> · <code>vertical</code></td><td><code>stretch</code></td><td>아니고 길이를 정하지 않았으면 원하는 크기(안쪽 영역보다 크지 않게)</td></tr>
+                  <tr><td><code>width</code> · <code>height</code></td><td>0</td><td>&gt; 0이면 그 길이. 안쪽 영역으로 다듬지 않는다</td></tr>
+                  <tr><td><code>margin</code></td><td>없음</td><td>이 자식만 더 들인다. 음수면 바깥으로 나간다(자르지 않는다)</td></tr>
+                  <tr><td>생성자의 <code>padding</code></td><td>없음</td><td>컨테이너 전체의 여백</td></tr>
+                  <tr><td><code>add</code></td><td>—</td><td><code>nullptr</code>는 무시한다. 담은 순서 = 그리는 순서, 뒤가 먼저 눌린다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="strip">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/strip_element.h:10-25,50-69" data-path="include/luil/ui/strip_element.h" data-start="10"><script type="text/plain">
+    struct strip_config
+    {
+        // 내용 전체 폭이다 (논리 픽셀).
+        // 측정 단계가 없으므로 담는 쪽이 알려 준다
+        // (`scroll_view_config::content_height`와 같은 계약이다).
+        float content_width { 0.0f };
+        // 지금 흘러간 양이다 (논리 픽셀).
+        // 범위 밖 값은 arrange가 다듬는다.
+        float scroll_offset { 0.0f };
+        // 스크롤 값을 이만큼 옮기자는 메시지다 (논리 픽셀, 양수 = 내용이 왼쪽으로).
+        // 있으면 넘칠 때 이 띠가 가로 흘림의 임자로 선다 (`scroll_source`) —
+        // 터치 끌기·표 없는 휠·초점 되살리기가 이 메시지로 띠를 흘린다.
+        std::function<input_action(float delta)> scroll {};
+        // 휠을 칸으로 넘기는 메시지다 (`scroll_source::step`). 비어 있으면 휠은 양만큼 흘린다.
+        std::function<input_action(int steps)> step {};
+    };
+⋯@50
+        void set_content(std::unique_ptr<ui_element> content);
+        // 내용 폭을 배치 직전에 다시 정한다 (논리 픽셀, arrange 전에 부른다).
+        //  - 내용 폭이 자리에 달린 담는 쪽(자리가 모자라면 탭을 줄이는 탭 막대)이 쓴다. 측정 단계가 없다는 계약은
+        //    그대로다 — 폭을 정하는 것은 여전히 담는 쪽이고, 정하는 때만 배치로 늦춘다.
+        void set_content_width(float width) noexcept;
+
+        // 이 띠에서 흘릴 수 있는 최대치다 (논리 픽셀).
+        // arrange 뒤에 유효하며 앱이 스크롤 값을 다듬을 때 쓴다.
+        //  - 내용이 없어도 `content_width`로 계산한다. 담는 쪽이 알려 준 값이
+        //    내용의 유무보다 앞선다 (측정 단계가 없다는 계약의 결과다).
+        [[nodiscard]] float maximum_scroll() const noexcept;
+        // arrange가 범위 안으로 다듬은 스크롤 값이다 (논리 픽셀).
+        [[nodiscard]] float scroll_offset() const noexcept;
+
+        // 내용에 주는 자리는 `{ slot.x - offset*scale, slot.y,
+        // max(content_width*scale, slot.width), slot.height }`다.
+        // 내용이 slot보다 짧아도 slot 폭을 다 받는다 (세로 창과 같은 규칙).
+        // 그 자리를 띠 안으로 들이는 스크롤 변화량이다 (논리 픽셀).
+        // 가로 띠라 x·width만 본다. arrange 뒤에 유효하다.
+        [[nodiscard]] float scroll_delta_to_reveal(const rect_f& target) const override;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>content_width</code></td><td>0</td><td>담는 쪽이 알려 준다. 내용이 짧아도 내용은 slot 폭을 다 받는다</td></tr>
+                  <tr><td><code>scroll_offset</code></td><td>0</td><td>arrange는 자기 사본만 다듬는다</td></tr>
+                  <tr><td><code>scroll</code></td><td>없음</td><td>없으면 띠를 흘리는 임자가 없다 (터치·휠·초점 되살리기 모두)</td></tr>
+                  <tr><td><code>step</code></td><td>없음</td><td>휠 한 눈금(120)을 한 칸으로. 비면 휠은 양만큼 흘린다</td></tr>
+                  <tr><td><code>maximum_scroll()</code> · <code>scroll_offset()</code></td><td>—</td><td>arrange 뒤의 논리 픽셀</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="panel · root">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/panel_element.h:9-48" data-path="include/luil/ui/panel_element.h" data-start="9"><script type="text/plain">
+    // 테두리를 긋는 변이다. 기본은 네 변 전부다.
+    struct panel_border_sides
+    {
+        bool top { true };
+        bool right { true };
+        bool bottom { true };
+        bool left { true };
+
+        [[nodiscard]] constexpr bool all() const noexcept
+        {
+            return top && right && bottom && left;
+        }
+
+        [[nodiscard]] bool operator==(const panel_border_sides&) const = default;
+    };
+
+    // 배경 panel의 설정이다.
+    struct panel_config
+    {
+        // 팔레트에서 배경색을 고른다.
+        // 비어 있으면 surface_background다 — 구체 색이 아니라 역할을 고르므로
+        // 테마가 바뀌어도 element는 그대로다.
+        std::function<ui_color(const ui_color_palette&)> background {};
+        // 모서리 반지름이다 (논리 픽셀). 0이면 직각이다.
+        float corner_radius { 0.0f };
+        // 둘레의 1px 테두리다. 팔레트에서 색을 고른다.
+        // 비어 있으면 긋지 않는다 — 지금까지의 panel이 그 특수 경우다.
+        //  - 바탕과 같은 색의 카드(대화상자 위의 설정 항목)는 테두리가 있어야 카드로 읽힌다.
+        //  - 내용을 그린 **뒤에** 긋는다. 내용이 가장자리까지 채워도 테두리가 남는다.
+        std::function<ui_color(const ui_color_palette&)> border {};
+        // 테두리를 긋는 변이다 (위·아래만 긋는 목록 판, 오른쪽만 긋는 옆 판).
+        //  - 네 변 전부면 지금처럼 둥근 모서리를 따라 한 줄로 긋는다.
+        //  - 일부만이면 변마다 곧은 선이다. 모서리가 둥글면 둥근 부분은 긋지 않고 곧은 변만 긋는다 —
+        //    빠진 변 쪽으로 휘어 들어가다 끊긴 선이 남지 않는다.
+        panel_border_sides border_sides {};
+        // 바깥으로 드리우는 그림자의 진하기다 (0~1). 0이면 없다.
+        // overlay 안의 dialog처럼 바깥에 그릴 자리가 있는 상자에서만 뜻이 있다 — 표면
+        // 가장자리에 붙은 panel에서는 잘린다. 색은 `content_shadow`다 (`draw_surface_shadow`).
+        float shadow { 0.0f };
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/root_element.h:8-25" data-path="include/luil/ui/root_element.h" data-start="8"><script type="text/plain">
+    // 창 전체를 담는 최상위 컨테이너다.
+    // 배경은 렌더러가 팔레트의 창 배경색으로 이미 칠했으므로 자식만 그린다.
+    // kind는 예약된 `ui_element_kind::root`이고, 표면이 여럿이면(주 창·보조 창)
+    // owner로 구분한다.
+    //
+    // 자식은 호출자가 직접 arrange한 채로 담는다 — caption처럼 자기 높이를
+    // 아는 element와 나머지를 채우는 stack을 겹치지 않게 쌓는 것은 tree를
+    // 조립하는 쪽의 몫이다 (examples/demo_main.cpp가 본보기다).
+    class root_element final : public ui_element
+    {
+    public:
+        explicit root_element(std::u8string owner = {});
+
+        void add(std::unique_ptr<ui_element> child);
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>background</code></td><td>없음 → <code>surface_background</code></td><td>팔레트의 역할을 고르는 함수</td></tr>
+                  <tr><td><code>corner_radius</code></td><td>0</td><td>내용을 자르지 않는다</td></tr>
+                  <tr><td><code>border</code> · <code>border_sides</code></td><td>없음 · 네 변</td><td>내용 뒤에 1px. 일부 변만이면 둥근 부분은 긋지 않는다</td></tr>
+                  <tr><td><code>shadow</code></td><td>0</td><td>0~1. 바깥에 그릴 자리가 있을 때만 보인다</td></tr>
+                  <tr><td><code>root_element::add</code></td><td>—</td><td>배치된 채로 담는다. root는 자식을 배치하지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="group">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/group_element.h:12-37" data-path="include/luil/ui/group_element.h" data-start="12"><script type="text/plain">
+    struct group_config
+    {
+        // 같은 화면에 그룹이 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        std::u8string title {};
+        // 접힘은 앱 상태다.
+        // element는 이 값을 받아 그리고 토글 메시지만 낸다.
+        bool collapsed { false };
+        // 제목 줄을 눌렀을 때의 토글이다. 없으면 `set_collapsed`가 대신 눌리고,
+        // 둘 다 없으면 제목 줄이 눌리지 않는다.
+        ui_action toggle {};
+        // 접힘을 **이 상태로** 하라는 절대 메시지다. 없으면 보조 기술이 펼치고
+        // 접을 수 없다 (UIA Expand·Collapse가 거절된다).
+        //  - 토글로 흘리면 오래된 발행본을 본 같은 명령 둘이 두 번 뒤집는다 —
+        //    절대 상태는 같은 메시지가 몇 번 겹쳐도 마지막 상태 그대로다
+        //    (막대의 `change_to`와 같은 갈래다).
+        //  - 이것만 있으면 제목 줄의 클릭도 여기서 나온다 (지금 상태의 반대를
+        //    담아). `toggle`은 이미 그 뜻의 메시지를 가진 앱의 자리다.
+        std::function<input_action(bool collapsed)> set_collapsed {};
+        // 펼쳤을 때의 내용 높이다 (논리 픽셀).
+        // 측정 단계가 없으므로 담는 쪽이 알려 준다.
+        float content_height { 0.0f };
+    };
+
+    // 제목 줄의 높이다 (논리 픽셀).
+    inline constexpr float group_header_height { 28.0f };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>그룹 id와 제목 줄 id에 함께 쓰인다</td></tr>
+                  <tr><td><code>collapsed</code></td><td>거짓</td><td>참이면 내용을 tree에 넣지 않는다</td></tr>
+                  <tr><td><code>toggle</code></td><td>없음</td><td>없으면 <code>set_collapsed</code>가 대신 눌리고, 둘 다 없으면 제목 줄이 눌리지 않는다</td></tr>
+                  <tr><td><code>set_collapsed</code></td><td>없음</td><td>없으면 보조 기술의 Expand·Collapse가 거절된다</td></tr>
+                  <tr><td><code>content_height</code></td><td>0</td><td>재지 않으므로 담는 쪽이 준다. 0이면 내용 칸 높이도 0</td></tr>
+                  <tr><td><code>group_header_height</code></td><td>28</td><td>제목 줄 높이. <code>height_for</code> = 28 + (접혔으면 0, 아니면 <code>content_height</code>)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="sidebar">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/sidebar_element.h:11-54" data-path="include/luil/ui/sidebar_element.h" data-start="11"><script type="text/plain">
+    enum class sidebar_side
+    {
+        left,
+        right,
+    };
+
+    struct sidebar_config
+    {
+        // 같은 화면에 사이드바가 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        sidebar_side side { sidebar_side::left };
+        // 펼친 폭과 접힌 폭이다 (논리 픽셀).
+        // 접힌 폭이 0이면 접는 순간 완전히 사라진다 (다시 펴는 수단은 앱이 밖에 둔다).
+        float expanded_width { 240.0f };
+        float collapsed_width { 48.0f };
+        // 접힘 여부는 앱 상태다.
+        // element는 이 값을 받아 그리고 토글 메시지만 낸다.
+        //  - 전환 중에는 이 값이 **가려는 곳**이다 (토글 버튼의 방향도 이 값이 정한다).
+        bool collapsed { false };
+        // 지금 이 순간의 폭이다 (논리 픽셀). 비어 있으면 `collapsed`가 정한다.
+        //  - **펴고 접는 사이의 중간 폭은 전환하는 앱만 안다.** 전환은 앱 상태이고
+        //    (`transition`) element는 "전환 중"이라는 것을 몰라도 되게 하려면,
+        //    지금 값을 그냥 받는 것이 맞다.
+        //  - `collapsed`와 어긋나 보이지만 둘은 다른 것을 말한다 — 저쪽은 **목표**,
+        //    이쪽은 **지금**이다. 전환이 끝나면 둘이 같아진다.
+        std::optional<float> width {};
+        // 접힘 토글이다. 액션이 없으면 버튼을 만들지 않는다.
+        ui_action toggle {};
+        std::u8string toggle_tooltip {};
+        // 폭 조절 손잡이다. 없으면 손잡이를 만들지 않는다.
+        // delta는 논리 픽셀이고 +가 넓어지는 쪽이다 — 어느 쪽에 붙었는지와 무관하게
+        // `split_handle_element`가 부호를 맞춘다.
+        // 폭의 범위 다듬기는 폭을 소유한 앱의 몫이다.
+        split_resize_message_factory resize {};
+        // 폭 조절이 끝났을 때 한 번 낸다 — 끝난 폭을 저장하는 자리다 (`split_handle_config::finish`).
+        split_finish_message_factory resize_finish {};
+        // 폭 조절 손잡이의 접근 이름이다. 손잡이는 이 element가 안에서 세우는 부품이라 앱이 이름을 줄 자리가 여기뿐이다.
+        //  - 손잡이는 키보드 초점을 받으므로 `resize`를 주는 앱은 이름도 준다. 비면 빈 이름이고 기본 문구를 넣지 않는다.
+        std::u8string handle_access_name {};
+    };
+
+    // 토글 버튼이 있을 때 내용 위에 남겨 두는 머리 높이와 손잡이의 hit 폭이다 (논리 픽셀).
+    inline constexpr float sidebar_header_height { 40.0f };
+    inline constexpr float sidebar_handle_width { 8.0f };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>expanded_width</code> · <code>collapsed_width</code></td><td>240 · 48</td><td>접힌 폭이 0이면 아무것도 짓지 않는다</td></tr>
+                  <tr><td><code>collapsed</code></td><td>거짓</td><td>전환 중에는 목표. 토글 화살표와 손잡이 유무도 이 값이 정한다</td></tr>
+                  <tr><td><code>width</code></td><td>비어 있음</td><td>지금 폭. 비면 <code>collapsed</code>가 정한다. 음수는 0</td></tr>
+                  <tr><td><code>toggle</code> · <code>toggle_tooltip</code></td><td>없음 · 빈 글</td><td>토글이 없으면 단추를 만들지 않는다. tooltip이 단추의 접근 이름이다</td></tr>
+                  <tr><td><code>resize</code> · <code>resize_finish</code></td><td>없음</td><td>없으면 손잡이를 만들지 않는다. + = 넓어짐 (쪽과 무관)</td></tr>
+                  <tr><td><code>handle_access_name</code></td><td>빈 글</td><td>비면 빈 이름. 기본 문구를 넣지 않는다</td></tr>
+                  <tr><td><code>sidebar_header_height</code> · <code>sidebar_handle_width</code></td><td>40 · 8</td><td>토글이 있을 때 내용 위 머리 높이 / 손잡이의 hit 폭</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="split_handle">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/split_handle_element.h:8-61" data-path="include/luil/ui/split_handle_element.h" data-start="8"><script type="text/plain">
+    // 손잡이를 끄는 축이다. 커서도 여기서 나온다.
+    enum class split_axis
+    {
+        // 세로로 선 손잡이를 좌우로 끈다.
+        horizontal,
+        // 가로로 누운 손잡이를 위아래로 끈다.
+        vertical,
+    };
+
+    // 손잡이가 나르는 길이를 가진 판이 어느 쪽인지다.
+    //  - 부호를 element가 맞추므로 앱은 언제나 "+ = 그 판이 넓어진다"만 안다.
+    //    이 규약이 없으면 왼쪽 판과 오른쪽 판이 같은 메시지에 반대로 반응하고,
+    //    부호를 맞추는 자리가 부르는 쪽마다 하나씩 늘어난다.
+    enum class split_grows
+    {
+        // 앞(왼쪽·위) 판의 길이다. 손잡이를 끝쪽으로 끌면 넓어진다.
+        toward_end,
+        // 뒤(오른쪽·아래) 판의 길이다. 손잡이를 앞쪽으로 끌면 넓어진다.
+        toward_start,
+    };
+
+    // 손잡이를 끈 만큼의 길이 변화를 앱 메시지로 바꾼다.
+    // delta는 논리 픽셀이고 +가 넓어지는 쪽이다.
+    using split_resize_message_factory = std::function<input_action(float delta)>;
+    // 길이 바꾸기 한 번이 끝났다는 메시지다. 앱이 끝난 길이를 저장하는 자리다.
+    using split_finish_message_factory = std::function<input_action()>;
+
+    // 키 한 번이 옮기는 거리다 (논리 픽셀).
+    // 손잡이는 자기 범위를 모르므로 Home/End에 답할 값이 없다 — 그 둘은 키를
+    // 그대로 흘려보낸다 (value-step-design.md).
+    inline constexpr float split_handle_key_step { 8.0f };
+    inline constexpr float split_handle_key_page_step { 64.0f };
+
+    struct split_handle_config
+    {
+        split_axis axis { split_axis::horizontal };
+        split_grows grows { split_grows::toward_end };
+        // 없으면 끌기 대상도 커서 주인도 되지 않는다 — 없는 것은 두지 않는다.
+        // 길이의 범위 다듬기는 그 길이를 가진 쪽의 몫이다.
+        split_resize_message_factory resize {};
+        // 길이 바꾸기가 끝났을 때 한 번 낸다. 비어 있으면 알리지 않는다.
+        //  - 끌기는 포인터를 뗄 때다. 시스템이 접촉을 취소했거나 입력을 잃어 거둔 끌기도 끝이다 —
+        //    그때까지 보낸 변화량이 그대로 남는다. 움직이지 않고 뗀 누름에도 낸다.
+        //  - 끄는 도중 손잡이가 tree에서 사라졌거나 가려진 뒤의 뗌에는 내지 않는다 (`pointer_drag_target::on_release`).
+        //  - 키는 한 번이 곧 한 번의 바꾸기라 그 키의 `resize` 바로 뒤에 낸다. 눌러 두어 되풀이되는 키도
+        //    되풀이마다 낸다 — 길이를 저장하는 쪽이 잦은 호출을 견뎌야 한다.
+        //  - `resize`가 없으면 끌 수도 키로 옮길 수도 없으므로 이것도 듣지 않는다.
+        split_finish_message_factory finish {};
+        // 쉬는 동안에도 가운데에 1 논리 px `divider` 선을 긋는다. 기본(거짓)은 지금처럼 hover·누름 동안만 그린다.
+        //  - 두 판 사이를 다른 무엇(테두리·바탕 차이)도 가르지 않는 화면에서 쓴다. 이미 판의 테두리가 가르는
+        //    자리에서 켜면 선이 두 겹이 된다.
+        //  - hover·누름 동안의 강조(`accent` 2 px)는 그대로다.
+        bool resting_divider { false };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>axis</code></td><td><code>horizontal</code></td><td>세로로 선 손잡이를 좌우로 끈다. 커서·화살표의 축도 고른다</td></tr>
+                  <tr><td><code>grows</code></td><td><code>toward_end</code></td><td>길이를 가진 판. 앱은 언제나 "+ = 그 판이 넓어짐"만 안다</td></tr>
+                  <tr><td><code>resize</code></td><td>없음</td><td>없으면 끌기도 커서도 Tab 자리도 키도 없다</td></tr>
+                  <tr><td><code>finish</code></td><td>없음</td><td>뗄 때·취소 때 한 번, 키는 걸음마다. 사라지거나 가려진 뒤의 뗌에는 오지 않는다</td></tr>
+                  <tr><td><code>resting_divider</code></td><td>거짓</td><td>쉬는 동안 가운데 1px 선. 판 테두리가 이미 가르는 자리에서는 두 겹이 된다</td></tr>
+                  <tr><td><code>split_handle_key_step</code> · <code>split_handle_key_page_step</code></td><td>8 · 64</td><td>화살표 / Page 한 번의 거리. Home/End는 답하지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="dock">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/dock_element.h:7-75" data-path="include/luil/ui/dock_element.h" data-start="7"><script type="text/plain">
+    // leaf는 탭 그룹, children 두 개가 있으면 분할이다. key는 layout 전체에서 유일하다.
+    struct dock_node
+    {
+        std::u8string key {};
+        std::vector<std::u8string> panels {};
+        std::u8string selected {};
+        split_axis axis { split_axis::horizontal };
+        float ratio { 0.5f };
+        std::vector<dock_node> children {};
+    };
+
+    struct floating_dock
+    {
+        dock_node group {};
+        // dock 자리 안의 논리 픽셀이다. 같은 표면 위에 떠 있고 뒤 항목이 앞에 선다.
+        rect_f bounds { 24.0f, 24.0f, 360.0f, 240.0f };
+    };
+
+    struct dock_layout
+    {
+        dock_node root { .key = u8"root" };
+        std::vector<floating_dock> floating {};
+        std::uint64_t next_key { 1 };
+    };
+
+    enum class dock_placement { center, left, right, top, bottom };
+    enum class dock_operation { select, move, detach, resize, raise, reposition };
+
+    struct dock_command
+    {
+        dock_operation operation { dock_operation::move };
+        std::u8string panel {};
+        std::u8string target {};
+        dock_placement placement { dock_placement::center };
+        // center에 넣을 때 이 탭 앞/뒤다. 비면 맨 뒤다.
+        std::u8string relative_to {};
+        drop_side side { drop_side::before };
+        // resize는 비율 변화량, reposition은 bounds의 x/y 변화량이다.
+        float delta { 0.0f };
+        rect_f bounds {};
+        // 앱이 별도 OS 창으로 떼어 낼 때 쓸 원본 좌표다. 기본 helper는 같은 표면에 띄운다.
+        std::optional<drag_release> release {};
+    };
+
+    [[nodiscard]] bool valid_dock_layout(const dock_layout& layout);
+    // 잘못된 명령은 false이고 원본은 그대로다. 빈 그룹·한쪽만 남은 분할은 정리한다.
+    [[nodiscard]] bool apply_dock_command(dock_layout& layout, const dock_command& command);
+
+    struct dock_panel
+    {
+        std::u8string key {};
+        std::u8string label {};
+        char32_t icon { 0 };
+    };
+
+    struct dock_config
+    {
+        std::u8string owner {};
+        dock_layout layout {};
+        std::vector<dock_panel> panels {};
+        std::function<std::unique_ptr<ui_element>(const std::u8string& panel)> content {};
+        std::function<input_action(dock_command)> change {};
+        float tab_height { 32.0f };
+        float handle_width { 6.0f };
+        float minimum_pane { 80.0f };
+        // 보조 기술이 읽는 탭 묶음과 분할 손잡이의 이름이다. 비면 기본 문구다.
+        std::u8string group_name {};
+        std::u8string divider_name {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>dock_node::key</code> · <code>panels</code></td><td>빈 글 · 없음</td><td>node key와 패널 key는 layout 전체에서 유일. 분할 node에는 패널이 없다</td></tr>
+                  <tr><td><code>dock_node::selected</code></td><td>빈 글</td><td><code>panels</code> 안이어야 한다. 비면 첫 패널을 보인다</td></tr>
+                  <tr><td><code>dock_node::ratio</code></td><td>0.5</td><td>유한해야 한다. 표시는 0.05~0.95로 묶고 최소 판으로 다시 다듬는다</td></tr>
+                  <tr><td><code>floating_dock::bounds</code></td><td>24, 24, 360, 240</td><td>dock 자리 안의 논리 픽셀. 표시는 자리 안으로 다듬는다(상태는 그대로)</td></tr>
+                  <tr><td><code>dock_layout::root</code></td><td><code>{ .key = u8"root" }</code></td><td>분할이 생기면 root의 key가 바뀐다</td></tr>
+                  <tr><td><code>layout</code></td><td>—</td><td>잘못되면(<code>valid_dock_layout</code>이 거짓) <strong>아무것도 짓지 않는다</strong></td></tr>
+                  <tr><td><code>content</code></td><td>없음</td><td>생성자에서 그룹마다 한 번 (logic thread). <code>nullptr</code>를 돌려도 된다</td></tr>
+                  <tr><td><code>change</code></td><td>없음</td><td>없으면 탭 고르기·끌기·놓기·분할 손잡이가 모두 서지 않는다</td></tr>
+                  <tr><td><code>tab_height</code> · <code>handle_width</code> · <code>minimum_pane</code></td><td>32 · 6 · 80</td><td>최소 판은 남은 길이의 절반을 넘지 않고, 상태의 <code>ratio</code>는 다듬지 않는다</td></tr>
+                  <tr><td><code>group_name</code> · <code>divider_name</code></td><td>빈 글</td><td>비면 기본 문구 "패널 묶음"·"패널 크기 조절"</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="pager">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/pager_element.h:6-27" data-path="include/luil/ui/pager_element.h" data-start="6"><script type="text/plain">
+    // offset은 페이지 단위다. 1.25면 두 번째 장에서 다음 장으로 1/4만큼 넘겼다.
+    // 끌 때는 offset을, 놓을 때는 settled_pager_offset을 앱 상태에 적용한다.
+    [[nodiscard]] float settled_pager_offset(float offset, float velocity, float page_width, std::size_t count) noexcept;
+
+    enum class pager_operation { drag, step, settle, select };
+    struct pager_command
+    {
+        pager_operation operation { pager_operation::drag };
+        // 페이지 단위 변화량과 초당 페이지 수다.
+        float delta { 0.0f };
+        float velocity { 0.0f };
+        std::size_t page { 0 };
+    };
+    // 앱이 가진 최신 offset에 적용한다. 같은 frame 사이에 이동이 여러 번 와도 잃지 않는다.
+    [[nodiscard]] float apply_pager_command(float offset, std::size_t count, const pager_command& command) noexcept;
+
+    struct pager_config
+    {
+        float offset { 0.0f };
+        std::function<input_action(pager_command)> change {};
+        std::u8string name {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드·함수</th><th>기본값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>offset</code></td><td>0</td><td>페이지 단위. arrange가 자기 사본을 <code>[0, 장 수 − 1]</code>로 다듬는다. 유한하지 않으면 0</td></tr>
+                  <tr><td><code>change</code></td><td>없음</td><td>없으면 Tab 자리·터치·휠·키가 모두 없다. 터치·휠·키는 장이 둘 이상이고 폭이 있을 때만 선다</td></tr>
+                  <tr><td><code>name</code></td><td>빈 글</td><td>보조 기술이 읽는 이름</td></tr>
+                  <tr><td><code>apply_pager_command</code></td><td>—</td><td>끌기 <code>clamp(지금 + delta)</code>, 걸음 <code>clamp(round(지금) + delta)</code>, 정착, 고르기 <code>clamp(page)</code></td></tr>
+                  <tr><td><code>settled_pager_offset</code></td><td>—</td><td><code>round(지금 + clamp(속도 × 0.18 ÷ 장 폭, −1, 1))</code>을 범위로</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="layout_metrics">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/layout_metrics.h:10-62" data-path="include/luil/ui/layout_metrics.h" data-start="10"><script type="text/plain">
+    // 창 폭의 등급이다 (Material의 창 크기 구간, device-request-design.md의 창 폭 등급).
+    // 배치를 기기 방향이 아니라 창 폭으로 고르면 화면 분할·접는 기기·태블릿·데스크톱 창을 한 규칙으로 다룬다.
+    enum class window_width_class
+    {
+        // 휴대폰 세로, 좁게 나눈 화면이다. 한 판씩 보인다.
+        compact,
+        // 휴대폰 가로, 접는 기기를 편 것, 작은 태블릿이다. 두 판이 들어간다.
+        medium,
+        // 태블릿 가로, 데스크톱 창이다. 옆 판·옆 시트가 늘 설 자리가 있다.
+        expanded,
+    };
+
+    // 등급의 경계다 (논리 픽셀, Android의 dp). 이 폭부터 그 등급이다.
+    struct window_width_breakpoints
+    {
+        float medium { 600.0f };
+        float expanded { 840.0f };
+
+        [[nodiscard]] bool operator==(const window_width_breakpoints&) const noexcept = default;
+    };
+
+    // 논리 폭을 등급으로 옮긴다.
+    //  - 폭이 유한하지 않으면 compact다.
+    //  - `expanded`가 `medium`보다 작으면 expanded는 서지 않는다 (경계가 뒤집힌 설정을 추측해 고치지 않는다).
+    [[nodiscard]] constexpr window_width_class classify_window_width(const float width, const window_width_breakpoints breakpoints = {}) noexcept
+    {
+        if (width >= breakpoints.expanded && breakpoints.expanded >= breakpoints.medium)
+            return window_width_class::expanded;
+        if (width >= breakpoints.medium)
+            return window_width_class::medium;
+        return window_width_class::compact;
+    }
+
+    // 네 변의 여백이다 (논리 픽셀).
+    struct edge_insets
+    {
+        float left { 0.0f };
+        float top { 0.0f };
+        float right { 0.0f };
+        float bottom { 0.0f };
+
+        [[nodiscard]] static constexpr edge_insets all(const float value) noexcept
+        {
+            return { value, value, value, value };
+        }
+
+        [[nodiscard]] static constexpr edge_insets symmetric(const float horizontal, const float vertical) noexcept
+        {
+            return { horizontal, vertical, horizontal, vertical };
+        }
+
+        [[nodiscard]] bool operator==(const edge_insets&) const noexcept = default;
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>이름</th><th>값</th><th>뜻과 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>window_width_breakpoints</code></td><td>600 · 840</td><td>이 폭부터 그 등급 (논리 픽셀 = Android dp)</td></tr>
+                  <tr><td><code>classify_window_width</code></td><td>—</td><td>숫자가 아닌 값과 −∞는 compact, <strong>+∞는 expanded</strong>. <code>expanded &lt; medium</code>이면 expanded가 서지 않는다</td></tr>
+                  <tr><td><code>edge_insets</code></td><td>0 · 0 · 0 · 0</td><td>위치 순서는 <strong>(left, top, right, bottom)</strong>. <code>all</code>·<code>symmetric(horizontal, vertical)</code></td></tr>
+                  <tr><td><code>align_within</code></td><td>—</td><td>칸보다 길면 <code>center</code>·<code>end</code>는 칸 앞으로 넘친다</td></tr>
+                  <tr><td><code>clamp_scroll</code></td><td>—</td><td><code>[0, content − viewport]</code>. 흘리는 요소의 arrange와 같은 식이다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">요소는 콜백을 부르지 않는다. 앱이 준 factory가 메시지를 만들고, logic thread의 <code>handle</code>이 상태를 바꾸면 다음 frame이 새 값으로 다시 짓는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="include/luil/ui/split_handle_element.h:29-33" data-path="include/luil/ui/split_handle_element.h" data-start="29"><script type="text/plain">
+    // 손잡이를 끈 만큼의 길이 변화를 앱 메시지로 바꾼다.
+    // delta는 논리 픽셀이고 +가 넓어지는 쪽이다.
+    using split_resize_message_factory = std::function<input_action(float delta)>;
+    // 길이 바꾸기 한 번이 끝났다는 메시지다. 앱이 끝난 길이를 저장하는 자리다.
+    using split_finish_message_factory = std::function<input_action()>;
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사용자 동작</th><th>요소</th><th>나가는 메시지</th><th>thread</th></tr></thead>
+            <tbody>
+              <tr><td>손잡이를 끈다</td><td><code>split_handle_element</code></td><td><code>resize(delta)</code> — 물리 이동 ÷ 배율, <code>grows</code>로 부호를 맞춘다. 0이면 아무것도 내지 않는다</td><td>input</td></tr>
+              <tr><td>손잡이를 뗀다 (취소·입력 유실 포함)</td><td><code>split_handle_element</code></td><td><code>finish()</code> 한 번. 손잡이가 사라졌거나 가려진 뒤의 뗌에는 없다</td><td>input</td></tr>
+              <tr><td>손잡이에서 화살표·Page</td><td><code>split_handle_element</code></td><td><code>resize(±8 / ±64)</code> 뒤 곧바로 <code>finish()</code></td><td>input</td></tr>
+              <tr><td>제목 줄 클릭·Enter·Space</td><td><code>group_element</code></td><td><code>toggle</code>, 없으면 <code>set_collapsed(collapsed == false)</code></td><td>input</td></tr>
+              <tr><td>보조 기술 Expand·Collapse</td><td><code>group_element</code></td><td><code>set_collapsed(command == collapse)</code>. 없으면 거절</td><td>UI</td></tr>
+              <tr><td>토글 단추 클릭·Enter·Space</td><td><code>sidebar_element</code></td><td><code>toggle</code></td><td>input</td></tr>
+              <tr><td>폭 손잡이 끌기·키 / 놓기</td><td><code>sidebar_element</code></td><td><code>resize(delta)</code> / <code>resize_finish()</code></td><td>input</td></tr>
+              <tr><td>터치 가로 끌기, 휠</td><td><code>strip_element</code></td><td><code>scroll(delta)</code>. <code>step</code>이 있으면 휠은 <code>step(칸 수)</code></td><td>input</td></tr>
+              <tr><td>키보드 초점이 띠 밖 자식으로</td><td><code>strip_element</code></td><td><code>scroll(되살릴 양)</code> — 앱 정책이 <code>route_reveal</code>을 부를 때만</td><td>input</td></tr>
+              <tr><td>탭 누름</td><td><code>dock_element</code></td><td><code>{ select, .panel, .target = 그룹 key }</code></td><td>input</td></tr>
+              <tr><td>탭을 같은 막대·다른 그룹의 탭 막대에 놓기</td><td><code>dock_element</code></td><td><code>{ move, .panel, .target, .relative_to, .side }</code></td><td>input</td></tr>
+              <tr><td>탭을 그룹 본문에 놓기</td><td><code>dock_element</code></td><td><code>{ move, .panel, .target, .placement }</code> — 가장 가까운 변에서 25% 띠 안이면 그쪽, 아니면 <code>center</code></td><td>input</td></tr>
+              <tr><td>받는 곳 없이 놓기</td><td><code>dock_element</code></td><td><code>{ detach, .panel, .bounds = 놓은 자리 − 잡은 자리, 360×240, .release }</code></td><td>input</td></tr>
+              <tr><td>분할 손잡이 끌기·키</td><td><code>dock_element</code></td><td><code>{ resize, .target = 분할 key, .delta = 논리 이동 ÷ 판 길이 }</code>. 끝 알림은 없다</td><td>input</td></tr>
+              <tr><td>터치로 끌기</td><td><code>pager_element</code></td><td><code>{ drag, .delta = 이동 ÷ 장 폭 }</code></td><td>input</td></tr>
+              <tr><td>손을 뗌 / 접촉 취소</td><td><code>pager_element</code></td><td><code>{ settle, .delta, .velocity }</code> 한 번 — 일반 관성 대신 / <code>settle(0, 0)</code></td><td>input</td></tr>
+              <tr><td>휠 한 눈금</td><td><code>pager_element</code></td><td><code>{ step, ±1 }</code> — 세로는 아래로, 가로는 오른쪽이 +1</td><td>input</td></tr>
+              <tr><td>←/→, PageUp/PageDown, Home/End</td><td><code>pager_element</code></td><td><code>{ step, ∓1 / ±1 }</code>, Home/End는 <code>{ select, 0 / 마지막 }</code></td><td>input</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>받은 메시지</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>손잡이·사이드바의 <code>resize(delta)</code></td><td>길이에 더하고 범위로 다듬는다 (handle에서, 또는 frame에서 다듬고 되쓴다)</td></tr>
+              <tr><td><code>finish()</code> · <code>resize_finish()</code></td><td>끝난 길이를 저장한다</td></tr>
+              <tr><td>그룹의 <code>set_collapsed(bool)</code> · <code>toggle</code></td><td><code>collapsed</code>를 그 값으로 / 반대로</td></tr>
+              <tr><td>사이드바의 <code>toggle</code></td><td>목표 <code>collapsed</code>를 뒤집고, 전환을 쓰면 지금 폭을 <code>width</code>에 싣는다</td></tr>
+              <tr><td>strip의 <code>scroll(delta)</code></td><td><code>scroll_offset += delta</code> 뒤 <code>clamp_scroll</code></td></tr>
+              <tr><td><code>dock_command</code></td><td><code>apply_dock_command(layout, command)</code>. 별도 OS 창으로 떼어 낼 앱은 <code>release</code>의 화면 좌표를 읽는다</td></tr>
+              <tr><td><code>pager_command</code></td><td><code>offset = apply_pager_command(offset, 장 수, command)</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>몰려온 메시지는 logic thread가 한 번에 처리하고 frame은 묶음당 한 번 게시한다. dock은 끄는 동안 대상 그룹이 놓일 반쪽을 3px 강조 테로 미리 보이고, 다른 dock의 탭은 받지 않는다. 기본 helper는 떼어 낸 패널을 같은 표면에 띄운다 — OS 창을 만들지 않는다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">값을 걸음으로 옮기는 키는 controller 한 곳이 가른다. 화살표는 축이 맞을 때만, Page·Home·End는 축과 무관하게 요소의 것이다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="키">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>요소</th><th>Tab 자리</th><th>키</th><th>동작</th></tr></thead>
+                <tbody>
+                  <tr><td rowspan="3"><code>split_handle_element</code></td><td rowspan="3"><code>resize</code>가 있을 때만</td><td>←/→ (<code>horizontal</code>) · ↑/↓ (<code>vertical</code>)</td><td>8 논리 픽셀. 화살표 방향으로 손잡이가 옮긴다 (부호는 <code>grows</code>가 맞춘다)</td></tr>
+                  <tr><td>PageUp / PageDown</td><td>−64 / +64</td></tr>
+                  <tr><td>Home / End</td><td>답하지 않는다 → 키가 앱으로 흐른다 (손잡이는 범위를 모른다)</td></tr>
+                  <tr><td>사이드바 토글</td><td>누를 수 있어 자리다</td><td>Enter / Space</td><td><code>toggle</code></td></tr>
+                  <tr><td>사이드바 손잡이</td><td>손잡이와 같다</td><td>←/→ · Page</td><td>폭 ±8 / ±64</td></tr>
+                  <tr><td>그룹 제목 줄</td><td><code>toggle</code>·<code>set_collapsed</code> 중 하나가 있으면</td><td>Enter / Space</td><td>접기·펴기. ←/→로 접는 키는 없다</td></tr>
+                  <tr><td rowspan="3"><code>pager_element</code></td><td rowspan="3"><code>change</code>가 있으면 (장이 하나여도)</td><td>← / → · PageUp / PageDown</td><td>앞 장 / 다음 장</td></tr>
+                  <tr><td>Home / End</td><td>첫 장 / 마지막 장</td></tr>
+                  <tr><td>↑ / ↓</td><td>받지 않는다 (가로 축)</td></tr>
+                  <tr><td>dock 분할 손잡이</td><td>손잡이와 같다</td><td>화살표 · Page</td><td>비율 변화 (±8·±64 ÷ 판 길이)</td></tr>
+                  <tr><td>dock 탭</td><td>탭 막대의 규칙</td><td>탭 막대의 키</td><td>고르면 <code>select</code> (<a class="xref" href="tabs.html">탭</a>). 패널을 키보드로 다른 그룹에 옮기는 길은 없다</td></tr>
+                  <tr><td><code>strip_element</code></td><td>자리 아님</td><td>—</td><td>자기 키는 없다. 초점이 띠 밖 자식으로 가면 앱 정책이 <code>route_reveal</code>로 흘린다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose">
+              <p>Ctrl·Alt·Meta와 함께 누른 걸음 키는 앱 단축키로 흐른다. Tab 순서는 tree를 앞에서부터 걷는 순서다 — 보이지 않는 가지는 건너뛰지만 <strong>잘림은 보지 않는다</strong>. 그래서 grid·layer는 담은 순서가 Tab 순서이고, pager의 모든 장 안의 요소가 Tab 순서에 든다.</p>
+            </div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>요소</th><th>역할 (<code>access_role</code>)</th><th>이름</th><th>상태·실행</th></tr></thead>
+                <tbody>
+                  <tr><td>stack · wrap · grid · layer · strip · panel · root</td><td><code>none</code> — 접근 tree에서 접히고 자식이 올라온다</td><td>—</td><td>—</td></tr>
+                  <tr><td>클릭과 이름을 단 panel 카드</td><td><code>button</code></td><td><code>set_access_name</code>, 없으면 tooltip</td><td>Invoke</td></tr>
+                  <tr><td><code>group_element</code></td><td><code>group</code></td><td><code>title</code></td><td>펼침 상태. Expand·Collapse는 <code>set_collapsed</code>로. 이미 펼친 그룹의 Expand는 할 일이 없다</td></tr>
+                  <tr><td>그룹 제목 줄</td><td>누를 수 있으면 <code>button</code>, 아니면 <code>static_text</code></td><td><code>title</code></td><td>—</td></tr>
+                  <tr><td>사이드바 토글</td><td><code>button</code> — 이름이 없으면 역할도 없다</td><td><code>toggle_tooltip</code></td><td>Invoke</td></tr>
+                  <tr><td>split 손잡이 · 사이드바 손잡이 · dock 분할 손잡이</td><td><code>handle</code> (범위 없음)</td><td><code>set_access_name</code> · <code>handle_access_name</code> · <code>divider_name</code>(비면 "패널 크기 조절")</td><td>범위 값이 없다</td></tr>
+                  <tr><td>dock 탭 묶음</td><td>탭 막대의 역할</td><td><code>group_name</code>, 비면 "패널 묶음"</td><td>—</td></tr>
+                  <tr><td><code>pager_element</code></td><td><code>pane</code></td><td><code>pager_config::name</code></td><td>지금 장을 알리지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose">
+              <p>Windows는 <code>handle</code>을 UIA Thumb, <code>pane</code>을 Pane, <code>group</code>을 Group으로 옮긴다. macOS는 <code>handle</code>을 AXSplitter로 옮긴다. 접힌 그룹의 내용은 접근 tree에도 없다 — 접힘이 곧 없음이다. 보조 기술의 Expand·Collapse는 목표 상태를 나르는 명령이라 클릭(뒤집기)으로 대신하지 않는다.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">배치 요소의 코드에는 플랫폼 분기가 없다. 배치 결과는 어디서나 같고, 차이는 입력 장치와 검증 범위에서 난다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>몸짓·장치</th><th>배치 요소에서</th></tr></thead>
+            <tbody>
+              <tr><td>손가락으로 가로 쓸기</td><td>strip·pager가 흐른다(<code>scroll</code>·<code>change</code>가 있을 때). 손가락이 움직인 축의 창만 흐른다. 400ms 안에 축 방향으로 12 논리 픽셀을 넘겨야 흘리기가 된다</td></tr>
+              <tr><td>손을 뗌</td><td>pager는 정착(<code>settle</code>) 한 번, strip은 관성으로 이어 흐르다 끝에서 멈춘다</td></tr>
+              <tr><td>나눔 손잡이를 누름 (터치)</td><td>누르는 즉시 끌기다. 감싼 창의 스크롤 후보가 아니다 — 사이드바·dock 손잡이도 같다</td></tr>
+              <tr><td>마우스로 끌기</td><td>pager·strip은 마우스 끌기로 흐르지 않는다. 흘리는 pan 판정은 터치에만 있다. 마우스는 휠·키보드·앱의 단추로 넘긴다</td></tr>
+              <tr><td>hover</td><td>손잡이는 hover·누름 동안만 강조 선을 긋는다. 터치 화면에서 쉬는 손잡이가 보이려면 <code>resting_divider</code>를 켠다</td></tr>
+              <tr><td>커서</td><td>손잡이는 좌우·위아래 크기 조절 커서를 단다. 포인터가 없는 터치 화면에서는 뜻이 없다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><strong>dock·pager는 Windows에서만 돌려 보았다.</strong> 두 요소의 소스는 모든 플랫폼의 공용 core에 들지만, 예제 <code>luil_selected_nodes</code>는 Windows 실행 파일이고 test도 Windows 전용 묶음에만 있다. Android·macOS·iOS에서 돌려 본 기록은 없다.</li>
+            <li>창 폭 등급은 host가 논리 폭으로 매긴다. Android의 창 크기는 시스템 막대·컷아웃을 뺀 안전 영역이다. 휴대폰 데모는 Windows에서도 세워 창 폭으로 두 꼴을 본다.</li>
+            <li>시스템이 상태 표시줄을 그리는 플랫폼에서는 <code>caption_element</code>가 자리를 차지하지 않는다. 휴대폰 데모는 <code>current_ui_platform().window_caption</code>으로 caption을 넣을지 고른다.</li>
+            <li>dock에서 떼어 낸 패널은 같은 표면 안에 떠서 dock 자리로 잘린다. 놓은 자리의 화면 좌표(<code>drag_release::screen</code>)는 그것을 모르는 플랫폼에서 비어 있다.</li>
+            <li>접근성 다리: Windows(UIA)와 macOS(AX)는 역할을 플랫폼 이름으로 옮긴다. Android 쪽에는 <code>access_role</code>을 옮기는 코드가 이 저장소에 없어 보조 기술 동작을 코드에서 확인할 수 없다.</li>
+            <li>배율: 끌기 변화량은 물리 이동 ÷ 배율이라 배율 1·1.25·2에서 같은 논리 값이다. strip의 최대치도 논리 픽셀이라 배율과 무관하다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다. "코드에서 확인한 동작"은 test가 잠그지 않은 것을 소스로 따라간 결론이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>자르지 않는 그릇은 넘친 자식을 그리고 누른다.</strong> stack·wrap·grid·layer·panel·group·sidebar에서 넘친 단추는 옆 판 위에서 눌린다. 잘라야 하면 strip이나 세로 스크롤 창에 담는다.</li>
+          <li><strong>유연 하한의 부족분은 다른 유연 항목의 몫에서 나온다.</strong> 하한들의 합이 남은 자리를 넘을 때만 stack·grid가 넘친다. 고정 길이는 다시 흥정하지 않는다. (설계 문서의 불변식 한 줄은 아직 "재분배하지 않고 넘친다"는 옛 규칙을 적고 있다. 코드와 test가 정본이다.)</li>
+          <li><strong>주축 정렬은 유연 항목이 모두 상한에 서도 뜻을 갖는다.</strong> 헤더 주석은 "유연 항목이 하나라도 있으면 정렬이 뜻이 없다"고 쓰지만, 코드는 모두 상한에 섰을 때 남는 자리를 <code>main_alignment</code>대로 둔다.</li>
+          <li><strong><code>stack_item { .weight = 0 }</code>은 길이 0의 고정 항목이다.</strong> 구조체로 담으면 다듬지 않는다. 0 이하를 1로 고치는 것은 <code>add_flexible</code>뿐이다. 그리고 <code>fit</code>은 <code>weight</code>·<code>length</code>를 이긴다.</li>
+          <li><strong>맞춤 자리에 넣은 panel·wrap·strip·group·sidebar·pager·dock은 길이 0이다.</strong> 원하는 크기에 답하는 배치 요소는 stack·grid·layer뿐이다. 길이를 직접 주거나 <code>height_for</code>·<code>width_for</code>·<code>wrap_height_for</code>를 쓴다.</li>
+          <li><strong>맞춤으로 담은 grid의 높이는 열을 "제한 없는 폭"으로 잰 값이다.</strong> grid의 원하는 크기는 받은 폭을 버리고 유연 열까지 맞춤처럼 잰다. 폭에 따라 줄이 접히는 내용을 유연 열에 두고 <code>add_fit</code>하면 잡힌 높이가 모자랄 수 있다 (코드에서 확인한 동작). 한 줄 입력만 든 폼은 영향이 없다.</li>
+          <li><strong>grid의 맞춤 열은 자식에게 무한대 폭을 묻는다.</strong> 여러 줄로 접히는 긴 글을 맞춤 열에 두면 그 열이 한 줄 폭만큼 넓어진다. <code>grid_track {}</code>는 맞춤 줄이고, grid에는 상한 필드가 없다.</li>
+          <li><strong><code>root_element</code>를 <code>make_arranged_tree</code>에 넣으면 자식이 배치되지 않는다.</strong> root는 자기 bounds만 정한다. 빠뜨린 배치는 <code>unarranged()</code>가 잡는다.</li>
+          <li><strong>stack·wrap·root·panel·strip에 <code>nullptr</code>를 넘기지 않는다.</strong> 이 다섯은 null을 거르지 않고, tree 색인과 그리기가 자식을 역참조한다. grid·layer·pager는 거른다. group·sidebar의 내용 인자와 dock의 <code>content</code>는 <code>nullptr</code>여도 된다.</li>
+          <li><strong>panel의 둥근 모서리는 내용을 자르지 않는다.</strong> 가장자리까지 칠하는 내용은 모서리 밖을 덮는다. 테두리는 내용 뒤에 그어 남는다.</li>
+          <li><strong>그룹은 slot 높이를 무시한다.</strong> bounds 높이가 <code>height_for(config)</code>라 stack 칸 길이를 다르게 주면 칸과 어긋난다. <code>content_height</code>를 빠뜨리면 내용 칸이 0이다. 그룹은 여백을 두지 않으므로 내용 stack의 padding으로 준다.</li>
+          <li><strong>토글만 준 그룹은 보조 기술로 접고 펼 수 없다.</strong> Expand·Collapse는 <code>set_collapsed</code>만 탄다.</li>
+          <li><strong>같은 owner의 그룹·사이드바 둘, 빈 id <code>ui_element_id {}</code>의 반복은 id가 겹친다.</strong> 첫 것이 이겨 hover·초점·보조 기술이 엉뚱한 쪽에 간다. <code>duplicate_ids()</code>로 확인한다.</li>
+          <li><strong>dock 탭 id에는 owner가 없다.</strong> dock 둘이나 dock과 다른 탭 막대가 같은 패널 key를 쓰면 탭 id가 겹친다.</li>
+          <li><strong>잘못된 <code>dock_layout</code>은 아무것도 그리지 않는다.</strong> 오류도 내지 않는다. 손으로 고친 layout은 <code>valid_dock_layout</code>으로 확인한다.</li>
+          <li><strong><code>layout.root.key</code>는 가장자리 놓기 뒤에 바뀐다.</strong> 처음 배치 뒤 root key는 <code>dock-2</code>다. <code>"root"</code>를 박아 두지 않는다.</li>
+          <li><strong>dock 분할은 최소 판을 표시에서만 지킨다.</strong> 상태의 <code>ratio</code>는 0.05~0.95로만 묶인다. 손잡이를 최소 판 너머로 끈 뒤 되돌리면 비율이 표시 범위로 돌아올 때까지 손잡이가 움직이지 않는다 (코드에서 확인한 동작).</li>
+          <li><strong>dock 분할 손잡이에는 끝 알림이 없다.</strong> <code>resize</code> 명령마다 <code>ratio</code>가 바뀐다. "놓을 때 한 번 저장"하는 길이 dock에는 없으니 저장 시점은 앱이 정한다.</li>
+          <li><strong>떠 있는 dock 패널은 자리 밖으로 나가지 않지만 상태는 나간 채 남는다.</strong> 표시만 dock 자리 안으로 다듬는다. 떼어 낸 자리는 언제나 360×240이다.</li>
+          <li><strong>strip은 화면만 다듬는다.</strong> 앱이 다듬지 않으면 끝을 넘은 값이 상태에 쌓인다. frame과 handle에서 같은 <code>clamp_scroll</code>을 쓴다.</li>
+          <li><strong>앱 정책을 둔 앱은 strip의 휠과 초점 되살리기를 직접 잇는다.</strong> 기본 <code>on_wheel</code>·<code>on_focus_moved</code>는 빈 목록이다. 몸통에서 <code>route_wheel</code>·<code>route_reveal</code>을 부른다. pager처럼 <code>step</code>이 있는 창의 휠은 정책보다 먼저 받는다.</li>
+          <li><strong>strip 안에 걸쳐 둔 손잡이는 바깥 절반이 hit되지 않는다.</strong> 걸치기는 부모가 자르지 않을 때만 선다. 자르는 그릇 안에서는 판 사이의 한 칸으로 담는다.</li>
+          <li><strong>사이드바 손잡이의 바깥 절반은 뒤에 담은 형제가 가져갈 수 있다.</strong> hit test는 뒤의 형제부터 본다. 내용 판이 그 자리에서 누를 수 있는 것을 가지면 그것이 이긴다 (코드에서 확인한 동작).</li>
+          <li><strong>사이드바는 접혀도 받은 내용을 버리지 않는다.</strong> 접힌 폭이 0보다 크면 내용을 접힌 폭(기본 48)에 배치한다. 접힌 동안은 내용 대신 <code>nullptr</code>를 넘긴다. <code>toggle_tooltip</code>이 비면 토글은 접근 이름도 역할도 없다.</li>
+          <li><strong><code>split_handle_element</code>는 <code>resize</code> 없이는 아무것도 아니다.</strong> 끌기·커서·Tab 자리·키가 모두 없다. <code>finish</code>는 손잡이가 사라졌거나 가려진 뒤의 뗌에는 오지 않으니 저장을 그것에만 걸면 한 번을 놓칠 수 있다.</li>
+          <li><strong>pager의 장은 전부 tree에 있고 전부 Tab 순서에 든다.</strong> 초점이 옆 장으로 가도 넘어가지 않는다 — pager는 되살리기에 답하지 않는다 (코드에서 확인한 동작). 막으려면 지금 장이 아닌 장 안의 초점 받는 요소마다 <code>set_enabled(false)</code>를 준다. 자리 판정은 그 요소 자신의 상태만 보고 조상을 보지 않는다.</li>
+          <li><strong>pager의 <code>count</code>는 앱이 맞춘다.</strong> 지은 장 수와 다르면 상태와 화면이 어긋난다. pager의 키는 pager 자신에 초점이 있을 때만이다 — 장 안의 단추에 초점이 있으면 ←/→는 pager로 가지 않는다.</li>
+          <li><strong>wrap에 크기가 다른 자식을 넣어도 모두 같은 칸을 받는다.</strong> <code>wrap_height_for</code>에 준 폭이 실제 slot 폭과 다르면 마지막 줄이 넘친다.</li>
+          <li><strong><code>visible(false)</code>는 자리를 비우지 않는다.</strong> 자리까지 빼려면 그 frame에서 담지 않는다.</li>
+          <li><strong><code>edge_insets</code>의 위치 초기화는 (left, top, right, bottom)이다.</strong> CSS의 (top, right, bottom, left)와 다르다. 헷갈리면 <code>.left =</code> 지정 초기화나 <code>symmetric</code>을 쓴다.</li>
+          <li><strong>창 폭 등급은 delegate의 넓은 훅에서만 온다.</strong> 기본 <code>make_metrics_message</code>는 세 값짜리 훅으로 넘겨 등급을 버린다. <code>classify_window_width</code>는 +∞를 expanded로 본다 (헤더 주석은 "유한하지 않으면 compact"라 쓰지만 코드와 test는 숫자가 아닌 값과 −∞만 compact다).</li>
+          <li><strong>factory는 어느 thread에서 불릴지 모른다.</strong> 포인터·키는 input thread, 보조 기술은 UI thread다. 앱 상태를 참조로 잡지 않는다. 생성자에서 불리는 dock의 <code>content</code>만 logic thread다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>사이드바가 접혔는지는 누가 들고 있나?</summary><div class="faq-a"><p class="faq-short">앱이다. <code>sidebar_config::collapsed</code>로 받아 그리고 <code>toggle</code>만 낸다.</p><p>전환 중의 지금 폭은 <code>width</code>에 따로 싣는다. <code>collapsed</code>는 목표, <code>width</code>는 지금이다 (<a class="xref" href="#build-side-panel">사이드바</a>).</p></div></details>
+          <details class="faq"><summary>나눔 손잡이로 바꾼 폭은 어디에 저장되나?</summary><div class="faq-a"><p class="faq-short">손잡이는 길이를 담지 않는다. 앱이 <code>resize(delta)</code>를 더하고 <code>finish()</code>가 올 때 저장한다.</p><p>뗄 때 한 번, 키는 걸음마다 한 번 온다. 손잡이가 사라졌거나 가려진 뒤의 뗌에는 오지 않는다 (<a class="xref" href="#build-split-row">좌우로 나눈 두 판</a>).</p></div></details>
+          <details class="faq"><summary>오른쪽 판의 폭을 손잡이로 바꾸는데 반대로 움직인다.</summary><div class="faq-a"><p class="faq-short"><code>grows = toward_start</code>로 둔다.</p><p>요소가 부호를 맞춰 "+ = 그 판이 넓어짐"이 된다. 사이드바는 <code>side</code>에 따라 스스로 고른다.</p></div></details>
+          <details class="faq"><summary>손잡이를 키보드로 옮기면 몇 픽셀인가? Home/End는?</summary><div class="faq-a"><p class="faq-short">화살표 8, Page 64 논리 픽셀이다. Home/End는 답하지 않고 앱으로 흐른다.</p><p>손잡이는 자기 범위를 몰라 "끝"에 답할 값이 없다. 키 한 번이 곧 한 번의 바꾸기라 <code>finish()</code>가 바로 뒤따른다.</p></div></details>
+          <details class="faq"><summary>폼의 라벨 열을 가장 긴 라벨에 맞추려면?</summary><div class="faq-a"><p class="faq-short"><code>grid_config::columns = { grid_track::fit(), grid_track::flexible() }</code>.</p><p>라벨 열이 그 열 하나에만 놓인 라벨들의 원하는 폭 중 가장 큰 것이 된다. 언어가 바뀌어도 고칠 폭이 없다. arrange 뒤에는 <code>column_widths()</code>로 읽을 수 있다 (<a class="xref" href="#build-form">폼</a>).</p></div></details>
+          <details class="faq"><summary>그림 위 오른쪽 위 모서리에 배지를 띄우려면?</summary><div class="faq-a"><p class="faq-short"><code>layer_element</code>에 그림, 배지 순서로 담고 배지에 <code>{ .horizontal = end, .vertical = start }</code>를 준다.</p><p>바깥으로 빼려면 음수 <code>margin</code>을 준다 — <code>{ 0.0f, -8.0f, -8.0f, 0.0f }</code>는 (left, top, right, bottom) 순서라 위·오른쪽으로 8 나간다 (<a class="xref" href="#build-toolbar">도구 막대</a>).</p></div></details>
+          <details class="faq"><summary>접힌 그룹의 내용은 눌리지 않나?</summary><div class="faq-a"><p class="faq-short">접히면 내용이 tree에 아예 없다.</p><p>그리지도, 누르지도, 보조 기술이 읽지도 않는다. 그룹 높이는 <code>height_for(config)</code>로 stack 칸에 쓴다 (<a class="xref" href="#build-group">접이식 섹션</a>).</p></div></details>
+          <details class="faq"><summary>가로로 넘치는 단추 줄을 손가락으로 쓸어 흘리려면?</summary><div class="faq-a"><p class="faq-short"><code>strip_element</code>에 <code>content_width</code>와 <code>scroll</code>을 준다.</p><p>넘칠 때만 가로 흘림의 임자가 된다. 흘린 양은 앱이 들고 <code>clamp_scroll</code>로 다듬는다 (<a class="xref" href="#build-strip">가로로 흐르는 띠</a>).</p></div></details>
+          <details class="faq"><summary>strip 위에서 마우스 휠이 안 먹는다.</summary><div class="faq-a"><p class="faq-short">앱 정책이 있으면 <code>on_wheel</code>이 휠을 받는데 기본은 빈 목록이다.</p><p>몸통에서 <code>route_wheel(tree, event, scroll_delta)</code>를 부른다. 세로 휠은 축을 묻지 않아 가로 띠도 흘린다. 정책이 없으면 controller가 바로 표 없는 길을 탄다.</p></div></details>
+          <details class="faq"><summary>pager의 offset 단위는? 1.5는 무엇인가?</summary><div class="faq-a"><p class="faq-short">페이지다. 1.5는 둘째 장에서 셋째 장으로 반쯤 넘긴 자리다.</p><p>장 i의 자리는 <code>x + (i − offset) × 폭</code>이다. 모든 장이 배치되고 pager가 자른다.</p></div></details>
+          <details class="faq"><summary>손을 떼면 어느 장에 서나?</summary><div class="faq-a"><p class="faq-short"><code>round(지금 + clamp(속도 × 0.18초, −1, 1))</code>이다.</p><p>빠르게 튕기면 0.2만 넘겨도 다음 장이고, 아무리 빨라도 한 장까지다. 정착은 곧바로 서고 애니메이션은 앱이 붙인다.</p></div></details>
+          <details class="faq"><summary>pager를 마우스로 끌어 넘길 수 있나?</summary><div class="faq-a"><p class="faq-short">없다. 터치 끌기·휠(한 눈금에 한 장)·키보드·앱의 단추로 넘긴다.</p><p>pager는 끌기 대상을 두지 않고, 흘리는 pan 판정은 터치에만 있다.</p></div></details>
+          <details class="faq"><summary>dock 배치를 저장했다가 되살리려면?</summary><div class="faq-a"><p class="faq-short"><code>dock_layout</code>은 값이라 앱이 그대로 직렬화한다. 직렬화 함수는 라이브러리에 없다.</p><p>되살린 값은 <code>valid_dock_layout</code>으로 확인한다. 잘못이면 dock이 아무것도 짓지 않는다.</p></div></details>
+          <details class="faq"><summary>dock 패널을 닫는 명령이 있나?</summary><div class="faq-a"><p class="faq-short">없다. <code>detach</code> 뒤 생긴 떠 있는 그룹을 지우면 정리까지 공개 API로 된다.</p><p><a class="xref" href="#build-dock-helpers">패널 닫기</a>의 <code class="free">close_dock_panel</code>이 그 꼴이다.</p></div></details>
+          <details class="faq"><summary>dock 탭을 창 밖으로 끌어 새 OS 창을 띄우려면?</summary><div class="faq-a"><p class="faq-short"><code>detach</code> 명령의 <code>release</code>(화면 좌표·<code>outside</code>)를 읽어 앱이 보조 창을 연다.</p><p>기본 helper는 같은 표면에 띄운다 — OS 창을 만들지 않는다. 다중 창 경로는 <a class="xref" href="window.html">창과 셸 통합</a>에 있다.</p></div></details>
+          <details class="faq"><summary>dock의 판 내용은 언제 지어지나?</summary><div class="faq-a"><p class="faq-short"><code>dock_element</code> 생성자에서, 그룹마다 고른 패널 하나만, logic thread에서다.</p><p>고르지 않은 탭의 내용은 tree에 없다. 편집 중인 초안은 factory 밖 앱 상태에 둔다.</p></div></details>
+          <details class="faq"><summary>dock 분할 비율을 끌기가 끝났을 때 저장하려면?</summary><div class="faq-a"><p class="faq-short">그런 메시지가 없다. 분할 손잡이에는 끝 알림이 달리지 않아 <code>resize</code> 명령만 온다.</p><p>저장 시점은 앱이 정한다 (예: 종료 처리).</p></div></details>
+          <details class="faq"><summary>좁은 창은 한 판, 넓은 창은 두 판으로 하려면?</summary><div class="faq-a"><p class="faq-short"><code>window_metrics::width_class != compact</code>로 가른다 (경계 600).</p><p>다른 경계는 <code>classify_window_width(폭 ÷ 배율, { .medium = …, .expanded = … })</code>로 다시 매긴다 (<a class="xref" href="#build-width-custom">등급 경계 바꾸기</a>).</p></div></details>
+          <details class="faq"><summary><code>root_element</code>와 stack 중 무엇을 뿌리로 쓰나?</summary><div class="faq-a"><p class="faq-short">가지를 따로 배치해 겹치지 않게 쌓는다면 root, 그릇 하나가 전부 배치하면 stack이다.</p><p>root는 가지마다 arrange해 담고 <code>ui_tree</code> 생성자로 감싼다. stack 뿌리는 <code>make_arranged_tree</code> 한 줄이다.</p></div></details>
+          <details class="faq"><summary>숨긴 자식이 자리를 차지한다. 빼려면?</summary><div class="faq-a"><p class="faq-short"><code>visible(false)</code>는 그리기와 hit만 끈다. 그 frame에서 담지 않는다.</p></div></details>
+          <details class="faq"><summary>같은 크기 칩을 여러 줄로 놓고 높이를 미리 알려면?</summary><div class="faq-a"><p class="faq-short"><code>wrap_height_for(config, 폭, 개수)</code>다.</p><p>arrange와 같은 열 계산이라 담는 칸 길이에 그대로 쓴다 (<a class="xref" href="#build-wrap">줄바꿈</a>의 실습에서 돌려 볼 수 있다).</p></div></details>
+          <details class="faq"><summary>stack 칸이 모자랄 때 하한을 준 항목은 넘치나?</summary><div class="faq-a"><p class="faq-short">다른 유연 항목의 몫을 먼저 줄인다. 하한들의 합이 자리를 넘을 때만 넘친다.</p><p>폭 300에 <code>{ weight 1, minimum 160 }</code>과 <code>{ weight 1 }</code>이면 160/140이다. 걸음은 <a class="xref" href="layout.html#s6">비율 분배</a>에 있다.</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/dock_element.h" target="_blank" rel="noopener">include/luil/ui/dock_element.h</a><span class="n">최상위 기호 11</span></div>
+            <div class="hdr-syms"><a href="api.html#dock-node" title="구조체"><span class="kb t">S</span>dock_node</a><a href="api.html#floating-dock" title="구조체"><span class="kb t">S</span>floating_dock</a><a href="api.html#dock-layout" title="구조체"><span class="kb t">S</span>dock_layout</a><a href="api.html#dock-placement" title="열거형"><span class="kb e">E</span>dock_placement</a><a href="api.html#dock-operation" title="열거형"><span class="kb e">E</span>dock_operation</a><a href="api.html#dock-command" title="구조체"><span class="kb t">S</span>dock_command</a><a href="api.html#valid-dock-layout" title="함수"><span class="kb f">f</span>valid_dock_layout</a><a href="api.html#apply-dock-command" title="함수"><span class="kb f">f</span>apply_dock_command</a><a href="api.html#dock-panel" title="구조체"><span class="kb t">S</span>dock_panel</a><a href="api.html#dock-config" title="구조체"><span class="kb t">S</span>dock_config</a><a href="api.html#dock-element" title="클래스"><span class="kb t">C</span>dock_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/grid_element.h" target="_blank" rel="noopener">include/luil/ui/grid_element.h</a><span class="n">최상위 기호 5</span></div>
+            <div class="hdr-syms"><a href="api.html#grid-track-kind" title="열거형"><span class="kb e">E</span>grid_track_kind</a><a href="api.html#grid-track" title="구조체"><span class="kb t">S</span>grid_track</a><a href="api.html#grid-config" title="구조체"><span class="kb t">S</span>grid_config</a><a href="api.html#grid-cell" title="구조체"><span class="kb t">S</span>grid_cell</a><a href="api.html#grid-element" title="클래스"><span class="kb t">C</span>grid_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/group_element.h" target="_blank" rel="noopener">include/luil/ui/group_element.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#group-config" title="구조체"><span class="kb t">S</span>group_config</a><a href="api.html#group-header-height" title="상수"><span class="kb ">k</span>group_header_height</a><a href="api.html#group-element" title="클래스"><span class="kb t">C</span>group_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/layer_element.h" target="_blank" rel="noopener">include/luil/ui/layer_element.h</a><span class="n">최상위 기호 2</span></div>
+            <div class="hdr-syms"><a href="api.html#layer-item" title="구조체"><span class="kb t">S</span>layer_item</a><a href="api.html#layer-element" title="클래스"><span class="kb t">C</span>layer_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/layout_metrics.h" target="_blank" rel="noopener">include/luil/ui/layout_metrics.h</a><span class="n">최상위 기호 9</span></div>
+            <div class="hdr-syms"><a href="api.html#window-width-class" title="열거형"><span class="kb e">E</span>window_width_class</a><a href="api.html#window-width-breakpoints" title="구조체"><span class="kb t">S</span>window_width_breakpoints</a><a href="api.html#classify-window-width" title="함수"><span class="kb f">f</span>classify_window_width</a><a href="api.html#edge-insets" title="구조체"><span class="kb t">S</span>edge_insets</a><a href="api.html#layout-alignment" title="열거형"><span class="kb e">E</span>layout_alignment</a><a href="api.html#align-within" title="함수"><span class="kb f">f</span>align_within</a><a href="api.html#scroll-edges" title="구조체"><span class="kb t">S</span>scroll_edges</a><a href="api.html#clamp-scroll" title="함수"><span class="kb f">f</span>clamp_scroll</a><a href="api.html#scroll-delta-to-reveal" title="함수"><span class="kb f">f</span>scroll_delta_to_reveal</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/pager_element.h" target="_blank" rel="noopener">include/luil/ui/pager_element.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#settled-pager-offset" title="함수"><span class="kb f">f</span>settled_pager_offset</a><a href="api.html#pager-operation" title="열거형"><span class="kb e">E</span>pager_operation</a><a href="api.html#pager-command" title="구조체"><span class="kb t">S</span>pager_command</a><a href="api.html#apply-pager-command" title="함수"><span class="kb f">f</span>apply_pager_command</a><a href="api.html#pager-config" title="구조체"><span class="kb t">S</span>pager_config</a><a href="api.html#pager-element" title="클래스"><span class="kb t">C</span>pager_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/panel_element.h" target="_blank" rel="noopener">include/luil/ui/panel_element.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#panel-border-sides" title="구조체"><span class="kb t">S</span>panel_border_sides</a><a href="api.html#panel-config" title="구조체"><span class="kb t">S</span>panel_config</a><a href="api.html#panel-element" title="클래스"><span class="kb t">C</span>panel_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/root_element.h" target="_blank" rel="noopener">include/luil/ui/root_element.h</a><span class="n">최상위 기호 1</span></div>
+            <div class="hdr-syms"><a href="api.html#root-element" title="클래스"><span class="kb t">C</span>root_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/sidebar_element.h" target="_blank" rel="noopener">include/luil/ui/sidebar_element.h</a><span class="n">최상위 기호 5</span></div>
+            <div class="hdr-syms"><a href="api.html#sidebar-side" title="열거형"><span class="kb e">E</span>sidebar_side</a><a href="api.html#sidebar-config" title="구조체"><span class="kb t">S</span>sidebar_config</a><a href="api.html#sidebar-header-height" title="상수"><span class="kb ">k</span>sidebar_header_height</a><a href="api.html#sidebar-handle-width" title="상수"><span class="kb ">k</span>sidebar_handle_width</a><a href="api.html#sidebar-element" title="클래스"><span class="kb t">C</span>sidebar_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/split_handle_element.h" target="_blank" rel="noopener">include/luil/ui/split_handle_element.h</a><span class="n">최상위 기호 8</span></div>
+            <div class="hdr-syms"><a href="api.html#split-axis" title="열거형"><span class="kb e">E</span>split_axis</a><a href="api.html#split-grows" title="열거형"><span class="kb e">E</span>split_grows</a><a href="api.html#split-resize-message-factory" title="별칭"><span class="kb t">=</span>split_resize_message_factory</a><a href="api.html#split-finish-message-factory" title="별칭"><span class="kb t">=</span>split_finish_message_factory</a><a href="api.html#split-handle-key-step" title="상수"><span class="kb ">k</span>split_handle_key_step</a><a href="api.html#split-handle-key-page-step" title="상수"><span class="kb ">k</span>split_handle_key_page_step</a><a href="api.html#split-handle-config" title="구조체"><span class="kb t">S</span>split_handle_config</a><a href="api.html#split-handle-element" title="클래스"><span class="kb t">C</span>split_handle_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/stack_element.h" target="_blank" rel="noopener">include/luil/ui/stack_element.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#stack-direction" title="열거형"><span class="kb e">E</span>stack_direction</a><a href="api.html#stack-alignment" title="열거형"><span class="kb e">E</span>stack_alignment</a><a href="api.html#stack-main-alignment" title="열거형"><span class="kb e">E</span>stack_main_alignment</a><a href="api.html#stack-config" title="구조체"><span class="kb t">S</span>stack_config</a><a href="api.html#stack-item" title="구조체"><span class="kb t">S</span>stack_item</a><a href="api.html#stack-element" title="클래스"><span class="kb t">C</span>stack_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/strip_element.h" target="_blank" rel="noopener">include/luil/ui/strip_element.h</a><span class="n">최상위 기호 2</span></div>
+            <div class="hdr-syms"><a href="api.html#strip-config" title="구조체"><span class="kb t">S</span>strip_config</a><a href="api.html#strip-element" title="클래스"><span class="kb t">C</span>strip_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/wrap_element.h" target="_blank" rel="noopener">include/luil/ui/wrap_element.h</a><span class="n">최상위 기호 4</span></div>
+            <div class="hdr-syms"><a href="api.html#wrap-config" title="구조체"><span class="kb t">S</span>wrap_config</a><a href="api.html#wrap-columns-for" title="함수"><span class="kb f">f</span>wrap_columns_for</a><a href="api.html#wrap-height-for" title="함수"><span class="kb f">f</span>wrap_height_for</a><a href="api.html#wrap-element" title="클래스"><span class="kb t">C</span>wrap_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<script src="assets/containermodel.js"></script>
+<script src="assets/containers-lab.js"></script>
+<script>
+  LuilContainersLab.grid(document.getElementById("gl-lab"));
+  LuilContainersLab.wrap(document.getElementById("wl-lab"));
+  LuilContainersLab.width(document.getElementById("wc-lab"));
+</script>
+</body>
+</html>

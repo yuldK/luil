@@ -227,12 +227,14 @@
     canvas.addEventListener("pointercancel", (event) => finish(event, "cancel"));
 
     // examples/demo/ink_sketch.h의 sample_actions — 정해 둔 물결 획 하나를 캔버스가 내는 것과 같은 메시지로 낸다
+    // float 연산을 한 번씩 반올림한다(Math.fround). std::sin(float)만은 Math.sin을 반올림한 값이라 마지막 자리가 다를 수 있다.
     function sampleStroke() {
-      const shift = (state.layer.length % 6) * 24;
+      const shift = f((state.layer.length % 6) * 24);
       const count = 16;
       for (let index = 0; index < count; index++) {
         const along = f(index / (count - 1));
-        const point = { x: f(24 + along * 220), y: f(40 + shift + Math.sin(along * 6.2831853) * 16), pressure: f(0.2 + along * 0.8) };
+        const wave = f(f(Math.sin(f(along * f(6.2831853)))) * 16);
+        const point = { x: f(24 + f(along * 220)), y: f(f(40 + shift) + wave), pressure: f(f(0.2) + f(along * f(0.8))) };
         emitStroke({ phase: index === 0 ? "begin" : "extend", device: "pen", point, pressure_reported: true });
         if (index + 1 === count) emitStroke({ phase: "end", device: "pen", point, pressure_reported: true });
       }

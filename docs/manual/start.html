@@ -1,0 +1,1594 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>설치와 첫 앱 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — 도구사슬과 Skia 패키지를 갖추고, 저장소를 preset으로 빌드하고, 내 CMake 프로젝트에 luil::luil을 붙여 hello를 본뜬 첫 창을 띄우는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  /* 두 소비 길 — 판 둘이 나란히 선다 */
+  .paths .panel h3 { display: flex; gap: 8px; align-items: center; }
+  .paths .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  /* 문제 해결 거르기 */
+  .ts-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 2px 0 6px; }
+  .ts-tools .ci { font-size: 16px; color: var(--fg-3); }
+  .ts-tools input[type="search"] { flex: 1 1 240px; min-width: 0; }
+  .ts-count { font-size: var(--fs-xs); color: var(--fg-3); font-variant-numeric: tabular-nums; }
+  .ts-group:not([hidden]) { display: grid; gap: 10px; }
+  .ts-group + .ts-group { margin-top: 10px; }
+  .ts-group h3 { margin: 0; }
+  table.ts td:first-child { min-width: 15em; }
+  table.ts td:last-child, table.ts td:last-child code { white-space: nowrap; font-size: var(--fs-xs); }
+  /* 칸이 넷 이상인 표는 좁은 화면에서 줄이지 않고 표 틀 안에서 가로로 흘린다 */
+  table.t.wide { min-width: 720px; }
+  /* 좁은 칸에서 낱말이 글자 단위로 쪼개지지 않게 한다. 코드는 자리가 모자랄 때만 끊는다 */
+  table.t td, table.t th { overflow-wrap: break-word; }
+  .doc-body :not(pre) > code { word-break: normal; }
+  /* 탭 안의 코드·글 사이 간격 (숨긴 탭은 그대로 숨는다) */
+  .tabs > section:not([hidden]) { display: grid; gap: 12px; }
+  .ts-empty { font-size: var(--fs-sm); color: var(--fg-2); border: 1px dashed var(--line-2); border-radius: var(--r-row); padding: 10px 12px; }
+  /* 근거 링크 (페이지 스크립트가 기준 커밋의 GitHub 줄로 잇는다) */
+  a.src { text-decoration: none; }
+  a.src code { color: var(--link); }
+  a.src:hover code { text-decoration: underline; }
+  .recap .tag { margin-right: 4px; vertical-align: 1px; }
+</style>
+</head>
+<body data-page="start">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>설치와 첫 앱</h1>
+      <p class="summary">필요한 것은 플랫폼의 도구사슬, CMake 4.2.0 이상, 그리고 대상마다 하나인 Skia 패키지다. 내 프로젝트에는 luil 소스 트리를 <code>add_subdirectory</code>로 넣거나(네 플랫폼), Windows라면 설치 패키지를 <code>find_package</code>로 찾는다. 어느 쪽이든 <code>luil::luil</code> 하나를 링크하고, 앱은 hello처럼 상태를 쥔 driver 하나와 진입 함수 하나로 시작한다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>CMakeLists.txt</code>·<code>CMakePresets.json</code>·<code>cmake/luil-config.cmake.in</code>·<code>scripts/fetch_skia.ps1</code>·<code>examples/hello</code>·<code>tests/package_consumer</code></dd></div>
+          <div><dt>대상</dt><dd>Windows 11 x64 · Android arm64 · macOS arm64 · iOS arm64</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="overview.html">luil 개요</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>플랫폼마다 설치할 것과 고정된 의존성의 판번을 안다.</li>
+            <li>Skia 패키지를 받고 preset으로 저장소와 hello를 빌드한다.</li>
+            <li>내 CMake 프로젝트에 luil을 소스 트리나 설치 패키지로 붙이고, 실행 파일에 필요한 리소스를 싣는다.</li>
+            <li>hello를 본떠 상태·메시지·driver·delegate·진입점을 갖춘 첫 앱을 쓴다.</li>
+            <li>configure·링크·시작 단계의 오류를 메시지로 찾아 고친다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="prereq">
+        <header class="sec-head">
+          <h2>준비물</h2>
+          <p class="lede">플랫폼의 도구사슬과 CMake 4.2.0 이상이 있으면 된다. 의존성은 판번과 체크섬이 저장소에 고정되어 있고, configure는 아무것도 내려받지 않는다.</p>
+        </header>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">이 문서의 명령에 대해</span>명령과 CMake는 README·<code>docs/</code>·<code>CMakePresets.json</code>·test에서 옮겼다. 설명서를 쓴 환경(Linux, CMake 3.28)에서는 돌려 보지 않았다 — luil의 configure는 첫 줄에서 CMake 4.2.0을 요구하고, 네 플랫폼 밖의 OS는 받지 않는다. 문서에서 그대로 옮긴 조각은 머리에 "문서 기준"이라고 적었다.</div></div>
+        <div class="table-wrap">
+          <table class="t wide">
+            <thead><tr><th>대상</th><th>호스트</th><th>컴파일러 · generator</th><th>SDK · 런타임</th><th>그 밖에 필요한 것</th></tr></thead>
+            <tbody>
+              <tr><td>Windows 11 x64</td><td>Windows</td><td>Visual Studio 2022 또는 2026, MSVC 19.40 이상. generator는 <code>Visual Studio 17 2022</code>·<code>Visual Studio 18 2026</code>, 플랫폼은 x64만</td><td>Windows SDK 10.0.22621.0 이상</td><td>PowerShell(받는 스크립트), Git</td></tr>
+              <tr><td>Android arm64</td><td>문서의 명령은 Windows의 PowerShell이다</td><td>NDK r27d(<code>27.3.13750724</code>)의 clang, Ninja Multi-Config</td><td>API 26 이상, arm64-v8a, <code>c++_static</code></td><td>Android Studio(SDK·JBR) — platform android-37, Build-Tools 37, Command-line Tools, Platform-Tools. adb로 잇는 기기</td></tr>
+              <tr><td>macOS arm64</td><td>Apple Silicon Mac</td><td>Xcode의 clang, Ninja Multi-Config</td><td>배포 하한 11.0, arm64만</td><td><code>pwsh</code> — 받는 스크립트가 PowerShell이다</td></tr>
+              <tr><td>iOS arm64</td><td>Mac</td><td>Xcode의 clang, Ninja Multi-Config</td><td>iOS 15.0 이상, 기기와 Apple Silicon 시뮬레이터 (x86_64 시뮬레이터는 없다)</td><td><code>pwsh</code>. 기기에 설치하려면 서명 신원과 provisioning profile</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code" data-lang="cmake" data-src="CMakeLists.txt:48-64" data-path="CMakeLists.txt" data-start="48"><script type="text/plain">
+set(LUIL_CXX_STANDARD 20)
+set(LUIL_MINIMUM_MSVC_VERSION 1940)
+set(LUIL_MINIMUM_WINDOWS_SDK_VERSION "10.0.22621.0")
+set(LUIL_TARGET_ARCHITECTURE "x64")
+set(LUIL_SUPPORTED_GENERATORS
+    "Visual Studio 17 2022"
+    "Visual Studio 18 2026"
+)
+# macOS의 대상이다. Skia 패키지(mac-arm64)가 정한 것과 같아야 한다.
+#  - 아키텍처는 arm64 하나다. 패키지가 그것만 담는다.
+#  - 최소 판은 패키지의 배포 하한(toolchain.json의 macos_deployment_target)과 같은 11이다.
+#    libc++의 부동소수점 `to_chars`(chrono·`std::format`의 실수 서식)는 13.3부터라 쓰지 않는다.
+set(LUIL_MACOS_ARCHITECTURE "arm64")
+set(LUIL_MINIMUM_MACOS_VERSION "11.0")
+# iOS는 기기와 시뮬레이터 모두 arm64다 (skia-prep의 ios-arm64·ios-arm64-simulator). 하한은 패키지와 같은 15.0이다.
+set(LUIL_IOS_ARCHITECTURE "arm64")
+set(LUIL_MINIMUM_IOS_VERSION "15.0")
+</script></div>
+        <div class="prose">
+          <p>위 표의 값은 문서(README, <code>docs/concepts/build-system.md</code>)와 이 상수들이 같다. configure는 이 값으로 generator·플랫폼·SDK·MSVC 판(Windows), ABI·API 수준·C++ 런타임(Android), 아키텍처·배포 하한(macOS·iOS)을 검사하고, 어긋나면 원인을 적고 멈춘다(<a class="xref" href="#troubleshoot">문제 해결</a>).</p>
+        </div>
+        <h3>고정된 의존성</h3>
+        <div class="table-wrap">
+          <table class="t wide">
+            <thead><tr><th>의존성</th><th>언제 필요한가</th><th>준비</th><th>고정된 판</th></tr></thead>
+            <tbody>
+              <tr><td>Skia</td><td>모든 구성</td><td><code>scripts/fetch_skia.ps1</code> (<a class="xref" href="#skia">아래</a>)</td><td>M157 <code>b94213a11b3a</code>, 패키지 r1 — 대상 다섯</td></tr>
+              <tr><td>nlohmann/json</td><td>모든 구성. HTTP를 부르지 않는 앱도 — 공개 헤더가 <code>&lt;nlohmann/json_fwd.hpp&gt;</code>를 들인다</td><td><code>git submodule update --init third_party/nlohmann_json</code></td><td>submodule commit</td></tr>
+              <tr><td>WebView2 SDK</td><td>Windows에서 <code>LUIL_ENABLE_WEBVIEW</code>가 켜진 구성 (기본값은 <code>LUIL_ENABLE_DIRECT3D</code>를 따른다)</td><td><code>scripts/fetch_webview2.ps1</code></td><td>1.0.4191.47 (NuGet)</td></tr>
+              <tr><td>WebView2 Evergreen Runtime</td><td>웹 콘텐츠를 실행할 때. 빌드에는 필요 없다</td><td>앱이 설치·배포를 준비한다</td><td>—</td></tr>
+              <tr><td>GameActivity</td><td>Android</td><td><code>scripts/fetch_game_activity.ps1</code>. Java 절반은 Gradle이 같은 판번을 받는다</td><td>4.4.2 (AAR)</td></tr>
+              <tr><td>Catch2</td><td><code>LUIL_BUILD_TESTS</code>를 켠 구성만</td><td><code>git submodule update --init third_party/catch2</code></td><td>submodule commit</td></tr>
+              <tr><td>libsmb2</td><td><code>LUIL_ENABLE_SMB</code>를 켠 Android·iOS 구성만 (기본 끔)</td><td>submodule <code>third_party/libsmb2</code></td><td><code>libsmb2-6.2</code> (문서 기준)</td></tr>
+              <tr><td>Codicons · MD4C · Unicode 데이터</td><td>저장소에 들어 있다. 빌드할 때 체크섬을 확인한다</td><td>—</td><td>Codicons 0.0.46-24</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">판번은 <code>third_party/*-prep*.json</code> 핀 파일과 <code>cmake/verify_codicons.cmake</code>에서 읽었다. submodule은 이 체크아웃에서 초기화되지 않아 판을 적지 않는다. 고정 방식 전체는 <a class="xref" href="testing.html#s5">시험과 빌드 — 고정된 의존성</a>에 있다.</p>
+      </section>
+
+      <section class="sec" id="skia">
+        <header class="sec-head">
+          <h2>Skia 받기</h2>
+          <p class="lede">Skia는 소스로 짓지 않는다. 대상마다 하나인 핀 파일이 패키지(헤더·정적 라이브러리·고지)를 고르고, 스크립트가 받아 SHA-256을 확인한 뒤 정해진 자리에 푼다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="powershell" data-src="scripts/fetch_skia.ps1:10-16,33-49" data-path="scripts/fetch_skia.ps1" data-start="10"><script type="text/plain">
+# 대상은 -Target이 고른다. 기본값은 win-x64이고, 핀과 설치 자리도 지금까지와 같다.
+#   win-x64       third_party/skia-prep.json → third_party/skia-prep
+#   android-arm64 third_party/skia-prep-android-arm64.json → third_party/skia-prep-android-arm64
+#   mac-arm64     third_party/skia-prep-mac-arm64.json → third_party/skia-prep-mac-arm64
+#   ios-arm64     third_party/skia-prep-ios-arm64.json → third_party/skia-prep-ios-arm64 (iPhone·iPad 기기)
+#   ios-arm64-simulator third_party/skia-prep-ios-arm64-simulator.json → third_party/skia-prep-ios-arm64-simulator
+# 대상마다 설치 자리가 따로라 한 저장소에서 두 대상을 함께 빌드할 수 있다.
+⋯@33
+[CmdletBinding()]
+param(
+    [ValidateSet('Debug', 'Release')]
+    [string[]]$Configuration = @('Release'),
+    # 받을 패키지의 대상이다. 핀의 target과 같아야 한다.
+    [ValidateSet('win-x64', 'android-arm64', 'mac-arm64', 'ios-arm64', 'ios-arm64-simulator')]
+    [string]$Target = 'win-x64',
+    [string]$Destination,
+    [string]$PinFile,
+    [string]$ArchiveDirectory,
+    [switch]$Force,
+    # 네트워크를 쓰지 않는다. 아카이브가 없거나 해시가 다르면 받지 않고
+    # 어디에 두어야 하는지만 말하고 실패한다.
+    [switch]$Offline,
+    # Release 구성을 디버그 정보가 든 심볼 자산으로 받는다.
+    [switch]$Symbols
+)
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="10-16" data-title="대상 다섯, 자리 다섯">대상마다 핀 파일과 설치 자리가 따로다. <code>win-x64</code>만 접미사 없는 옛 경로를 쓴다. 자리가 따로라 한 저장소에서 두 대상을 함께 지을 수 있다.</li>
+            <li data-lines="35-36" data-title="기본은 Release 하나">구성을 주지 않으면 Release만 받는다. Visual Studio 같은 다중 구성 generator는 <code>CMAKE_CONFIGURATION_TYPES</code>의 구성을 모두 검사하므로 Debug도 있어야 한다. 문서의 명령이 늘 <code>-Configuration Debug,Release</code>인 까닭이다.</li>
+            <li data-lines="37-39" data-title="대상">핀의 <code>target</code>과 고른 대상이 다르면 받거나 지우기 전에 멈춘다.</li>
+            <li data-lines="40-48" data-title="자리·캐시·오프라인">받아 둔 zip이 <code>-ArchiveDirectory</code>에 있고 해시가 맞으면 네트워크를 쓰지 않는다. <code>-Offline</code>은 받으러 가지 않고 실패한다. 같은 패키지가 이미 설치되어 있으면 다시 풀지 않고, <code>-Force</code>로 다시 푼다. <code>-Symbols</code>는 win-x64의 심볼 자산이다.</li>
+          </ol>
+        </div>
+        <div class="table-wrap">
+          <table class="t wide">
+            <thead><tr><th>대상 (<code>-Target</code>)</th><th>핀 파일</th><th>설치 자리</th><th>Skia를 지은 컴파일러</th><th class="num">Release · Debug</th></tr></thead>
+            <tbody>
+              <tr><td><code>win-x64</code> (기본)</td><td><code>third_party/skia-prep.json</code></td><td><code>third_party/skia-prep</code></td><td>clang-cl</td><td class="num">22.1 · 155.4 MB</td></tr>
+              <tr><td><code>android-arm64</code></td><td><code>third_party/skia-prep-android-arm64.json</code></td><td><code>third_party/skia-prep-android-arm64</code></td><td>clang (NDK r27d)</td><td class="num">19.4 · 59.9 MB</td></tr>
+              <tr><td><code>mac-arm64</code></td><td><code>third_party/skia-prep-mac-arm64.json</code></td><td><code>third_party/skia-prep-mac-arm64</code></td><td>clang (Xcode)</td><td class="num">12.1 · 185.9 MB</td></tr>
+              <tr><td><code>ios-arm64</code> (기기)</td><td><code>third_party/skia-prep-ios-arm64.json</code></td><td><code>third_party/skia-prep-ios-arm64</code></td><td>clang</td><td class="num">11.9 · 185.7 MB</td></tr>
+              <tr><td><code>ios-arm64-simulator</code></td><td><code>third_party/skia-prep-ios-arm64-simulator.json</code></td><td><code>third_party/skia-prep-ios-arm64-simulator</code></td><td>clang</td><td class="num">12.1 · 185.9 MB</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">크기는 핀 파일의 <code>size</code>(바이트)를 10⁶으로 나눈 값이다. win-x64에는 심볼 자산(89.0 MB)이 더 있다. 다섯 핀 모두 Skia 157 <code>b94213a11b3a</code>, 패키지 r1이다.</p>
+        <div class="code" data-lang="powershell" data-label="docs/skia-build.md · 문서 기준" data-src="docs/skia-build.md:14-16" data-path="docs/skia-build.md" data-start="14"><script type="text/plain">
+scripts\fetch_skia.ps1 -Configuration Debug,Release
+scripts\fetch_skia.ps1 -Target android-arm64 -Configuration Debug,Release
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target mac-arm64 -Configuration Debug,Release"
+</script></div>
+        <div class="prose">
+          <p>iOS는 <code>-Target ios-arm64</code>(기기)나 <code>-Target ios-arm64-simulator</code>다. 둘은 섞이지 않는다. 기기용 패키지를 시뮬레이터 구성에 넣으면 링커가 멈추므로, configure가 먼저 패키지와 SDK가 맞는지 본다.</p>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">소비자에게 clang은 필요 없다</span>Windows 패키지의 Skia는 clang-cl로 지었고, luil과 앱은 그대로 MSVC로 짓는다. configure는 패키지 옆의 <code>args.gn</code>과 <code>toolchain.json</code>을 읽어 컴파일러, ABI(<code>is_trivial_abi = false</code>), CRT(Debug <code>/MTd</code>, 그 밖 <code>/MT</code>)를 확인할 뿐 컴파일러를 찾지도 부르지도 않는다.</div></div>
+        <h3>직접 빌드한 Skia를 쓸 때</h3>
+        <div class="prose">
+          <p>캐시 변수 셋으로 자리를 준다. <code>LUIL_SKIA_ROOT</code>는 헤더와 고지가 있는 루트, <code>LUIL_SKIA_BUILD_DEBUG</code>·<code>LUIL_SKIA_BUILD_RELEASE</code>는 구성별 라이브러리와 <code>args.gn</code>이 있는 디렉터리다. 검사는 패키지와 같다 — 요구 라이브러리 전부, luil이 요구하는 GN 인자, <code>is_trivial_abi = false</code>, 구성에 맞는 CRT, clang-cl로 컴파일했다는 기록. 조건 다섯은 <a class="src" data-gh="docs/skia-build.md:216-248"><code>docs/skia-build.md</code></a>의 "직접 빌드한 Skia 사용"에 있다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-repo">
+        <header class="sec-head">
+          <h2>저장소 빌드</h2>
+          <p class="lede">저장소 루트에서 preset으로 configure하고 짓는다. 내 프로젝트보다 먼저 hello가 뜨는지 본다 — 도구사슬의 문제와 내 프로젝트의 문제를 가르는 가장 빠른 길이다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="Windows">
+            <div class="code" data-lang="powershell" data-label="README.md · 의존성과 예제 (문서 기준)" data-src="README.md:26-28,49-51" data-path="README.md" data-start="26"><script type="text/plain">
+git submodule update --init third_party/nlohmann_json
+scripts\fetch_skia.ps1 -Configuration Debug,Release
+scripts\fetch_webview2.ps1
+⋯@49
+cmake --preset vs2026-examples
+cmake --build --preset vs2026-examples-debug
+build\vs2026-examples\examples\Debug\luil_hello.exe
+</script></div>
+            <div class="prose small">
+              <p>Visual Studio 2022라면 <code>vs2026</code> 자리에 <code>vs2022</code>를 쓴다(<code>vs2022-examples</code>, <code>vs2022-examples-debug</code>). 웹뷰를 쓰지 않으면 <code>fetch_webview2.ps1</code>을 건너뛰고 <code>LUIL_ENABLE_WEBVIEW=OFF</code>로 구성한다. GPU가 필요 없으면 <code>LUIL_ENABLE_DIRECT3D=OFF</code>다 — 웹뷰도 기본으로 꺼진다.</p>
+            </div>
+          </section>
+          <section data-tab="Android">
+            <div class="code" data-lang="powershell" data-label="README.md · core와 예제 (문서 기준)" data-src="README.md:111-116" data-path="README.md" data-start="111"><script type="text/plain">
+scripts\fetch_skia.ps1 -Target android-arm64 -Configuration Debug,Release
+scripts\fetch_game_activity.ps1
+$env:ANDROID_NDK_HOME = "$env:LOCALAPPDATA\Android\Sdk\ndk\27.3.13750724"
+cmake --preset android-arm64 -DCMAKE_MAKE_PROGRAM="<ninja.exe 경로>"
+cmake --build --preset android-arm64-release
+ctest --preset android-arm64-release
+</script></div>
+            <div class="code" data-lang="powershell" data-label="docs/concepts/build-system.md · 예제 APK (문서 기준)" data-src="docs/concepts/build-system.md:83-86" data-path="docs/concepts/build-system.md" data-start="83"><script type="text/plain">
+$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
+examples\android\gradlew.bat -p examples\android :app:assembleHelloDebug :app:assembleWidgetsDebug
+adb install -r examples\android\app\build\outputs\apk\hello\debug\app-hello-debug.apk
+adb shell am start -n io.github.yuldk.luil.hello/com.google.androidgamesdk.GameActivity
+</script></div>
+            <div class="prose small">
+              <p>core test는 adb로 연결한 기기에서 돈다. 예제의 네이티브 절반은 luil의 CMake가 공유 라이브러리로 짓고, <code>examples/android</code>의 Gradle이 APK로 싼다. NDK 경로와 Ninja 위치는 사람마다 달라 저장소의 preset에 넣지 않았다. 자주 쓰면 Git에서 빠지는 <code>CMakeUserPresets.json</code>에 적는다.</p>
+            </div>
+          </section>
+          <section data-tab="macOS">
+            <div class="code" data-lang="bash" data-label="docs/concepts/build-system.md · zsh (문서 기준)" data-src="docs/concepts/build-system.md:117-121" data-path="docs/concepts/build-system.md" data-start="117"><script type="text/plain">
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target mac-arm64 -Configuration Debug,Release"
+cmake --preset macos-arm64
+cmake --build --preset macos-arm64-debug
+ctest --preset macos-arm64-debug
+open build/macos-arm64/Debug/luil_demo.app
+</script></div>
+            <div class="prose small">
+              <p>예제는 앱 번들이다. 로그를 터미널에서 보려면 번들 안의 실행 파일 <code>build/macos-arm64/Debug/luil_demo.app/Contents/MacOS/luil_demo</code>를 바로 띄운다. 창이 앞에 서는 test가 있어 <code>ctest</code>는 로그인한 화면이 있는 기계에서 돈다.</p>
+            </div>
+          </section>
+          <section data-tab="iOS">
+            <div class="code" data-lang="bash" data-label="docs/concepts/build-system.md · 시뮬레이터 (문서 기준)" data-src="docs/concepts/build-system.md:187-191" data-path="docs/concepts/build-system.md" data-start="187"><script type="text/plain">
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target ios-arm64-simulator -Configuration Debug,Release"
+cmake --preset ios-arm64-simulator
+cmake --build --preset ios-arm64-simulator-debug
+xcrun simctl install booted build/ios-arm64-simulator/Debug/luil_mobile_demo.app
+xcrun simctl launch --console booted io.github.yuldk.luil.mobile-demo
+</script></div>
+            <div class="prose small">
+              <p>기기는 <code>ios-arm64</code> preset이다. 서명 신원(<code>LUIL_IOS_CODE_SIGN_IDENTITY</code>)과 provisioning profile(<code>LUIL_IOS_PROVISIONING_PROFILE</code>)을 주지 않으면 서명하지 않은 번들이라 기기에 설치되지 않는다. iOS에는 test preset이 없다.</p>
+            </div>
+          </section>
+        </div>
+        <h3>preset이 정하는 것</h3>
+        <div class="walk side">
+          <div class="code" data-lang="json" data-src="CMakePresets.json:9-27" data-path="CMakePresets.json" data-start="9"><script type="text/plain">
+        {
+            "name": "windows-common",
+            "hidden": true,
+            "architecture": {
+                "value": "x64",
+                "strategy": "set"
+            },
+            "binaryDir": "${sourceDir}/build/${presetName}",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            },
+            "cacheVariables": {
+                "CMAKE_SYSTEM_VERSION": "10.0.22621.0",
+                "LUIL_BUILD_TESTS": "OFF",
+                "LUIL_ENABLE_MSVC_ANALYZE": "OFF"
+            }
+        },
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="12-15" data-title="x64를 정한다">명령 줄의 <code>-A x64</code>와 같다. luil의 configure는 generator 플랫폼이 x64인지 본다. preset 없이 내 프로젝트를 configure할 때도 <code>-A x64</code>를 준다.</li>
+            <li data-lines="16" data-title="빌드 디렉터리"><code>build/&lt;preset 이름&gt;</code>이다. 예제 실행 파일의 자리(<code>build\vs2026-examples\examples\Debug\luil_hello.exe</code>)가 여기서 나온다.</li>
+            <li data-lines="17-21" data-title="호스트 조건">Windows preset은 Windows 호스트에서만 보인다. macOS·iOS preset은 macOS 호스트에서만 보인다.</li>
+            <li data-lines="22-26" data-title="SDK와 기본 꺼짐">Windows SDK 판을 10.0.22621.0으로 준다(<code>CMAKE_SYSTEM_VERSION</code>). luil은 고른 SDK가 그보다 낮으면 멈춘다. 시험과 분석은 끈 채로 시작하고, 이것을 이어받는 preset이 하나씩 켠다.</li>
+          </ol>
+        </div>
+        <div class="table-wrap">
+          <table class="t wide">
+            <thead><tr><th>configure preset</th><th>켜는 것</th><th>build preset</th><th>호스트</th></tr></thead>
+            <tbody>
+              <tr><td><code>vs2022</code> · <code>vs2026</code></td><td>라이브러리만</td><td><code>vs2026-debug</code> · <code>vs2026-release</code></td><td>Windows</td></tr>
+              <tr><td><code>vs2026-examples</code></td><td><code>LUIL_BUILD_EXAMPLES</code> + Skia 기능 다섯</td><td><code>vs2026-examples-debug</code> · <code>-release</code></td><td>Windows</td></tr>
+              <tr><td><code>vs2026-tests</code></td><td><code>LUIL_BUILD_TESTS</code> · <code>LUIL_BUILD_TOOLING</code> + 기능 다섯</td><td><code>vs2026-tests-debug</code> · <code>-release</code> (test preset도 같은 이름)</td><td>Windows</td></tr>
+              <tr><td><code>vs2026-analysis</code></td><td><code>LUIL_ENABLE_MSVC_ANALYZE</code></td><td><code>vs2026-analysis</code></td><td>Windows</td></tr>
+              <tr><td><code>android-arm64-core</code></td><td>core와 그 test + 기능 다섯. NDK toolchain은 <code>ANDROID_NDK_HOME</code>에서</td><td><code>android-arm64-core-debug</code> · <code>-release</code></td><td>조건 없음</td></tr>
+              <tr><td><code>android-arm64</code></td><td>위 + 앱 host와 예제</td><td><code>android-arm64-debug</code> · <code>-release</code></td><td>조건 없음</td></tr>
+              <tr><td><code>macos-arm64-core</code></td><td>core · 앱 host 라이브러리 · core test + 기능 다섯</td><td><code>macos-arm64-core-debug</code> · <code>-release</code></td><td>macOS</td></tr>
+              <tr><td><code>macos-arm64</code></td><td>위 + 예제와 그 smoke test</td><td><code>macos-arm64-debug</code> · <code>-release</code></td><td>macOS</td></tr>
+              <tr><td><code>ios-arm64-simulator</code> · <code>ios-arm64</code></td><td>예제 + 기능 다섯 (test preset 없음)</td><td><code>ios-arm64-simulator-debug</code> · <code>ios-arm64-release</code> 등</td><td>macOS</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">기능 다섯은 예제·시험 preset만 켠다</span>SVG·텍스트 모양 잡기(+fallback)·AVIF·Lottie는 라이브러리 옵션의 기본이 끔이고, 라이브러리만 짓는 <code>vs2026</code> preset도 끈 채다. 그 구성을 설치해 쓰는 앱에서는 그 API가 남아 있되 <code>unsupported_format</code>으로 답한다. 설치본의 <code>luil-config.cmake</code>는 무엇을 켰는지 옵션과 같은 이름의 변수(<code>LUIL_ENABLE_SVG</code> 등)로 알린다.</div></div>
+      </section>
+
+      <section class="sec" id="consume">
+        <header class="sec-head">
+          <h2>내 프로젝트에 붙이는 두 길</h2>
+          <p class="lede">링크하는 이름은 어느 길이든 <code>luil::luil</code> 하나다. 소스 트리 길은 네 플랫폼에서, 설치 패키지 길은 Windows에서만 된다.</p>
+        </header>
+        <div class="cols two paths">
+          <div class="panel">
+            <h3><i class="ci" aria-hidden="true">&#xEA83;</i>소스 트리 — <code>add_subdirectory</code></h3>
+            <ul>
+              <li>luil 저장소를 내 프로젝트 안(submodule이나 사본)에 둔다.</li>
+              <li>Skia·nlohmann은 그 luil 안의 <code>third_party</code>에 준비한다.</li>
+              <li>Windows 실행 파일은 부모 scope에 변수 셋을 정하고 <code>.rc</code> 조각을 짓는다.</li>
+              <li>Android·macOS·iOS도 이 길이다.</li>
+            </ul>
+            <p><a class="xref" href="#consume-subdir">소스 트리로 넣기</a></p>
+          </div>
+          <div class="panel">
+            <h3><i class="ci" aria-hidden="true">&#xEAF7;</i>설치 패키지 — <code>find_package</code></h3>
+            <ul>
+              <li>luil을 한 번 지어 설치하고, 앱은 설치 자리를 <code>CMAKE_PREFIX_PATH</code>로 준다.</li>
+              <li>설치본의 config가 빌드 트리와 같은 Skia 검사를 다시 한다.</li>
+              <li>설치본이 고지·<code>.rc</code> 함수와 원본 파일을 함께 싣는다.</li>
+              <li>Windows만 — 다른 플랫폼은 설치 규칙을 끈다.</li>
+            </ul>
+            <p><a class="xref" href="#consume-package">설치 패키지로 찾기</a></p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th>소스 트리</th><th>설치 패키지</th></tr></thead>
+            <tbody>
+              <tr><td>쓰는 명령</td><td><code>add_subdirectory(third_party/luil)</code></td><td><code>find_package(luil 0.1 REQUIRED)</code> 또는 <code>find_package(luil CONFIG REQUIRED)</code></td></tr>
+              <tr><td>플랫폼</td><td>네 플랫폼</td><td>Windows만. 다른 플랫폼에서는 <code>LUIL_INSTALL</code>을 일반 변수로 먼저 끈다</td></tr>
+              <tr><td>CMake</td><td>4.2.0 이상 — luil의 <code>CMakeLists.txt</code> 첫 줄</td><td>하한은 코드에서 확인할 수 없다. test 소비자는 3.25를 적지만 luil과 같은 CMake로 돈다</td></tr>
+              <tr><td>generator (Windows)</td><td>Visual Studio 2022·2026, 플랫폼 x64 — luil이 configure에서 검사한다</td><td>config는 검사하지 않는다. test는 luil을 지은 generator와 플랫폼을 그대로 쓴다</td></tr>
+              <tr><td>Skia·WebView2 자리</td><td>luil 소스 안의 <code>third_party</code>가 기본</td><td>설치한 기계의 절대 경로가 기본. 다른 기계에서는 <code>LUIL_SKIA_ROOT</code> 등으로 다시 준다</td></tr>
+              <tr><td><code>.rc</code> 조각 (Windows)</td><td>부모 scope에 변수 셋을 정한 뒤 두 함수를 부른다</td><td>설치본이 같은 두 함수와 <code>share/luil</code>의 원본을 쓴다</td></tr>
+              <tr><td>이 길을 잠그는 test</td><td>없다. 저장소의 예제와 test가 같은 함수를 저장소 안에서 부를 뿐이다</td><td><code>luil_installed_consumer</code>(label <code>package</code>) — 설치하고, 공백이 든 경로로 옮기고, 별도 프로젝트로 짓고 실행한다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">두 길에서 같은 것</span><code>luil::luil</code>은 C++20과 MSVC의 <code>/utf-8</code>을 앱에 전파한다(<code>luil_usage</code>). luil의 경고 규율(<code>/W4</code>·<code>/WX</code> 등)을 담은 <code>luil_options</code>는 전파하지 않는다 — 예제가 그것을 링크하는 것은 저장소의 일부라서다. CRT는 앱이 정한다. Skia와 같은 정적 CRT(Debug <code>/MTd</code>, 그 밖 <code>/MT</code>)여야 한다.</div></div>
+      </section>
+
+      <section class="sec" id="consume-subdir">
+        <header class="sec-head">
+          <h2>소스 트리로 넣기</h2>
+          <p class="lede">luil 저장소를 내 프로젝트 안에 두고 <code>add_subdirectory</code>한다. Windows 실행 파일에는 luil이 찾는 리소스 조각을 더한다.</p>
+        </header>
+        <div class="code" data-lang="text" data-label="폴더 짜임 (예)"><script type="text/plain">
+my_app/
+├─ CMakeLists.txt
+├─ src/
+│  ├─ app.h        ← examples/hello/hello_app.h를 본뜬다
+│  ├─ app.cpp      ← examples/hello/hello_app.cpp
+│  └─ main.cpp     ← examples/hello/main.cpp (Windows 진입점)
+└─ third_party/
+   └─ luil/        ← luil 저장소 (submodule이나 사본)
+</script></div>
+        <h3>1. luil 안의 의존성을 준비한다</h3>
+        <div class="code" data-lang="powershell" data-label="my_app 폴더 · PowerShell (직접 작성)"><script type="text/plain">
+git -C third_party\luil submodule update --init third_party/nlohmann_json
+third_party\luil\scripts\fetch_skia.ps1 -Configuration Debug,Release
+third_party\luil\scripts\fetch_webview2.ps1
+</script></div>
+        <div class="prose">
+          <p>받는 스크립트는 자기가 든 저장소의 루트를 기준으로 푼다(<a class="src" data-gh="scripts/fetch_skia.ps1:56-71"><code>fetch_skia.ps1:56</code></a>). 그래서 Skia는 <code>third_party/luil/third_party/skia-prep</code>에 놓이고, 그것이 luil의 <code>LUIL_SKIA_ROOT</code> 기본값이다(<a class="src" data-gh="CMakeLists.txt:127-134"><code>CMakeLists.txt:127</code></a>). 다른 자리에 두었다면 <code>LUIL_SKIA_ROOT</code>를 준다. 웹뷰를 쓰지 않으면 셋째 줄을 빼고 <code>LUIL_ENABLE_WEBVIEW</code>를 끈다.</p>
+        </div>
+        <h3>2. CMakeLists.txt</h3>
+        <div class="code" data-lang="cmake" data-label="CMakeLists.txt 앞부분 (직접 작성)"><script type="text/plain">
+cmake_minimum_required(VERSION 4.2)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+project(my_app LANGUAGES CXX RC)
+
+add_executable(my_app WIN32 src/main.cpp src/app.cpp src/app.h)
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><strong>CMake 4.2.</strong> luil의 <code>CMakeLists.txt</code> 첫 줄이 <code>cmake_minimum_required(VERSION 4.2.0 FATAL_ERROR)</code>다. 부모가 더 낮은 판을 적어도 4.2 아래의 CMake는 거기서 멈춘다.</li>
+            <li><strong>정적 CRT를 먼저 정한다.</strong> luil은 최상위 빌드일 때만 정적 CRT를 강제하고, 하위로 들어오면 앱의 설정을 그대로 따른다(<a class="src" data-gh="CMakeLists.txt:5-9"><code>CMakeLists.txt:5</code></a>). luil의 대상이 만들어지는 <code>add_subdirectory</code>보다 앞이어야 그 대상들도 같은 CRT를 받는다. 이 줄은 test 소비자의 2행과 같다.</li>
+            <li><strong>RC 언어.</strong> <code>.rc</code> 조각은 앱 대상의 소스로 컴파일된다. 부모 프로젝트가 RC를 쓸 수 있어야 한다(소비자 계약). test 소비자도 <code>LANGUAGES CXX RC</code>다.</li>
+            <li><strong><code>WIN32</code>.</strong> hello의 진입점은 <code>wWinMain</code>이고, 예제 대상도 <code>add_executable(luil_hello WIN32 …)</code>로 짓는다.</li>
+          </ul>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cmake" data-label="CMakeLists.txt 뒷부분 — consumer-contract.md (문서 기준)" data-src="docs/concepts/consumer-contract.md:24-33" data-path="docs/concepts/consumer-contract.md" data-start="24"><script type="text/plain">
+add_subdirectory(third_party/luil)
+set(LUIL_SOURCE_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/third_party/luil/src")
+set(LUIL_ASSET_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/third_party/luil/assets/codicons")
+set(LUIL_NLOHMANN_JSON_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/third_party/luil/third_party/nlohmann_json")
+set(app_notices "${CMAKE_CURRENT_BINARY_DIR}/third_party_notices.txt")
+set(app_resources "${CMAKE_CURRENT_BINARY_DIR}/luil_resources.rc")
+luil_generate_third_party_notices("${app_notices}")
+luil_configure_resource_script("${app_resources}" "${app_notices}")
+target_sources(my_app PRIVATE "${app_resources}")
+target_link_libraries(my_app PRIVATE luil::luil)
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="24" data-title="luil을 들인다">이 줄이 luil의 configure를 돌린다. 플랫폼·generator·Skia 검사가 여기서 일어나고, 실패하면 앱의 configure도 멈춘다.</li>
+            <li data-lines="25-27" data-title="부모 scope의 세 변수">고지·<code>.rc</code> 함수가 이 변수를 읽는데, luil 안에서 <code>set()</code>한 값은 부모 scope에 보이지 않는다(<a class="src" data-gh="cmake/generate_notices.cmake:262-273"><code>generate_notices.cmake:262</code></a>). 빠뜨리면 경로 앞부분이 비어 라이선스 파일을 찾지 못하고 멈춘다.</li>
+            <li data-lines="28-31" data-title="고지와 .rc 조각">제3자 고지 파일을 만들고, Codicons 글꼴·라이선스 둘·고지를 리소스 101~104로 싣는 <code>.rc</code> 조각을 짓는다. 앱의 아이콘·manifest·버전 리소스는 따로 더하고, ID 101~104는 비워 둔다.</li>
+            <li data-lines="32" data-title="실행 파일에 넣는다">조각을 실행 파일 소스에 넣는다. 빠뜨리면 빌드는 되고 실행할 때 시작 실패 상자가 뜬다(<a class="xref" href="#assets">자산과 글꼴</a>).</li>
+            <li data-lines="33" data-title="링크는 하나">링크는 <code>luil::luil</code>이다. 플랫폼을 모르는 층 <code>luil_core</code>는 PUBLIC으로 따라오고, Skia·nlohmann·WebView2도 빌드 트리에서 함께 이어진다.</li>
+          </ol>
+        </div>
+        <h3>3. configure하고 짓는다</h3>
+        <div class="code" data-lang="powershell" data-label="my_app 폴더 · PowerShell (직접 작성)"><script type="text/plain">
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64
+cmake --build build --config Debug
+</script></div>
+        <div class="prose">
+          <p>generator는 <code>Visual Studio 17 2022</code>나 <code>Visual Studio 18 2026</code>만, 플랫폼은 x64만 받는다. luil의 configure가 검사하므로 Windows에서 이 길로는 Ninja를 쓸 수 없다.</p>
+        </div>
+        <h3>옵션을 정하는 자리</h3>
+        <div class="prose">
+          <p>luil의 옵션과 카탈로그 경로는 캐시 변수다. configure 명령의 <code>-D</code>로 주거나 <code>add_subdirectory</code> 앞에서 정한다. luil의 <code>option()</code>은 같은 이름의 일반 변수를 따르므로(CMP0077 — luil 자신이 다른 플랫폼에서 설치·Direct3D·웹뷰를 이렇게 끈다) <code>set(LUIL_ENABLE_WEBVIEW OFF)</code>도 된다.</p>
+        </div>
+        <div class="code" data-lang="cmake" data-label="docs/concepts/asset-pipeline.md · 카탈로그 바꾸기 (문서 기준)" data-src="docs/concepts/asset-pipeline.md:34-37" data-path="docs/concepts/asset-pipeline.md" data-start="34"><script type="text/plain">
+# add_subdirectory(luil) 전에 설정한다. 기존 캐시에는 -D 옵션으로 변경한다.
+set(LUIL_ACCENT_CATALOG "${CMAKE_CURRENT_SOURCE_DIR}/accent.json" CACHE FILEPATH "Accent catalog")
+set(LUIL_DEFAULT_ACCENT_ID "brand" CACHE STRING "Default accent")
+add_subdirectory(luil)
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>옵션</th><th>기본</th><th>뜻</th></tr></thead>
+            <tbody>
+              <tr><td><code>LUIL_ENABLE_WEBVIEW</code></td><td><code>LUIL_ENABLE_DIRECT3D</code>를 따른다</td><td>끄면 WebView2 SDK를 찾지도 잇지도 않는다. API는 그대로이고 웹뷰는 placeholder로 남는다</td></tr>
+              <tr><td><code>LUIL_ENABLE_DIRECT3D</code></td><td>켬 (Windows)</td><td>끄면 Direct3D 12 렌더러 대신 CPU 렌더러만 넣는다</td></tr>
+              <tr><td><code>LUIL_ENABLE_SVG</code> · <code>LUIL_ENABLE_TEXT_SHAPING</code> · <code>LUIL_ENABLE_TEXT_SHAPING_FALLBACK</code> · <code>LUIL_ENABLE_AVIF</code> · <code>LUIL_ENABLE_LOTTIE</code></td><td>끔</td><td>Skia의 기능별 아카이브를 링크하고 고지에 싣는다. 끈 기능의 API는 <code>unsupported_format</code>으로 답한다</td></tr>
+              <tr><td><code>LUIL_WARNINGS_AS_ERRORS</code></td><td>켬</td><td>luil 자신의 소스에만 거는 경고=오류다. 새 도구사슬이 핀으로 박힌 luil을 경고하면 앱이 끈다</td></tr>
+              <tr><td><code>LUIL_INSTALL</code></td><td>최상위 빌드일 때만 켬</td><td>하위로 들어오면 앱의 install에 끼어들지 않는다</td></tr>
+              <tr><td><code>LUIL_ENABLE_SMB</code></td><td>끔</td><td>Android·iOS 전용. 켜면 LGPL-2.1인 libsmb2를 따로 싸서 배포한다</td></tr>
+              <tr><td><code>LUIL_BUILD_EXAMPLES</code> · <code>LUIL_BUILD_TESTS</code></td><td>끔</td><td>저장소의 예제와 test다. 앱에는 필요 없다</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="consume-package">
+        <header class="sec-head">
+          <h2>설치 패키지로 찾기 (Windows)</h2>
+          <p class="lede">luil을 한 번 지어 설치하고, 앱은 그 자리를 <code>CMAKE_PREFIX_PATH</code>로 주어 <code>find_package</code>한다. 설치·이동·빌드·실행을 test가 잠근 길이다(<a class="xref" href="testing.html#s7">소비자 통합 계약을 test로</a>).</p>
+        </header>
+        <h3>1. 설치한다</h3>
+        <div class="code" data-lang="powershell" data-label="docs/how-to-start.md · luil 저장소 루트 (문서 기준)" data-src="docs/how-to-start.md:91-93" data-path="docs/how-to-start.md" data-start="91"><script type="text/plain">
+cmake --preset vs2026
+cmake --build --preset vs2026-release
+cmake --install build/vs2026 --config Release --prefix build/package
+</script></div>
+        <div class="prose">
+          <p>이 명령은 Release만 짓고 설치한다. 앱이 Debug로도 지어진다면 Debug를 지은 뒤(<code>cmake --build --preset vs2026-debug</code>) 같은 자리에 <code>cmake --install build/vs2026 --config Debug --prefix build/package</code>를 한 번 더 돌린다 — Debug 산출물은 이름 끝에 <code>d</code>가 붙어 같은 <code>lib/</code>에 함께 선다(<code>DEBUG_POSTFIX</code>). 설치본에 없는 구성을 앱이 지으면 <code>find_package</code>가 그 자리에서 멈춘다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>설치 자리</th><th>담긴 것</th></tr></thead>
+            <tbody>
+              <tr><td><code>include/</code></td><td>공개 헤더(<code>luil/…</code>), 생성 헤더(<code>luil/generated/…</code>), nlohmann의 <code>single_include</code> 사본</td></tr>
+              <tr><td><code>lib/</code></td><td><code>luil</code>·<code>luil_core</code> 정적 라이브러리. Debug는 이름 끝에 <code>d</code></td></tr>
+              <tr><td><code>lib/cmake/luil/</code></td><td><code>luil-config.cmake</code>와 판 파일, 내보낸 대상, Skia·WebView2 검사 모듈, 고지·문자열 표 함수</td></tr>
+              <tr><td><code>share/luil/</code></td><td>라이선스 원문(<code>LICENSE.luil</code>·<code>LICENSE.md4c</code>·<code>LICENSE.unicode</code>·<code>LICENSE.MIT</code>), <code>codicon.ttf</code>, Codicons 라이선스 둘, <code>resource_ids.h</code>, <code>.rc</code> 틀</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>2. 앱의 CMakeLists.txt</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cmake" data-src="tests/package_consumer/CMakeLists.txt:1-9" data-path="tests/package_consumer/CMakeLists.txt" data-start="1"><script type="text/plain">
+cmake_minimum_required(VERSION 3.25)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+project(luil_package_consumer LANGUAGES CXX RC)
+find_package(luil CONFIG REQUIRED)
+luil_generate_third_party_notices("${CMAKE_CURRENT_BINARY_DIR}/notices.txt")
+luil_configure_resource_script("${CMAKE_CURRENT_BINARY_DIR}/resources.rc"
+    "${CMAKE_CURRENT_BINARY_DIR}/notices.txt")
+add_executable(package_consumer main.cpp "${CMAKE_CURRENT_BINARY_DIR}/resources.rc")
+target_link_libraries(package_consumer PRIVATE luil::luil)
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1-3" data-title="머리 세 줄">Skia와 같은 정적 CRT, 그리고 <code>.rc</code>를 위한 RC 언어다. 소스 트리 길과 같다.</li>
+            <li data-lines="4" data-title="찾는다">설치본의 config는 빌드 트리와 같은 파일(<code>skia.cmake</code>)로 Skia를 다시 검사하고, 웹뷰를 켜고 설치한 패키지면 WebView2 SDK도 찾는다. 지금 짓는 구성(Debug·Release)의 luil 산출물이 설치본에 없으면 원인과 함께 멈춘다.</li>
+            <li data-lines="5-7" data-title="고지와 .rc 조각">설치본이 실은 같은 두 함수다. 원본 파일을 <code>share/luil</code>에서 읽으므로 소스 트리 길의 변수 셋이 필요 없다.</li>
+            <li data-lines="8-9" data-title="실행 파일과 링크">test는 콘솔 <code>main</code>이라 <code>WIN32</code>가 없다. 창 앱이면 hello처럼 <code>WIN32</code>로 짓는다. 링크는 <code>luil::luil</code> 하나다.</li>
+          </ol>
+        </div>
+        <h3>3. configure</h3>
+        <div class="code" data-lang="powershell" data-label="앱 폴더 · PowerShell (직접 작성 — install_consumer.cmake가 같은 인자로 부른다)"><script type="text/plain">
+cmake -S . -B build -G "Visual Studio 18 2026" -A x64 -DCMAKE_PREFIX_PATH="<luil 설치 자리>" -DCMAKE_CONFIGURATION_TYPES=Release
+cmake --build build --config Release
+</script></div>
+        <div class="prose">
+          <p>Release만 설치했으므로 <code>CMAKE_CONFIGURATION_TYPES=Release</code>로 짓는 구성을 하나로 줄인다. 줄이지 않으면 Visual Studio의 기본 구성 목록에 Debug가 있어, config가 Debug 산출물(luil과 Skia 둘 다)을 찾다가 멈춘다. test도 구성을 하나로 줄여 부른다. Debug까지 설치했다면 이 인자를 뺀다.</p>
+        </div>
+        <h3>설치본이 읽는 변수</h3>
+        <div class="code" data-lang="cmake" data-src="cmake/luil-config.cmake.in:3-22" data-path="cmake/luil-config.cmake.in" data-start="3"><script type="text/plain">
+# 손으로 빌드한 Skia의 위치는 소비자 환경이 이 변수들로 지정하는 것이 계약이다.
+# 설치 시점의 경로는 같은 머신에서 쓸 때의 편의 기본값일 뿐이다 —
+# LUIL_SKIA_ROOT만 바꾸면 빌드 디렉터리는 패키지의 기본 위치로 따라온다.
+# 검사 논리는 빌드 트리와 동일한 cmake/dependencies/skia.cmake 하나다 —
+# 잘못 빌드한 Skia는 링크 오류가 아니라 원인이 드러나는 메시지로 잡히고,
+# 지금 빌드하는 구성에 필요한 flavor(Debug·Release)만 검사된다.
+if(NOT DEFINED LUIL_SKIA_ROOT)
+    set(LUIL_SKIA_ROOT "@LUIL_SKIA_ROOT@")
+    set(_luil_build_debug_default "@LUIL_SKIA_BUILD_DEBUG@")
+    set(_luil_build_release_default "@LUIL_SKIA_BUILD_RELEASE@")
+else()
+    set(_luil_build_debug_default "${LUIL_SKIA_ROOT}/out/skia-ui-debug")
+    set(_luil_build_release_default "${LUIL_SKIA_ROOT}/out/skia-ui-release")
+endif()
+if(NOT DEFINED LUIL_SKIA_BUILD_DEBUG)
+    set(LUIL_SKIA_BUILD_DEBUG "${_luil_build_debug_default}")
+endif()
+if(NOT DEFINED LUIL_SKIA_BUILD_RELEASE)
+    set(LUIL_SKIA_BUILD_RELEASE "${_luil_build_release_default}")
+endif()
+</script></div>
+        <div class="prose">
+          <p>설치할 때의 Skia 경로는 같은 기계에서 쓸 때의 기본값일 뿐이다. 다른 기계에서는 <code>LUIL_SKIA_ROOT</code>만 주면 구성별 자리가 <code>&lt;root&gt;/out/skia-ui-debug</code>·<code>-release</code>로 따라온다. WebView2 SDK는 <code>LUIL_WEBVIEW2_ROOT</code>다. config는 설치한 라이브러리의 선택을 <code>LUIL_ENABLE_DIRECT3D</code>·<code>LUIL_ENABLE_WEBVIEW</code>·<code>LUIL_ENABLE_SVG</code> 같은 변수로 알린다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="include">
+        <header class="sec-head">
+          <h2>어떤 헤더를 include하나</h2>
+          <p class="lede">경로는 늘 <code>luil/</code>로 시작한다. <code>luil/luil.h</code> 하나로 공개 API 대부분이 들어오지만, macOS·iOS 진입 헤더와 Codicons 상수 헤더는 따로 들인다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="include/luil/luil.h:1-9,154-164" data-path="include/luil/luil.h" data-start="1"><script type="text/plain">
+#pragma once
+
+#include "luil/ui/font_scale.h"
+
+// 라이브러리 공개 API 전체를 한 번에 들이는 umbrella header다.
+// 빌드 시간을 아끼려면 필요한 header만 골라 include해도 된다 —
+// 어느 쪽이든 경로는 항상 `luil/` 접두로 시작한다.
+
+#include "luil/version.h"
+⋯@154
+// Win32 platform 조립이다 (창 실행).
+// app_host·renderer_policy·webview는 옛 경로의 별칭 헤더다 (한 판 동안 둔다).
+#include "luil/win32/app_host.h"
+#include "luil/win32/drop_data.h"
+#include "luil/win32/renderer_policy.h"
+#include "luil/win32/webview.h"
+#include "luil/win32/win32_window.h"
+
+// Android platform 조립이다 (GameActivity 앱 실행).
+// 선언만 담은 헤더라 다른 플랫폼에서 include해도 컴파일된다.
+#include "luil/android/android_app.h"
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="5-7" data-title="우산 헤더">공개 API 전체를 한 번에 들인다고 스스로 적는다. 빌드 시간을 아끼려면 필요한 헤더만 골라 include해도 된다.</li>
+            <li data-lines="9" data-title="판번"><code>luil/version.h</code>가 configure가 만든 <code>luil/generated/version.h</code>의 매크로(<code>LUIL_VERSION_MAJOR</code> 등)와 <code>library_version()</code>을 들인다.</li>
+            <li data-lines="154-160" data-title="Windows 조립"><code>win32_window.h</code>가 <code>run_application_window</code>와 <code>window_delegate</code>를 선언한다. 옛 경로의 별칭 헤더도 여기서 들어온다.</li>
+            <li data-lines="162-164" data-title="Android 조립">선언만 담은 헤더라 다른 플랫폼에서도 컴파일된다. macOS·iOS의 진입 헤더는 이 목록에 없다.</li>
+          </ol>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>쓰려는 것</th><th>include</th><th><code>luil/luil.h</code>에 드나</th></tr></thead>
+            <tbody>
+              <tr><td>공개 API 대부분</td><td><code>luil/luil.h</code></td><td>—</td></tr>
+              <tr><td>driver·frame·host (<code>logic_driver</code>, <code>ui_frame</code>, <code>app_host</code>)</td><td><code>luil/app/app_host.h</code></td><td>든다</td></tr>
+              <tr><td>Windows 진입 (<code>win32::run_application_window</code>, <code>win32::window_delegate</code>)</td><td><code>luil/win32/win32_window.h</code></td><td>든다</td></tr>
+              <tr><td>Android 진입 (<code>android::run_application</code>)</td><td><code>luil/android/android_app.h</code></td><td>든다</td></tr>
+              <tr><td>macOS 진입 (<code>macos::run_application</code>)</td><td><code>luil/macos/macos_app.h</code></td><td><strong>들지 않는다</strong></td></tr>
+              <tr><td>iOS 진입 (<code>ios::run_application</code>)</td><td><code>luil/ios/ios_app.h</code></td><td><strong>들지 않는다</strong></td></tr>
+              <tr><td>Codicons 상수 (<code>codicons::icon_search</code> 등)</td><td><code>luil/generated/codicons.h</code></td><td><strong>들지 않는다</strong> — 빌드가 만드는 헤더다</td></tr>
+              <tr><td>판번 (<code>LUIL_VERSION_STRING</code>, <code>library_version()</code>)</td><td><code>luil/version.h</code></td><td>든다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">문서와 코드가 다르다: 우산 헤더</span>README와 <code>luil.h</code>의 주석은 우산 헤더가 공개 API 전체라고 말한다. 이 판의 <code>luil.h</code>에는 <code>luil/macos/macos_app.h</code>·<code>luil/ios/ios_app.h</code>가 없다. 이 체크아웃에서 <code>cmake/verify_umbrella_header.cmake</code>(Windows 시험 구성의 <code>luil_umbrella_header</code> test가 부르는 스크립트)를 돌리면 두 헤더가 빠졌다고 멈춘다. hello의 macOS·iOS 진입 파일은 그 헤더를 직접 include한다.</div></div>
+        <div class="prose">
+          <p>공개 헤더는 <code>&lt;windows.h&gt;</code>를 품지 않는다. <code>wWinMain</code>을 쓰는 파일이 직접 들인다 — hello의 <code>main.cpp</code>가 그렇다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="first-app" data-toc="첫 앱 ① 파일과 꽂는 자리">
+        <header class="sec-head">
+          <h2>첫 앱 ① 파일과 꽂는 자리</h2>
+          <p class="lede">hello를 그대로 본뜬다. 앱 쪽 절반(상태·메시지·driver·delegate)은 두 파일이고 네 플랫폼이 같다. 진입 파일만 플랫폼마다 다르다. 설계의 뜻은 <a class="xref" href="overview.html#s6">개요의 hello 읽기</a>가 줄마다 설명하므로, 여기서는 내 앱에 무엇을 써야 하는지만 본다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t wide">
+            <thead><tr><th>hello의 파일</th><th>내 앱의 파일</th><th>담는 것</th><th>스레드</th></tr></thead>
+            <tbody>
+              <tr><td><code>examples/hello/hello_app.h</code></td><td><code class="free">src/app.h</code></td><td>element 종류, 메시지(intent), driver·delegate 선언</td><td>—</td></tr>
+              <tr><td><code>examples/hello/hello_app.cpp</code></td><td><code class="free">src/app.cpp</code></td><td><code>handle</code>(상태 바꾸기), <code>make_frame</code>(화면 짓기), 종료, 크기 메시지</td><td><span class="thread-chip lg">logic</span> <span class="thread-chip ui">UI</span></td></tr>
+              <tr><td><code>examples/hello/main.cpp</code></td><td><code class="free">src/main.cpp</code></td><td>창 설정, 세 조각 꽂기, 메시지 루프</td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><td><code>android_main.cpp</code> · <code>macos_main.cpp</code> · <code>ios_main.cpp</code></td><td>플랫폼마다 하나</td><td>그 플랫폼의 진입 함수 (<a class="xref" href="#platforms">다른 플랫폼에서</a>)</td><td><span class="thread-chip ui">UI</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>hello의 CMake 대상</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cmake" data-src="examples/CMakeLists.txt:5-8,19-27" data-path="examples/CMakeLists.txt" data-start="5"><script type="text/plain">
+set(luil_demo_notices "${LUIL_GENERATED_DIRECTORY}/third_party_notices.txt")
+set(luil_demo_resource "${LUIL_GENERATED_DIRECTORY}/luil_demo.rc")
+luil_generate_third_party_notices("${luil_demo_notices}")
+luil_configure_resource_script("${luil_demo_resource}" "${luil_demo_notices}")
+⋯@19
+luil_add_source_filter(luil_hello_files "app"
+    hello/hello_app.cpp
+    hello/hello_app.h
+    hello/main.cpp)
+add_executable(luil_hello WIN32
+    ${luil_example_resource}
+    ${luil_hello_files})
+target_include_directories(luil_hello PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(luil_hello PRIVATE luil::luil luil_options)
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="5-8" data-title="고지와 .rc 조각">예제 실행 파일들이 함께 쓰는 조각 하나를 짓는다. 내 프로젝트의 고지·<code>.rc</code> 줄과 같은 일이다. 저장소 안이라 변수 셋이 이미 보인다.</li>
+            <li data-lines="19-22" data-title="소스 목록"><code>luil_add_source_filter</code>는 저장소가 IDE 필터를 짜는 도구다. 앱은 파일을 그냥 나열하면 된다.</li>
+            <li data-lines="23-25" data-title="WIN32 실행 파일"><code>.rc</code> 조각과 세 파일로 짓는다. <code>wWinMain</code>이라 <code>WIN32</code>다.</li>
+            <li data-lines="26" data-title="include 자리"><code>#include "hello/hello_app.h"</code>가 풀리도록 <code>examples</code> 폴더를 준다.</li>
+            <li data-lines="27" data-title="링크"><code>luil_options</code>는 저장소의 경고 규율이다. 앱은 <code>luil::luil</code>만 링크한다.</li>
+          </ol>
+        </div>
+        <h3>꽂는 자리의 원문: logic_driver</h3>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="include/luil/app/app_host.h:621-689" data-path="include/luil/app/app_host.h" data-start="621"><script type="text/plain">
+    // 앱이 logic thread에 꽂는 구동기다.
+    // 모든 메서드는 app_host의 logic thread에서 불린다 (shutdown_completed·
+    // make_close_message·cancel은 UI thread에서도 불리므로 thread-safe해야 한다).
+    //
+    // 예외는 오류 전달 수단이 아니다. 콜백이 던지면 logic thread가 그 예외를
+    // 삼키고 `app_host::faulted()`에 기록한 뒤 멈춘다 — frame 게시와 메시지
+    // 처리가 함께 멎으므로, 오류는 값(메시지·frame 상태)으로 나른다.
+    class logic_driver
+    {
+    public:
+        logic_driver() = default;
+        logic_driver(const logic_driver&) = delete;
+        logic_driver(logic_driver&&) = delete;
+        logic_driver& operator=(const logic_driver&) = delete;
+        logic_driver& operator=(logic_driver&&) = delete;
+        virtual ~logic_driver() = default;
+
+        // logic thread 시작 직후 한 번이다.
+        // 초기 상태 로드를 여기서 제출한다.
+        virtual void start()
+        {
+        }
+
+        // app inbox 메시지 1건을 처리한다.
+        virtual void handle(app_message message) = 0;
+
+        // 처리 후 게시할 frame이다.
+        // tree를 포함해 불변 값으로 만든다.
+        [[nodiscard]] virtual std::shared_ptr<const ui_frame> make_frame() = 0;
+
+        // 종료가 시작됐다는 알림이다.
+        // shutdown()이 종료 신호를 게시하기 직전에 UI thread에서 부른다.
+        // 오래 걸리는 handle·tick·make_frame이 이를 보고 일찍 돌아와야
+        // 종료 예산 안에 logic thread가 빠져나온다. 짧은 콜백만 쓰면 비워 둔다.
+        virtual void cancel() noexcept
+        {
+        }
+
+        // 종료 신호 메시지다.
+        // shutdown()이 app inbox에 넣고, 앱 logic은 이를 처리하며 종료 저장을 제출한다.
+        [[nodiscard]] virtual app_message make_close_message() = 0;
+
+        // 종료 신호를 처리해 종료 저장까지 내보냈는지다 (UI thread가 조회).
+        [[nodiscard]] virtual bool shutdown_completed() const = 0;
+
+        // 종료 순서 중 worker pool을 멈출 시점이다.
+        // worker가 없으면 비워 둔다.
+        virtual void stop_workers()
+        {
+        }
+
+        // 시간이 흘러야 바뀌는 logic 상태(토스트 만료·진행률·시간 제한)의 예고다.
+        // frame 게시 뒤마다 물어, 답한 시각이 되면 메시지가 없어도 `tick`이
+        // 불리고 frame이 다시 게시된다. 답이 없으면 시간 경로는 완전히 잠잔다.
+        //  - `ui_element::next_update`와 같은 규칙이되, 그쪽은 그림만 다시
+        //    그리고 이쪽은 logic 상태가 실제로 바뀐다.
+        // 앱이 스레드를 만들지 않고도 "3초 뒤 지운다"를 표현하는 경로다.
+        [[nodiscard]] virtual std::optional<std::chrono::steady_clock::time_point> next_tick()
+        {
+            return std::nullopt;
+        }
+
+        // `next_tick`이 예고한 시각이 지나면 logic thread에서 불린다.
+        // 만료 처리를 하고 나면 새 frame이 게시된다.
+        virtual void tick(std::chrono::steady_clock::time_point now)
+        {
+            static_cast<void>(now);
+        }
+    };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="621-627" data-title="부르는 스레드와 예외">모든 함수는 logic thread에서 불린다. <code>cancel</code>·<code>make_close_message</code>·<code>shutdown_completed</code>는 UI thread에서도 불려 스레드 안전해야 한다. 콜백이 던지면 logic thread가 삼키고 멈춘다(<code>app_host::faulted()</code>) — 오류는 메시지나 frame의 상태 값으로 나른다(<a class="xref" href="threads.html#s9">스레드 모델</a>).</li>
+            <li data-lines="631-636" data-title="복사·이동 금지">driver는 한 객체로 산다. 진입 함수는 그 주소를 빌려 쓸 뿐 소유하지 않는다.</li>
+            <li data-lines="638-642" data-title="start">logic thread가 선 직후 한 번 불린다. 처음 상태를 읽는 일을 여기서 제출한다.</li>
+            <li data-lines="644-649" data-title="꼭 쓰는 둘 ①"><code>handle</code>과 <code>make_frame</code>은 순수 가상이다. 메시지 1건을 처리하고, 처리 뒤 게시할 frame을 불변 값으로 만든다.</li>
+            <li data-lines="651-664" data-title="꼭 쓰는 둘 ②"><code>make_close_message</code>와 <code>shutdown_completed</code>도 순수 가상이다. 창이 닫히면 라이브러리가 종료 메시지를 inbox에 넣고, <code>shutdown_completed</code>가 참이 되기를 기다린다(<a class="xref" href="threads.html#s8">종료 절차와 시간 예산</a>).</li>
+            <li data-lines="666-689" data-title="필요할 때만"><code>stop_workers</code>는 worker를 둔 앱이, <code>next_tick</code>·<code>tick</code>은 시간이 흘러야 바뀌는 상태(토스트 만료 등)를 가진 앱이 쓴다. hello는 쓰지 않는다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="sec" id="first-app-code" data-toc="첫 앱 ② 상태·메시지·driver">
+        <header class="sec-head">
+          <h2>첫 앱 ② 상태·메시지·driver·delegate</h2>
+          <p class="lede">상태는 driver의 멤버이고, 상태를 바꾸는 길은 메시지 하나뿐이다. 앱 헤더 하나에 element 종류·메시지·두 클래스를 모두 선언한다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="examples/hello/hello_app.h:14-91" data-path="examples/hello/hello_app.h" data-start="14"><script type="text/plain">
+#include "luil/luil.h"
+
+#include <atomic>
+#include <memory>
+
+namespace hello {
+    // --- 앱이 정의하는 element 종류(kind) ---
+    //
+    // 라이브러리는 element를 kind(정수)로만 구분하고 값을 해석하지 않는다.
+    // 낮은 대역은 라이브러리가 예약하고, 앱은 application_element_kind(index)로
+    // 자기 대역에서 정의한다. 같은 kind가 여럿이면 owner 문자열로 구분한다.
+    constexpr luil::ui_element_kind kind_label { luil::application_element_kind(0) };
+    constexpr luil::ui_element_kind kind_button { luil::application_element_kind(1) };
+
+    // --- 앱 메시지(intent) ---
+    //
+    // 앱 메시지는 평범한 구조체다. 라이브러리의 불투명 운반체 app_message에
+    // 담겨 스레드를 건너고, 받는 쪽(driver::handle)이 get<T>()로 복원한다.
+    // 라이브러리는 이 타입들을 전혀 모른다.
+
+    // 버튼을 눌렀다.
+    struct increment_intent
+    {
+    };
+
+    // 창 크기·배율이 정해졌거나 바뀌었다 (delegate가 보낸다).
+    struct metrics_intent
+    {
+        float width { 0.0f };
+        float height { 0.0f };
+        float scale { 1.0f };
+    };
+
+    // 창을 닫는다 (캡션 X, Alt+F4).
+    struct close_intent
+    {
+    };
+
+    // --- logic thread: 앱 상태와 화면 ---
+    //
+    // 모든 메서드는 라이브러리가 만든 logic thread에서 불린다.
+    // 예외는 둘뿐이다: make_close_message·shutdown_completed는 종료 절차 중
+    // UI thread에서도 불리므로 atomic으로 지킨다.
+    class hello_driver final : public luil::win32::logic_driver
+    {
+    public:
+        // app inbox에 든 메시지 1건을 처리한다.
+        // 여기서 앱 상태를 바꾼다 — 상태를 바꾸는 곳은 이 함수 하나뿐이다.
+        void handle(luil::app_message message) override;
+
+        // 처리 후 게시할 화면이다.
+        // element tree를 매번 새로 만들어 불변 값으로 게시한다.
+        // (tree는 만들고 나면 아무도 고치지 않으므로 세 스레드가 lock 없이 읽는다.)
+        [[nodiscard]] std::shared_ptr<const luil::win32::ui_frame> make_frame() override;
+
+        // 종료 신호로 쓸 메시지다. 창이 닫힐 때 라이브러리가 inbox에 넣는다.
+        [[nodiscard]] luil::app_message make_close_message() override;
+
+        // 종료 신호를 처리했는지다. 라이브러리가 스레드를 정리하기 전에 기다린다.
+        [[nodiscard]] bool shutdown_completed() const override;
+
+    private:
+        // 창의 실제 크기·배율이다. metrics 메시지가 채운다.
+        // 첫 frame(메시지가 오기 전)은 기본값으로 배치한다.
+        metrics_intent metrics_ {};
+        int clicks_ { 0 };
+        std::atomic<bool> closed_ { false };
+    };
+
+    // --- UI thread: 창 사건을 메시지로 ---
+    class hello_delegate final : public luil::win32::window_delegate
+    {
+    public:
+        // 창 크기·DPI가 바뀌면 라이브러리가 부른다.
+        // 반환한 메시지가 app inbox로 들어가 driver::handle에 닿는다.
+        [[nodiscard]] luil::app_message make_window_metrics_message(float width, float height, float scale) override;
+    };
+}
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="14-17" data-title="include"><code>luil/luil.h</code> 하나다. 이 헤더를 네 플랫폼의 진입 파일이 같이 들인다.</li>
+            <li data-lines="75-80" data-title="앱 상태">상태는 driver의 private 멤버다. hello의 상태는 창 크기(<code>metrics_</code>), 누른 횟수(<code>clicks_</code>), 종료를 처리했는지(<code>closed_</code>)다. <code>closed_</code>만 <code>std::atomic</code>이다 — UI thread도 읽는다.</li>
+            <li data-lines="28-50" data-title="메시지 (intent)">앱 메시지는 기반 클래스 없는 평범한 구조체다. 버튼 누름, 창 크기, 종료가 하나씩이다. <code>app_message</code>가 타입을 지운 채 스레드를 건너 나르고, 받는 쪽이 <code>get</code>으로 꺼낸다(<a class="xref" href="messaging.html#s8">스레드 경계 메시징</a>).</li>
+            <li data-lines="20-26" data-title="element 종류">앱의 element 종류는 <code>application_element_kind(index)</code>로 앱 대역에서 정한다. 낮은 대역은 라이브러리 몫이다.</li>
+            <li data-lines="57-73" data-title="driver">순수 가상 넷만 재정의한다. hello는 옛 이름 <code>luil::win32::logic_driver</code>와 <code>luil::win32::ui_frame</code>을 쓴다 — 같은 형식의 별칭이고, 새 코드는 <code>luil::logic_driver</code>·<code>luil::ui_frame</code>이다(<a class="xref" href="#first-app-main">③의 끝</a>).</li>
+            <li data-lines="83-90" data-title="delegate">창 크기·배율을 메시지로 바꾸는 훅 하나만 재정의한다. 나머지 훅의 기본은 "아무 일도 하지 않음"이다.</li>
+          </ol>
+        </div>
+        <h3>handle과 make_frame, 종료, 크기 메시지</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/hello/hello_app.cpp:29-57,109-130" data-path="examples/hello/hello_app.cpp" data-start="29"><script type="text/plain">
+    void hello_driver::handle(luil::app_message message)
+    {
+        // 메시지 타입별로 상태를 바꾼다.
+        // get<T>()는 타입이 맞을 때만 값을 돌려주므로 순서대로 물어보면 된다.
+        if (message.get<close_intent>() != nullptr)
+        {
+            // 종료 저장이 있다면 여기서 제출한다. 이 예제는 저장할 것이 없다.
+            closed_.store(true);
+            return;
+        }
+        if (const auto* const metrics { message.get<metrics_intent>() }; metrics != nullptr)
+        {
+            metrics_ = *metrics;
+            return;
+        }
+        if (message.get<increment_intent>() != nullptr)
+        {
+            ++clicks_;
+            return;
+        }
+    }
+
+    std::shared_ptr<const luil::win32::ui_frame> hello_driver::make_frame()
+    {
+        // 배치 단위 규칙: 설정·길이는 논리 픽셀(96 DPI 기준)이고,
+        // arrange의 slot 좌표는 물리 픽셀이다. scale이 그 사이를 잇는다.
+        const float scale { metrics_.scale > 0.0f ? metrics_.scale : 1.0f };
+        const float width { metrics_.width > 0.0f ? metrics_.width : 800.0f };
+        const float height { metrics_.height > 0.0f ? metrics_.height : 500.0f };
+⋯@109
+        // 4) frame으로 묶어 게시한다.
+        //    frame은 화면의 전부다: tree, (있다면) popup·보조 창, 외양 선호.
+        auto frame { std::make_shared<luil::win32::ui_frame>() };
+        frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
+        return frame;
+    }
+
+    luil::app_message hello_driver::make_close_message()
+    {
+        return luil::app_message { close_intent {} };
+    }
+
+    bool hello_driver::shutdown_completed() const
+    {
+        return closed_.load();
+    }
+
+    luil::app_message hello_delegate::make_window_metrics_message(const float width, const float height, const float scale)
+    {
+        // 창 크기가 바뀔 때마다 이 메시지가 오고, driver가 새 크기로 다시 배치한다.
+        return luil::app_message { metrics_intent { width, height, scale } };
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="29-49" data-title="handle">메시지 종류마다 한 갈래다. 상태를 바꾸는 곳은 여기뿐이고, 모르는 메시지는 그냥 지나간다. 기능을 더할 때는 intent 하나와 갈래 하나를 더한다.</li>
+            <li data-lines="33-38" data-title="종료 메시지">저장할 것이 있으면 여기서 제출하고 <code>closed_</code>를 세운다.</li>
+            <li data-lines="51-57" data-title="첫 frame">크기 메시지가 오기 전에도 불린다. 크기 0을 그대로 쓰지 않고 기본값을 둔다. 길이는 논리 픽셀, 배치 좌표는 물리 픽셀이다(<a class="xref" href="layout.html#s2">두 가지 픽셀</a>).</li>
+            <li data-lines="109-114" data-title="게시">root를 <code>ui_tree</code>로 감싸 frame에 싣는다. 생략한 가운데(58–108행)의 tree 짓기는 <a class="xref" href="overview.html#s7">개요의 hello 읽기 ②</a>가 줄마다 읽는다.</li>
+            <li data-lines="116-124" data-title="종료 신호와 완료">UI thread에서도 불리므로 <code>closed_</code>는 atomic이다. 참이 되지 않으면 창을 닫을 때마다 종료가 시간 예산(3초)을 다 쓰고 저장을 포기한다.</li>
+            <li data-lines="126-130" data-title="delegate의 크기 메시지">UI thread에서 불린다. 받은 크기·배율을 메시지로 돌려줄 뿐 상태를 만지지 않는다. delegate를 꽂지 않으면 이 메시지가 아예 없다.</li>
+          </ol>
+        </div>
+        <h3>delegate가 받는 것</h3>
+        <div class="prose">
+          <p>훅은 모두 UI thread에서 불리고, 기본은 "아무 일도 하지 않음"이다. 메시지를 돌려주는 훅에서 빈 메시지는 게시되지 않는다. 플랫폼을 가리지 않는 훅은 <a class="xref" href="api.html#app-delegate"><code>app_delegate</code></a>에, 데스크톱 창만 갖는 훅은 그것을 넓힌 <a class="xref" href="api.html#win32--window-delegate"><code>win32::window_delegate</code></a>에 있다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>훅</th><th>언제</th><th>돌려주는 것</th></tr></thead>
+            <tbody>
+              <tr><td><code>on_started(host)</code></td><td>창과 host가 준비된 직후, 이벤트 루프 전</td><td>없음 — 시작 메시지를 <code>host</code>로 게시한다</td></tr>
+              <tr><td><code>make_window_metrics_message</code> · <code>make_metrics_message</code></td><td>창 크기·배율이 바뀔 때. host는 뒤의 것을 부르고, 그 기본이 앞의 것을 부른다 — 폭 등급이 필요한 앱만 뒤의 것을 넓힌다</td><td>앱 메시지</td></tr>
+              <tr><td><code>make_lifecycle_message</code></td><td>앱이 보이거나 사라질 때 (모바일). Win32는 지금 부르지 않는다</td><td>앱 메시지</td></tr>
+              <tr><td><code>make_system_appearance_message</code></td><td>시스템 외양(밝기·대비 등)이 바뀔 때</td><td>앱 메시지</td></tr>
+              <tr><td><code>make_file_dialog_message</code></td><td>파일 대화 상자의 결과 (취소·실패도)</td><td>앱 메시지</td></tr>
+              <tr><td><code>win32::window_delegate::make_window_placement_message</code></td><td>주 창의 배치가 바뀔 때 (데스크톱)</td><td>앱 메시지</td></tr>
+              <tr><td><code>win32::window_delegate::on_file_dropped</code></td><td>받는 element가 없는 파일 끌어 놓기 (데스크톱)</td><td>소비했으면 참</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="first-app-main" data-toc="첫 앱 ③ 진입점">
+        <header class="sec-head">
+          <h2>첫 앱 ③ 진입점과 그다음</h2>
+          <p class="lede">진입 함수는 창을 설정하고 세 조각을 꽂은 뒤 메시지 루프에 들어간다. 텍스트 입력이 생기면 정책을 더 꽂는다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/hello/main.cpp:19-42,51-61" data-path="examples/hello/main.cpp" data-start="19"><script type="text/plain">
+#include "hello/hello_app.h"
+
+#include <windows.h>
+
+#include <string>
+#include <string_view>
+
+int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
+{
+    // DPI 인지는 창을 만들기 전에 한 번 켠다.
+    luil::win32::enable_per_monitor_dpi_awareness();
+    // COM STA는 TSF(텍스트 입력)·파일 dialog가 요구한다.
+    // 이 예제는 텍스트 입력이 없지만 켜 두는 것이 관례다.
+    const luil::win32::com_sta_scope com {};
+
+    // 창의 겉모습과 정책이다. 길이는 전부 논리 96 DPI 기준 px다.
+    luil::win32::window_config config {};
+    config.class_name = L"Luil.Hello.Window";
+    config.caption.title = u8"hello luil";
+    config.caption.minimize_tooltip = u8"Minimize";
+    config.caption.maximize_tooltip = u8"Maximize or restore";
+    config.caption.close_tooltip = u8"Close";
+    config.initial_width = 800;
+    config.initial_height = 500;
+⋯@51
+    // 앱의 세 조각을 꽂는다.
+    // policy는 텍스트 입력·휠·단축키가 생길 때 구현한다 — 없으면 nullptr로 둔다.
+    hello::hello_driver driver {};
+    hello::hello_delegate delegate {};
+    luil::win32::window_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+
+    // 메시지 루프가 끝날 때까지 여기서 돈다. 반환값이 프로세스 종료 코드다.
+    return luil::win32::run_application_window(config, environment);
+}
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="19-24" data-title="include">앱 헤더(그 안의 <code>luil/luil.h</code>)와, <code>wWinMain</code>의 형식을 위한 <code>&lt;windows.h&gt;</code>다.</li>
+            <li data-lines="26-32" data-title="창보다 먼저">DPI 인지와 COM STA를 켠다. COM이 실패해도 앱은 뜨지만 파일 대화 상자·TSF·OS 끌어 놓기가 조용히 꺼지고, 접근성은 이 STA를 전제로 한다. 까닭은 <a class="xref" href="overview.html#s6">개요의 hello 읽기 ①</a>에 있다.</li>
+            <li data-lines="34-42" data-title="창 설정">길이는 논리 픽셀이다. <code>caption</code>의 값은 tree에 그리는 <code>caption_element</code>의 설정과 같아야 한다 — 하나는 창의 비클라이언트 판정에, 하나는 그리기에 쓰여 버튼 자리가 맞물린다(<code>hello_app.cpp</code>의 <code>make_caption</code> 주석).</li>
+            <li data-lines="51-57" data-title="세 조각">driver는 꼭 꽂는다 — 비면 host 없이 caption만 그린다. delegate가 비면 크기 메시지가 없다. 텍스트 입력이 없으니 정책은 비워 둔다. 셋 다 이 함수가 돌아올 때까지 살아 있어야 한다.</li>
+            <li data-lines="59-61" data-title="메시지 루프">창이 닫히고 종료 절차가 끝나면 돌아온다. 반환값이 프로세스 종료 코드이고, 시작에 실패하면 메시지 상자를 띄운 뒤 1이다.</li>
+          </ol>
+        </div>
+        <h3>텍스트 입력이 생기면: 정책</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/main.cpp:45-51" data-path="examples/widgets/main.cpp" data-start="45"><script type="text/plain">
+    widgets::widgets_driver driver {};
+    widgets::widgets_policy policy {};
+    widgets::widgets_delegate delegate {};
+    luil::win32::window_environment environment {};
+    environment.driver = &driver;
+    environment.policy = &policy;
+    environment.delegate = &delegate;
+</script></div>
+        <div class="prose">
+          <p>텍스트 칸·휠·단축키가 생기면 <a class="xref" href="api.html#interaction-policy"><code>interaction_policy</code></a>를 구현해 <code>environment.policy</code>에 꽂는다. 정책은 input thread에서 불리고, 어떤 element 종류가 텍스트 칸인지(<code>text_target_of</code>)와 편집 요청을 앱 메시지로 바꾸는 일(<code>make_text_edit_action</code>)을 맡는다. widgets 예제의 정책이 텍스트 대상·편집·휠·초점 이동을 모두 보인다(<a class="xref" href="input.html">입력과 초점</a>).</p>
+        </div>
+        <h3>옛 이름과 새 이름</h3>
+        <div class="code" data-lang="cpp" data-src="include/luil/win32/app_host.h:3-11,15-23" data-path="include/luil/win32/app_host.h" data-start="3"><script type="text/plain">
+// 옛 경로다. host API는 플랫폼을 가리지 않으므로 `luil/app/app_host.h`와 네임스페이스
+// `luil`로 옮겼다 (docs/android-port-plan.md 결정 1).
+//
+// 이 헤더는 한 판 동안 옛 이름을 그대로 쓰게 하는 다리다. 아래 별칭은 새 타입 **그 자체**를
+// 가리키므로 `luil::win32::logic_driver`를 상속한 구동기, `luil::win32::ui_frame`을 만드는
+// 코드가 고치지 않고 빌드된다.
+//  - 깨지는 것은 `namespace luil::win32 { class logic_driver; }` 같은 전방 선언뿐이다.
+//    별칭은 다시 선언할 수 없어서다. 새 경로의 헤더를 include하면 된다.
+//  - 새 코드는 `luil/app/app_host.h`와 `luil::` 이름을 쓴다.
+⋯@15
+namespace luil::win32 {
+    using luil::app_host;
+    using luil::logic_driver;
+    using luil::popup_dismiss_reason;
+    using luil::ui_frame;
+    using luil::ui_popup;
+    using luil::ui_window;
+    using luil::window_placement;
+}
+</script></div>
+        <div class="prose">
+          <p>hello가 쓰는 <code>luil::win32::logic_driver</code>·<code>luil::win32::ui_frame</code>은 새 형식 그 자체를 가리키는 별칭이라 고치지 않아도 빌드된다. 새 코드는 <code>luil/app/app_host.h</code>의 <code>luil::logic_driver</code>·<code>luil::ui_frame</code>을 쓴다 — <code>examples/selected_nodes/main.cpp</code>와 <code>examples/tool_window/main.cpp</code>가 그렇게 쓴 예제다. <code>win32::window_delegate</code>는 별칭이 아니라 Win32 delegate 그 자체이고, 모바일만 겨냥하면 <code>luil::app_delegate</code>를 넓힌다(<code>examples/mobile_demo</code>).</p>
+        </div>
+        <h3>다 됐는지 확인할 것</h3>
+        <div class="code" data-lang="markdown" data-label="docs/how-to-start.md · 확인할 항목 (문서 기준)" data-src="docs/how-to-start.md:110-114" data-path="docs/how-to-start.md" data-start="110"><script type="text/plain">
+1. hello 예제가 실행되는지 확인한다.
+2. 앱이 element 액션을 메시지로 처리하고 새 frame을 게시하는지 확인한다.
+3. 키보드 초점·IME·클립보드가 필요한 요소에 입력 정책을 연결한다.
+4. 종료 요청에서 앱 상태 정리와 스레드 종료가 완료되는지 확인한다.
+5. 배포할 실행 파일에 리소스·고지가 포함되고 필요한 런타임이 준비되어 있는지 확인한다.
+</script></div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>다른 플랫폼에서</h2>
+          <p class="lede">앱 쪽 두 파일은 그대로다. 바뀌는 것은 진입 파일, CMake 대상의 꼴, 포장이다. 진입 코드 네 벌은 <a class="xref" href="overview.html#s8">개요의 "같은 앱, 네 진입점"</a>에, 플랫폼별 차이 전체는 <a class="xref" href="platforms.html#s5">플랫폼과 host의 매트릭스</a>에 있다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t wide">
+            <thead><tr><th></th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td>진입 함수</td><td><code>wWinMain</code> → <a class="xref" href="api.html#win32--run-application-window"><code>win32::run_application_window</code></a></td><td><code>extern "C" android_main(android_app*)</code> → <a class="xref" href="api.html#android--run-application"><code>android::run_application</code></a></td><td><code>main</code> → <a class="xref" href="api.html#macos--run-application"><code>macos::run_application</code></a></td><td><code>main</code> → <a class="xref" href="api.html#ios--run-application"><code>ios::run_application</code></a></td></tr>
+              <tr><td>헤더</td><td><code>luil/win32/win32_window.h</code></td><td><code>luil/android/android_app.h</code></td><td><code>luil/macos/macos_app.h</code> (우산 밖)</td><td><code>luil/ios/ios_app.h</code> (우산 밖)</td></tr>
+              <tr><td>UI thread</td><td><code>wWinMain</code>을 부른 스레드</td><td>GameActivity가 만든 스레드</td><td>main thread여야 한다</td><td>main thread여야 한다</td></tr>
+              <tr><td>돌아오나</td><td>종료가 끝나면. 반환값이 종료 코드, 시작 실패는 1</td><td>Activity가 끝날 때. 0이 정상</td><td>종료가 끝나면. 0이 정상</td><td>돌아오지 않는다. 시작 실패만 1</td></tr>
+              <tr><td>driver·delegate의 수명</td><td>지역 변수</td><td>지역 변수</td><td>지역 변수</td><td>프로세스와 함께 — <code>static</code></td></tr>
+              <tr><td>delegate 형식</td><td><code>win32::window_delegate*</code></td><td colspan="3"><code>app_delegate*</code> — Windows용 delegate를 그대로 넘겨도 된다. 플랫폼 중립 부분만 불린다 (macOS는 <code>win32::window_delegate</code>를 구현했으면 그 훅도 부른다)</td></tr>
+              <tr><td>CMake 대상</td><td><code>add_executable(… WIN32 …)</code> + <code>.rc</code> 조각</td><td><code>add_library(… SHARED …)</code> → Gradle이 APK로 싼다</td><td><code>MACOSX_BUNDLE</code> 앱 번들 + Info.plist + 서명</td><td><code>MACOSX_BUNDLE</code> + Info.plist(장면 목록) + <code>luil_ios_sign_bundle</code></td></tr>
+              <tr><td>Codicons</td><td>실행 파일 리소스</td><td colspan="3">라이브러리에 내장 — 앱이 넣는 단계가 없다</td></tr>
+              <tr><td>설치 패키지</td><td>있다</td><td colspan="3">없다 — 소스 트리 길만</td></tr>
+              <tr><td>렌더러를 바꿔 띄우기</td><td><code>window_config::renderer</code></td><td><code>adb shell setprop debug.luil.renderer cpu</code> (<code>apply_debug_properties</code>)</td><td><code>application_config::renderer</code></td><td><code>--renderer=cpu</code> (<code>apply_debug_arguments</code>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="tabs">
+          <section data-tab="Android">
+            <div class="code" data-lang="cmake" data-src="examples/android/CMakeLists.txt:5-15,26-33" data-path="examples/android/CMakeLists.txt" data-start="5"><script type="text/plain">
+function(luil_add_android_example example)
+    cmake_parse_arguments(PARSE_ARGV 1 arguments "" "" "SOURCES")
+    set(target luil_${example})
+    add_library(${target} SHARED ${arguments_SOURCES})
+    target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/..")
+    target_link_libraries(${target} PRIVATE luil::luil luil_options)
+    add_custom_command(TARGET ${target} POST_BUILD
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:${target}>"
+            "${CMAKE_BINARY_DIR}/jniLibs/${example}/$<CONFIG>/${ANDROID_ABI}/$<TARGET_FILE_NAME:${target}>"
+        VERBATIM)
+⋯@26
+endfunction()
+
+# hello — 앱 쪽 절반(hello_app)은 Windows와 같은 파일이다.
+luil_add_android_example(hello
+    SOURCES
+        ../hello/android_main.cpp
+        ../hello/hello_app.cpp
+        ../hello/hello_app.h)
+</script></div>
+            <div class="prose small">
+              <ul>
+                <li>네이티브 절반은 공유 라이브러리다. 예제는 그것을 <code>&lt;빌드&gt;/jniLibs/&lt;예제&gt;/&lt;구성&gt;/arm64-v8a</code>에 두고, <code>examples/android</code>의 Gradle 프로젝트가 GameActivity의 Java 절반과 함께 APK로 싼다. 앱 쪽 Java 코드는 없다.</li>
+                <li><code>luil::luil</code>이 링크 옵션 <code>--wrap=GameActivity_onCreate</code>를 앱에 나른다(<a class="src" data-gh="src/CMakeLists.txt:941-943"><code>src/CMakeLists.txt:943</code></a>). 창 장식을 Java 메인 thread에서 바꾸려고 luil이 생성 함수를 먼저 받는다.</li>
+                <li>Android 앱을 따로 꾸리는 절차는 문서에 없다. 아래는 예제가 하는 일이다.</li>
+              </ul>
+            </div>
+            <div class="code" data-lang="xml" data-src="examples/android/app/src/main/AndroidManifest.xml:13-27" data-path="examples/android/app/src/main/AndroidManifest.xml" data-start="13"><script type="text/plain">
+    <application
+        android:enableOnBackInvokedCallback="false"
+        android:label="${label}"
+        android:theme="@style/Theme.Luil">
+        <!--
+            회전·크기·밀도·어두운 모드는 Activity를 다시 만들지 않고 네이티브 쪽이 받는다
+            (APP_CMD_CONFIG_CHANGED). 다시 만들면 네이티브 상태가 처음부터 다시 선다.
+        -->
+        <activity
+            android:name="com.google.androidgamesdk.GameActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode|fontScale|layoutDirection"
+            android:exported="true">
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="${libraryName}" />
+</script></div>
+            <div class="code" data-lang="kotlin" data-src="examples/android/app/build.gradle.kts:7-10,75-79" data-path="examples/android/app/build.gradle.kts" data-start="7"><script type="text/plain">
+// GameActivity의 판번은 네이티브 절반과 같은 핀이 정한다 (third_party/game-activity-prep.json).
+// 두 절반의 판번이 어긋나면 JNI 서명이 맞지 않아 실행 중에 깨진다.
+val gameActivityPin = JsonSlurper().parse(rootDir.resolve("../../third_party/game-activity-prep.json")) as Map<*, *>
+val gameActivityVersion = gameActivityPin["version"] as String
+⋯@75
+dependencies {
+    implementation("androidx.games:games-activity:$gameActivityVersion")
+    // GameActivity가 AppCompatActivity라 AppCompat 테마가 필요하다.
+    implementation("androidx.appcompat:appcompat:1.8.0")
+}
+</script></div>
+            <div class="prose small">
+              <ul>
+                <li>Activity는 GameActivity 그대로이고, 매니페스트 25–27행의 meta-data가 열 네이티브 라이브러리의 이름이다.</li>
+                <li>Android 16에서 targetSdk 36 이상이면 <code>android:enableOnBackInvokedCallback="false"</code>가 있어야 뒤로 가기 키가 앱에 온다. 앱이 뒤로 가기를 받는 길은 <code>ui_frame::back</code>이다.</li>
+                <li>GameActivity의 Java 판번은 네이티브 핀(4.4.2)과 같아야 한다. 어긋나면 JNI 서명이 맞지 않아 실행 중에 깨진다. HTTP를 쓰면 매니페스트에 INTERNET 권한이 있어야 한다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="macOS">
+            <div class="code" data-lang="cmake" data-src="examples/macos.cmake:9-41" data-path="examples/macos.cmake" data-start="9"><script type="text/plain">
+function(luil_add_macos_bundle target)
+    cmake_parse_arguments(PARSE_ARGV 1 arguments "" "IDENTIFIER;NAME" "")
+    if(arguments_UNPARSED_ARGUMENTS OR NOT arguments_IDENTIFIER OR NOT arguments_NAME)
+        message(FATAL_ERROR "luil_add_macos_bundle needs IDENTIFIER and NAME only.")
+    endif()
+    set(luil_bundle_identifier "${arguments_IDENTIFIER}")
+    set(luil_bundle_name "${arguments_NAME}")
+    set(luil_bundle_executable "${target}")
+    set(plist "${CMAKE_CURRENT_BINARY_DIR}/${target}-Info.plist")
+    configure_file("${luil_examples_directory}/macos/Info.plist.in" "${plist}" @ONLY)
+    set_target_properties("${target}" PROPERTIES
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_INFO_PLIST "${plist}")
+endfunction()
+
+# 번들에 ad-hoc 서명(`-`)을 한다. 다른 빌드 뒤 단계(자원 복사)를 다 건 다음에 불러 그 파일까지 봉인한다.
+#  - 링커가 실행 파일에만 한 서명으로는 번들의 Info.plist가 봉인되지 않아 UserNotifications가 앱을 받지 않는다.
+#  - 배포용 서명(Developer ID, 공증)이 아니다. 이 기계에서 돌리는 개발 빌드용이다.
+function(luil_sign_macos_bundle target)
+    add_custom_command(TARGET "${target}" POST_BUILD
+        COMMAND codesign --force --sign - "$<TARGET_BUNDLE_DIR:${target}>"
+        COMMENT "Signing the ${target} app bundle (ad hoc)"
+        VERBATIM)
+endfunction()
+
+add_executable(luil_hello
+    "${luil_examples_directory}/hello/hello_app.cpp"
+    "${luil_examples_directory}/hello/hello_app.h"
+    "${luil_examples_directory}/hello/macos_main.cpp")
+target_include_directories(luil_hello PRIVATE "${luil_examples_directory}")
+target_link_libraries(luil_hello PRIVATE luil::luil luil_options)
+luil_add_macos_bundle(luil_hello IDENTIFIER "io.github.yuldk.luil.hello" NAME "luil hello")
+luil_sign_macos_bundle(luil_hello)
+</script></div>
+            <div class="prose small">
+              <ul>
+                <li><code>luil_add_macos_bundle</code>·<code>luil_sign_macos_bundle</code>은 <strong>예제 파일 안의 함수</strong>다. luil을 하위로 들인 앱에는 없으므로 앱이 같은 일을 직접 한다.</li>
+                <li>번들 식별자가 있고 서명된 앱 번들에서만 OS 알림이 선다. ad-hoc 서명(<code>-</code>)은 그 기계의 개발 빌드용이다.</li>
+                <li>앱 자산은 <code>Contents/Resources</code>에 둔다. <code>Contents/MacOS</code>에 코드가 아닌 파일이 있으면 codesign이 번들 서명을 거절한다.</li>
+                <li>처음 configure 전에 <code>CMAKE_OSX_ARCHITECTURES=arm64</code>와 <code>CMAKE_OSX_DEPLOYMENT_TARGET</code>(11.0 이상)을 준다. 없으면 luil이 멈춘다. Windows의 <code>.rc</code> 조각은 없다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="iOS">
+            <div class="code" data-lang="cmake" data-label="docs/concepts/consumer-contract.md · iOS 앱 번들 (문서 기준)" data-src="docs/concepts/consumer-contract.md:65-74" data-path="docs/concepts/consumer-contract.md" data-start="65"><script type="text/plain">
+add_executable(my_app MACOSX_BUNDLE ...)
+set_target_properties(my_app PROPERTIES MACOSX_BUNDLE_INFO_PLIST "${CMAKE_CURRENT_SOURCE_DIR}/ios/Info.plist")
+target_link_libraries(my_app PRIVATE luil::luil)
+# 1. 번들 안을 채우는 빌드 뒤 단계 (앱의 자원 복사, 다른 프레임워크 싣기)를 먼저 건다.
+luil_ios_embed_smb(my_app CODE_SIGN_IDENTITY "${MY_SIGNING_IDENTITY}")   # SMB를 끈 구성에서는 아무 일도 없다
+# 2. 서명은 마지막이다.
+luil_ios_sign_bundle(my_app
+    BUNDLE_IDENTIFIER "com.example.my-app"
+    CODE_SIGN_IDENTITY "${MY_SIGNING_IDENTITY}"
+    PROVISIONING_PROFILE "${MY_PROVISIONING_PROFILE}")
+</script></div>
+            <div class="prose small">
+              <ul>
+                <li>두 함수는 luil의 CMake가 iOS 구성에서 들이므로 하위로 들인 앱이 부를 수 있다. 예제도 같은 함수를 같은 차례로 부른다(<code>examples/ios.cmake</code>).</li>
+                <li>서명은 대상마다 한 번, 번들을 바꾸는 빌드 뒤 단계를 모두 건 다음 맨 마지막이다. 서명 뒤에 바뀐 파일이 있으면 기기가 설치를 거절한다.</li>
+                <li>Info.plist에는 장면 목록(<code>UIApplicationSceneManifest</code>)이 있어야 host가 장면을 세운다. 빈 <code>UILaunchScreen</code>이 없으면 iOS가 옛 화면 크기(호환 모드)로 띄운다(<code>examples/ios/Info.plist.in</code>의 주석).</li>
+                <li><code>run_application</code>은 돌아오지 않는다. driver·delegate는 <code>static</code>으로 둔다.</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="assets">
+        <header class="sec-head">
+          <h2>자산과 글꼴</h2>
+          <p class="lede">Windows 실행 파일에는 luil이 찾는 리소스 넷이 들어 있어야 한다. 다른 플랫폼은 Codicons 글꼴이 라이브러리 안에 있다. 생성 헤더는 빌드가 만들고, 앱 글꼴·그림과 고지 화면은 앱의 몫이다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>무엇</th><th>Windows</th><th>Android · macOS · iOS</th></tr></thead>
+            <tbody>
+              <tr><td>Codicons 글꼴 (<code>codicon.ttf</code>)</td><td>실행 파일 리소스 101 — <code>.rc</code> 조각</td><td>라이브러리에 내장 — 빌드가 바이트 배열로 싣는다 (<code>luil_codicon_font</code>)</td></tr>
+              <tr><td>Codicons 라이선스 둘</td><td>리소스 102·103</td><td>실행 파일에 싣는 단계가 없다 — 앱의 고지 화면에 싣는다</td></tr>
+              <tr><td>제3자 고지</td><td>리소스 104 — <code>luil_generate_third_party_notices</code>가 짓는다</td><td>고지 생성기는 Windows 실행 파일 리소스용이다(문서). 앱이 직접 싣는다</td></tr>
+              <tr><td>생성 헤더</td><td colspan="2">빌드 트리의 <code>generated/include</code>, 설치본의 <code>include/</code> — <a class="xref" href="#generated">아래 표</a></td></tr>
+              <tr><td>앱의 글꼴·그림</td><td>데모는 실행 파일 옆의 <code>assets</code>에 복사한다</td><td>macOS 번들은 <code>Contents/Resources</code>. 모바일 demo는 견본 그림을 바이트 배열로 싣는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cols two">
+          <div class="code" data-lang="cpp" data-src="src/win32/resource_ids.h:3-8" data-path="src/win32/resource_ids.h" data-start="3"><script type="text/plain">
+// luil가 실행 파일 resource에서 찾는 ID다.
+// 소비자 앱은 101~104를 비워 두고 자기 resource ID를 그 밖에서 정의한다.
+#define IDR_CODICONS_FONT 101
+#define IDR_CODICONS_LICENSE 102
+#define IDR_CODICONS_LICENSE_CODE 103
+#define IDR_THIRD_PARTY_NOTICES 104
+</script></div>
+          <div class="code" data-lang="cpp" data-src="src/win32/embedded_assets.cpp:48-72" data-path="src/win32/embedded_assets.cpp" data-start="48"><script type="text/plain">
+    bool verify_embedded_resources(std::u8string& error)
+    {
+        constexpr std::array required_resources {
+            IDR_CODICONS_FONT,
+            IDR_CODICONS_LICENSE,
+            IDR_CODICONS_LICENSE_CODE,
+            IDR_THIRD_PARTY_NOTICES,
+        };
+
+        for (const int resource_id : required_resources)
+        {
+            if (find_embedded_resource(resource_id).data == nullptr)
+            {
+                error = u8"Required executable resource not found.";
+                return false;
+            }
+        }
+
+        if (load_codicon_typeface() == nullptr)
+        {
+            error = u8"Failed to create a Skia typeface from the embedded Codicons font.";
+            return false;
+        }
+        return true;
+    }
+</script></div>
+        </div>
+        <div class="prose">
+          <p><code>run_application_window</code>는 창을 만들기 전에 이 넷을 찾는다(<a class="src" data-gh="src/win32/win32_window.cpp:4115-4122"><code>win32_window.cpp:4118</code></a>). 하나라도 없으면 "luil startup error" 메시지 상자에 진단 글을 띄우고 1을 돌려준다. <code>.rc</code> 조각을 실행 파일 소스에 넣지 않은 첫 앱이 가장 흔히 만나는 실패다 — 빌드는 아무 경고 없이 성공한다.</p>
+        </div>
+        <div class="code" data-lang="cmake" data-src="src/CMakeLists.txt:839-854" data-path="src/CMakeLists.txt" data-start="839"><script type="text/plain">
+if(LUIL_PLATFORM STREQUAL "android")
+    # codicon 글꼴을 라이브러리 안에 싣는다. Android에는 실행 파일 resource가 없고,
+    # 앱이 APK assets에 따로 넣는 단계를 만들지 않으려는 것이다 (docs/android-port-plan.md).
+    set(luil_codicon_source "${LUIL_GENERATED_DIRECTORY}/codicon_font.cpp")
+    add_custom_command(
+        OUTPUT "${luil_codicon_source}"
+        COMMAND "${CMAKE_COMMAND}"
+            "-DINPUT_FILE=${LUIL_ASSET_DIRECTORY}/codicon.ttf"
+            "-DOUTPUT_FILE=${luil_codicon_source}"
+            "-DSYMBOL=luil_codicon_font"
+            -P "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        DEPENDS
+            "${LUIL_ASSET_DIRECTORY}/codicon.ttf"
+            "${LUIL_CMAKE_DIRECTORY}/embed_binary.cmake"
+        COMMENT "Embedding the Codicons font"
+        VERBATIM)
+</script></div>
+        <div class="prose">
+          <p>Android·macOS·iOS는 같은 글꼴을 라이브러리 소스로 바꿔 싣는다. 앱이 APK assets나 번들 자원에 넣는 단계를 만들지 않으려는 것이다.</p>
+        </div>
+        <h3 id="generated">생성 헤더</h3>
+        <div class="table-wrap">
+          <table class="t wide">
+            <thead><tr><th>헤더</th><th>원본</th><th>바꾸는 캐시 변수</th><th>설치</th></tr></thead>
+            <tbody>
+              <tr><td><code>luil/generated/codicons.h</code></td><td><code>assets/codicons/mapping.json</code></td><td>— (체크섬으로 고정)</td><td>공개</td></tr>
+              <tr><td><code>luil/generated/accents.h</code></td><td><code>assets/accents.json</code></td><td><code>LUIL_ACCENT_CATALOG</code></td><td>공개</td></tr>
+              <tr><td><code>luil/generated/accent_defaults.h</code></td><td>configure</td><td><code>LUIL_DEFAULT_ACCENT_ID</code> (기본 <code>mint</code>)</td><td>공개</td></tr>
+              <tr><td><code>luil/generated/ui_style.h</code></td><td><code>assets/style.json</code></td><td><code>LUIL_STYLE</code></td><td>공개</td></tr>
+              <tr><td><code>luil/generated/version.h</code></td><td><code>project(luil VERSION 0.1.0)</code></td><td>—</td><td>공개</td></tr>
+              <tr><td><code>luil/generated/library_text.h</code></td><td><code>assets/strings/*.json</code></td><td><code>LUIL_STRINGS</code></td><td>설치하지 않는다 (내부 표)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>카탈로그·스타일·문자열은 빌드할 때 라이브러리에 박힌다. 설치본의 JSON을 실행 중에 읽는 기능이 아니다 — 바꾸려면 luil을 다시 짓는다. 앱 자신의 문자열 표는 같은 생성기를 <code>luil_add_string_table</code>로 자기 대상에 건다. 빌드 트리와 설치본에서 같다.</p>
+        </div>
+        <h3>Codicons 쓰기</h3>
+        <div class="code" data-lang="cpp" data-src="tests/package_consumer/main.cpp:1-2,45-53" data-path="tests/package_consumer/main.cpp" data-start="1"><script type="text/plain">
+#include "consumer_strings.h"
+#include "luil/generated/codicons.h"
+⋯@45
+    const auto font { luil::load_codicon_typeface() };
+    if (font == nullptr || font->unicharToGlyph(luil::codicons::icon_search) == 0)
+        return 3;
+    const luil::glyph_element icon {
+        luil::ui_element_id { luil::application_element_kind(0) },
+        luil::glyph_config { .glyph = luil::codicons::icon_search, .typeface = font, .description = u8"검색" },
+    };
+    if (icon.accessibility().name != u8"검색")
+        return 4;
+</script></div>
+        <div class="prose">
+          <p>설치본을 쓰는 test 소비자의 한 대목이다. 상수 헤더는 우산 헤더에 들지 않아 따로 들인다. <code>glyph_config::typeface</code>가 비어 있으면 내장 Codicons로 그리므로, 보통의 앱은 <code>load_codicon_typeface</code>를 부를 일이 없다.</p>
+        </div>
+        <h3>앱 글꼴을 함께 배포할 때</h3>
+        <div class="prose">
+          <p>저장소의 예제에는 앱 글꼴을 등록하는 코드가 없어 아래에 썼다. 글꼴 이름과 파일 이름은 예시다. 기본 UI 글꼴은 앱이 시작하기 전에 정한다 — 이미 만든 화면과 글꼴 객체는 저절로 바뀌지 않는다(<code>luil/text/fonts.h</code>).</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="앱 글꼴 등록 (직접 작성)" data-compile="pre-fonts"><script type="text/plain">
+// 실행 파일과 함께 배포한 글꼴 파일을 한 가족으로 묶어 기본 UI 글꼴로 앞세운다.
+// 창을 띄우기 전에(run_application_window·run_application 앞에서) 한 번 부른다.
+bool register_app_fonts(const std::filesystem::path& font_directory)
+{
+    std::vector<sk_sp<SkTypeface>> faces {};
+    for (const char8_t* const name : { u8"Pretendard-Regular.otf", u8"Pretendard-Bold.otf" })
+    {
+        // 파일이 없거나 읽지 못하면 비어 있다.
+        if (sk_sp<SkTypeface> face { luil::load_typeface_file(font_directory / name) }; face)
+            faces.push_back(std::move(face));
+    }
+    if (faces.empty())
+        return false;
+    // OS에 설치하지 않고 한 가족 이름으로 등록한다. 같은 이름의 설치 글꼴보다 앞선다.
+    luil::register_font_family(u8"Pretendard", std::move(faces));
+    // 앞에서부터 찾는다.
+    luil::set_ui_typeface_families({ u8"Pretendard", u8"Segoe UI" });
+    return true;
+}
+</script></div>
+        <script type="text/plain" id="pre-fonts" data-prelude>
+#include "luil/text/fonts.h"
+#include <filesystem>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p>글꼴 디렉터리는 앱이 정한다. 데모는 실행 파일의 디렉터리를 쓰고, macOS 번들 안에서는 <code>Contents/Resources</code>를 답한다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/common.cpp:54-68" data-path="examples/demo/common.cpp" data-start="54"><script type="text/plain">
+    std::filesystem::path executable_directory()
+    {
+        const std::filesystem::path path { executable_path() };
+        if (path.empty())
+            return path;
+#if defined(__APPLE__)
+        // 앱 번들(`<이름>.app/Contents/MacOS/<실행 파일>`) 안이면 자산은 `Contents/Resources`에 있다.
+        //  - codesign은 `Contents/MacOS`에 코드가 아닌 파일이 있으면 번들 서명을 거절한다 (examples/macos.cmake).
+        const std::filesystem::path code { path.parent_path() };
+        const std::filesystem::path contents { code.parent_path() };
+        if (code.filename() == "MacOS" && contents.filename() == "Contents" && contents.parent_path().extension() == ".app")
+            return contents / "Resources";
+#endif
+        return path.parent_path();
+    }
+</script></div>
+      </section>
+
+      <section class="sec" id="troubleshoot">
+        <header class="sec-head">
+          <h2>문제 해결</h2>
+          <p class="lede">luil의 configure는 원인을 영어 한두 문장으로 적고 멈춘다. 받은 메시지를 그대로 붙여 넣거나 낱말 몇 개를 아래 칸에 넣으면 표가 좁혀진다.</p>
+        </header>
+        <div class="ts-tools">
+          <i class="ci" aria-hidden="true">&#xEA6D;</i>
+          <input type="search" id="ts-filter" placeholder="메시지를 붙여 넣거나 낱말 (예: Skia, generator, resource)" aria-label="문제 해결 표 거르기" aria-controls="ts-groups">
+          <span class="ts-count" id="ts-count" aria-live="polite"></span>
+        </div>
+        <div id="ts-groups">
+          <div class="ts-group">
+            <h3>configure — 플랫폼과 도구사슬</h3>
+            <div class="table-wrap">
+              <table class="t ts wide">
+                <thead><tr><th>메시지</th><th>원인</th><th>고치기</th><th>근거</th></tr></thead>
+                <tbody>
+                  <tr><td><code>luil supports Windows 11 x64, Android arm64, macOS arm64 and iOS arm64. … is not supported.</code></td><td>네 플랫폼 밖의 OS(예: Linux)에서 configure했다</td><td>네 플랫폼 가운데 하나에서 configure한다. Android·iOS는 toolchain이나 <code>CMAKE_SYSTEM_NAME</code>을 준다</td><td><a class="src" data-gh="CMakeLists.txt:39-43"><code>CMakeLists.txt:40</code></a></td></tr>
+                  <tr><td><code>A supported generator is required: Visual Studio 17 2022, Visual Studio 18 2026. Current value: …</code></td><td>소스 트리 길에서 Ninja 같은 다른 generator를 골랐다</td><td><code>-G "Visual Studio 18 2026"</code> (또는 <code>17 2022</code>)</td><td><a class="src" data-gh="cmake/platform/windows.cmake:28-34"><code>windows.cmake:31</code></a></td></tr>
+                  <tr><td><code>The generator platform must be x64. Current value: …</code></td><td><code>-A x64</code>를 주지 않았거나 다른 플랫폼을 주었다</td><td><code>-A x64</code>. preset은 <code>architecture</code>로 준다</td><td><a class="src" data-gh="cmake/platform/windows.cmake:35-39"><code>windows.cmake:36</code></a></td></tr>
+                  <tr><td><code>Windows SDK 10.0.22621.0 or newer is required. Current value: …</code></td><td>Visual Studio가 고른 Windows SDK가 낮다</td><td>SDK를 설치하고 <code>CMAKE_SYSTEM_VERSION</code>으로 고른다</td><td><a class="src" data-gh="cmake/platform/windows.cmake:43-47"><code>windows.cmake:44</code></a></td></tr>
+                  <tr><td><code>MSVC 1940 or newer is required. Current value: …</code></td><td>MSVC가 19.40보다 낮다</td><td>Visual Studio를 올린다</td><td><a class="src" data-gh="cmake/compiler/msvc.cmake:55-59"><code>msvc.cmake:56</code></a></td></tr>
+                  <tr><td><code>Configure Android with the NDK toolchain file: …</code></td><td>NDK의 toolchain 파일 없이 configure했다</td><td><code>CMAKE_TOOLCHAIN_FILE</code>에 NDK의 <code>build/cmake/android.toolchain.cmake</code>를 주거나 preset을 쓴다(<code>ANDROID_NDK_HOME</code>)</td><td><a class="src" data-gh="cmake/platform/android.cmake:27-32"><code>android.cmake:28</code></a></td></tr>
+                  <tr><td><code>The Android ABI must be arm64-v8a.</code> · <code>Android API level 26 or newer is required.</code> · <code>The Android C++ runtime must be c++_static.</code></td><td>ABI·API 수준·C++ 런타임이 Skia 패키지와 다르다</td><td><code>ANDROID_ABI</code> · <code>ANDROID_PLATFORM</code> · <code>ANDROID_STL</code></td><td><a class="src" data-gh="cmake/platform/android.cmake:33-46"><code>android.cmake:34</code></a></td></tr>
+                  <tr><td><code>The macOS architecture must be arm64.</code> · <code>The iOS architecture must be arm64.</code></td><td>universal이나 x86_64로 지으려 했다. 패키지는 arm64만 담는다</td><td><code>CMAKE_OSX_ARCHITECTURES=arm64</code></td><td><a class="src" data-gh="cmake/platform/macos.cmake:33-39"><code>macos.cmake:34</code></a> · <a class="src" data-gh="cmake/platform/ios.cmake:37-43"><code>ios.cmake:38</code></a></td></tr>
+                  <tr><td><code>CMAKE_OSX_DEPLOYMENT_TARGET is not set.</code></td><td>배포 하한을 처음 configure 전에 주지 않았다</td><td>macOS 11.0, iOS 15.0 이상을 준다</td><td><a class="src" data-gh="cmake/platform/macos.cmake:41-46"><code>macos.cmake:42</code></a> · <a class="src" data-gh="cmake/platform/ios.cmake:45-50"><code>ios.cmake:46</code></a></td></tr>
+                  <tr><td><code>CMAKE_OSX_SYSROOT must be iphoneos (devices) or iphonesimulator (the simulator).</code></td><td>iOS SDK를 고르지 않았다</td><td><code>CMAKE_OSX_SYSROOT</code>를 <code>iphoneos</code>나 <code>iphonesimulator</code>로</td><td><a class="src" data-gh="cmake/platform/ios.cmake:25-30"><code>ios.cmake:26</code></a></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="ts-group">
+            <h3>configure — 의존성</h3>
+            <div class="table-wrap">
+              <table class="t ts wide">
+                <thead><tr><th>메시지</th><th>원인</th><th>고치기</th><th>근거</th></tr></thead>
+                <tbody>
+                  <tr><td><code>The Skia package was not found: …</code></td><td>그 대상의 패키지를 받지 않았거나 <code>LUIL_SKIA_ROOT</code>가 틀렸다</td><td><code>scripts/fetch_skia.ps1 -Target &lt;대상&gt;</code></td><td><a class="src" data-gh="cmake/dependencies/skia.cmake:303-311"><code>skia.cmake:305</code></a></td></tr>
+                  <tr><td><code>A Skia Debug build output is missing: …</code> (Release도 같은 꼴)</td><td>그 구성의 패키지가 없다. 받는 스크립트의 기본은 Release 하나다</td><td><code>-Configuration Debug,Release</code>로 다시 받거나, 짓는 구성을 줄인다(<code>CMAKE_CONFIGURATION_TYPES</code>)</td><td><a class="src" data-gh="cmake/dependencies/skia.cmake:249-259"><code>skia.cmake:252</code></a></td></tr>
+                  <tr><td><code>Skia args.gn was not found: …</code></td><td>패키지가 온전히 풀리지 않았다</td><td><code>fetch_skia.ps1 -Force</code></td><td><a class="src" data-gh="cmake/dependencies/skia.cmake:16-21"><code>skia.cmake:17</code></a></td></tr>
+                  <tr><td><code>Skia was built without … = ….</code></td><td>직접 빌드한 Skia에 luil이 요구하는 GN 인자가 없다. 켠 기능(SVG 등)의 인자도 여기서 본다</td><td>그 인자로 Skia를 다시 짓거나 고정 패키지를 쓴다</td><td><a class="src" data-gh="cmake/dependencies/skia.cmake:30-35"><code>skia.cmake:32</code></a></td></tr>
+                  <tr><td><code>Skia was not compiled with clang-cl …</code> · <code>Skia was not built with is_trivial_abi = false.</code> · <code>Skia's Debug build does not use /MTd.</code></td><td>직접 빌드한 Skia가 도구사슬·ABI·CRT 계약을 어겼다. 셋 다 링크는 되는데 느리거나 실행 중에 깨지는 것들이라 configure에서 잡는다</td><td>skia-prep의 빌드 스크립트로 짓거나 고정 패키지를 쓴다</td><td><a class="src" data-gh="cmake/dependencies/skia.cmake:69-81"><code>skia.cmake:69</code></a> · <a class="src" data-gh="cmake/dependencies/skia.cmake:93-98"><code>94</code></a> · <a class="src" data-gh="cmake/dependencies/skia.cmake:140-150"><code>142</code></a></td></tr>
+                  <tr><td><code>The Skia package at … is built for the iOS Simulator, but this configure targets ios-arm64 (a device).</code> (반대도 있다)</td><td>기기용과 시뮬레이터용 패키지를 바꿔 썼다</td><td>받은 패키지와 <code>CMAKE_OSX_SYSROOT</code>를 맞춘다</td><td><a class="src" data-gh="cmake/dependencies/skia.cmake:234-243"><code>skia.cmake:236</code></a></td></tr>
+                  <tr><td><code>The nlohmann/json submodule is not initialized: …</code></td><td>submodule을 받지 않았다</td><td><code>git submodule update --init third_party/nlohmann_json</code></td><td><a class="src" data-gh="cmake/dependencies/nlohmann_json.cmake:14-18"><code>nlohmann_json.cmake:15</code></a></td></tr>
+                  <tr><td><code>The WebView2 SDK package was not found: …</code></td><td>웹뷰를 켠 구성인데 SDK가 없다</td><td><code>scripts/fetch_webview2.ps1</code>, 또는 <code>LUIL_ENABLE_WEBVIEW=OFF</code></td><td><a class="src" data-gh="cmake/dependencies/webview2.cmake:15-25"><code>webview2.cmake:17</code></a></td></tr>
+                  <tr><td><code>The GameActivity package was not found: …</code></td><td>Android 구성인데 GameActivity를 받지 않았다</td><td><code>scripts/fetch_game_activity.ps1</code></td><td><a class="src" data-gh="cmake/dependencies/game_activity.cmake:15-22"><code>game_activity.cmake:18</code></a></td></tr>
+                  <tr><td><code>The Catch2 submodule is not initialized: …</code></td><td>시험 구성인데 submodule이 없다</td><td><code>git submodule update --init third_party/catch2</code>, 또는 <code>LUIL_BUILD_TESTS=OFF</code></td><td><a class="src" data-gh="cmake/dependencies/catch2.cmake:7-12"><code>catch2.cmake:8</code></a></td></tr>
+                  <tr><td><code>Codicons checksum mismatch: …</code></td><td>Codicons 파일의 바이트가 바뀌었다(줄 끝 변환 등). 저장소는 <code>.gitattributes</code>로 이 폴더의 변환을 끈다</td><td>원본 파일을 되살린다</td><td><a class="src" data-gh="cmake/verify_codicons.cmake:21-27"><code>verify_codicons.cmake:23</code></a></td></tr>
+                  <tr><td><code>MD4C checksum mismatch: …</code></td><td>같은 까닭으로 MD4C 원본이 바뀌었다</td><td>원본 파일을 되살린다</td><td><a class="src" data-gh="src/CMakeLists.txt:1221-1232"><code>src/CMakeLists.txt:1230</code></a></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="ts-group">
+            <h3>configure — 내 프로젝트</h3>
+            <div class="table-wrap">
+              <table class="t ts wide">
+                <thead><tr><th>메시지</th><th>원인</th><th>고치기</th><th>근거</th></tr></thead>
+                <tbody>
+                  <tr><td><code>A license file is missing: /LICENSE.MIT</code> (<code>Component: nlohmann/json</code>)</td><td>소스 트리 소비자가 변수 셋을 부모 scope에 정하지 않았다. 빈 변수 뒤에 파일 이름만 남는다</td><td><code>LUIL_SOURCE_DIRECTORY</code>·<code>LUIL_ASSET_DIRECTORY</code>·<code>LUIL_NLOHMANN_JSON_ROOT</code>를 두 함수 앞에서 정한다</td><td><a class="src" data-gh="cmake/generate_notices.cmake:238-244"><code>generate_notices.cmake:241</code></a></td></tr>
+                  <tr><td><code>configure_file</code>이 <code>/win32/resources/luil_resources.rc.in</code>을 찾지 못한다</td><td>같은 까닭 — <code>LUIL_SOURCE_DIRECTORY</code>가 비었다</td><td>위와 같다</td><td><a class="src" data-gh="cmake/generate_notices.cmake:262-279"><code>generate_notices.cmake:263</code></a></td></tr>
+                  <tr><td><code>find_package</code>가 luil의 config 파일을 찾지 못한다</td><td>설치 자리를 알려 주지 않았다</td><td><code>CMAKE_PREFIX_PATH</code>에 설치 자리를 준다</td><td><a class="src" data-gh="docs/how-to-start.md:96-101"><code>how-to-start.md:96</code></a></td></tr>
+                  <tr><td><code>This luil package was not installed for the Debug configuration (installed: …)</code></td><td>앱이 짓는 구성의 luil 산출물이 설치본에 없다</td><td>그 구성도 같은 자리에 설치하거나(<code>cmake --install … --config Debug</code>), 짓는 구성을 줄인다</td><td><a class="src" data-gh="cmake/luil-config.cmake.in:66-82"><code>luil-config.cmake.in:74</code></a></td></tr>
+                  <tr><td><code>LUIL_ENABLE_TEXT_SHAPING_FALLBACK requires LUIL_ENABLE_TEXT_SHAPING=ON.</code></td><td>fallback만 켰다</td><td>둘을 함께 켠다</td><td><a class="src" data-gh="CMakeLists.txt:412-414"><code>CMakeLists.txt:413</code></a></td></tr>
+                  <tr><td><code>LUIL_ENABLE_SMB is Android and iOS only. …</code></td><td>Windows·macOS에서 SMB를 켰다</td><td>끈다. 두 OS는 SMB 공유를 OS로 다룬다</td><td><a class="src" data-gh="CMakeLists.txt:387-391"><code>CMakeLists.txt:389</code></a></td></tr>
+                  <tr><td>경고 <code>LUIL_ENABLE_WEBVIEW is ON while LUIL_ENABLE_DIRECT3D is OFF.</code></td><td>이미 구성한 빌드 폴더에서 Direct3D만 껐다. 옵션은 캐시에 남은 값을 다시 보지 않는다</td><td>웹뷰도 명시적으로 끈다</td><td><a class="src" data-gh="CMakeLists.txt:466-472"><code>CMakeLists.txt:467</code></a></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="ts-group">
+            <h3>빌드와 링크</h3>
+            <div class="table-wrap">
+              <table class="t ts wide">
+                <thead><tr><th>증상</th><th>원인</th><th>고치기</th><th>근거</th></tr></thead>
+                <tbody>
+                  <tr><td>링크가 CRT 불일치로 멈춘다 (링커의 <code>/FAILIFMISMATCH</code>)</td><td>앱의 CRT가 Skia의 <code>/MT</code>·<code>/MTd</code>와 다르다. 소스 트리로 넣으면 luil은 앱의 설정을 따르고, 앱의 CRT는 configure가 검사하지 않는다</td><td><code>CMAKE_MSVC_RUNTIME_LIBRARY</code>를 <code>MultiThreaded$&lt;$&lt;CONFIG:Debug&gt;:Debug&gt;</code>로, luil보다 먼저 정한다</td><td><a class="src" data-gh="docs/skia-build.md:157-163"><code>skia-build.md:163</code></a> · <a class="src" data-gh="CMakeLists.txt:5-9"><code>CMakeLists.txt:5</code></a></td></tr>
+                  <tr><td>링커가 진입점(<code>main</code>이나 <code>wWinMain</code>)을 찾지 못한다</td><td><code>wWinMain</code>을 쓰는데 대상을 <code>WIN32</code> 없이 지었거나 그 반대다. 저장소에서 따로 시험한 동작이 아니라 MSVC의 서브시스템 규칙이다</td><td>창 앱은 <code>add_executable(… WIN32 …)</code></td><td><a class="src" data-gh="examples/CMakeLists.txt:23-25"><code>examples/CMakeLists.txt:23</code></a></td></tr>
+                  <tr><td>링커가 <code>building for 'iOS-simulator', but linking in object file ... built for 'iOS'</code>로 멈춘다</td><td>기기용 Skia를 시뮬레이터 구성에 넣었다 (반대도 같다)</td><td>SDK에 맞는 패키지를 받는다</td><td><a class="src" data-gh="docs/skia-build.md:206"><code>skia-build.md:206</code></a></td></tr>
+                  <tr><td>Apple 헤더를 들인 앱의 <code>.mm</code>에서 luil 헤더의 <code>check</code>가 매크로로 펼쳐진다</td><td><code>AssertMacros.h</code>가 <code>check</code>·<code>verify</code>·<code>require</code>를 매크로로 정의한다. luil은 이를 막는 정의를 자기 대상(<code>luil_options</code>)에만 건다. 코드에서 읽은 것이고 소비자 test는 없다</td><td>앱 대상에도 <code>__ASSERT_MACROS_DEFINE_VERSIONS_WITHOUT_UNDERSCORES=0</code>을 정의한다</td><td><a class="src" data-gh="cmake/platform/macos.cmake:53-71"><code>macos.cmake:53</code></a></td></tr>
+                  <tr><td>새 MSVC에서 luil 자신의 소스가 경고로 멈춘다</td><td>luil 소스에는 경고=오류(<code>/WX</code>)가 걸려 있다</td><td><code>LUIL_WARNINGS_AS_ERRORS=OFF</code></td><td><a class="src" data-gh="CMakeLists.txt:473-476"><code>CMakeLists.txt:476</code></a></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div class="ts-group">
+            <h3>실행</h3>
+            <div class="table-wrap">
+              <table class="t ts wide">
+                <thead><tr><th>증상 · 메시지</th><th>원인</th><th>고치기</th><th>근거</th></tr></thead>
+                <tbody>
+                  <tr><td>메시지 상자 "luil startup error" — <code>Required executable resource not found.</code></td><td>실행 파일에 <code>.rc</code> 조각(리소스 101~104)이 없다</td><td><code>luil_configure_resource_script</code>가 지은 <code>.rc</code>를 대상 소스에 넣는다</td><td><a class="src" data-gh="src/win32/embedded_assets.cpp:57-64"><code>embedded_assets.cpp:61</code></a></td></tr>
+                  <tr><td>메시지 상자 — <code>Failed to create a Skia typeface from the embedded Codicons font.</code></td><td>리소스 101의 바이트로 Skia 글꼴을 만들지 못했다</td><td>Codicons 원본을 되살리고 다시 짓는다</td><td><a class="src" data-gh="src/win32/embedded_assets.cpp:66-70"><code>embedded_assets.cpp:68</code></a></td></tr>
+                  <tr><td>창에 caption만 있고 앱 화면이 없다</td><td><code>environment.driver</code>가 비었다 — host 없이 caption만 그린다</td><td>driver를 꽂는다</td><td><a class="src" data-gh="include/luil/win32/win32_window.h:509-513"><code>win32_window.h:510</code></a></td></tr>
+                  <tr><td>창 크기를 바꿔도 배치가 그대로다</td><td>delegate를 꽂지 않았거나 크기 메시지를 <code>handle</code>에서 처리하지 않는다. delegate가 없으면 크기 메시지가 없다</td><td><code>make_window_metrics_message</code>를 넓히고 <code>handle</code>에 갈래를 둔다</td><td><a class="src" data-gh="src/win32/win32_window.cpp:1835-1838"><code>win32_window.cpp:1837</code></a></td></tr>
+                  <tr><td>창을 닫으면 몇 초 멈췄다가 끝난다</td><td><code>shutdown_completed</code>가 참이 되지 않는다. 종료가 시간 예산(3초)을 다 쓴다</td><td>종료 메시지를 처리할 때 참으로 세운다</td><td><a class="src" data-gh="src/host/app_host.cpp:398-409"><code>app_host.cpp:403</code></a></td></tr>
+                  <tr><td>앱 상태가 더 바뀌지 않는다 — 화면은 마지막 frame 그대로다</td><td>driver의 콜백이 예외를 던졌다. logic thread가 삼키고 멈춘다(<code>app_host::faulted()</code>)</td><td>오류를 예외가 아니라 값으로 나른다</td><td><a class="src" data-gh="include/luil/app/app_host.h:625-627"><code>app_host.h:625</code></a></td></tr>
+                  <tr><td><code>run_application needs a logic driver.</code> (macOS·iOS·Android 로그)</td><td>driver가 비었다</td><td>driver를 꽂는다</td><td><a class="src" data-gh="src/macos/macos_app.mm:1393-1396"><code>macos_app.mm:1395</code></a></td></tr>
+                  <tr><td><code>run_application must be called on the main thread.</code> (iOS 로그)</td><td>main thread 밖에서 불렀다</td><td><code>main</code>에서 부른다</td><td><a class="src" data-gh="src/ios/ios_app.mm:2715-2719"><code>ios_app.mm:2717</code></a></td></tr>
+                  <tr><td>iOS 앱이 뜨자마자 dyld가 멈춘다 (SMB를 켠 구성)</td><td><code>libsmb2.framework</code>를 번들에 싣지 않았다</td><td>앱 대상마다 <code>luil_ios_embed_smb</code>를 서명보다 먼저 부른다</td><td><a class="src" data-gh="docs/concepts/consumer-contract.md:51-52"><code>consumer-contract.md:51</code></a></td></tr>
+                  <tr><td>iOS 시뮬레이터에서 비밀 저장소가 <code>errSecMissingEntitlement</code>(-34018)로 거절된다</td><td>실행 파일에 앱 id·Keychain 권한 구역이 없다</td><td><code>luil_ios_sign_bundle</code>을 부른다</td><td><a class="src" data-gh="docs/concepts/consumer-contract.md:78"><code>consumer-contract.md:78</code></a></td></tr>
+                  <tr><td>macOS에서 OS 알림이 서지 않는다</td><td>번들 밖의 맨 실행 파일이다. 알림은 번들 식별자가 있고 서명된 앱에서만 선다</td><td>앱 번들로 짓고 서명한다</td><td><a class="src" data-gh="docs/concepts/build-system.md:124"><code>build-system.md:124</code></a></td></tr>
+                  <tr><td>Android에서 뒤로 가기 키가 오지 않는다</td><td>targetSdk 36 이상인데 매니페스트에 <code>android:enableOnBackInvokedCallback="false"</code>가 없다</td><td>매니페스트에 더한다</td><td><a class="src" data-gh="include/luil/android/android_app.h:68-71"><code>android_app.h:69</code></a></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+        <p class="ts-empty" id="ts-empty" hidden>맞는 항목이 없다. 메시지의 다른 낱말로 찾아본다.</p>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리거나, 문서만 보고는 놓치기 쉬운 자리들이다. 문서와 코드가 다른 곳은 코드를 따랐고 표시를 달았다.</p>
+        </header>
+        <ol class="recap">
+          <li><span><strong>CRT는 앱이 정한다.</strong> 소스 트리로 넣으면 luil은 앱의 CRT 설정을 바꾸지 않는다. <code>add_subdirectory</code>보다 먼저 <code>/MT</code>·<code>/MTd</code>를 정하지 않으면 링크가 원인을 말하지 않는 <code>/FAILIFMISMATCH</code>로 멈춘다.</span></li>
+          <li><span><strong>변수 셋은 부모 scope에 정한다.</strong> <code>LUIL_SOURCE_DIRECTORY</code>·<code>LUIL_ASSET_DIRECTORY</code>·<code>LUIL_NLOHMANN_JSON_ROOT</code>는 luil 안에서 정해져도 앱의 <code>CMakeLists.txt</code>에는 보이지 않는다. 고지·<code>.rc</code> 함수가 그 값을 읽는다.</span></li>
+          <li><span><strong><code>.rc</code> 조각을 빠뜨려도 빌드는 된다.</strong> 실행하는 순간 시작 실패 상자가 뜨고 1로 끝난다. 리소스 ID 101~104는 luil의 몫이라 앱이 쓰지 않는다.</span></li>
+          <li><span><strong>Skia 스크립트의 기본은 Release 하나다.</strong> Visual Studio는 Debug도 검사하므로 <code>-Configuration Debug,Release</code>로 받는다.</span></li>
+          <li><span><strong>소스 트리 길은 Visual Studio generator와 x64만 받는다.</strong> Ninja나 <code>-A</code> 없는 configure는 luil의 검사에서 멈춘다.</span></li>
+          <li><span><strong><code>luil_options</code>를 따라 링크하지 않는다.</strong> 예제가 링크하는 것은 저장소의 경고 규율이다. 앱은 <code>luil::luil</code> 하나만 링크한다.</span></li>
+          <li><span><span class="tag">문서가 말하지 않는다</span><strong><code>find_package</code>는 Windows만이다.</strong> README와 시작 가이드는 설치 패키지 길의 플랫폼을 적지 않는다. 코드는 다른 플랫폼에서 설치 규칙을 끈다(<code>CMakeLists.txt:348</code>).</span></li>
+          <li><span><span class="tag">문서와 다르다</span><strong>우산 헤더에 macOS·iOS 진입 헤더가 없다.</strong> <code>luil/macos/macos_app.h</code>·<code>luil/ios/ios_app.h</code>를 직접 include한다. 우산 헤더 검사 스크립트를 이 체크아웃에서 돌리면 두 헤더가 빠졌다고 멈춘다.</span></li>
+          <li><span><strong>Codicons 상수 헤더는 따로 들인다.</strong> <code>luil/generated/codicons.h</code>는 우산 헤더에 들지 않는다.</span></li>
+          <li><span><span class="tag">문서와 예제가 다르다</span><strong>hello는 옛 이름을 쓴다.</strong> 소비자 계약은 새 코드에 <code>luil::logic_driver</code>·<code>luil::ui_frame</code>을 쓰라고 하는데, 첫 앱의 본보기인 hello는 <code>luil::win32::</code> 별칭을 쓴다. 별칭은 "한 판 동안" 남고, <code>namespace luil::win32 { class logic_driver; }</code> 같은 전방 선언은 이미 깨진다.</span></li>
+          <li><span><strong><code>make_close_message</code>·<code>shutdown_completed</code>·<code>cancel</code>은 UI thread에서도 불린다.</strong> hello처럼 <code>std::atomic</code>으로 지킨다. <code>shutdown_completed</code>가 참이 되지 않으면 창을 닫을 때마다 종료가 3초 예산을 다 쓴다.</span></li>
+          <li><span><strong>driver 콜백에서 예외를 던지지 않는다.</strong> logic thread가 예외를 삼키고 멈춰 frame 게시와 메시지 처리가 함께 멎는다.</span></li>
+          <li><span><strong>세 조각은 진입 함수보다 오래 산다.</strong> 라이브러리는 주소만 빌린다. iOS의 <code>run_application</code>은 돌아오지 않으므로 <code>static</code>으로 둔다.</span></li>
+          <li><span><strong>첫 frame은 크기를 모른 채 불린다.</strong> 크기 메시지는 delegate가 만들고, delegate가 없으면 영영 오지 않는다. hello처럼 기본 크기를 둔다.</span></li>
+          <li><span><strong>창 설정의 caption과 tree의 <code>caption_element</code>는 같은 값이어야 한다.</strong> 하나는 비클라이언트 판정에, 하나는 그리기에 쓰여 어긋나면 버튼 자리가 맞물리지 않는다.</span></li>
+          <li><span><strong>Skia 기능 다섯은 예제·시험 preset만 켠다.</strong> 라이브러리 preset(<code>vs2026</code>)으로 지어 설치하면 SVG·Lottie·AVIF가 <code>unsupported_format</code>으로 답한다. 설치할 luil을 지을 때 기능을 고른다.</span></li>
+          <li><span><strong>소스 트리 소비자의 고지는 켠 기능만 고르지 않는다.</strong> 켠 기능 목록(<code>LUIL_SKIA_FEATURES</code>)이 부모 scope에 보이지 않아 Skia의 <code>NOTICE.md</code> 전체를 싣는다. 해가 되지는 않는다. 코드에서 읽은 것이고 test로 잠긴 동작은 아니다.</span></li>
+          <li><span><strong>macOS 번들 함수는 예제에만 있다.</strong> iOS의 <code>luil_ios_sign_bundle</code>·<code>luil_ios_embed_smb</code>는 luil의 CMake가 들이지만, <code>luil_add_macos_bundle</code>·<code>luil_sign_macos_bundle</code>은 예제 파일 안의 함수다.</span></li>
+          <li><span><strong>Apple 헤더의 매크로를 막는 정의는 앱에 전파되지 않는다.</strong> 앱의 <code>.mm</code>에서 <code>check</code>가 펼쳐지면 앱 대상에도 같은 정의를 건다.</span></li>
+          <li><span><span class="tag">문서와 다르다</span><strong>차트 선택 라이브러리는 이 판에 없다.</strong> 빌드 체계·소비자 계약 문서가 말하는 <code class="free">LUIL_BUILD_CHART</code>·<code class="free">luil::luil_chart</code>·<code class="free">luil/chart.h</code>는 이 판의 CMake와 헤더에 없다. 문서 머리의 "선택 이식 범위" 안내가 그 까닭이다.</span></li>
+          <li><span><span class="tag">문서가 모자란다</span><strong>Skia 빌드 준비 문서의 대상 표는 셋이다.</strong> 스크립트는 <code>ios-arm64</code>·<code>ios-arm64-simulator</code>까지 다섯을 받는다.</span></li>
+          <li><span><span class="tag">문서와 다르다</span><strong>"실행 파일에 내장된 Codicons"는 Windows 이야기다.</strong> <code>fonts.md</code>와 <code>fonts.h</code>의 주석이 그렇게 말하지만, Android·macOS·iOS에서는 글꼴이 라이브러리 소스로 들어간다.</span></li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>Skia를 소스에서 빌드해야 하나?</summary><div class="faq-a"><p class="faq-short">아니다. <code>scripts/fetch_skia.ps1</code>이 핀으로 고정한 패키지를 받는다.</p><p>Skia 소스도, external도, gn·ninja도 필요 없다. 직접 빌드한 Skia도 <code>LUIL_SKIA_ROOT</code>·<code>LUIL_SKIA_BUILD_DEBUG</code>·<code>LUIL_SKIA_BUILD_RELEASE</code>로 쓸 수 있지만 패키지와 같은 다섯 조건을 통과해야 한다(<a class="xref" href="#skia">Skia 받기</a>).</p></div></details>
+          <details class="faq"><summary>clang을 설치해야 하나?</summary><div class="faq-a"><p class="faq-short">Windows에서는 아니다. Skia는 이미 clang-cl로 지어져 있고, luil과 앱은 MSVC로 짓는다.</p><p>configure는 패키지가 적어 둔 <code>toolchain.json</code>을 읽을 뿐 컴파일러를 찾지도 부르지도 않는다. Android·macOS·iOS는 원래 NDK·Xcode의 clang으로 짓는다.</p></div></details>
+          <details class="faq"><summary>Debug와 Release 패키지를 둘 다 받아야 하나?</summary><div class="faq-a"><p class="faq-short">짓는 구성만큼 받는다. Visual Studio처럼 구성이 여럿인 generator는 둘 다 필요하다.</p><p>검사는 configure가 실제로 짓는 구성에만 걸린다. 다중 구성 generator는 <code>CMAKE_CONFIGURATION_TYPES</code>가 정하고, Debug는 <code>/MTd</code> 산출물을, 그 밖의 구성은 Release 산출물을 쓴다.</p></div></details>
+          <details class="faq"><summary>Windows에서 Ninja로 지을 수 있나?</summary><div class="faq-a"><p class="faq-short">소스 트리 길에서는 안 된다. luil이 configure에서 Visual Studio 2022·2026만 받는다.</p><p>설치 패키지의 config는 generator를 검사하지 않는다. 다만 test는 luil을 지은 generator를 그대로 쓰므로, 다른 generator로 소비하는 길은 확인된 것이 아니다.</p></div></details>
+          <details class="faq"><summary>vcpkg나 Conan 패키지가 있나?</summary><div class="faq-a"><p class="faq-short">저장소에는 없다. 소비 길은 소스 트리와 설치 패키지 둘이다.</p><p>둘 다 링크하는 이름은 <code>luil::luil</code>이다. 의존성 취득은 사람이 돌리는 스크립트가 맡고 configure는 네트워크를 쓰지 않는다.</p></div></details>
+          <details class="faq"><summary>앱을 동적 CRT(<code>/MD</code>)로 지을 수 있나?</summary><div class="faq-a"><p class="faq-short">안 된다. Skia 패키지가 정적 CRT(<code>/MT</code>·<code>/MTd</code>)라 앱과 luil이 같은 것을 써야 한다.</p><p>configure는 Skia 쪽의 CRT만 확인하고 앱의 설정은 보지 않는다. 어긋나면 링커가 <code>/FAILIFMISMATCH</code>로 멈춘다.</p></div></details>
+          <details class="faq"><summary>C++20과 <code>/utf-8</code>은 내가 켜야 하나?</summary><div class="faq-a"><p class="faq-short">아니다. <code>luil::luil</code>을 링크하면 따라온다.</p><p><code>luil_usage</code>가 공개 헤더를 컴파일하는 데 필요한 두 가지만 전파한다 — 헤더에 한국어 주석과 <code>u8</code> 문자열이 있어서다. 경고 수준과 <code>/WX</code>는 전파하지 않는다.</p></div></details>
+          <details class="faq"><summary>웹뷰를 쓰지 않으면 무엇을 빼나?</summary><div class="faq-a"><p class="faq-short"><code>LUIL_ENABLE_WEBVIEW=OFF</code>로 구성하고 <code>fetch_webview2.ps1</code>을 건너뛴다.</p><p>SDK를 찾지도, 정적 로더를 링크하지도, 고지에 싣지도 않는다. 공개 API는 그대로이고 frame에 실은 웹뷰는 placeholder로 남는다. CPU 렌더러만 넣는 <code>LUIL_ENABLE_DIRECT3D=OFF</code>는 웹뷰도 기본으로 끈다.</p></div></details>
+          <details class="faq"><summary>macOS·iOS·Android에서도 <code>find_package</code>를 쓸 수 있나?</summary><div class="faq-a"><p class="faq-short">아니다. 설치 규칙은 Windows에만 있다.</p><p>다른 플랫폼에서는 <code>LUIL_INSTALL</code>을 일반 변수로 먼저 꺼서 옵션이 그 값을 따른다. 그 플랫폼에서는 소스 트리를 <code>add_subdirectory</code>한다.</p></div></details>
+          <details class="faq"><summary>설치본을 다른 경로나 다른 기계로 옮겨도 되나?</summary><div class="faq-a"><p class="faq-short">경로는 된다 — test가 공백이 든 경로로 옮겨 확인한다. 다른 기계에서는 Skia 자리를 다시 준다.</p><p>설치본에 적힌 Skia·WebView2 경로는 설치한 기계의 절대 경로다. <code>LUIL_SKIA_ROOT</code>만 주면 구성별 자리는 그 아래 <code>out/skia-ui-debug</code>·<code>-release</code>로 따라온다.</p></div></details>
+          <details class="faq"><summary>판번은 어떻게 확인하나?</summary><div class="faq-a"><p class="faq-short">컴파일 때는 <code>LUIL_VERSION_MAJOR</code> 같은 매크로, 실행 중에는 <code>library_version()</code>이다.</p><p>둘 다 <code>project(luil VERSION 0.1.0)</code> 하나에서 configure가 만든다. 설치본은 같은 주 판번을 호환으로 보므로 README처럼 <code>find_package(luil 0.1 REQUIRED)</code>로 찾는다.</p></div></details>
+          <details class="faq"><summary>앱 아이콘이나 내 리소스는 어디에 넣나?</summary><div class="faq-a"><p class="faq-short">별도의 <code>.rc</code>로 더하고, ID 101~104는 피한다.</p><p>luil의 조각은 Codicons·라이선스·고지만 담는다. 창 아이콘은 실행 파일 리소스의 ID를 <code>window_config::icon_resource</code>에 준다(0이면 시스템 기본).</p></div></details>
+          <details class="faq"><summary>창 크기를 바꿔도 화면이 그대로다.</summary><div class="faq-a"><p class="faq-short">delegate가 크기 메시지를 만들고 <code>handle</code>이 그것을 상태에 넣는지 본다.</p><p>delegate를 꽂지 않으면 크기 메시지가 아예 없다. hello는 <code>make_window_metrics_message</code>가 <code>metrics_intent</code>를 돌려주고, <code>handle</code>이 <code>metrics_</code>를 바꾸고, <code>make_frame</code>이 그 크기로 배치한다.</p></div></details>
+          <details class="faq"><summary>창을 닫으면 잠깐 멈췄다가 끝난다.</summary><div class="faq-a"><p class="faq-short"><code>shutdown_completed</code>가 참이 되는지 본다.</p><p>라이브러리는 종료 메시지를 넣은 뒤 그 값이 참이 되기를 시간 예산(3초) 안에서 기다린다. 종료 메시지를 처리할 때 저장을 제출하고 참으로 세운다(<a class="xref" href="threads.html#s8">종료 절차와 시간 예산</a>).</p></div></details>
+          <details class="faq"><summary>hello와 달리 <code>luil::logic_driver</code>를 상속해도 되나?</summary><div class="faq-a"><p class="faq-short">된다. 같은 형식이고, 새 코드는 그쪽을 쓰라는 것이 소비자 계약이다.</p><p><code>luil::win32::logic_driver</code>는 <code>luil::logic_driver</code>를 가리키는 별칭이다. 새 이름으로 쓴 예제는 <code>examples/selected_nodes/main.cpp</code>와 <code>examples/tool_window/main.cpp</code>다.</p></div></details>
+          <details class="faq"><summary>Linux에서 쓸 수 있나?</summary><div class="faq-a"><p class="faq-short">아니다. configure가 첫 갈래에서 멈춘다.</p><p>받는 플랫폼은 Windows 11 x64, Android arm64, macOS arm64, iOS arm64 넷이고, 나머지는 원인을 적은 오류로 끝난다. Skia 패키지도 그 대상들만 있다.</p></div></details>
+          <details class="faq"><summary>네트워크가 막힌 환경에서 빌드하려면?</summary><div class="faq-a"><p class="faq-short">핀이 가리키는 아카이브를 캐시 디렉터리에 두고 <code>-Offline</code>으로 받는다.</p><p>기본 캐시는 <code>third_party/skia-prep-archives</code>이고 <code>-ArchiveDirectory</code>로 바꾼다. 캐시 파일에도 같은 해시 검사가 걸린다. <code>fetch_webview2.ps1</code>도 같은 두 스위치를 받는다. configure 자체는 네트워크를 쓰지 않는다.</p></div></details>
+          <details class="faq"><summary>새 Visual Studio에서 luil 소스가 경고 때문에 빌드되지 않는다.</summary><div class="faq-a"><p class="faq-short"><code>LUIL_WARNINGS_AS_ERRORS=OFF</code>로 구성한다.</p><p>luil은 자기 소스에 경고=오류를 건다. 핀으로 고정한 luil을 새 도구사슬이 경고할 때 앱이 소스를 고칠 수는 없으므로, 그때 끄라고 둔 옵션이다. 앱의 경고 정책에는 영향이 없다.</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/app_host.h" target="_blank" rel="noopener">include/luil/app/app_host.h</a><span class="n">최상위 기호 24</span></div>
+            <div class="hdr-syms"><a href="api.html#window-placement" title="구조체"><span class="kb t">S</span>window_placement</a><a href="api.html#popup-dismiss-reason" title="열거형"><span class="kb e">E</span>popup_dismiss_reason</a><a href="api.html#window-backdrop" title="열거형"><span class="kb e">E</span>window_backdrop</a><a href="api.html#ui-popup" title="구조체"><span class="kb t">S</span>ui_popup</a><a href="api.html#popup-corner-radius" title="함수"><span class="kb f">f</span>popup_corner_radius</a><a href="api.html#window-screen-anchor" title="구조체"><span class="kb t">S</span>window_screen_anchor</a><a href="api.html#ui-window" title="구조체"><span class="kb t">S</span>ui_window</a><a href="api.html#screen-rect" title="구조체"><span class="kb t">S</span>screen_rect</a><a href="api.html#display-info" title="구조체"><span class="kb t">S</span>display_info</a><a href="api.html#screen-edge" title="열거형"><span class="kb e">E</span>screen_edge</a><a href="api.html#edge-alignment" title="열거형"><span class="kb e">E</span>edge_alignment</a><a href="api.html#docked-edge-placement" title="구조체"><span class="kb t">S</span>docked_edge_placement</a><a href="api.html#ui-docked-surface" title="구조체"><span class="kb t">S</span>ui_docked_surface</a><a href="api.html#screen-orientation" title="열거형"><span class="kb e">E</span>screen_orientation</a><a href="api.html#system-bars-mode" title="열거형"><span class="kb e">E</span>system_bars_mode</a><a href="api.html#device-request" title="구조체"><span class="kb t">S</span>device_request</a><a href="api.html#app-permission" title="열거형"><span class="kb e">E</span>app_permission</a><a href="api.html#permission-state" title="열거형"><span class="kb e">E</span>permission_state</a><a href="api.html#focus-request" title="구조체"><span class="kb t">S</span>focus_request</a><a href="api.html#focus-request-outcome" title="열거형"><span class="kb e">E</span>focus_request_outcome</a><a href="api.html#ui-frame" title="구조체"><span class="kb t">S</span>ui_frame</a><a href="api.html#background-work" title="클래스"><span class="kb t">C</span>background_work</a><a href="api.html#logic-driver" title="클래스"><span class="kb t">C</span>logic_driver</a><a href="api.html#app-host" title="클래스"><span class="kb t">C</span>app_host</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/luil.h" target="_blank" rel="noopener">include/luil/luil.h</a><span class="n">최상위 기호 0</span></div>
+            <p class="hdr-desc">라이브러리 공개 API 전체를 한 번에 들이는 umbrella header다. 빌드 시간을 아끼려면 필요한 header만 골라 include해도 된다 — 어느 쪽이든 경로는 항상 `luil/` 접두로 시작한다.</p>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/version.h" target="_blank" rel="noopener">include/luil/version.h</a><span class="n">최상위 기호 1</span></div>
+            <p class="hdr-desc">판번 매크로(LUIL_VERSION_MAJOR 등)다. 근원은 CMake의 project VERSION 하나이고 configure가 생성한다. 소비자는 매크로로 `#if` 분기를 하고, 런타임 표시는 아래 함수를 쓴다.</p>
+            <div class="hdr-syms"><a href="api.html#library-version" title="함수"><span class="kb f">f</span>library_version</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
+<script src="assets/manual.js"></script>
+<script>
+(function () {
+  "use strict";
+  const LU = window.LU;
+
+  // 근거 링크: data-gh="경로:시작-끝"을 설명서 기준 커밋의 GitHub 줄로 잇는다.
+  for (const a of document.querySelectorAll("a[data-gh]")) {
+    const spec = a.dataset.gh;
+    const cut = spec.lastIndexOf(":");
+    const path = cut > 0 ? spec.slice(0, cut) : spec;
+    const range = cut > 0 ? spec.slice(cut + 1).split("-") : [];
+    const start = Number(range[0]) || 0;
+    const end = Number(range[1]) || start;
+    a.href = LU.sourceUrl(path, start, end);
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.title = "GitHub에서 원본 보기 (" + LU.DOCS.commitShort + ")";
+  }
+
+  // 문제 해결 표 거르기: 낱말마다 모두 든 줄만 남긴다.
+  const input = document.getElementById("ts-filter");
+  const count = document.getElementById("ts-count");
+  const empty = document.getElementById("ts-empty");
+  if (!input) return;
+  const groups = Array.from(document.querySelectorAll("#ts-groups .ts-group"));
+  const norm = (s) => s.toLowerCase().replace(/[\s"'`…·]+/g, " ").trim();
+  const rows = [];
+  for (const g of groups) {
+    for (const r of g.querySelectorAll("tbody tr")) {
+      // 첫 칸의 메시지에서 값이 바뀌지 않는 조각(…으로 끊은 앞뒤)을 모아 둔다. 붙여 넣은 메시지에 그 조각이 들면 맞는다.
+      const frags = Array.from(r.cells[0].querySelectorAll("code"))
+        .flatMap((c) => c.textContent.split(/…|\.\.\./))
+        .map(norm)
+        .filter((f) => f.length >= 12);
+      rows.push({ g, r, text: norm(r.textContent), frags });
+    }
+  }
+  // 낱말이 셋 이하면 모두 든 줄만, 그보다 많으면(붙여 넣은 메시지) 세 글자 이상 낱말의 6할이 든 줄을 남긴다.
+  function matches(row, query, words) {
+    if (!words.length) return true;
+    if (row.frags.some((f) => query.includes(f))) return true;
+    const long = words.filter((w) => w.length >= 3);
+    if (words.length <= 3 || !long.length) return words.every((w) => row.text.includes(w));
+    return long.filter((w) => row.text.includes(w)).length / long.length >= 0.6;
+  }
+  function apply() {
+    const query = norm(input.value);
+    const words = query.split(" ").filter(Boolean);
+    let shown = 0;
+    const visible = new Map(groups.map((g) => [g, 0]));
+    for (const row of rows) {
+      const ok = matches(row, query, words);
+      row.r.hidden = !ok;
+      if (ok) {
+        shown++;
+        visible.set(row.g, visible.get(row.g) + 1);
+      }
+    }
+    for (const g of groups) g.hidden = visible.get(g) === 0;
+    count.textContent = words.length ? shown + "건 / 전체 " + rows.length + "건" : "전체 " + rows.length + "건";
+    empty.hidden = shown !== 0;
+  }
+  input.addEventListener("input", apply);
+  apply();
+})();
+</script>
+</body>
+</html>

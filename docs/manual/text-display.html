@@ -1,0 +1,2158 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>글 표시와 글꼴 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — label·markdown·glyph·badge·breadcrumb element와 툴팁, 직접 그리는 글(text_block·text_layout), 글꼴 불러오기·굵기·시스템 글자 크기로 글을 보이는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  .yes { color: var(--accent-ink); font-weight: 600; }
+  .no { color: var(--error); font-weight: 600; }
+</style>
+</head>
+<body data-page="text-display">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>글 표시와 글꼴</h1>
+      <p class="summary">글을 보이는 element는 다섯이다. 글 한 덩어리는 label, 서식 있는 본문과 도움말은 markdown, 아이콘 하나는 glyph, 작은 상태 표시는 badge, 경로는 breadcrumb다. element를 직접 짓는다면 <code>draw_text_block</code>이 label과 같은 규칙으로 글을 놓는다. 글꼴은 앱이 frame마다 이름으로 고르고, 크기는 논리 픽셀로 적으면 그릴 때 시스템 글자 크기와 화면 배율이 곱해진다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>label_element.h</code>·<code>markdown_element.h</code>·<code>glyph_element.h</code>·<code>badge_element.h</code>·<code>breadcrumb_element.h</code>·<code>text_block.h</code>·<code>text_layout.h</code>·<code>font_scale.h</code>·<code>fonts.h</code>·<code>font_style.h</code></dd></div>
+          <div><dt>실습</dt><dd>글 상자 — 줄 바꿈·줄 수·말줄임·정렬</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="text.html">텍스트 처리</a> · <a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="layout.html">배치</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>label·markdown·glyph·badge·breadcrumb·툴팁·직접 그리는 글 가운데 무엇을 쓸지 고른다.</li>
+            <li>줄 바꿈·줄 수 제한·말줄임·정렬이 어떻게 정해지고 칸 높이를 어떻게 재는지 안다.</li>
+            <li>마크다운 링크와 경로 막대가 내는 메시지를 받아 <code>handle</code>에서 처리한다.</li>
+            <li>앱 글꼴을 등록하고, 굵기와 시스템 글자 크기가 어디에 닿는지 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 것을 쓰나</h2>
+          <p class="lede">고르는 기준은 글의 모양보다 계약이다. 누를 수 있는가, 서식이 섞이는가, 앱이 그림을 직접 그리는가.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA93;</i><code>label_element</code></h4>
+            <ul>
+              <li>글 한 덩어리. 기본은 한 줄이고 <code>wrap</code>이면 폭에서 접는다.</li>
+              <li>색 역할·바탕 역할·정렬·말줄임·굵기·줄 수 제한.</li>
+              <li>누를 수 없다. 보조 기술에는 <code>static_text</code>다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB1D;</i><code>markdown_element</code></h4>
+            <ul>
+              <li>제목·문단·굵게·기울임·코드·목록·인용·구분선·링크·취소선.</li>
+              <li>링크마다 <code>link</code> 자식이 서고, 누르면 앱 메시지를 낸다.</li>
+              <li>선택·편집이 없다. 편집할 글은 <a class="xref" href="text-input.html">텍스트 입력</a>이다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA6B;</i>툴팁</h4>
+            <ul>
+              <li><code>set_tooltip</code>은 한 줄 글, <code>set_tooltip_content</code>는 임의의 UI tree, <code>make_markdown_tooltip</code>은 마크다운이다.</li>
+              <li>지연·자리·닫힘은 tree와 input thread가 맡는다. 앱이 열림 상태를 들지 않는다.</li>
+              <li>마우스·펜 hover로만 뜬다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB5C;</i><code>glyph_element</code></h4>
+            <ul>
+              <li>글꼴의 코드포인트 하나를 칸 가운데에 그린다. 기본은 내장 Codicons다.</li>
+              <li>그 글꼴에 없는 글자는 그리지 않는다 — 대체 글꼴이 없다.</li>
+              <li><code>description</code>이 있으면 <code>image</code>로 읽힌다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA66;</i><code>badge_element</code></h4>
+            <ul>
+              <li>누를 수 없는 작은 알약. 개수·"새것"·상태 이름.</li>
+              <li><code>tone</code>이 색을 정하고, 경고·오류면 글리프도 붙인다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEAB6;</i><code>breadcrumb_element</code></h4>
+            <ul>
+              <li>경로 조각·꺾쇠 단추·"…" 접기 단추를 한 줄에 늘어놓는다.</li>
+              <li>폭이 모자라면 앞쪽 조각부터 접는다. navigation 랜드마크로 읽힌다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA73;</i><code>draw_text_block</code></h4>
+            <ul>
+              <li>직접 짓는 element 안의 글. label과 같은 규칙과 같은 글꼴이다.</li>
+              <li>그림 위 글에 두르는 테두리(halo)가 있다.</li>
+              <li>칸 높이는 <code>measure_text_block</code>으로 잰다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB7E;</i><code>text_layout</code></h4>
+            <ul>
+              <li>불변 배치 값. caret 자리·hit test·선택 사각형을 묻는다.</li>
+              <li>크기는 <strong>물리 픽셀</strong>이다. 글을 그리는 element의 아래층이다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>제목·설명·상태 글 한 줄</td><td><code>label_element</code></td><td><a class="xref" href="#build-label">라벨</a></td></tr>
+              <tr><td>칸 폭에서 접고 두 줄을 넘으면 "…"</td><td><code>label_config::wrap</code> + <code>max_lines</code></td><td><a class="xref" href="#build-label">라벨</a></td></tr>
+              <tr><td>긴 경로에서 파일 이름을 남기기</td><td><code>text_elide::start</code>·<code>middle</code></td><td><a class="xref" href="#build-label">라벨</a></td></tr>
+              <tr><td>굵게·코드·링크가 섞인 도움말 본문</td><td><code>markdown_element</code></td><td><a class="xref" href="#build-markdown">마크다운과 툴팁</a></td></tr>
+              <tr><td>마우스를 올리면 뜨는 설명, 서식·링크가 있는 설명</td><td><code>set_tooltip</code> · <code>make_markdown_tooltip</code></td><td><a class="xref" href="#build-markdown">마크다운과 툴팁</a></td></tr>
+              <tr><td>아이콘 하나, 앱이 실어 온 아이콘 글꼴</td><td><code>glyph_element</code></td><td><a class="xref" href="#build-icons">글리프·배지·경로 막대</a></td></tr>
+              <tr><td>"12"·"새것"·"확인 필요" 같은 작은 표시</td><td><code>badge_element</code></td><td><a class="xref" href="#build-icons">글리프·배지·경로 막대</a></td></tr>
+              <tr><td>파일 관리자의 주소 막대</td><td><code>breadcrumb_element</code></td><td><a class="xref" href="#build-icons">글리프·배지·경로 막대</a></td></tr>
+              <tr><td>그림 위 글, 직접 짓는 element의 글</td><td><code>draw_text_block</code> · <code>measure_text_block</code></td><td><a class="xref" href="#build-draw">직접 그리는 글</a></td></tr>
+              <tr><td>caret·선택 사각형 계산</td><td><code>make_text_layout</code></td><td><a class="xref" href="#build-draw">직접 그리는 글</a></td></tr>
+              <tr><td>앱 글꼴, 고정폭 코드 글꼴, 큰 글자 설정</td><td><code>register_font_family</code> · <code>font_settings</code> · <code>text_line_height</code></td><td><a class="xref" href="#build-fonts">글꼴 불러오기와 크기</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 역할·정책·글꼴 층·논리 크기</h2>
+          <p class="lede">element 설정에는 색도 글꼴 파일도 픽셀 크기도 없다. 역할과 논리 크기만 담고, 구체 값은 그리는 순간 팔레트·글꼴 등록부·배율이 정한다.</p>
+        </header>
+
+        <h3>색은 역할로 고른다</h3>
+        <div class="prose">
+          <p>label·badge의 설정은 "이 글이 무엇을 뜻하나"만 담는다. 색은 그리는 순간 팔레트가 고른다. 그래서 테마를 바꾸거나 고대비로 가도 element를 고칠 일이 없다 (<a class="xref" href="theming.html">테마와 스타일</a>).</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>element</th><th>칸</th><th>값 → 팔레트 역할</th></tr></thead>
+            <tbody>
+              <tr><td>label 글</td><td><code>color</code> (기본 <strong><code>dim</code></strong>)</td><td><code>primary</code> → <code>primary_foreground</code>, <code>dim</code> → <code>secondary_foreground</code>, <code>error</code> → <code>error_accent</code></td></tr>
+              <tr><td>label 바탕</td><td><code>background</code> (기본 <code>none</code>)</td><td><code>notice</code> → <code>notice_background</code>(직각), <code>raised</code> → <code>raised_background</code>(모서리 <code>control_corner_radius</code>)</td></tr>
+              <tr><td>badge 테</td><td><code>tone</code></td><td><code>neutral</code> → <code>divider</code>, <code>accent</code> → <code>accent</code>, <code>warning</code> → <code>warning_accent</code>, <code>error</code> → <code>error_accent</code></td></tr>
+              <tr><td>badge 바탕·글</td><td><code>tone</code></td><td>바탕은 <code>accent</code>만 tone 색으로 채우고 나머지는 <code>raised_background</code>다. 글은 <code>accent_foreground</code>(accent), <code>secondary_foreground</code>(neutral), 테와 같은 색(심각도)</td></tr>
+              <tr><td>markdown</td><td>칸이 없다</td><td>본문 <code>primary_foreground</code>, 링크 글·밑줄 <code>accent</code>, 코드 바탕 <code>input_background</code>, 인용 막대·구분선 <code>tooltip_border</code></td></tr>
+              <tr><td>glyph</td><td><code>color</code> (optional)</td><td>비면 <code>primary_foreground</code></td></tr>
+              <tr><td>breadcrumb</td><td>칸이 없다</td><td>지금 자리 <code>primary_foreground</code>, 지나온 조각 <code>secondary_foreground</code>. 누를 수 있는 꺾쇠와 "…"는 단추의 기본 글리프 색(<code>primary_foreground</code>), 누를 수 없는 꺾쇠는 <code>secondary_foreground</code></td></tr>
+              <tr><td>문자열 툴팁</td><td>칸이 없다</td><td>바탕 <code>tooltip_background</code>, 테 <code>tooltip_border</code>, 글 <code>primary_foreground</code></td></tr>
+              <tr><td>직접 그리는 글</td><td><code>SkPaint</code> 인자</td><td>앱이 고른다. 보통 <code>solid_paint(context.palette.…)</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">심각도 배지는 색만으로 말하지 않는다</span>고대비 테마는 경고색과 오류색을 같은 전경색으로 접는다. 그래서 <code>warning</code>·<code>error</code> tone은 글리프(<code>codicons::icon_warning</code>·<code>codicons::icon_error</code>)를 함께 붙이고, 앱이 글리프를 뺄 칸은 없다. 어느 tone이든 1px 테를 두른다 — 고대비가 바탕을 창 배경으로 접어도 배지가 보인다.</div></div>
+
+        <h3>줄 바꿈: 누가 접고, 정책은 어디서 오나</h3>
+        <div class="prose">
+          <p>"어느 글자 사이에서 바꿀 수 있나"는 <a class="xref" href="text.html#s5">텍스트 처리 — 줄은 어디서 바꿀 수 있나</a>가 다룬다. 한국어 어절 규칙은 <a class="xref" href="text.html#s7"><code>hangul_words</code></a>, 폭 안의 마지막 후보에서 자르는 접기는 <a class="xref" href="text.html#s8">접기</a>에 있다. 여기서는 어느 칸을 채우면 접히고, 정책을 누가 정하는지만 본다.</p>
+          <ul>
+            <li><strong>접는 것</strong>: <code>wrap</code>을 켠 label, <code>wrap</code>을 켠 <code>text_block_style</code>, 그리고 markdown의 모든 블록. 문자열 툴팁·badge·breadcrumb는 접지 않고 한 줄로 그린다.</li>
+            <li><strong>정책 칸</strong>: label·markdown·<code>text_block_style</code>의 <code>line_break</code>는 <code>std::optional</code>이다. 비어 있으면 앱 스타일의 <code>text.wrap_policy</code>(JSON <code>text.wrapPolicy</code>)를 따른다. <code>text_layout_request::line_break</code>만 구체 값(기본 <code>hangul_words</code>)이다.</li>
+            <li><strong>줄 수 제한</strong>: <code>max_lines</code>(0이면 무제한)를 넘으면 마지막 보이는 줄이 남은 글 전체를 맡는다. 그 줄 안의 줄바꿈을 공백으로 펴서 끝을 <code>…</code>로 줄인다. 이때 줄이는 자리는 늘 끝이다 — <code>elide</code>는 한 줄 글의 칸이다.</li>
+            <li><strong>접지 않는 글의 줄바꿈</strong>: 한 줄 도우미 규칙 <code>single_line_break</code>를 따른다. 기본 <code>space</code>는 줄바꿈 하나를 공백 하나로 그린다.</li>
+          </ul>
+        </div>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">config</span><span>칸에 적은 정책이 있으면 그것이다. 한 칸만 어절로 두고 싶으면 그 칸에 적는다.</span></div>
+          <div role="listitem"><span class="who">측정 문맥</span><span>칸이 비면 <code>measure_context::line_break_for</code>가 문맥이 든 앱 스타일(<code>arrange_context::style</code>에서 온다)의 정책을 고른다.</span></div>
+          <div role="listitem"><span class="who">내장 스타일</span><span>측정 문맥의 <code>style</code>이 비면 내장 스타일(<code>default_ui_style</code>)이다. 손으로 지은 <code>measure_context { .scale, .measurer }</code>가 이 길이다.</span></div>
+          <div role="listitem"><span class="who">그리기 문맥</span><span>배치에서 잰 줄 없이 그리는 다섯 인자 <code>draw_text_block</code>만 그리기 문맥의 <code>draw_context::wrap_policy</code>로 접는다. label은 배치에서 잰 줄로 그려 이 값을 읽지 않는다.</span></div>
+        </div>
+
+        <h3>말줄임은 글자소 경계에서</h3>
+        <div class="prose">
+          <p><code>text_elide</code>는 <code>end</code>(기본)·<code>middle</code>·<code>start</code> 셋이다. 셋 다 들어가는 가장 긴 글을 이분 탐색으로 찾고, 자르는 자리는 언제나 글자소 경계다 — 조합형 한글이나 가족 이모지가 반으로 갈리지 않는다 (<a class="xref" href="text.html#s1">"한 글자"는 몇 개인가</a>).</p>
+          <ul>
+            <li><code>end</code>: 앞부분 + <code>…</code>. <code>middle</code>: 남길 글자소 k개 가운데 앞이 ⌈k/2⌉, 뒤가 ⌊k/2⌋. <code>start</code>: <code>…</code> + 뒷부분.</li>
+            <li><code>…</code>조차 들어가지 않으면 아무것도 그리지 않는다.</li>
+            <li>가운데·끝 정렬은 <strong>줄인 글의 폭</strong>으로 맞춘다.</li>
+            <li>보조 기술이 읽는 이름은 줄이기와 상관없이 원문 전체다.</li>
+          </ul>
+          <p>아래 <a class="xref" href="#lab">실습</a>에서 폭을 줄여 가며 셋을 견줄 수 있다.</p>
+        </div>
+
+        <h3>글꼴이 정해지는 세 층</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">frame</span><span>앱이 <code>ui_frame::fonts</code>(<code>font_settings { ui_family, code_family }</code>)에 가족 이름을 싣는다. host가 frame마다 글꼴 등록부에 건다. 빈 이름은 내장 UI 글꼴이고, <strong>없는 이름도 오류 없이 내장 글꼴로 되돌아간다.</strong> <code>code_family</code>가 비면 코드 글꼴은 UI 글꼴과 같다.</span></div>
+          <div role="listitem"><span class="who">내장 UI 글꼴</span><span><code>set_ui_typeface_families</code> 목록을 앞에서부터 찾는다. 같은 이름이면 등록한 앱 가족(<code>register_font_family</code>)이 설치된 가족보다 앞선다. 모두 없으면 플랫폼의 기본 가족이다 — Windows <code>Segoe UI</code>, Android <code>sans-serif</code>, macOS·iOS <code>.AppleSystemUIFont</code>.</span></div>
+          <div role="listitem"><span class="who">글자별 대체</span><span>고른 글꼴에 없는 글자(Segoe UI 속 한글, 코드 글꼴 속 이모지)는 시스템이 고른 face로 그린다. (글자, 굵기, 기울임, 사용자 UI 언어)로 묻는다 — 한자는 언어마다 자형이 달라서다.</span></div>
+        </div>
+        <div class="prose">
+          <p>element 하나만 다른 글꼴로 그리는 칸은 둘이다: 직접 그리는 글의 <code>text_font::typeface</code>와 <code>glyph_config::typeface</code>. label·markdown·badge·breadcrumb에는 글꼴 칸이 없다. <code>glyph_element</code>는 대체 글꼴도 쓰지 않는다 — 아이콘 글꼴에 없는 코드포인트는 빈칸이다. 아이콘의 뜻이 바뀌면 안 되기 때문이다.</p>
+          <p><strong>굵기와 기울임</strong>은 face를 고르는 값이다. <code>font_weight</code>는 1~1000의 수이고(이름 사이 값은 <code>static_cast&lt;font_weight&gt;(350)</code>), 그 굵기의 진짜 face를 찾는다. 시스템 가족은 관리자에 다시 묻고, 등록한 앱 가족은 가장 가까운 face를 고르고, 파일로 읽은 face는 그대로 쓴다. 가변 글꼴은 <code>wght</code> 축으로 clone한다. 그래도 모자라면 <code>semibold</code>(600) 이상만 획을 덧칠하고, 기울임은 눕힌다. 굵기 칸은 label과 직접 그리는 글에 있고, 컴포넌트 글은 스타일의 <code>ui_metrics::font_weights</code>다. <strong>badge와 breadcrumb 글에는 굵기 칸이 없다.</strong></p>
+        </div>
+
+        <h3>논리 크기와 시스템 글자 크기</h3>
+        <div class="prose">
+          <p>모든 <code>font_size</code>는 논리 픽셀이다. 그릴 때 <code>scaled_font_size(logical, display_scale)</code>가 플랫폼이 읽은 글자 크기 표(<code>set_system_font_sizes</code>)로 바꾸고 화면 배율을 곱한다. 표가 없으면 그냥 <code>logical × display_scale</code>이다. 표는 Windows의 텍스트 크기, Android의 글꼴 크기, iOS의 Dynamic Type에서 온다 (<a class="xref" href="#platforms">플랫폼 차이</a>). 그런데 모든 그림이 이 표를 지나지는 않는다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>무엇</th><th>글자</th><th>높이</th></tr></thead>
+            <tbody>
+              <tr><td>label</td><td class="yes">따른다</td><td class="yes">따른다 — <code>height_for</code> = <code>scaled_font_size(font_size) + 7</code></td></tr>
+              <tr><td>직접 그리는 글 (<code>make_text_font</code>)</td><td class="yes">따른다</td><td class="yes">기본 줄 높이는 따른다</td></tr>
+              <tr><td>badge</td><td class="yes">글은 따른다</td><td class="no">안 따른다 — <code>font_size + 7</code> 고정. 글리프도 <code>font_size × 배율</code>이다</td></tr>
+              <tr><td>breadcrumb</td><td class="yes">따른다</td><td class="no">안 따른다 — 늘 24</td></tr>
+              <tr><td>문자열 툴팁</td><td class="yes">따른다</td><td class="no">안 따른다 — 상자 22 × 배율에서 잘린다</td></tr>
+              <tr><td>markdown</td><td class="no">안 따른다 — <code>font_size × 배율</code>로 배치한다</td><td class="no">안 따른다</td></tr>
+              <tr><td>glyph</td><td>안 따른다 (설계대로 — 아이콘·여백은 키우지 않는다)</td><td>—</td></tr>
+              <tr><td><code>measure_context::text_width</code></td><td class="yes">따른다</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">크기는 논리 픽셀, <code>text_layout</code>만 물리 픽셀</span>label·badge·markdown·<code>text_font</code>의 크기는 논리 픽셀로 적는다. <code>text_layout_request</code>의 <code>font_size</code>·<code>width</code>·<code>line_height</code>만 물리 픽셀이다 — 배율과 시스템 글자 크기는 부르는 쪽이 곱해 넘긴다. 시스템 글자 크기가 바뀌면 플랫폼이 창 metrics를 다시 보내고(<code>window_metrics::text_scale</code>은 12 논리 픽셀 글자의 배율), 앱은 그 메시지에서 다시 배치한다.</div></div>
+      </section>
+
+      <section class="sec" id="build-label">
+        <header class="sec-head">
+          <h2>만들기: 라벨</h2>
+          <p class="lede">설정 하나를 값으로 짓고 stack에 넣는다. 한 줄이 기본이고, <code>wrap</code>을 켜면 받은 폭에서 접는다. 높이는 <code>height_for</code>나 <code>preferred_size</code>가 답한다.</p>
+        </header>
+
+        <h3>한 줄 label</h3>
+        <div class="code" data-lang="cpp" data-src="examples/hello/hello_app.cpp:90-95" data-path="examples/hello/hello_app.cpp" data-start="90"><script type="text/plain">
+        luil::label_config label_config {};
+        label_config.text = count_text(clicks_);
+        label_config.font_size = 14.0f;
+        label_config.color = luil::label_color_role::primary;
+        auto label { std::make_unique<luil::label_element>(luil::ui_element_id { kind_label }, label_config) };
+        column->add(std::move(label), luil::label_element::height_for(label_config));
+</script></div>
+        <div class="prose">
+          <p>색을 적지 않으면 <code>dim</code>(흐린 보조 글자색)이다. 제목이나 값은 이 예처럼 <code>primary</code>를 적는다. stack의 고정 길이로는 <code>label_element::height_for(config)</code>를 쓴다. 글자 크기에 위아래 여백 7을 더한 논리 높이이고, 시스템 글자 크기를 따른다. 길이를 모르면 맞춤 칸(<code>stack_element::add_fit</code>)에 넣는다. 그러면 <code>preferred_size</code>가 올림한 글 폭 + 양옆 <code>padding</code>을 답한다 (<a class="xref" href="containers.html">배치 요소</a>).</p>
+        </div>
+
+        <h3>굵기와 기울임</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:382-400" data-path="examples/demo/gallery_page.cpp" data-start="382"><script type="text/plain">
+        // 굵기마다 진짜 face로 선다. 설치되지 않은 굵기는 가장 가까운 face이고, semibold 이상이 모자라면 획을 덧칠한다.
+        page.begin_card(u8"글 굵기", u8"label의 weight·slant로 고릅니다.");
+        auto weights { row(u8"gallery/weights") };
+        const std::pair<luil::font_weight, std::u8string_view> ladder[] {
+            { luil::font_weight::light, u8"Light 가벼움" },
+            { luil::font_weight::regular, u8"Regular 보통" },
+            { luil::font_weight::semibold, u8"Semibold 조금 굵게" },
+            { luil::font_weight::bold, u8"Bold 굵게" },
+            { luil::font_weight::black, u8"Black 아주 굵게" },
+        };
+        for (const auto& [weight, text] : ladder)
+        {
+            luil::label_config weighted { .text = std::u8string { text }, .font_size = 14.0f, .weight = weight, .color = luil::label_color_role::primary };
+            const std::u8string key { u8"gallery/weight/" + std::u8string { text.substr(0, text.find(u8' ')) } };
+            weights->add_fit(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, key }, std::move(weighted)));
+        }
+        page.add(std::move(weights), 26.0f);
+        luil::label_config leaning { .text = u8"Italic 기울임 — 기울임 face가 없는 한글은 눕혀 그립니다", .font_size = 14.0f, .slant = luil::font_slant::italic, .color = luil::label_color_role::primary };
+        page.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"gallery/weight/italic" }, std::move(leaning)), 26.0f);
+</script></div>
+        <div class="prose">
+          <p>그 굵기의 진짜 face로 선다. 설치되지 않은 굵기는 가장 가까운 face이고, semibold 이상이 모자라면 획을 덧칠한다. 기울임 face가 없는 한글은 눕혀 그린다. 맞춤 칸에 넣은 굵은 label의 폭도 그 굵기로 잰다 — 보통 굵기로 재고 굵게 그려 끝이 잘리는 일이 없다.</p>
+        </div>
+
+        <h3>칸 폭에서 접는 설명 (줄 수 제한)</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:579-586" data-path="examples/demo/gallery_page.cpp" data-start="579"><script type="text/plain">
+        // 여러 줄 라벨: 폭에서 줄을 바꾸고 두 줄을 넘으면 마지막 줄 끝을 줄인다. 창 폭을 줄여 보세요.
+        luil::label_config description {};
+        description.text = u8"설명 글은 칸의 폭에서 줄을 바꿉니다. 공백에서 먼저 바꾸고, 공백이 없는 긴 낱말은 글자 경계에서 바꿉니다. "
+                           u8"두 줄을 넘으면 마지막 줄의 끝을 줄여 아래 내용이 밀리지 않습니다.";
+        description.font_size = 12.0f;
+        description.wrap = true;
+        description.max_lines = 2;
+        page.add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"gallery/wrapped-description" }, description), 2.0f * luil::label_element::height_for(description));
+</script></div>
+        <div class="prose">
+          <p><code>wrap</code>이면 받은 폭에서 접고, <code>max_lines</code>를 넘으면 마지막 줄 끝을 <code>…</code>로 줄인다. 줄은 배치(<code>arrange</code>)에서 한 번 바꾸고, 그리기는 그 줄을 그대로 쓴다. 접은 줄도 줄마다 <code>align</code>을 따른다. 바꾼 줄 하나의 높이는 한 줄 label과 같아서, 고정 길이로 넣을 때는 이 예처럼 <code>max_lines × height_for</code>로 잡는다.</p>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">상자를 자르지 않는다</span>칸이 줄 수보다 낮으면 아래 줄이 칸 밖으로 그려져 이웃을 덮는다. 높이를 <code>preferred_size</code>·<code>measure_wrap</code>로 받거나 <code>max_lines</code>로 막는다. 그리고 접는 label은 한 줄로 끝나도 <strong>위에 붙는다</strong> — 한 줄 label은 세로 가운데인데 <code>wrap</code>이면 위에서부터 쌓는다.</div></div>
+
+        <h3>칸 높이를 미리 잰다</h3>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/common.cpp:105-118" data-path="examples/mobile_demo/common.cpp" data-start="105"><script type="text/plain">
+    void page_column::wrapped_note(std::u8string owner, std::u8string text, const float page_width, const float scale, const luil::text_measurer* const measurer)
+    {
+        luil::label_config config {};
+        config.text = std::move(text);
+        config.font_size = note_text_size;
+        config.color = luil::label_color_role::dim;
+        config.wrap = true;
+        // 줄 나눔 규칙을 스타일에 맡기면 여기서 잴 때와 배치할 때의 규칙이 갈려 줄 수가 달라질 수 있다.
+        config.line_break = luil::text::line_break_policy::hangul_words;
+        // 한 줄이면 한 줄 `note`와 같은 높이를 지켜 위아래 간격이 그대로다.
+        const float one_line { luil::text_line_height(note_text_size, note_line_height - note_text_size) };
+        const float measured { luil::label_element::measure_wrap(config, luil::measure_context { .scale = scale, .measurer = measurer }, page_width - 2.0f * padding_).height };
+        add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, std::move(owner) }, std::move(config)), std::max(one_line, measured));
+    }
+</script></div>
+        <div class="prose">
+          <p><code>label_element::measure_wrap(config, context, width)</code>는 그리기·배치와 같은 규칙으로 바꾼 줄(원문 byte 구간), 말줄임 여부, 높이를 논리 픽셀로 준다. <code>width</code>는 여백을 포함한 칸 폭이다. 흘리는 창의 내용 높이를 더해 갈 때 쓰는 길이다.</p>
+          <p>이 예는 정책을 config에 적었다. 측정 문맥에 <code>.style</code>을 싣지 않았기 때문이다 — 정책 칸을 비우면 여기서는 내장 스타일로 재고, 화면은 앱 스타일로 접어 줄 수가 갈릴 수 있다. 한 줄이면 접기를 끄고 한 줄 높이를 지키는 변형은 <code>examples/mobile_demo/page_list.cpp</code>의 <code class="free">make_summary</code>에 있다.</p>
+        </div>
+
+        <h3>좁은 칸에서 줄이기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1278-1284" data-path="examples/demo/workbench_page.cpp" data-start="1278"><script type="text/plain">
+        std::u8string title { patch_path_.empty() ? diff_source_ : u8"불러온 패치: " + patch_path_ };
+        if (title.empty())
+            title = u8"표에서 변경을 고르면 차이를 보인다";
+        // 제목과 찾기 칸이 좁은 판의 폭을 나눈다. 찾기 칸은 96~180이고, 제목은 남는 폭에서 가운데를 줄인다.
+        head->add_flexible(std::make_unique<luil::label_element>(
+                               workbench_id(u8"diff-title"), luil::label_config { .text = std::move(title), .color = luil::label_color_role::primary, .elide = luil::text_elide::middle }),
+            2.0f);
+</script></div>
+        <div class="prose">
+          <p>유연한 칸(<code>add_flexible</code>)이 남는 폭을 주고, label은 그 폭에서 줄인다. <code>middle</code>은 앞의 폴더와 뒤의 파일 이름을 둘 다 남긴다. 파일 이름만 중요하면 <code>start</code>다 — "…ments\report.txt"처럼 끝을 남긴다.</p>
+        </div>
+
+        <h3>바탕이 있는 label</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/lists_page.cpp:123-130" data-path="examples/demo/lists_page.cpp" data-start="123"><script type="text/plain">
+            // 색인 badge다. 바탕이 있어야 번호가 이름과 한 덩어리로 읽히지 않는다.
+            luil::label_config badge {};
+            badge.text = log_number(index);
+            badge.font_size = 10.0f;
+            badge.color = luil::label_color_role::dim;
+            badge.background = luil::label_background_role::raised;
+            badge.padding = 6.0f;
+            row->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"log-index-" + item.key }, std::move(badge)), 52.0f);
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/zoom_page.cpp:29-37" data-path="examples/demo/zoom_page.cpp" data-start="29"><script type="text/plain">
+                for (int index { 0 }; index < 4; ++index)
+                    add_child(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, to_u8(index) },
+                        luil::label_config {
+                            .text = u8"노드 " + to_u8(index + 1),
+                            .font_size = 18.0f,
+                            .color = luil::label_color_role::primary,
+                            .background = luil::label_background_role::notice,
+                            .padding = 8.0f,
+                        }));
+</script></div>
+        <div class="prose">
+          <p><code>raised</code>는 번호·짧은 꼬리표처럼 옆 글과 한 덩어리로 읽히지 않아야 할 때의 중립 바탕이다(둥근 모서리). <code>notice</code>는 일반 표면과 구분되는 배너 바탕이다(직각). 바탕은 label의 칸 전체를 칠한다. <code>padding</code>은 글을 좌우로만 들인다. 글이 비면 바탕도 그리지 않는다.</p>
+        </div>
+
+        <h3>글 폭에 맞춘 바탕 (여러 줄 자막)</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/video/scene.cpp:70-117" data-path="examples/video/scene.cpp" data-start="70"><script type="text/plain">
+        // 여러 줄 SRT도 가장 긴 표시 줄에만 바탕을 깐다. 실제 배치와 같은 글꼴·줄바꿈 측정기를 쓴다.
+        class subtitle_box final : public luil::ui_element
+        {
+        public:
+            subtitle_box(std::u8string text, bool translucent)
+                : luil::ui_element { {} }
+                , config_ { .text = std::move(text), .font_size = 16.0f, .weight = luil::font_weight::medium
+                    , .color = luil::label_color_role::primary, .background = luil::label_background_role::raised
+                    , .padding = 10.0f, .align = luil::text_align::center, .wrap = true
+                }
+            {
+                auto scope { std::make_unique<luil::palette_scope_element>(luil::ui_element_id {}
+                    , luil::palette_scope_config { .palette = [translucent](luil::ui_color_palette palette, luil::color_theme) {
+                        static const auto dark { luil::color_palette_for(luil::color_theme::dark) };
+                        palette.primary_foreground = dark.primary_foreground;
+                        palette.raised_background = translucent ? luil::with_alpha(dark.window_background, 0.82f) : dark.window_background;
+                        return palette;
+                    }
+                    }
+                )
+                };
+                scope->set_content(label(u8"subtitle", config_));
+                add_child(std::move(scope));
+                set_hit_opaque(false);
+            }
+
+            std::optional<luil::size_f> preferred_size(const luil::measure_context& context, float width) const override
+            {
+                const auto lines { luil::label_element::measure_wrap(config_, context, width) };
+                return luil::size_f { std::min(width, std::ceil(lines.width) + 2.0f * config_.padding + 1.0f)
+                    , std::max(lines.height, luil::label_element::height_for(config_)) + 4.0f
+                };
+            }
+
+            void arrange(const luil::arrange_context& context) override
+            {
+                set_bounds(context.slot);
+                children().front()->arrange(context);
+            }
+
+            void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override
+            {
+                draw_children(context, interaction);
+            }
+
+        private:
+            luil::label_config config_ {};
+        };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="76-79" data-title="label 설정">가운데 정렬·여러 줄·<code>raised</code> 바탕·좌우 여백 10이다.</li>
+            <li data-lines="81-91" data-title="영상 위의 색">자막은 영상 위에 뜨므로 <code>palette_scope_element</code>로 어두운 팔레트의 글자색과 바탕을 쓴다.</li>
+            <li data-lines="96-102" data-title="가장 넓은 줄의 폭">label의 바탕은 칸 전체다. 그래서 감싸는 element가 <code>measure_wrap</code>의 <code>width</code>(가장 넓은 줄, 여백 제외)로 자기 폭을 답한다. 그러면 바탕이 글에 맞는다.</li>
+            <li data-lines="104-113" data-title="배치와 그리기">받은 자리를 그대로 label에 넘기고, 그리기는 자식에게 맡긴다.</li>
+          </ol>
+        </div>
+
+        <h3>바뀌는 상태 글을 저절로 읽게 하기</h3>
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1874-1877" data-path="tests/accessibility_tests.cpp" data-start="1874"><script type="text/plain">
+    // 상태 글을 바꾸는 요소는 live region으로 둔다. 경고 역할은 정하지 않아도 끊고 읽는다.
+    auto status { make_note(u8"status", u8"준비") };
+    status->set_live_region(luil::access_live::polite);
+    REQUIRE(luil::access_info_of(*status).live == luil::access_live::polite);
+</script></div>
+        <div class="prose">
+          <p>글이 바뀌면 보조 기술이 저절로 읽는 자리(live region)다. 상태 글은 <code>polite</code>, 입력 거절 사유는 <code>assertive</code>다. 감싸는 판에 걸면 안쪽 label의 글이 바뀌어도 판이 알린다 (<a class="xref" href="accessibility.html">접근성</a>).</p>
+        </div>
+
+        <h3>앱 전체의 줄 나눔 정책</h3>
+        <div class="code" data-lang="cpp" data-src="tests/wrap_policy_tests.cpp:96-117" data-path="tests/wrap_policy_tests.cpp" data-start="96"><script type="text/plain">
+TEST_CASE("The arrange context hands its style to measuring down the tree", "[ui][wrap-policy]")
+{
+    const luil::arrange_context context { .slot = { 0.0f, 0.0f, narrow, 400.0f }, .scale = 1.0f, .measurer = &half_size_measurer, .style = &unicode_style };
+    const luil::measure_context measured { context.measure() };
+    REQUIRE(measured.style == &unicode_style);
+    REQUIRE(measured.measurer == &half_size_measurer);
+    REQUIRE(measured.scale == 1.0f);
+
+    // 두 계층 아래의 맞춤 label이 배치 문맥의 스타일로 잰 높이에 선다 (`for_child`가 스타일을 잇는다).
+    const auto arranged_height = [](const luil::ui_style* const style) {
+        auto label { std::make_unique<luil::label_element>(luil::ui_element_id { luil::application_element_kind(0), u8"wrap" }, wrapping()) };
+        const luil::label_element* const placed { label.get() };
+        auto inner { std::make_unique<luil::stack_element>(luil::ui_element_id { luil::application_element_kind(1), u8"inner" }, luil::stack_config {}) };
+        inner->add_fit(std::move(label));
+        luil::stack_element root { luil::ui_element_id { luil::application_element_kind(1), u8"root" }, luil::stack_config {} };
+        root.add(std::move(inner), 400.0f);
+        root.arrange({ .slot = { 0.0f, 0.0f, narrow, 400.0f }, .scale = 1.0f, .measurer = &half_size_measurer, .style = style });
+        return placed->bounds().height;
+    };
+    const float line { luil::label_element::height_for(wrapping()) };
+    REQUIRE(arranged_height(&unicode_style) == 3.0f * line);
+    REQUIRE(arranged_height(&words_style) == 4.0f * line);
+</script></div>
+        <div class="prose">
+          <p>배치 문맥의 <code>style</code>은 <code>measure()</code>와 <code>for_child</code>를 지나 몇 단계 아래 label의 측정까지 닿는다. 앱은 <code>make_arranged_tree(…, style)</code>과 <code>ui_frame::style</code>에 같은 포인터를 준다. 정책 칸에 값을 적은 label은 스타일보다 앞선다. 두 정책이 어떻게 다르게 접는지는 <a class="xref" href="text.html#s6">텍스트 처리의 실험</a>에서 볼 수 있다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-markdown">
+        <header class="sec-head">
+          <h2>만들기: 마크다운과 툴팁</h2>
+          <p class="lede"><code>markdown_config::text</code>에 원문을 넣으면 생성자가 곧바로 파싱한다. 링크를 열려면 <code>activate_link</code>로 목적지를 앱 메시지로 바꾼다. 같은 설정을 <code>make_markdown_tooltip</code>에 넘기면 마크다운 툴팁이다.</p>
+        </header>
+
+        <h3>지원하는 문법과 luil이 짓는 것</h3>
+        <div class="prose">
+          <p>파서는 MD4C 0.5.2(CommonMark)이고, 켠 확장은 HTML 끄기와 취소선 둘뿐이다. 결과는 <code>markdown_block</code>의 목록이다. 블록마다 글 한 덩어리와 서식 구간(<code>markdown_span</code>)이 든다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>쓴 것</th><th>짓는 것</th></tr></thead>
+            <tbody>
+              <tr><td><code># 제목</code> … <code>###### 제목</code></td><td>블록 하나. <code>heading</code> = 수준. 글자 크기는 <code>font_size + 7 − 수준</code>(H1이 +6)이고 늘 굵게다</td></tr>
+              <tr><td>빈 줄로 가른 문단</td><td>블록 하나. 강제 줄 바꿈(줄 끝 공백 둘이나 <code>\</code>)은 <code>\n</code>, 그냥 줄바꿈은 공백이다</td></tr>
+              <tr><td><code>- 항목</code> · <code>3. 항목</code></td><td>항목마다 블록 하나. 글 앞에 <code>"• "</code> 또는 <code>"N. "</code>가 붙는다 (시작 번호를 따른다). 들여쓰기는 (목록 깊이 − 1) × 14 논리 픽셀이다</td></tr>
+              <tr><td><code>&gt; 인용</code></td><td>블록에 <code>quote</code>. 깊이와 상관없이 막대 하나와 들여쓰기 10이다</td></tr>
+              <tr><td>울타리·들여쓴 코드 블록</td><td><code>code</code> 블록. 코드 글꼴, 사방 여백 8, <code>input_background</code> 바탕. 언어별 구문 강조는 없다. 끝의 줄바꿈 하나는 뗀다</td></tr>
+              <tr><td><code>---</code></td><td><code>rule</code> 블록. 높이 4에 선 1 논리 픽셀</td></tr>
+              <tr><td><code>**굵게**</code> · <code>*기울임*</code> · <code>`코드`</code> · <code>~~취소~~</code></td><td>서식 구간 (<code>bold</code>·<code>italic</code>·<code>code</code>·<code>strike</code>). 굵게는 바탕 굵기와 700 가운데 굵은 쪽이다</td></tr>
+              <tr><td><code>[글](주소)</code> · 참조 링크 · <code>&lt;https://…&gt;</code></td><td>링크 구간. 주소의 엔티티를 푼다. 강조가 섞인 한 링크는 조각이 여럿이어도 <code>link</code> 자식 하나다</td></tr>
+              <tr><td><code>![대체 글](그림)</code></td><td>대체 글만 글로 남는다. 그림을 가져오지 않는다</td></tr>
+              <tr><td>HTML</td><td>글자 그대로 보인다 (실행하지 않는다)</td></tr>
+              <tr><td>표, <code>- [ ] 할 일</code>, 맨 URL·www 자동 링크</td><td>MD4C 확장을 켜지 않아 <strong>글자 그대로 문단이 된다</strong></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>마크다운 본문</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:522-528" data-path="examples/demo/popups_page.cpp" data-start="522"><script type="text/plain">
+        if (preview_ && deleted_ == false)
+        {
+            luil::markdown_config markdown {};
+            markdown.text = u8"## 보고서 미리 보기\n공용 메뉴에서 **열기**를 실행했습니다.\n\n- 즐겨찾기: 체크 메뉴 상태로 표시\n- 편집 잠금: 지우기 명령의 활성 상태와 연결\n\n표시 방식과 메뉴 "
+                            u8"선택은 페이지를 이동해도 유지됩니다.";
+            page.add(std::make_unique<luil::markdown_element>(luil::ui_element_id { kind_text, u8"document-preview" }, std::move(markdown)), 180.0f);
+        }
+</script></div>
+        <div class="prose">
+          <p><code>preferred_size</code>는 받은 폭에서 블록 높이와 블록 사이(<code>block_spacing</code>)를 더한 높이를 답한다. 이 예처럼 고정 길이(180)로 넣으면 넘치는 아래쪽은 <strong>잘린다</strong> — markdown은 말줄임을 하지 않는다. 길이를 모르면 맞춤 칸이나 흘리는 창(<a class="xref" href="scrolling.html">스크롤과 확대</a>)에 넣는다.</p>
+        </div>
+
+        <h3>링크가 있는 본문</h3>
+        <div class="code" data-lang="cpp" data-src="tests/markdown_element_tests.cpp:41-48" data-path="tests/markdown_element_tests.cpp" data-start="41"><script type="text/plain">
+    [[nodiscard]] std::shared_ptr<const luil::ui_tree> content(const std::u8string_view first_destination = u8"app:first")
+    {
+        luil::markdown_config config { .text = u8"[first](" + std::u8string { first_destination } + u8") and [second](https://example.test/?x=1&y=2)" };
+        config.activate_link = [](const std::u8string_view destination) { return luil::make_app_action(visit_link { std::u8string { destination } }); };
+        auto markdown { std::make_unique<luil::markdown_element>(luil::ui_element_id { luil::ui_element_kind::root, u8"help" }, std::move(config)) };
+        markdown->arrange({ .slot = { 0.0f, 0.0f, 120.0f, 72.0f }, .measurer = &cells });
+        return std::make_shared<const luil::ui_tree>(std::move(markdown));
+    }
+</script></div>
+        <div class="prose">
+          <p><code>activate_link</code>가 있으면 링크마다 Tab 자리·손 모양 커서·왼쪽 클릭 액션이 선다. 클릭 대상은 줄을 바꾼 뒤의 실제 글 조각뿐이다 — 링크가 두 줄에 걸치면 두 조각만 맞는다. 자식의 id는 <code>"&lt;owner&gt;/link/&lt;번호&gt;:&lt;목적지&gt;"</code>다. 목적지가 id에 들어 있어서, 누르는 사이 내용이 바뀌어 같은 자리의 링크 목적지가 달라지면 그 누름은 취소된다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/markdown_element_tests.cpp:216-226" data-path="tests/markdown_element_tests.cpp" data-start="216"><script type="text/plain">
+TEST_CASE("Inline emphasis keeps one anchor across all of its styled fragments", "[ui][markdown]")
+{
+    luil::markdown_config config { .text = u8"[**bold** and *italic*](app:one) [next](app:two)" };
+    config.activate_link = [](std::u8string_view) { return luil::make_app_action(visit_link {}); };
+    luil::markdown_element markdown { { luil::ui_element_kind::root, u8"styled" }, std::move(config) };
+    markdown.arrange({ .slot = { 0.0f, 0.0f, 300.0f, 100.0f }, .measurer = &cells });
+    REQUIRE(markdown.children().size() == 2);
+    REQUIRE(markdown.children()[0]->accessibility().name == u8"bold and italic");
+    REQUIRE(markdown.hit_test(10.0f, 5.0f) == markdown.children()[0].get());
+    REQUIRE(markdown.hit_test(100.0f, 5.0f) == markdown.children()[0].get());
+}
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl"><code>activate_link</code>가 없으면 누를 수 없는 "링크"다</span>여전히 강조색과 밑줄로 그리고 보조 기술에 <code>link</code>로 읽히지만, hit도 Tab 자리도 실행도 없다. 목적지가 빈 <code>[글]()</code>는 아예 링크가 아니다.</div></div>
+
+        <h3>링크 메시지를 받아 처리한다 (앱의 몫)</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>링크를 눌렀다 같은 자리에서 뗀다. 또는 초점 선 링크에서 Enter·Space.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller가 링크 자식의 <code>left_click</code> 액션을 실행한다. 액션이 <code>activate_link(destination)</code>을 부른다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>콜백이 <code>input_action</code> 하나를 돌려준다. 보통 <code>make_app_action(intent)</code>로 싼 앱 메시지다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱의 <code>handle</code>이 그 메시지를 받아 앱 화면을 열거나, 바깥 주소를 <code>open_url</code>로 연다.</span></div>
+        </div>
+        <div class="prose"><p>1) 목적지를 앱 메시지로 바꾼다. 앱 안의 주소는 <code>app:</code> 같은 scheme으로 가른다:</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:105-112" data-path="examples/demo/gallery_page.cpp" data-start="105"><script type="text/plain">
+        [[nodiscard]] luil::input_action follow_link(const std::u8string_view destination)
+        {
+            if (destination == u8"app:theme")
+                return luil::make_app_action(navigate_intent { std::u8string { page_theme } });
+            if (destination == u8"app:tabs")
+                return luil::make_app_action(navigate_intent { std::u8string { page_tabs } });
+            return luil::make_app_action(toast_request_intent { u8"마크다운 링크를 실행했습니다.", luil::toast_severity::success });
+        }
+</script></div>
+        <div class="prose"><p>2) logic thread의 <code>handle</code>에서 메시지를 복원한다:</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:40-44" data-path="examples/widgets/app.cpp" data-start="40"><script type="text/plain">
+        if (message.get<increment_intent>() != nullptr)
+        {
+            ++state_.clicks;
+            return;
+        }
+</script></div>
+        <div class="prose"><p>3) 바깥 주소는 앱이 확인하고 연다. <code>open_url</code>은 허용한 scheme(기본 http·https·mailto)만 연다 (<a class="xref" href="services.html">플랫폼 서비스</a>):</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:164-170" data-path="examples/demo/basics_page.cpp" data-start="164"><script type="text/plain">
+        if (const auto* const link { message.get<open_link_intent>() }; link != nullptr)
+        {
+            // 라이브러리는 링크를 열지 않는다 — 여는 것은 앱이고, `open_url`은 허용한 scheme(http·https·mailto)만 연다.
+            const luil::platform_result result { luil::open_url(link->destination) };
+            link_report_ = result.ok() ? link->destination + u8" 를 열었다." : link->destination + u8" 를 열지 못했다 — " + result.error;
+            return true;
+        }
+</script></div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">콜백은 메시지만 만든다</span><code>activate_link</code>는 포인터·키로 실행되면 input thread에서, 보조 기술의 Invoke면 그 요청을 받은 platform 쪽에서 불린다. 게시된 tree의 액션은 여러 스레드에서 실행될 수 있으니 앱 상태를 참조로 잡지 말고 메시지만 짓는다 (<a class="xref" href="messaging.html">스레드 경계 메시징</a>). 모르는 목적지에 <code>input_action {}</code>(<code>std::monostate</code>)를 돌려주면 아무 일도 없다 — Windows host의 배분에서 확인했다.</div></div>
+
+        <h3>그리지 않고 구조만 읽기</h3>
+        <div class="code" data-lang="cpp" data-src="tests/markdown_element_tests.cpp:82-98" data-path="tests/markdown_element_tests.cpp" data-start="82"><script type="text/plain">
+TEST_CASE("CommonMark blocks preserve headings, lists, quotes, fences and nested inline styles", "[ui][markdown]")
+{
+    const auto blocks { luil::parse_markdown(u8"# Title\n\n**bold *nested*** and `code` and ~~gone~~\n\n> quote\n\n3. third\n4. fourth\n\n```cpp\nif (x < 2) {}\n```\n\n---") };
+    REQUIRE(blocks.size() == 7);
+    REQUIRE(blocks[0].heading == 1);
+    REQUIRE(blocks[0].text == u8"Title");
+    REQUIRE(blocks[1].text == u8"bold nested and code and gone");
+    REQUIRE(std::any_of(blocks[1].spans.begin(), blocks[1].spans.end(), [](const auto& span) { return span.bold && span.italic; }));
+    REQUIRE(std::any_of(blocks[1].spans.begin(), blocks[1].spans.end(), [](const auto& span) { return span.code; }));
+    REQUIRE(std::any_of(blocks[1].spans.begin(), blocks[1].spans.end(), [](const auto& span) { return span.strike; }));
+    REQUIRE(blocks[2].quote);
+    REQUIRE(blocks[3].text == u8"3. third");
+    REQUIRE(blocks[4].text == u8"4. fourth");
+    REQUIRE(blocks[5].code);
+    REQUIRE(blocks[5].text == u8"if (x < 2) {}");
+    REQUIRE(blocks[6].rule);
+}
+</script></div>
+        <div class="prose">
+          <p><code>parse_markdown</code>은 element 없이 블록·글·서식·링크를 돌려준다. 목록 번호는 블록 글의 머리에 들어간다(<code>"3. third"</code>). 입력이 <code>MD_SIZE</code>보다 크면 <code>std::length_error</code>, 파서가 실패하면 <code>std::runtime_error</code>를 던진다. <code>markdown_element</code>의 생성자도 이 함수를 부르므로 같은 예외가 난다.</p>
+        </div>
+
+        <h3>마크다운 툴팁</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/controls_section.cpp:23-34" data-path="examples/widgets/controls_section.cpp" data-start="23"><script type="text/plain">
+        [[nodiscard]] luil::tooltip_config make_counter_tooltip()
+        {
+            return luil::make_markdown_tooltip({
+                .text = u8"### 카운터를 하나 더합니다\n\n**마크다운**과 *강조*, `인라인 코드`를 표시합니다. "
+                        u8"툴팁 위로 이동해도 열린 채로 유지됩니다.\n\n"
+                        u8"- 여러 줄 설명과 목록\n- 클릭할 수 있는 링크\n\n"
+                        u8"```cpp\nbutton->set_tooltip_content(\n    make_markdown_tooltip(help));\n```\n\n"
+                        u8"[여기를 눌러 카운터 더하기](app:increment)",
+                .activate_link
+                = [](const std::u8string_view destination) -> luil::input_action { return destination == u8"app:increment" ? luil::make_app_action(increment_intent {}) : luil::input_action {}; },
+            });
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/controls_section.cpp:69-72" data-path="examples/widgets/controls_section.cpp" data-start="69"><script type="text/plain">
+        auto text_button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_counter_button }, luil::text_button_config { .text = u8"하나 더" }) };
+        text_button->set_cursor(luil::ui_cursor::hand);
+        text_button->set_tooltip(u8"카운터를 하나 더합니다. 제목·설명·코드가 있는 커스텀 툴팁입니다.");
+        text_button->set_tooltip_content(make_counter_tooltip());
+</script></div>
+        <div class="prose">
+          <p>둘을 함께 단다. 화면에는 마크다운 내용이 서고, 문자열(<code>set_tooltip</code>)은 보조 기술이 읽는 이름과 도움말(UIA HelpText)로 남는다. 툴팁 상자는 대상·상자·둘 사이의 좁은 간격을 지나는 동안 열려 있어서, 포인터를 상자로 옮겨 링크를 누를 수 있다. 폭은 둘째 인자다(기본 320, 예: <code>make_markdown_tooltip(std::move(markdown), 340.0f)</code>). 셋째 인자 <code>tooltip_config</code>로 지연·여백·색을 바꾼다.</p>
+          <p><code>make_markdown_tooltip</code>은 부를 때마다 파싱하고 잰다. 배율 1, 빈 측정 문맥이라 줄 나눔 정책은 앱 스타일이 아니라 내장 스타일이다(칸에 적으면 그것이다). 결과 tree는 불변이고 여러 element·창·배율에서 함께 쓸 수 있으니, frame마다 짓지 말고 한 번 지어 들고 있는다. 글꼴을 바꾸면 다시 짓는다.</p>
+        </div>
+
+        <h3>커스텀 툴팁 내용 (label 두 줄)</h3>
+        <div class="code" data-lang="cpp" data-label="label 두 줄의 툴팁 내용 (직접 작성)" data-compile="pre-tooltip"><script type="text/plain">
+using namespace std::chrono_literals;
+
+// 툴팁 내용은 배율 1의 논리 좌표로 배치한 독립 tree다. root의 bounds가 상자 크기가 된다.
+// 한 번 지어 앱 상태에 두고, 여러 element가 같은 shared_ptr을 쓴다. 게시한 뒤에는 불변이다.
+[[nodiscard]] luil::tooltip_config make_save_tooltip()
+{
+    const luil::label_config title { .text = u8"저장", .font_size = 12.0f, .weight = luil::font_weight::semibold, .color = luil::label_color_role::primary };
+    const luil::label_config keys { .text = u8"Ctrl+S" };
+    luil::stack_config column_config {};
+    column_config.spacing = 2.0f;
+    auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { luil::ui_element_kind::root, u8"save-tip" }, column_config) };
+    column->add(std::make_unique<luil::label_element>(luil::ui_element_id { luil::application_element_kind(3), u8"save-tip/title" }, title), luil::label_element::height_for(title));
+    column->add(std::make_unique<luil::label_element>(luil::ui_element_id { luil::application_element_kind(3), u8"save-tip/keys" }, keys), luil::label_element::height_for(keys));
+    const float height { luil::label_element::height_for(title) + column_config.spacing + luil::label_element::height_for(keys) };
+    return luil::tooltip_config {
+        .content = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(column), { 0.0f, 0.0f, 120.0f, height }, 1.0f)),
+        .delay = 300ms,
+    };
+}
+
+// 문자열은 보조 기술의 이름·도움말로 남고, 화면에는 내용 tree가 선다.
+void attach_save_tooltip(luil::ui_element& button, const luil::tooltip_config& shared)
+{
+    button.set_tooltip(u8"저장 (Ctrl+S)");
+    button.set_tooltip_content(shared);
+}
+</script></div>
+        <script type="text/plain" id="pre-tooltip" data-prelude>
+#include "luil/ui/label_element.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/ui_tree.h"
+#include <chrono>
+#include <memory>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p>내용 tree는 배율 1로 배치한다. 그릴 때 소유 표면의 배율로 키운다. 내용 안의 element는 <code>set_action</code>으로 클릭을 받는다. 툴팁은 클릭·커서·세로 휠만 처리하고 키보드 초점을 넘기지 않는다 — 편집이나 키보드 탐색이 필요한 판은 <a class="xref" href="popups.html">popup</a>이다. <code>delay</code>·<code>padding</code>·<code>gap</code>·<code>corner_radius</code>·<code>shadow</code>의 음수·비정상 값은 0으로, <code>shadow</code>는 1 이하로 다듬는다. 빈 tree, 배치하지 않은 root, 숨은 root, 크기 0인 root는 없는 내용으로 보고 문자열 툴팁이 대신 선다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-icons">
+        <header class="sec-head">
+          <h2>만들기: 글리프·배지·경로 막대</h2>
+          <p class="lede">작고 뜻이 분명한 표시들이다. 글리프는 코드포인트 하나, 배지는 tone 하나, 경로 막대는 조각 목록 하나를 받는다.</p>
+        </header>
+
+        <h3>내장 Codicons 글리프</h3>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/page_list.cpp:118-121" data-path="examples/mobile_demo/page_list.cpp" data-start="118"><script type="text/plain">
+        if (chevron)
+            row->add(std::make_unique<luil::glyph_element>(
+                         luil::ui_element_id { kind_text, u8"entry-chevron-" + key }, luil::glyph_config { .glyph = luil::codicons::icon_chevron_right, .font_size = 18.0f }),
+                entry_chevron_width);
+</script></div>
+        <div class="prose">
+          <p>코드포인트 이름표는 생성 헤더 <code>luil/generated/codicons.h</code>의 <code>luil::codicons::icon_*</code>다. <code>font_size</code>는 논리 픽셀이고 화면 배율만 곱한다 (시스템 글자 크기는 따르지 않는다). 글리프의 실제 윤곽을 칸 가운데에 놓고 칸 밖은 자른다. 맞춤 크기는 <code>font_size × font_size</code> 정사각형이다. 색을 적지 않으면 <code>primary_foreground</code>다. <code>description</code>이 비면 장식이라 접근 tree에 서지 않는다.</p>
+        </div>
+
+        <h3>앱 아이콘 글꼴의 글리프</h3>
+        <div class="code" data-lang="cpp" data-label="아이콘 글꼴 한 번 읽어 나눠 쓰기 (직접 작성)" data-compile="pre-icons"><script type="text/plain">
+// 아이콘 글꼴은 한 번 읽어 앱 상태에 둔다. 돌려받은 값이 바이트를 소유하고, 복사는 같은 face를 공유한다.
+struct icon_fonts
+{
+    sk_sp<SkTypeface> brand {};
+};
+
+[[nodiscard]] icon_fonts load_icon_fonts(const std::filesystem::path& file)
+{
+    // 읽지 못하면(없는 파일, 깨진 데이터, 잘못된 face index) nullptr다.
+    return icon_fonts { .brand = luil::load_typeface_file(file) };
+}
+
+// 글리프는 글꼴 안의 색인이 아니라 Unicode 코드포인트다.
+[[nodiscard]] std::unique_ptr<luil::glyph_element> brand_icon(const icon_fonts& fonts, luil::ui_element_id id, std::u8string description)
+{
+    return std::make_unique<luil::glyph_element>(std::move(id), luil::glyph_config {
+        .glyph = U'',
+        .font_size = 20.0f,
+        // 비어 있으면 내장 Codicons다. 이 글꼴에 없는 글자는 그리지 않는다 (대체 글꼴이 없다).
+        .typeface = fonts.brand,
+        // 비면 장식이고, 있으면 image 역할로 읽힌다.
+        .description = std::move(description),
+    });
+}
+</script></div>
+        <script type="text/plain" id="pre-icons" data-prelude>
+#include "luil/text/fonts.h"
+#include "luil/ui/glyph_element.h"
+#include <filesystem>
+#include <memory>
+#include <string>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p>바이트로도 읽는다(<code>load_typeface_bytes</code>). 읽은 뒤 원본 바이트를 지워도 face는 산다. 실패는 모두 <code>nullptr</code>이다 — 빈 경로, 일반 파일이 아님, 크기 0, 음수나 없는 face index. 시험이 그 성질을 잠근다 (<code>win32::find_embedded_resource</code>는 Windows host 안의 함수라 앱 API가 아니다):</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/glyph_element_tests.cpp:62-71,87-97" data-path="tests/glyph_element_tests.cpp" data-start="62"><script type="text/plain">
+TEST_CASE("Public font loaders own bytes and read Unicode file paths", "[fonts][glyph]")
+{
+    const auto resource { luil::win32::find_embedded_resource(IDR_CODICONS_FONT) };
+    REQUIRE(resource.data != nullptr);
+    const auto* begin { static_cast<const std::uint8_t*>(resource.data) };
+    std::vector<std::uint8_t> bytes { begin, begin + resource.size };
+    const auto font { luil::load_typeface_bytes(bytes) };
+    REQUIRE(font != nullptr);
+    std::fill(bytes.begin(), bytes.end(), std::uint8_t { 0 });
+    REQUIRE(font->unicharToGlyph(luil::codicons::icon_add) != 0);
+⋯@87
+    const auto from_file { luil::load_typeface_file(file.path) };
+    REQUIRE(from_file != nullptr);
+    REQUIRE(std::filesystem::remove(file.path));
+    REQUIRE(from_file->unicharToGlyph(luil::codicons::icon_add) != 0);
+    REQUIRE(luil::load_typeface_file(file.path) == nullptr);
+    REQUIRE(luil::load_typeface_file(std::filesystem::temp_directory_path()) == nullptr);
+    REQUIRE(luil::load_typeface_bytes({}) == nullptr);
+    REQUIRE(luil::load_typeface_bytes(bytes) == nullptr);
+    REQUIRE(luil::load_typeface_bytes({ begin, resource.size }, -1) == nullptr);
+    REQUIRE(luil::load_typeface_bytes({ begin, resource.size }, 999) == nullptr);
+}
+</script></div>
+
+        <h3>배지</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/status_section.cpp:76-100" data-path="examples/widgets/status_section.cpp" data-start="76"><script type="text/plain">
+        luil::stack_config badges_config {};
+        badges_config.direction = luil::stack_direction::row;
+        badges_config.spacing = 8.0f;
+        auto badges { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"status-badges" }, badges_config) };
+
+        const struct
+        {
+            std::u8string_view text {};
+            luil::badge_tone tone {};
+            float width { 0.0f };
+        } samples[] {
+            { u8"진행 중", luil::badge_tone::neutral, 64.0f },
+            { u8"새것", luil::badge_tone::accent, 52.0f },
+            { u8"확인 필요", luil::badge_tone::warning, 88.0f },
+            { u8"실패", luil::badge_tone::error, 64.0f },
+        };
+        float badge_height { 0.0f };
+        for (const auto& sample : samples)
+        {
+            luil::badge_config badge {};
+            badge.text = std::u8string { sample.text };
+            badge.tone = sample.tone;
+            badge_height = luil::badge_element::height_for(badge);
+            badges->add(std::make_unique<luil::badge_element>(luil::ui_element_id { kind_badge, std::u8string { sample.text } }, std::move(badge)), sample.width);
+        }
+</script></div>
+        <div class="prose">
+          <p>이 예는 칸마다 폭을 손으로 준다. 폭을 글에 맞추려면 맞춤 칸에 넣는다. <code>preferred_size</code>가 그리기와 같은 알약 식으로 폭을 답한다: 양옆 6, 심각도 글리프(<code>font_size</code>)와 간격 4, 원(<code>height_for</code>)보다 좁지 않음.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="글 폭에 맞춘 배지 줄 (직접 작성)" data-compile="pre-badges"><script type="text/plain">
+// 배지를 글 폭에 맞춰 담는다. 맞춤 칸(add_fit)은 badge_element::preferred_size의 알약 폭을 받는다.
+[[nodiscard]] std::unique_ptr<luil::stack_element> status_badges()
+{
+    luil::stack_config row_config {};
+    row_config.direction = luil::stack_direction::row;
+    row_config.spacing = 6.0f;
+    auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { luil::application_element_kind(1), u8"badges" }, row_config) };
+    row->add_fit(std::make_unique<luil::badge_element>(luil::ui_element_id { luil::application_element_kind(2), u8"unread" },
+        luil::badge_config { .text = u8"12", .tone = luil::badge_tone::accent }));
+    row->add_fit(std::make_unique<luil::badge_element>(luil::ui_element_id { luil::application_element_kind(2), u8"review" },
+        luil::badge_config { .text = u8"확인 필요", .tone = luil::badge_tone::warning }));
+    return row;
+}
+
+// 담는 쪽 줄 높이다 (논리 픽셀). 배지 높이는 font_size + 7이다.
+inline constexpr float status_badges_height { luil::badge_element::height_for(luil::badge_config {}) };
+</script></div>
+        <script type="text/plain" id="pre-badges" data-prelude>
+#include "luil/ui/badge_element.h"
+#include "luil/ui/stack_element.h"
+#include <memory>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose"><p>단추 모서리에 얹은 개수 배지다. layer는 배지가 원하는 크기로 담는다:</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1079-1084" data-path="examples/demo/workbench_page.cpp" data-start="1079"><script type="text/plain">
+        auto layer { std::make_unique<luil::layer_element>(workbench_id(u8"commit-layer")) };
+        layer->add(std::move(commit));
+        if (staged > 0)
+            layer->add(std::make_unique<luil::badge_element>(workbench_id(u8"commit-count"), luil::badge_config { .text = to_u8(static_cast<int>(staged)), .tone = luil::badge_tone::accent }),
+                { .horizontal = luil::layout_alignment::end, .vertical = luil::layout_alignment::start, .margin = { 0.0f, -8.0f, -8.0f, 0.0f } });
+        row->add_fit(std::move(layer));
+</script></div>
+        <div class="prose">
+          <p>좁게 주면 글 끝을 <code>…</code>로 줄여 옆 UI를 침범하지 않는다. 배지는 액션도 커서도 Tab 자리도 없다. 누를 수 있는 칩이 필요하면 다른 element(단추)를 쓴다.</p>
+        </div>
+
+        <h3>경로 조각 막대</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:552-576" data-path="examples/demo/gallery_page.cpp" data-start="552"><script type="text/plain">
+        // 경로 조각 막대: 폭이 모자라면 앞부터 "…"로 접는다. 꺾쇠는 아래 단계, "…"는 접힌 조각을 연다.
+        luil::breadcrumb_config path {};
+        path.owner = u8"gallery/path";
+        path.segments = {
+            { u8"c", u8"C:", true },
+            { u8"users", u8"Users", true },
+            { u8"someone", u8"someone", true },
+            { u8"documents", u8"Documents", true },
+            { u8"projects", u8"Projects", true },
+            { u8"luil", u8"luil", false },
+        };
+        path.navigate = [](const std::u8string& key) { return luil::make_app_action(toast_request_intent { u8"이동: " + key }); };
+        path.open_children = [](const std::u8string& key, const luil::ui_action_context&) { return luil::make_app_action(toast_request_intent { u8"하위 항목 메뉴: " + key }); };
+        path.open_collapsed = [](const std::vector<std::u8string>& keys, const luil::ui_action_context&) {
+            std::u8string listed {};
+            for (const std::u8string& key : keys)
+                listed += (listed.empty() ? u8"" : u8" · ") + key;
+            return luil::make_app_action(toast_request_intent { u8"접힌 경로: " + listed });
+        };
+        path.name = u8"경로";
+        path.current_label = u8"현재 위치";
+        path.children_label = u8"하위 항목";
+        path.collapsed_label = u8"앞 경로";
+        page.add(make_label({ kind_text, u8"gallery/path-title" }, u8"경로 조각 — 창 폭을 줄이면 앞부터 접힙니다", 12.0f, luil::label_color_role::dim), 24.0f);
+        page.add(std::make_unique<luil::breadcrumb_element>(std::move(path)), luil::breadcrumb_element::height_for({}));
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="553-562" data-title="조각 목록">맨 위에서 지금 자리까지다. 마지막이 지금 자리다. 조각마다 앱의 키, 보일 글, 아래 단계가 있는가.</li>
+            <li data-lines="563" data-title="이동">지나온 조각을 왼쪽 클릭·Enter·Space로 누르면 <code>navigate(key)</code>다. 지금 자리는 누를 것이 없다.</li>
+            <li data-lines="564" data-title="꺾쇠">아래 단계가 있는 조각 뒤의 꺾쇠 단추가 <code>open_children(key, context)</code>를 낸다. 앱이 아래 단계를 메뉴로 연다.</li>
+            <li data-lines="565-570" data-title="접힌 앞쪽">폭이 모자라 앞쪽을 "…" 단추 하나로 접었을 때, 그 단추가 접힌 조각의 키를 앞에서부터 <code>open_collapsed(keys, context)</code>로 낸다.</li>
+            <li data-lines="571-574" data-title="읽히는 이름">막대의 이름, 지금 자리 뒤에 붙는 상태, 꺾쇠와 "…"의 툴팁이자 이름이다. 앱의 언어로 준다. 비면 붙이지 않는다.</li>
+            <li data-lines="576" data-title="높이"><code>height_for</code>는 설정과 상관없이 24다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><strong>접기</strong>: 배치가 폭에서 정한다. 앞에서 c개를 접은 폭이 들어가는 가장 작은 c를 고른다. 조각 하나를 접어도 "…" 단추가 같은 폭을 차지해 줄지 않으면 다음 수로 간다. 지금 자리는 끝까지 남고, 그마저 들어가지 않으면 그 글의 끝을 줄인다. 같은 설정이라도 폭이 바뀌면 다시 접는다. 지난 배치가 접은 수는 <code>collapsed()</code>가 준다.</li>
+            <li><strong>꺾쇠 단추</strong>는 <code>has_children</code>와 <code>open_children</code>가 <strong>둘 다</strong> 있어야 선다. 하나라도 없으면 누를 수 없는 흐린 꺾쇠만 그린다. 다음 조각이 있는 자리에도 흐린 꺾쇠가 선다.</li>
+            <li><strong>메뉴 앵커</strong>: 꺾쇠는 <code>breadcrumb_chevron_id(owner, key)</code>, "…"는 <code>breadcrumb_collapsed_id(owner)</code>로 단추를 찾는다. <code>context</code>의 x·y는 누른 점이다 (<a class="xref" href="menus.html">메뉴와 메뉴 막대</a>).</li>
+            <li>가운데 버튼(<code>middle_click</code>)과 오른쪽 버튼(<code>context_menu</code>)은 지금 자리를 포함해 모든 조각에 걸린다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-draw">
+        <header class="sec-head">
+          <h2>만들기: 직접 그리는 글</h2>
+          <p class="lede">element를 직접 짓거나 그림 위에 글을 얹을 때는 <code>draw_text_block</code>을 부른다. label과 같은 규칙·같은 글꼴이라 손으로 baseline과 정렬을 잴 일이 없다.</p>
+        </header>
+
+        <h3>칸 가운데 한 줄</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/images_page.cpp:100-105" data-path="examples/demo/images_page.cpp" data-start="100"><script type="text/plain">
+        // 칸 가운데에 한 줄을 그린다. 좁은 칸에서는 자른 글의 폭으로 가운데 둔다 (`draw_text_block`).
+        void draw_centered_line(luil::draw_context& context, const std::u8string_view text, const luil::rect_f& box, const float font_size, const SkPaint& paint)
+        {
+            const luil::text_block_style style { .font = { .size = font_size }, .align = luil::text_align::center };
+            static_cast<void>(luil::draw_text_block(context, text, box, style, paint));
+        }
+</script></div>
+        <div class="prose">
+          <p>상자(<code>box</code>)와 돌려받는 자리는 물리 픽셀이고, 글자 크기·줄 높이·테두리 두께는 논리 픽셀이다. 좁은 칸에서는 줄인 글의 폭으로 가운데에 둔다. 한 줄을 세로 가운데에 둘 때는 상자 높이로 baseline을 잡는다 — 한 줄 label이 그리는 자리 그대로다.</p>
+        </div>
+
+        <h3>그림 위의 글 (테두리)</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/images_page.cpp:107-145" data-path="examples/demo/images_page.cpp" data-start="107"><script type="text/plain">
+        // 그림 위에 얹는 이름이다. 그림이 밝든 어둡든 읽히도록 글자에 바탕색 테두리를 두른다.
+        //  - 칸에 바탕을 까는 label은 그림을 가린다. 직접 그리는 글(`draw_text_block`)은 글자 둘레만 덮는다.
+        //  - 테두리는 불투명하게 칠한다. 반투명이면 이웃 글자의 테두리가 겹친 자리만 짙어진다.
+        class picture_caption_element final : public luil::ui_element
+        {
+        public:
+            picture_caption_element(luil::ui_element_id id, std::u8string caption)
+                : ui_element { std::move(id) }
+                , caption_ { std::move(caption) }
+            {
+            }
+
+            void arrange(const luil::arrange_context& context) override
+            {
+                set_bounds(context.slot);
+            }
+
+            void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override
+            {
+                static_cast<void>(interaction);
+                const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+                const float padding { 10.0f * scale };
+                const luil::rect_f box { bounds() };
+                const luil::text_block_style style {
+                    .font = { .size = 13.0f, .weight = luil::font_weight::bold },
+                    .align = luil::text_align::center,
+                    .vertical = luil::text_vertical_align::bottom,
+                    .wrap = true,
+                    .max_lines = 2,
+                    .halo_color = context.palette.window_background,
+                    .halo_width = 2.0f,
+                };
+                const luil::rect_f area { box.x + padding, box.y + padding, box.width - padding * 2.0f, box.height - padding * 2.0f };
+                static_cast<void>(luil::draw_text_block(context, caption_, area, style, luil::solid_paint(context.palette.primary_foreground)));
+            }
+
+        private:
+            std::u8string caption_ {};
+        };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="107-109" data-title="왜 label이 아닌가">label의 바탕은 칸 전체를 덮어 그림을 가린다. 직접 그리는 글은 글자 둘레만 덮는다.</li>
+            <li data-lines="119-122" data-title="배치">자리만 받는다. 줄은 그리기가 접는다 (다섯 인자 overload).</li>
+            <li data-lines="130-138" data-title="글을 놓는 규칙">굵게 13, 가운데, 아래에서부터 쌓기, 두 줄까지, 창 바탕색 테두리 2 논리 픽셀. 테두리는 모든 줄에 먼저 칠하고 글자를 얹는다. 획은 바깥 두께의 두 배, 둥근 이음이다.</li>
+            <li data-lines="139-140" data-title="그리기">여백을 뺀 상자에 그린다. 정책 칸이 비었으므로 그리기 문맥의 <code>draw_context::wrap_policy</code>로 접는다.</li>
+          </ol>
+        </div>
+
+        <h3>배치에서 잰 줄로 그리기</h3>
+        <div class="prose">
+          <p>칸 높이를 배치가 정해야 하면(맞춤 칸, 흘리는 창의 내용 높이) <code>preferred_size</code>와 <code>arrange</code>에서 <code>measure_text_block</code>으로 재고, 그리기는 잰 줄을 받는 여섯 인자 <code>draw_text_block</code>으로 한다. 그리기마다 줄을 다시 접지 않는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="잰 줄을 쥐는 element (직접 작성)" data-compile="pre-measured"><script type="text/plain">
+// 그림 아래 두 줄 설명을 직접 그리는 element의 배치 쪽이다.
+class caption_element final : public luil::ui_element
+{
+public:
+    caption_element(luil::ui_element_id id, std::u8string text)
+        : ui_element { std::move(id) }
+        , text_ { std::move(text) }
+    {
+    }
+
+    // 맞춤 칸(add_fit)이 묻는다. 폭과 돌려주는 크기는 논리 픽셀이다.
+    [[nodiscard]] std::optional<luil::size_f> preferred_size(const luil::measure_context& context, const float available_width) const override
+    {
+        const luil::text_block_layout measured { luil::measure_text_block(context, text_, style_, available_width) };
+        return luil::size_f { available_width, std::max(measured.height, luil::text_block_line_height(style_)) };
+    }
+
+    // 받은 자리는 물리 픽셀이다. 배율로 나눠 논리 폭으로 재고, 잰 줄을 쥔다 — 그리기마다 다시 접지 않는다.
+    void arrange(const luil::arrange_context& context) override
+    {
+        set_bounds(context.slot);
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        layout_ = luil::measure_text_block(context.measure(), text_, style_, context.slot.width / scale);
+    }
+
+    // 몸통은 아래 조각이다 (Skia의 SkPaint 정의가 필요하다).
+    void draw(luil::draw_context& context, const luil::interaction_snapshot& interaction) const override;
+
+private:
+    std::u8string text_ {};
+    luil::text_block_style style_ { .font = { .size = 12.0f }, .vertical = luil::text_vertical_align::top, .wrap = true, .max_lines = 2 };
+    luil::text_block_layout layout_ {};
+};
+</script></div>
+        <script type="text/plain" id="pre-measured" data-prelude>
+#include "luil/ui/text_block.h"
+#include <algorithm>
+#include <optional>
+#include <string>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="code" data-lang="cpp" data-label="그리기 몸통 (직접 작성 · Skia 헤더 필요)"><script type="text/plain">
+void caption_element::draw(luil::draw_context& context, const luil::interaction_snapshot&) const
+{
+    static_cast<void>(luil::draw_text_block(context, text_, bounds(), style_, luil::solid_paint(context.palette.secondary_foreground), layout_));
+}
+</script></div>
+        <div class="prose">
+          <p>그리기 몸통은 <code>SkPaint</code> 값을 만들어서 Skia 헤더가 있는 빌드에서만 컴파일된다 — 이 설명서의 컴파일 검사 밖이다. label이 같은 꼴이다. 배치에서 <code>measure_wrap</code>으로 줄을 쥐고(<code>src/ui/label_element.cpp</code> 58–66행), 그 줄로 여섯 인자 <code>draw_text_block</code>을 부른다(93–94행).</p>
+          <p>측정 문맥에 측정기를 넣었으면(시험) 그것이 굵기·기울임·<code>face</code>보다 앞선다. 앱 글꼴(<code>typeface</code>)만은 그 글꼴로 잰다. 측정 결과의 성질은 시험이 잠근다:</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/text_block_tests.cpp:55-81" data-path="tests/text_block_tests.cpp" data-start="55"><script type="text/plain">
+TEST_CASE("A text block wraps like a label and keeps its sizes in logical pixels", "[ui][text-block]")
+{
+    luil::text_block_style style {};
+    style.wrap = true;
+    style.max_lines = 2;
+    const std::u8string text { u8"alpha beta gamma delta epsilon zeta" };
+    const luil::label_config label { .text = text, .font_size = 12.0f, .wrap = true, .max_lines = 2 };
+
+    // 기본 줄 높이는 label의 한 줄이고, 배율과 상관없이 같은 자리에서 바꾼다.
+    REQUIRE(luil::text_block_line_height(style) == luil::label_element::height_for(label));
+    for (const float scale : { 1.0f, 1.5f, 2.0f })
+    {
+        const luil::text_block_layout block { luil::measure_text_block(context_at(scale), text, style, 70.0f) };
+        const luil::label_wrap wrapped { luil::label_element::measure_wrap(label, context_at(scale), 70.0f) };
+        REQUIRE(block.lines.size() == 2u);
+        REQUIRE(block.truncated);
+        REQUIRE(block.lines.back().end == text.size());
+        REQUIRE(block.width == 70.0f);
+        REQUIRE(block.height == 2.0f * luil::text_block_line_height(style));
+        REQUIRE(wrapped.lines.size() == block.lines.size());
+        REQUIRE(wrapped.lines[0].end == block.lines[0].end);
+    }
+
+    // 줄 높이를 정하면 그 높이로 쌓는다.
+    style.line_height = 30.0f;
+    REQUIRE(luil::measure_text_block(context_at(1.0f), text, style, 70.0f).height == 60.0f);
+}
+</script></div>
+        <div class="prose">
+          <p>줄 구간은 원문 byte다. 말줄임한 마지막 줄은 남은 글 전체의 구간이다. 높이는 줄 수 × 줄 높이다(기본 줄 높이는 label 한 줄). 빈 글은 줄도 높이도 없고, 그리면 상자 왼쪽 위의 빈 자리를 돌려준다. 앱이 건넨 줄 구간이 글과 어긋나도 글 밖을 읽지 않는다.</p>
+        </div>
+
+        <h3>caret·선택 질의 (<code>text_layout</code>)</h3>
+        <div class="code" data-lang="cpp" data-src="tests/text_layout_tests.cpp:41-59" data-path="tests/text_layout_tests.cpp" data-start="41"><script type="text/plain">
+TEST_CASE("Soft wraps distinguish upstream carets and split selections across the same rows", "[ui][text-layout]")
+{
+    const auto layout { luil::make_text_layout({ .text = u8"abcde", .width = 20.0f, .wrap = true, .line_height = 10.0f }, cells) };
+    REQUIRE(layout.lines().size() == 3);
+    REQUIRE(layout.lines()[0].end == 2);
+    REQUIRE(layout.lines()[1].begin == 2);
+    REQUIRE(layout.caret_rect(2, true).x == 20.0f);
+    REQUIRE(layout.caret_rect(2, true).y == 0.0f);
+    REQUIRE(layout.caret_rect(2).x == 0.0f);
+    REQUIRE(layout.caret_rect(2).y == 10.0f);
+    REQUIRE(layout.hit_test({ 20.0f, 1.0f }) == luil::text_caret_position { 2, true });
+    REQUIRE(layout.hit_test({ 0.0f, 11.0f }) == luil::text_caret_position { 2, false });
+    const auto selection { layout.selection_rects(1, 4) };
+    REQUIRE(selection.size() == 2);
+    REQUIRE(selection[0].x == 10.0f);
+    REQUIRE(selection[0].width == 10.0f);
+    REQUIRE(selection[1].x == 0.0f);
+    REQUIRE(selection[1].width == 20.0f);
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>요청의 크기·폭·줄 높이는 <strong>물리 픽셀</strong>이다. offset은 UTF-8 byte이고 caret은 글자소 경계에만 선다 (<a class="xref" href="text.html#s3">caret은 글자소로 움직인다</a>).</li>
+            <li>넘겨 접은 경계(이 시험의 offset 2)는 caret 자리가 둘이다. <code>upstream = true</code>면 윗줄 끝이고, <code>hit_test</code>도 윗줄 끝을 누르면 <code>upstream</code>을 돌려준다.</li>
+            <li><code>selection_rects</code>는 줄마다 사각형 하나다. 줄 바꿈을 넘는 선택은 그 줄에 글자 크기의 1/3을 더해 표시한다.</li>
+            <li>측정기를 받는 overload(<code>make_text_layout(request, measurer)</code>)는 기하만 짓는다 — backend는 <code>text_layout_backend::measured</code>이고 <strong>그릴 수 없다</strong>. 그리려면 측정기 없는 <code>make_text_layout(request)</code>로 짓고 <code>draw_text_layout</code>을 부른다. 그것은 설정된 UI·코드 글꼴로 짓고 프로세스 공용 cache(16 MiB·512항목)에 넣는다.</li>
+            <li>글꼴·언어·대체 설정이 바뀌면 <code>invalidate_text_layouts</code>가 revision을 올린다. 다음 배치부터 새 설정이고, 이미 지은 값은 그대로다.</li>
+          </ul>
+        </div>
+
+        <h3>element 없이 말줄임</h3>
+        <div class="code" data-lang="cpp" data-src="tests/breadcrumb_tests.cpp:144-165" data-path="tests/breadcrumb_tests.cpp" data-start="144"><script type="text/plain">
+TEST_CASE("Start elision keeps the end of a path on a grapheme boundary", "[ui][breadcrumb][elide]")
+{
+    const SkFont font { luil::configured_ui_typeface(), 12.0f };
+    const std::u8string path { u8"C:\\Users\\someone\\Documents\\report.txt" };
+    // 넉넉하면 그대로다.
+    REQUIRE(luil::elide_text_start(path, 10000.0f, font) == path);
+    const float narrow { luil::measure_text(u8"…report.txt", font) + 0.5f };
+    const std::u8string elided { luil::elide_text_start(path, narrow, font) };
+    REQUIRE(elided.starts_with(u8"…"));
+    REQUIRE(elided.ends_with(u8"report.txt"));
+    REQUIRE(luil::measure_text(elided, font) <= narrow);
+    // 조합형 한글 끝을 남겨도 글자소를 가르지 않는다.
+    std::u8string hangul {};
+    for (int index { 0 }; index < 10; ++index)
+        hangul += u8"\u1112\u1161\u11AB";
+    const std::u8string tail { luil::elide_text_start(hangul, luil::measure_text(hangul, font) / 2.0f, font) };
+    const std::u8string_view kept { std::u8string_view { tail }.substr(std::u8string_view { u8"…" }.size()) };
+    const std::vector<std::size_t> boundaries { luil::text::grapheme_boundaries(hangul) };
+    REQUIRE(std::find(boundaries.begin(), boundaries.end(), hangul.size() - kept.size()) != boundaries.end());
+    // `…`조차 들어가지 않으면 빈 값이다.
+    REQUIRE(luil::elide_text_start(path, 1.0f, font).empty());
+}
+</script></div>
+        <div class="prose">
+          <p><code>elide_text</code>·<code>elide_text_middle</code>·<code>elide_text_start</code>는 공개 도우미다. 직접 그리는 element라면 <code>SkFont</code>를 <code>make_text_font(context, font)</code>로 얻는다 — <code>size * scale</code>로 손수 지은 글꼴은 시스템 글자 크기를 놓친다. 이 시험이 쓰는 <code>configured_ui_typeface</code>는 내부 헤더(<code>src/host/font_registry.h</code>)의 함수라 앱 API가 아니다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-fonts">
+        <header class="sec-head">
+          <h2>만들기: 글꼴 불러오기와 크기</h2>
+          <p class="lede">앱이 실어 온 글꼴은 가족 이름으로 등록해 기본 UI 글꼴로 쓴다. 창의 UI·코드 글꼴은 frame마다 이름으로 고른다. 사용자의 큰 글자 설정을 따르려면 고정 행 높이를 <code>text_line_height</code>로 짓는다.</p>
+        </header>
+
+        <h3>앱 글꼴 가족을 등록해 기본 UI 글꼴로 쓰기</h3>
+        <div class="code" data-lang="cpp" data-label="앱 시작에서 글꼴 가족 등록 (직접 작성)" data-compile="pre-fonts"><script type="text/plain">
+// 앱 시작에서 한 번 부른다. 창을 세우기 전이다.
+//  - 읽지 못한 파일은 nullptr이고, register_font_family가 nullptr face를 버린다.
+//  - 같은 이름을 다시 부르면 face 목록을 바꾼다. 남은 face가 없으면 등록이 지워진다.
+void install_app_fonts(const std::filesystem::path& folder)
+{
+    std::vector<sk_sp<SkTypeface>> faces {
+        luil::load_typeface_file(folder / u8"Pretendard-Regular.otf"),
+        luil::load_typeface_file(folder / u8"Pretendard-SemiBold.otf"),
+        luil::load_typeface_file(folder / u8"Pretendard-Bold.otf"),
+    };
+    luil::register_font_family(u8"Pretendard", std::move(faces));
+    // 앞에서부터 찾는다. 등록한 앱 가족이 설치된 같은 이름보다 앞선다.
+    luil::set_ui_typeface_families({ u8"Pretendard", u8"Segoe UI" });
+}
+</script></div>
+        <script type="text/plain" id="pre-fonts" data-prelude>
+#include "luil/text/fonts.h"
+#include <filesystem>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li>OS에 설치하지 않는다. 등록한 이름은 설치된 가족처럼 쓰인다 — 기본 UI 글꼴 목록, <code>font_settings</code>의 가족 이름, <code>installed_font_families()</code>에 나온다.</li>
+            <li>굵기를 요청하면 가족 안에서 기울임이 맞고 굵기가 가장 가까운 face를 고른다. 같은 거리면 regular 이상의 요청은 더 굵은 쪽이다. 가변 글꼴 face 하나만 넣어도 <code>wght</code> 축으로 모든 굵기를 낸다.</li>
+            <li>빈 이름, NUL이 든 이름, 깨진 UTF-8 이름은 조용히 무시한다. <code>unregister_font_family</code>가 지운다.</li>
+            <li>등록·해제·목록 변경은 글꼴 cache를 비운다. 다음 배치부터 새 face로 재지만, 이미 배치한 tree의 폭은 옛 글꼴의 것이다. 실행 중에 바꿨다면 frame을 다시 짓는다.</li>
+          </ul>
+        </div>
+        <div class="prose"><p>등록한 가족이 이름으로 찾히고, 굵게 요청하면 그 가족의 Bold face가 서는 것을 시험이 보인다 (Windows 실제 글꼴로 도는 시험):</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/font_style_native_tests.cpp:182-216" data-path="tests/font_style_native_tests.cpp" data-start="182"><script type="text/plain">
+// 등록한 앱 가족은 설치된 가족처럼 이름으로 찾고, 굵기는 가족 안에서 고른다.
+TEST_CASE("A registered app family serves its weights by name", "[win32][fonts][font-style]")
+{
+    const sk_sp<SkTypeface> regular { font_file("segoeui.ttf") };
+    const sk_sp<SkTypeface> heavy { font_file("segoeuib.ttf") };
+    if (regular == nullptr || heavy == nullptr)
+        SKIP("segoeui.ttf or segoeuib.ttf is not available.");
+
+    const std::u8string family { u8"luil test family" };
+    const registered_family_scope scope { family, { heavy, regular, nullptr } };
+
+    const std::vector<std::u8string> installed { luil::installed_font_families() };
+    REQUIRE(std::ranges::find(installed, family) != installed.end());
+
+    // 이름만으로는 regular다.
+    const sk_sp<SkTypeface> named { luil::family_typeface(family) };
+    REQUIRE(named.get() == regular.get());
+    // 굵게 요청하면 같은 가족의 Bold face다 — 덧칠이 아니다.
+    const luil::styled_typeface styled { luil::style_typeface(named.get(), bold) };
+    REQUIRE(styled.typeface.get() == heavy.get());
+    REQUIRE_FALSE(styled.embolden);
+    // 가족에 없는 기울임은 눕혀 메운다.
+    REQUIRE(luil::style_typeface(named.get(), { luil::font_weight::regular, luil::font_slant::italic }).skew);
+
+    // 기본 UI 글꼴 목록에서도 이름으로 고른다.
+    luil::set_ui_typeface_families({ family });
+    REQUIRE(luil::load_ui_typeface().get() == regular.get());
+    REQUIRE(luil::configured_ui_typeface().get() == regular.get());
+
+    // 지우면 이름이 사라진다.
+    luil::unregister_font_family(family);
+    const std::vector<std::u8string> after { luil::installed_font_families() };
+    REQUIRE(std::ranges::find(after, family) == after.end());
+    REQUIRE(luil::family_typeface(family) == nullptr);
+}
+</script></div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">시험 속 내부 이름</span><code>family_typeface</code>·<code>style_typeface</code>·<code>load_ui_typeface</code>·<code>configured_ui_typeface</code>·<code>styled_typeface</code>는 내부 헤더 <code>src/host/font_registry.h</code>의 이름이다. 앱이 쓰는 공개 함수는 <code>fonts.h</code>의 <code>load_typeface_bytes</code>·<code>load_typeface_file</code>·<code>load_codicon_typeface</code>·<code>installed_font_families</code>·<code>set_ui_typeface_families</code>·<code>register_font_family</code>·<code>unregister_font_family</code>뿐이다.</div></div>
+
+        <h3>창의 UI·코드 글꼴 고르기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:933-935" data-path="examples/demo_main.cpp" data-start="933"><script type="text/plain">
+                // 코드 글꼴은 이름을 줘야 고정폭이 된다. 비워 두면 내장 UI 글꼴이다 (appearance.h).
+                // 변경 작업대의 차이 보기가 이 글꼴로 열을 맞춘다. Windows에 늘 있는 Consolas다.
+                frame->fonts.code_family = u8"Consolas";
+</script></div>
+        <div class="prose">
+          <p><code>ui_frame::fonts</code>는 <code>font_settings { ui_family, code_family }</code>다. host가 frame마다 글꼴 등록부에 걸고, 이름이 그대로면 아무 일도 하지 않는다. 사용자 설정에서 고른 이름을 그대로 실으면 된다.</p>
+          <ul>
+            <li>빈 이름은 내장 UI 글꼴이다. 설치되지 않은 이름도 화면만 내장 글꼴로 되돌아가고, 설정 값은 그대로다 — 다른 PC에 갔다 돌아와도 고른 이름이 남는다. 오류는 없다. 이름이 있는지 확인하려면 <code>installed_font_families()</code>에서 찾는다.</li>
+            <li><code>code_family</code>가 비면 코드 글꼴은 UI 글꼴이다. 그래서 markdown 코드 블록·인라인 코드가 고정폭이 되려면 이 예처럼 이름을 준다.</li>
+          </ul>
+        </div>
+
+        <h3>시스템 글자 크기를 따르는 고정 높이 행</h3>
+        <div class="code" data-lang="cpp" data-src="tests/font_scale_tests.cpp:19-30" data-path="tests/font_scale_tests.cpp" data-start="19"><script type="text/plain">
+TEST_CASE("System font sizes preserve nonlinear scaling and reject corrupt settings", "[ui][font-scale]")
+{
+    const font_scale_reset reset {};
+    REQUIRE(luil::scaled_font_size(12.0f, 1.5f) == 18.0f);
+    REQUIRE(luil::set_system_font_sizes({ 0.0f, 2.0f, 3.0f, 4.0f }));
+    REQUIRE(luil::scaled_font_size(1.5f, 2.0f) == 5.0f);
+    REQUIRE(luil::text_line_height(2.0f, 7.0f) == 10.0f);
+    REQUIRE_FALSE(luil::set_system_font_sizes({ 1.0f, 2.0f }));
+    REQUIRE_FALSE(luil::set_system_font_sizes({ 0.0f, 2.0f, 1.0f }));
+    REQUIRE_FALSE(luil::set_system_font_sizes({ 0.0f, std::numeric_limits<float>::infinity() }));
+    REQUIRE(luil::scaled_font_size(2.0f) == 3.0f);
+}
+</script></div>
+        <div class="prose">
+          <p>표가 없으면 <code>scaled_font_size</code>는 <code>logical × scale</code>이다. 표가 서면 <code>sizes[n]</code>이 n sp의 dp 값이고 정수 사이는 선형으로 잇는다. 표 끝을 넘으면 마지막 값의 비율로 늘린다. 표는 첫 값이 0이고 유한하게 단조 증가해야 받는다. 앱이 직접 정하는 행 높이는 <code>text_line_height(글자 크기, 여백)</code>로 지어야 사용자가 글자를 키울 때 행도 커진다:</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/common.cpp:99-103" data-path="examples/mobile_demo/common.cpp" data-start="99"><script type="text/plain">
+    void page_column::note(std::u8string owner, std::u8string text)
+    {
+        add(make_label(luil::ui_element_id { kind_text, std::move(owner) }, std::move(text), note_text_size, luil::label_color_role::dim),
+            luil::text_line_height(note_text_size, note_line_height - note_text_size));
+    }
+</script></div>
+        <div class="prose">
+          <p>글자 크기 설정만 바뀌어도 플랫폼이 <code>app_delegate::make_metrics_message</code>를 다시 부른다. <code>window_metrics::text_scale</code>은 대표값(12 논리 픽셀 글자의 배율)이고 실제 크기는 <code>scaled_font_size</code>로 묻는다. 앱은 그 메시지에서 다시 배치한다. 고정 높이 화면을 아직 옮기지 못한 Windows 앱은 <code>window_config::follow_text_scale</code>을 꺼서 물러설 수 있다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 기호는 <a class="xref" href="api.html#label-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="label_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/label_element.h:7-51" data-path="include/luil/ui/label_element.h" data-start="7"><script type="text/plain">
+    enum class label_color_role
+    {
+        primary,
+        dim,
+        error,
+    };
+
+    // 바탕 역할이다.
+    // 구체 색은 theme이 그리기 시점에 정한다.
+    enum class label_background_role
+    {
+        none,
+        // notice 배너다.
+        // 일반 표면과 같은 색으로 보이지 않도록 바탕을 깐다.
+        notice,
+        // 뜻 없는 중립 바탕을 모서리를 둥글려 깐다 — 번호·짧은 꼬리표처럼 옆 글과 한 덩어리로 읽히지 않아야 할 때다.
+        //  - 모서리는 `ui_metrics::control_corner_radius`다.
+        raised,
+    };
+
+    struct label_config
+    {
+        std::u8string text {};
+        float font_size { 12.0f };
+        // 굵기와 기울임이다. 그 굵기의 face를 찾고, 없으면 덧칠·눕힘으로 메운다 (docs/font-style-design.md).
+        font_weight weight { font_weight::regular };
+        font_slant slant { font_slant::upright };
+        label_color_role color { label_color_role::dim };
+        label_background_role background { label_background_role::none };
+        // 바탕이 있을 때 글자를 좌우로 들여쓰는 여백이다 (논리 픽셀).
+        float padding { 0.0f };
+        text_align align { text_align::start };
+        text_elide elide { text_elide::end };
+        // 폭에서 줄을 바꾼다 (설명·오류 글 — label-wrap-design.md). 거짓이면 지금처럼 한 줄이다.
+        //  - 줄 바꿈은 여러 줄 칸과 같은 text_layout 규칙이다: UAX #14의 후보(공백·하이픈·슬래시 뒤, 한자·가나 사이)
+        //    에서 바꾸고, 후보가 없는 긴 낱말은 글자소 경계에서 바꾼다. 닫는 부호는 줄 머리에 오지 않고, NBSP·WJ로
+        //    붙인 글은 떼지 않는다. 조합형 한글·이모지 결합 글자가 줄 경계에서 갈리지 않는다. `\n`은 줄 바꿈이다.
+        //  - 바꾼 줄도 줄마다 `align`을 따른다. `elide`는 한 줄 label의 것이다 — 넘친 마지막 줄은 늘 끝을 줄인다.
+        bool wrap { false };
+        // 후보를 고르는 규칙이다 (line_break.h). `hangul_words`는 한국어를 어절에서 바꾸고, `unicode`는 음절 사이에서도 바꾼다.
+        //  - 비면 앱 스타일의 `text.wrap_policy`다 (배치 문맥의 `style`, docs/wrap-policy-key-design.md). 적은 값이 스타일보다 앞선다.
+        std::optional<text::line_break_policy> line_break {};
+        // 바꾼 줄의 최대 수다. 0이면 무제한이다. 넘치면 마지막 줄의 끝을 `…`로 줄인다.
+        std::size_t max_lines { 0 };
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/label_element.h:53-80" data-path="include/luil/ui/label_element.h" data-start="53"><script type="text/plain">
+    // 줄을 바꾼 결과다 (`label_element::measure_wrap`). 직접 그리는 글과 같은 값이다 (`measure_text_block`).
+    //  - 폭은 여백을 뺀 논리 픽셀이고, 높이는 보이는 줄 높이의 합이다.
+    using label_wrap = text_block_layout;
+
+    // 텍스트다. 기본은 한 줄이고 `wrap`이면 여러 줄이다.
+    // 한 줄은 bounds 안에서 설정한 가로 정렬과 세로 중앙 baseline으로 그린다.
+    //  - 그리기는 `draw_text_block`이다. element 없이 같은 글을 그리려는 element는 그 함수를 부른다.
+    class label_element final : public ui_element
+    {
+    public:
+        label_element(ui_element_id id, label_config config);
+
+        // `wrap`인 설정을 폭 `available_width`(논리 픽셀, 여백 포함)에서 바꾼 결과다. 그리기·배치와 같은 규칙이다.
+        //  - 한 줄의 높이는 `height_for`다 — 한 줄 label과 같은 행 높이가 줄마다 쌓인다.
+        [[nodiscard]] static label_wrap measure_wrap(const label_config& config, const measure_context& context, float available_width);
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] access_info accessibility() const override;
+        // 글 한 줄의 폭(양옆 `padding` 포함)과 `height_for` 높이다. 폭은 올림한다 — 잰 폭에 꼭 맞춘 자리에서
+        // 부동소수 잔차로 말줄임이 서지 않게 한다.
+        //  - `wrap`이면 그 폭에서 바꾼 줄 수만큼의 높이다 (`measure_wrap`). 폭은 바꾼 줄이 있으면 받은 폭이다.
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
+
+        // 한 줄이 차지하는 자연 높이다 (논리 픽셀).
+        // 글자 크기에 위아래 숨 쉴 여백을 더한 값이라 stack의 고정 길이로 바로 넣는다.
+        // 호출부마다 흩어지던 높이 매직 넘버를 대신한다.
+        [[nodiscard]] static float height_for(const label_config& config) noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>text</code></td><td>빈 글</td><td>비면 바탕까지 아무것도 그리지 않는다</td></tr>
+                  <tr><td><code>font_size</code></td><td>12 (논리 픽셀)</td><td>시스템 글자 크기와 화면 배율은 그릴 때 곱한다</td></tr>
+                  <tr><td><code>weight</code> · <code>slant</code></td><td><code>regular</code> · <code>upright</code></td><td>그 굵기의 face를 찾는다. 없으면 semibold 이상만 덧칠하고, 기울임은 눕힌다</td></tr>
+                  <tr><td><code>color</code></td><td><strong><code>dim</code></strong></td><td>기본이 흐린 보조 글자색이다. 제목·값은 <code>primary</code>를 적는다</td></tr>
+                  <tr><td><code>background</code></td><td><code>none</code></td><td>칸 전체를 칠한다. <code>notice</code>는 직각, <code>raised</code>는 둥근 모서리</td></tr>
+                  <tr><td><code>padding</code></td><td>0</td><td>주석은 "바탕이 있을 때"지만 바탕이 없어도 좌우로 들인다. 위아래는 들이지 않는다</td></tr>
+                  <tr><td><code>align</code></td><td><code>start</code></td><td>줄마다 따로, 줄인 글의 폭으로 맞춘다</td></tr>
+                  <tr><td><code>elide</code></td><td><code>end</code></td><td>한 줄일 때만 쓴다. <code>wrap</code>이면 넘친 마지막 줄은 늘 끝을 줄인다</td></tr>
+                  <tr><td><code>wrap</code></td><td>거짓</td><td>참이면 위에서부터 쌓는다 (한 줄로 끝나도)</td></tr>
+                  <tr><td><code>line_break</code></td><td>빔</td><td>측정 문맥이 든 앱 스타일의 <code>text.wrap_policy</code>다. 비어 있을 때 <code>== hangul_words</code>는 거짓이니 <code>line_break_for</code>로 푼 값을 견준다</td></tr>
+                  <tr><td><code>max_lines</code></td><td>0 (무제한)</td><td><code>wrap</code>일 때만 뜻이 있다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="markdown_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/markdown_element.h:7-45" data-path="include/luil/ui/markdown_element.h" data-start="7"><script type="text/plain">
+    struct markdown_span
+    {
+        std::size_t begin { 0 };
+        std::size_t end { 0 };
+        bool bold { false };
+        bool italic { false };
+        bool code { false };
+        bool strike { false };
+        std::u8string link {};
+        std::size_t link_id { 0 };
+    };
+
+    struct markdown_block
+    {
+        std::u8string text {};
+        std::vector<markdown_span> spans {};
+        unsigned heading { 0 };
+        unsigned indent { 0 };
+        bool quote { false };
+        bool code { false };
+        bool rule { false };
+    };
+
+    // CommonMark의 문단·제목·강조·코드·목록·인용·링크와 취소선을 파싱한다.
+    // HTML은 글로 표시하며 이미지의 대체 글만 읽는다. 외부 자원을 가져오지 않는다.
+    [[nodiscard]] std::vector<markdown_block> parse_markdown(std::u8string_view text);
+
+    struct markdown_config
+    {
+        std::u8string text {};
+        float font_size { 12.0f };
+        float line_height { 18.0f };
+        float block_spacing { 8.0f };
+        // 링크를 눌렀을 때 앱 액션을 만든다. 없으면 링크는 표시만 한다.
+        std::function<input_action(std::u8string_view destination)> activate_link {};
+        // 블록을 폭에서 접는 자리를 고르는 규칙이다 (line_break.h). 비면 앱 스타일의 `text.wrap_policy`다
+        // (배치 문맥의 `style`, docs/wrap-policy-key-design.md). 적은 값이 스타일보다 앞선다.
+        std::optional<text::line_break_policy> line_break {};
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/markdown_element.h:75-76" data-path="include/luil/ui/markdown_element.h" data-start="75"><script type="text/plain">
+    // 마크다운을 논리 좌표로 측정·배치해 툴팁에 붙일 내용으로 만든다.
+    [[nodiscard]] tooltip_config make_markdown_tooltip(markdown_config config, float width = 320.0f, tooltip_config appearance = {});
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>text</code></td><td>빈 글</td><td>생성자가 곧바로 파싱한다. 실패하면 예외다</td></tr>
+                  <tr><td><code>font_size</code></td><td>12</td><td>0 이하·비정상이면 12. 제목은 <code>+ (7 − 수준)</code>. 시스템 글자 크기는 따르지 않는다</td></tr>
+                  <tr><td><code>line_height</code></td><td>18</td><td>0 이하면 18. 실제 줄 높이는 <code>max(line_height, 글자 크기 × 1.5)</code>라 더 작게 줄 수 없다</td></tr>
+                  <tr><td><code>block_spacing</code></td><td>8</td><td><strong>0 이하면 8로 되돌린다 — 0을 줄 수 없다.</strong> 마지막 블록 뒤는 높이에 넣지 않는다</td></tr>
+                  <tr><td><code>activate_link</code></td><td>없음</td><td>링크는 표시만 한다. hit·Tab 자리·실행이 없다</td></tr>
+                  <tr><td><code>line_break</code></td><td>빔</td><td>앱 스타일의 정책이다. <code>make_markdown_tooltip</code>은 빈 문맥으로 재서 내장 스타일이다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p><code>make_markdown_tooltip</code>의 폭이 0 이하면 320이다. 내용 root의 id는 <code>{ ui_element_kind::root, "markdown-tooltip" }</code>로 고정이다 — 툴팁 내용의 id 공간은 주 tree와 갈려서 겹쳐도 섞이지 않는다.</p></div>
+          </section>
+          <section data-tab="glyph · badge">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/glyph_element.h:9-24" data-path="include/luil/ui/glyph_element.h" data-start="9"><script type="text/plain">
+    struct glyph_config
+    {
+        // 글리프 색인이 아닌 Unicode 코드포인트다. 0이면 그리지 않는다.
+        char32_t glyph { 0 };
+        float font_size { 16.0f };
+        // 비어 있으면 draw_context의 내장 Codicons를 쓴다. 소유권을 공유한다.
+        sk_sp<SkTypeface> typeface {};
+        // 비어 있으면 테마의 primary_foreground다.
+        std::optional<ui_color> color {};
+        // 비어 있으면 장식이다. 설명이 있으면 접근성 이미지로 노출한다.
+        std::u8string description {};
+    };
+
+    // bounds 중앙에 폰트 글리프 하나를 그린다. 크기는 논리 픽셀이고 bounds로 잘린다.
+    // 지정한 폰트에 없는 글리프는 그리지 않는다 (시스템 폰트로 대체하지 않는다).
+    class glyph_element final : public ui_element
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/badge_element.h:8-55" data-path="include/luil/ui/badge_element.h" data-start="8"><script type="text/plain">
+    // 배지가 말하는 뜻이다. 구체 색은 theme이 그리기 시점에 정한다.
+    enum class badge_tone
+    {
+        // 뜻이 색에 있지 않은 이름표다 (개수·분류·상태 이름).
+        neutral,
+        // 눈에 띄어야 하는 이름표다 ("새것"·"베타").
+        accent,
+        // 심각도다. **색과 함께 글리프가 붙는다.**
+        //  - 고대비는 경고색과 오류색을 같은 전경색으로 접으므로 색만으로는 둘을
+        //    가를 수 없다. 글리프를 설정으로 두면 "글리프 없는 경고 배지"라는 조합이
+        //    생기는데 그것은 고대비에서 뜻을 잃은 배지다 — 그래서 tone이 함께 정한다.
+        warning,
+        error,
+    };
+
+    struct badge_config
+    {
+        std::u8string text {};
+        badge_tone tone { badge_tone::neutral };
+        float font_size { 11.0f };
+    };
+
+    // 알약 모양의 작은 상태 표시다. 액션도 커서도 갖지 않는다.
+    //
+    // **폭은 담는 쪽이 준다.** 준 폭이 좁으면 글자가 잘린다(`draw_text_within`) — 배지가 옆 UI를 침범하지 않는다.
+    //  - 글에 맞는 폭은 `preferred_size`가 답한다. 맞춤으로 담으면(`stack_element::add_fit`) 글이 잘리지 않는다.
+    //
+    // 어느 tone이든 **1px 테를 두른다.** 고대비는 바탕을 전부 창 배경으로 접으므로
+    // 채우기만으로는 배지가 표면에서 사라진다. 테가 tone의 색을 나르고, 심각도는
+    // 거기에 글리프까지 더해 색이 접혀도 뜻이 남는다.
+    class badge_element final : public ui_element
+    {
+    public:
+        badge_element(ui_element_id id, badge_config config);
+
+        // 이 설정으로 배지가 차지할 높이다 (논리 픽셀).
+        // 라벨 한 줄과 같은 식이라 같은 줄에 나란히 서면 높이가 맞는다.
+        [[nodiscard]] static constexpr float height_for(const badge_config& config) noexcept
+        {
+            return config.font_size + 7.0f;
+        }
+
+        // 이 tone이 글리프를 함께 그리는지다.
+        // 심각도만 참이다 — test가 "색만으로 말하지 않는다"를 이 함수로 잠근다.
+        [[nodiscard]] static constexpr bool shows_glyph(const badge_tone tone) noexcept
+        {
+            return tone == badge_tone::warning || tone == badge_tone::error;
+        }
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>glyph_config::glyph</code></td><td>0</td><td>0·서로게이트·U+10FFFF 너머는 그리지 않는다</td></tr>
+                  <tr><td><code>glyph_config::font_size</code></td><td>16</td><td>화면 배율만 곱한다. 맞춤 크기는 정사각형</td></tr>
+                  <tr><td><code>glyph_config::typeface</code></td><td>빔</td><td>비면 <code>draw_context</code>의 Codicons. 그것도 없으면 그리지 않는다</td></tr>
+                  <tr><td><code>glyph_config::color</code></td><td>빔</td><td><code>primary_foreground</code></td></tr>
+                  <tr><td><code>glyph_config::description</code></td><td>빔</td><td>장식이라 접근 tree에 없다. 있으면 <code>image</code></td></tr>
+                  <tr><td><code>badge_config::text</code></td><td>빈 글</td><td>알약은 선다. 폭은 원(<code>height_for</code>)보다 좁지 않다</td></tr>
+                  <tr><td><code>badge_config::tone</code></td><td><code>neutral</code></td><td><code>warning</code>·<code>error</code>는 글리프가 붙는다. 접근성 이름에는 tone이 없다</td></tr>
+                  <tr><td><code>badge_config::font_size</code></td><td>11</td><td>높이는 <code>font_size + 7</code> 고정이다 — 시스템 글자 크기를 따르지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="breadcrumb_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/breadcrumb_element.h:10-52" data-path="include/luil/ui/breadcrumb_element.h" data-start="10"><script type="text/plain">
+    // 경로 조각 하나다 (`breadcrumb_config::segments`).
+    struct breadcrumb_segment
+    {
+        // 앱이 조각을 가르는 키다 (자식 id의 owner에 들어간다).
+        std::u8string key {};
+        std::u8string label {};
+        // 아래 단계가 있다. 참이면 조각 뒤에 그것을 여는 꺾쇠 단추가 선다.
+        bool has_children { false };
+    };
+
+    // 경로 조각 막대다 (breadcrumb-design.md).
+    struct breadcrumb_config
+    {
+        // 막대를 가르는 키다. 막대·조각·꺾쇠·접은 단추 id의 owner가 이것으로 시작한다.
+        std::u8string owner {};
+        // 맨 위에서 지금 자리까지다. 마지막이 지금 자리다.
+        std::vector<breadcrumb_segment> segments {};
+        // 조각을 눌렀다 (왼쪽 누름·Enter·Space). 지금 자리(마지막 조각)는 누를 것이 없다.
+        std::function<input_action(const std::u8string& key)> navigate {};
+        // 꺾쇠를 눌렀다. 앱이 그 조각의 아래 단계를 메뉴로 연다 — 자리는 문맥의 누른 점이고, 앵커가 필요하면
+        // `breadcrumb_chevron_id`로 그 단추를 찾는다.
+        std::function<input_action(const std::u8string& key, const ui_action_context& context)> open_children {};
+        // 폭이 모자라 앞쪽 조각을 접었을 때 그 "…" 단추를 눌렀다. 접힌 조각의 키다 (앞에서부터).
+        std::function<input_action(const std::vector<std::u8string>& keys, const ui_action_context& context)> open_collapsed {};
+        // 조각을 가운데 버튼으로 눌렀다 (새 탭에서 열기). 비어 있으면 받지 않는다.
+        std::function<input_action(const std::u8string& key)> middle_click {};
+        // 조각을 오른쪽 버튼으로 눌렀다 (컨텍스트 메뉴). 비어 있으면 받지 않는다.
+        std::function<input_action(const std::u8string& key, const ui_action_context& context)> context_menu {};
+        float font_size { 12.0f };
+        // 보조 기술이 읽는 이름이다 (앱의 언어 — "경로"). 막대는 navigation 랜드마크로 선다.
+        std::u8string name {};
+        // 지금 자리 조각의 이름 뒤에 붙는 상태다 ("현재 위치"). 비어 있으면 붙이지 않는다.
+        std::u8string current_label {};
+        // 꺾쇠 단추의 tooltip이자 이름의 뒤다 ("하위 항목" → "문서 · 하위 항목").
+        std::u8string children_label {};
+        // 접은 단추의 tooltip이자 이름이다 ("앞 경로").
+        std::u8string collapsed_label {};
+    };
+
+    // 꺾쇠·접은 단추의 id다. 메뉴의 앵커로 그 자리를 찾을 때 쓴다.
+    [[nodiscard]] ui_element_id breadcrumb_segment_id(std::u8string_view owner, std::u8string_view key);
+    [[nodiscard]] ui_element_id breadcrumb_chevron_id(std::u8string_view owner, std::u8string_view key);
+    [[nodiscard]] ui_element_id breadcrumb_collapsed_id(std::u8string_view owner);
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/breadcrumb_element.h:65-78" data-path="include/luil/ui/breadcrumb_element.h" data-start="65"><script type="text/plain">
+        // 한 줄의 높이다 (논리 픽셀).
+        [[nodiscard]] static float height_for(const breadcrumb_config& config) noexcept;
+        // 폭 `available_width`(논리 픽셀)에서 앞에서부터 접을 조각의 수다. 배치와 같은 규칙이다.
+        //  - 조각이 하나면 0이다. 지금 자리는 접지 않는다.
+        [[nodiscard]] static std::size_t collapsed_count(const breadcrumb_config& config, const measure_context& context, float available_width);
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] access_info accessibility() const override;
+        // 접지 않은 모든 조각을 늘어놓은 폭과 한 줄 높이다.
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
+
+        // 지난 배치가 접은 조각의 수다.
+        [[nodiscard]] std::size_t collapsed() const noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>막대의 id가 <code>{ breadcrumb, owner }</code>, 조각 id의 owner가 <code>"owner/key"</code>다. 막대가 둘이면 다르게 준다</td></tr>
+                  <tr><td><code>segment.key</code></td><td>빈 글</td><td>막대 안에서 겹치면 첫 조각만 찾힌다</td></tr>
+                  <tr><td><code>navigate</code></td><td>없음</td><td>조각이 눌리지 않는다. Tab 자리는 그대로다</td></tr>
+                  <tr><td><code>open_children</code></td><td>없음</td><td><code>has_children</code>여도 꺾쇠 단추가 없다. 흐린 꺾쇠만 그린다</td></tr>
+                  <tr><td><code>open_collapsed</code></td><td>없음</td><td>"…" 단추가 서지만 누를 것이 없다</td></tr>
+                  <tr><td><code>middle_click</code> · <code>context_menu</code></td><td>없음</td><td>그 버튼을 받지 않는다</td></tr>
+                  <tr><td><code>font_size</code></td><td>12</td><td>막대 높이(24)는 바뀌지 않는다</td></tr>
+                  <tr><td><code>name</code> · <code>current_label</code> · <code>children_label</code> · <code>collapsed_label</code></td><td>빈 글</td><td>붙이지 않는다. <code>collapsed_label</code>이 비면 "…" 단추는 이름이 없어 접근 tree에서 빠진다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="text_block">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/text_block.h:19-60" data-path="include/luil/ui/text_block.h" data-start="19"><script type="text/plain">
+    // 글이 상자 안에서 서는 가로 자리다. 줄마다 따로 맞춘다.
+    enum class text_align
+    {
+        start,
+        center,
+        end
+    };
+    // 들어가지 않는 한 줄 글을 줄이는 자리다. `start`는 앞을 줄여 끝(파일 이름)을 남긴다.
+    enum class text_elide
+    {
+        end,
+        middle,
+        start
+    };
+    // 글 덩어리가 상자 안에서 서는 세로 자리다.
+    enum class text_vertical_align
+    {
+        top,
+        center,
+        bottom
+    };
+
+    // 직접 그리는 글의 글꼴이다.
+    struct text_font
+    {
+        // 논리 픽셀이다. 시스템 글자 크기와 화면 배율은 글꼴을 만들 때 곱한다 (`scaled_font_size`).
+        float size { 12.0f };
+        // `code`인데 문맥에 고정폭 글꼴이 없으면 UI 글꼴이다.
+        text_layout_face face { text_layout_face::ui };
+        // 굵기와 기울임이다 (docs/font-style-design.md). 그 굵기의 face를 찾고, 없으면 덧칠·눕힘으로 메운다.
+        font_weight weight { font_weight::regular };
+        font_slant slant { font_slant::upright };
+        // 있으면 `face` 대신 이 글꼴이다 (`load_typeface_file`로 읽은 앱 글꼴). 굵기는 그 face의 `wght` 축이나 그 face가
+        // 든 등록 가족(`register_font_family`)에서 찾는다.
+        sk_sp<SkTypeface> typeface {};
+
+        // 굵기와 기울임을 한 값으로 묶은 것이다 (`apply_font_style`).
+        [[nodiscard]] font_style style() const noexcept
+        {
+            return { weight, slant };
+        }
+    };
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/text_block.h:67-126" data-path="include/luil/ui/text_block.h" data-start="67"><script type="text/plain">
+    // 상자 하나에 글을 놓는 규칙이다 (`draw_text_block`·`measure_text_block`).
+    struct text_block_style
+    {
+        text_font font {};
+        text_align align { text_align::start };
+        text_vertical_align vertical { text_vertical_align::center };
+        // 한 줄 글이 넘칠 때 줄이는 자리다. 여러 줄 글은 마지막 줄의 끝을 줄인다.
+        text_elide elide { text_elide::end };
+        // 상자 폭에서 줄을 바꾼다. 규칙은 여러 줄 label과 같다 — UAX #14의 후보(공백·하이픈·슬래시 뒤, 한자·가나
+        // 사이)에서 바꾸고, 후보가 없는 긴 낱말은 글자소 경계에서 바꾼다. `\n`은 줄 바꿈이다. 거짓이면 한 줄이고 글
+        // 안의 줄바꿈은 `draw_text`의 규칙을 따른다.
+        bool wrap { false };
+        // 후보를 고르는 규칙이다 (line_break.h). 비면 앱 스타일의 `text.wrap_policy`다 (docs/wrap-policy-key-design.md).
+        //  - 측정(`measure_text_block`)은 측정 문맥의 스타일(`measure_context::line_break_for`)로, 줄 없이 그리는 길은
+        //    그리기 문맥의 정책(`draw_context::wrap_policy`)으로 푼다. 배치에서 잰 줄로 그리는 길은 정책을 읽지 않는다.
+        std::optional<text::line_break_policy> line_break {};
+        // 바꾼 줄의 최대 수다. 0이면 무제한이다. 넘치면 마지막 보이는 줄이 남은 글을 한 줄로 펴서 끝을 `…`로 줄인다.
+        std::size_t max_lines { 0 };
+        // 한 줄의 높이다 (논리 픽셀). 0이면 label의 한 줄 높이(`text_line_height(size, 7)`)다.
+        float line_height { 0.0f };
+        // 그림·사진 위의 글이 읽히도록 글자 둘레에 두르는 테두리다. 폭은 글자 바깥으로 나가는 두께(논리 픽셀)이고
+        // 0이거나 색이 완전히 투명하면 두르지 않는다. 모든 줄의 테두리를 먼저 칠하고 글자를 얹는다.
+        ui_color halo_color { 0 };
+        float halo_width { 0.0f };
+    };
+
+    // 상자에 놓은 글의 줄이다 (`measure_text_block`).
+    struct text_block_layout
+    {
+        // 보이는 줄마다의 원문 byte 구간이다. 말줄임한 마지막 줄은 남은 글 전체의 구간이다.
+        struct line
+        {
+            std::size_t begin { 0 };
+            std::size_t end { 0 };
+        };
+        std::vector<line> lines {};
+        // 넘쳐서 줄였다 (한 줄이면 폭, 여러 줄이면 `max_lines`).
+        bool truncated { false };
+        // 가장 넓은 줄의 폭이다. 줄였으면 받은 폭이다.
+        float width { 0.0f };
+        // 보이는 줄 높이의 합이다.
+        float height { 0.0f };
+    };
+
+    // 한 줄의 높이다 (논리 픽셀).
+    [[nodiscard]] float text_block_line_height(const text_block_style& style) noexcept;
+
+    // 폭 `available_width`(논리 픽셀)에 놓은 글의 줄과 크기다 (논리 픽셀). 그리기와 같은 규칙·글꼴로 잰다.
+    //  - 배치에서 칸 높이를 정하는 element가 `preferred_size`에서 부른다. 문맥에 측정기를 넣었으면(test) 그것으로 잰다.
+    //  - 넣은 측정기는 `weight`·`slant`·`face`보다 앞선다 — 굵기는 측정기가 직접 반영해야 한다. 앱 글꼴(`typeface`)만은
+    //    그 글꼴로 잰다.
+    [[nodiscard]] text_block_layout measure_text_block(const measure_context& context, std::u8string_view text, const text_block_style& style, float available_width);
+
+    // `box`(물리 픽셀) 안에 글을 놓아 그린다. 그린 글이 차지한 자리(물리 픽셀)를 돌려준다 — 글 뒤에 바탕을 깔거나
+    // 옆에 다른 그림을 이을 때 쓴다. 글이 비면 `box`의 왼쪽 위에 선 빈 자리다.
+    //  - element의 `draw`뿐 아니라 사진·도형을 칠한 뒤 그 위에 글을 얹을 때도 같은 함수다. 상자는 자르지 않는다 —
+    //    높이가 모자라면 `max_lines`로 줄을 막는다.
+    rect_f draw_text_block(draw_context& context, std::u8string_view text, const rect_f& box, const text_block_style& style, const SkPaint& paint);
+    // 배치에서 잰 줄(`measure_text_block`)로 그린다. 그리기마다 줄을 다시 바꾸지 않는다.
+    rect_f draw_text_block(draw_context& context, std::u8string_view text, const rect_f& box, const text_block_style& style, const SkPaint& paint, const text_block_layout& layout);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>font.size</code></td><td>12</td><td><code>make_text_font</code>가 <code>scaled_font_size(size, scale)</code>로 바꾼다</td></tr>
+                  <tr><td><code>font.face</code></td><td><code>ui</code></td><td><code>code</code>인데 코드 글꼴이 없으면 UI 글꼴이다</td></tr>
+                  <tr><td><code>font.typeface</code></td><td>빔</td><td>있으면 <code>face</code>보다 앞선다 (앱 글꼴)</td></tr>
+                  <tr><td><code>vertical</code></td><td><code>center</code></td><td>한 줄이면 상자 높이로 baseline을 잡는다</td></tr>
+                  <tr><td><code>elide</code></td><td><code>end</code></td><td>한 줄일 때만 쓴다</td></tr>
+                  <tr><td><code>line_break</code></td><td>빔</td><td>측정은 측정 문맥의 스타일, 다섯 인자 그리기는 <code>draw_context::wrap_policy</code></td></tr>
+                  <tr><td><code>line_height</code></td><td>0</td><td>0이면 label 한 줄 = <code>text_line_height(size, 7)</code></td></tr>
+                  <tr><td><code>halo_color</code> · <code>halo_width</code></td><td>0 · 0</td><td>알파가 0이거나 두께가 0이면 두르지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="text_layout">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/text_layout.h:35-49" data-path="include/luil/ui/text_layout.h" data-start="35"><script type="text/plain">
+    struct text_layout_request
+    {
+        std::u8string text {};
+        // 물리 픽셀이다. 배율은 크기·폭·줄 높이에 반영해서 넘긴다.
+        float font_size { 12.0f };
+        text_layout_face face { text_layout_face::ui };
+        float width { 0.0f };
+        bool wrap { false };
+        float line_height { 0.0f };
+        // begin 순서의 비중첩 글자소 범위다. 색은 배치와 분리한다.
+        std::vector<text_layout_style> styles {};
+        // 접는 자리를 고르는 규칙이다 (docs/line-break-design.md). 정책만 다른 두 배치는 cache에서 다른 항목이다.
+        text::line_break_policy line_break { text::line_break_policy::hangul_words };
+        [[nodiscard]] bool operator==(const text_layout_request&) const noexcept = default;
+    };
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/text_layout.h:99-131" data-path="include/luil/ui/text_layout.h" data-start="99"><script type="text/plain">
+    // Glyph·글꼴·원문을 소유하는 불변 값이다. 복사는 같은 발행본을 공유한다.
+    class text_layout
+    {
+    public:
+        text_layout() = default;
+        [[nodiscard]] bool valid() const noexcept;
+        [[nodiscard]] std::u8string_view text() const noexcept;
+        [[nodiscard]] text_layout_backend backend() const noexcept;
+        [[nodiscard]] text_layout_size size() const noexcept;
+        [[nodiscard]] std::span<const text_layout_line> lines() const noexcept;
+        [[nodiscard]] std::span<const text_layout_cluster> clusters() const noexcept;
+        [[nodiscard]] std::span<const text_layout_run> runs() const noexcept;
+        [[nodiscard]] std::span<const text_layout_stop> caret_stops() const noexcept;
+        // 합자 안의 글자소 caret을 균등 분할했는가다. SkShaper는 OpenType caret 표를 내주지 않는다.
+        [[nodiscard]] bool approximate_ligature_carets() const noexcept;
+        [[nodiscard]] std::size_t storage_bytes() const noexcept;
+        [[nodiscard]] std::size_t line_at(std::size_t offset, bool upstream = false) const noexcept;
+        [[nodiscard]] rect_f caret_rect(std::size_t offset, bool upstream = false) const noexcept;
+        [[nodiscard]] text_caret_position hit_test(zoom_point point) const noexcept;
+        [[nodiscard]] std::vector<rect_f> selection_rects(std::size_t begin, std::size_t end) const;
+
+    private:
+        friend struct text_layout_access;
+        std::shared_ptr<const text_layout_data> data_ {};
+    };
+
+    [[nodiscard]] text_layout make_text_layout(text_layout_request request);
+    // 주입한 측정기의 기하만 만든다. native glyph payload·전역 cache를 섞지 않는다.
+    [[nodiscard]] text_layout make_text_layout(text_layout_request request, const text_measurer& measurer);
+    [[nodiscard]] bool ui_text_shaping_enabled() noexcept;
+    // 글꼴·언어·fallback·품질 변경을 다음 배치에 반영한다. 발행된 값은 바꾸지 않는다.
+    void invalidate_text_layouts() noexcept;
+    [[nodiscard]] std::uint64_t text_layout_revision() noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>font_size</code></td><td>12</td><td><strong>물리 픽셀</strong>이다. 비정상이면 12, 음수는 0</td></tr>
+                  <tr><td><code>width</code></td><td>0</td><td>물리 픽셀. 접지 않으면 0으로 맞춘다</td></tr>
+                  <tr><td><code>line_height</code></td><td>0</td><td>0이면 글꼴 metrics의 줄 간격 (측정기 overload는 <code>max(1, 크기 × 1.5)</code>)</td></tr>
+                  <tr><td><code>styles</code></td><td>빔</td><td>begin 순서의 겹치지 않는 굵게·기울임·코드 구간. 색은 배치와 갈린다</td></tr>
+                  <tr><td><code>line_break</code></td><td><code>hangul_words</code></td><td><code>std::optional</code>이 아니다 — 앱 스타일을 읽지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="툴팁">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element.h:1060-1077" data-path="include/luil/ui/ui_element.h" data-start="1060"><script type="text/plain">
+    inline constexpr std::chrono::milliseconds tooltip_delay { 500 };
+    class ui_tree;
+
+    // 정보 표시용 hover 콘텐츠다. 내용은 배율 1의 논리 좌표로 배치한 독립 tree이고,
+    // root의 bounds가 내용 크기다. 그릴 때 소유 표면의 DPI를 적용하므로 여러 배율에서 공유할 수 있다.
+    // 포인터는 내용에 먼저 전달한다. 키보드 초점·접근 tree는 분리하며 읽을 요약은 소유 요소의 set_tooltip에 둔다.
+    struct tooltip_config
+    {
+        std::shared_ptr<const ui_tree> content {};
+        std::chrono::milliseconds delay { tooltip_delay };
+        float padding { 8.0f };
+        float gap { 3.0f };
+        float corner_radius { 4.0f };
+        float shadow { 0.16f };
+        // 비어 있으면 각각 tooltip_background·tooltip_border다.
+        std::function<ui_color(const ui_color_palette&)> background {};
+        std::function<ui_color(const ui_color_palette&)> border {};
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element.h:1265-1268" data-path="include/luil/ui/ui_element.h" data-start="1265"><script type="text/plain">
+        void set_tooltip(std::u8string text);
+        // 커스텀 내용이 문자열 대신 표시된다. 빈 content로 지우면 문자열 표시로 돌아간다.
+        // 게시 후에는 내용 tree도 불변이다. 화면 밖으로 넘치는 내용은 표면 안에서 잘린다.
+        void set_tooltip_content(tooltip_config config);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>content</code></td><td>빔</td><td>설정 전체를 버린다. 문자열 툴팁이 선다</td></tr>
+                  <tr><td><code>delay</code></td><td>500 ms (<code>tooltip_delay</code>)</td><td>음수는 0. 문자열 툴팁은 늘 500 ms다</td></tr>
+                  <tr><td><code>padding</code> · <code>gap</code> · <code>corner_radius</code></td><td>8 · 3 · 4</td><td>음수·비정상은 0</td></tr>
+                  <tr><td><code>shadow</code></td><td>0.16</td><td>0~1로 자른다</td></tr>
+                  <tr><td><code>background</code> · <code>border</code></td><td>빔</td><td><code>tooltip_background</code> · <code>tooltip_border</code>. 그릴 때 불러 테마 전환을 따른다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>문자열 툴팁에는 설정이 없다. 한 줄이고 여백 5, 높이 22, 대상과의 간격 3, 모서리 2(논리 픽셀), 글자는 <code>ui_metrics::small_font_size</code>(기본 11)와 굵기 <code>small_text</code>다. 긴 글은 창 폭에서 잘린다.</p></div>
+          </section>
+          <section data-tab="글꼴">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/text/fonts.h:12-39" data-path="include/luil/text/fonts.h" data-start="12"><script type="text/plain">
+namespace luil {
+    // OS에 설치하지 않고 글꼴을 읽는다. 실패하거나 face_index가 잘못되면 nullptr다.
+    // 반환값이 데이터를 소유하므로 원본 바이트·파일은 이후 유지할 필요가 없다.
+    // 앱에서 한 번 읽어 보관하고 SkFont나 glyph_config에 공유한다.
+    [[nodiscard]] sk_sp<SkTypeface> load_typeface_bytes(std::span<const std::uint8_t> bytes, int face_index = 0);
+    [[nodiscard]] sk_sp<SkTypeface> load_typeface_file(const std::filesystem::path& path, int face_index = 0);
+
+    // 실행 파일에 내장된 Codicons다. 리소스가 없으면 nullptr다.
+    [[nodiscard]] sk_sp<SkTypeface> load_codicon_typeface();
+
+    // 설치된 글꼴 가족을 UTF-8 이름 순으로 돌려준다. 중복은 없고 조회 실패 시 빈 목록이다.
+    [[nodiscard]] std::vector<std::u8string> installed_font_families();
+
+    // 기본 UI 글꼴을 앞에서부터 찾는다. 빈 목록이나 모두 없는 이름이면 Segoe UI다.
+    // 등록한 앱 가족(`register_font_family`)도 이름으로 찾으며 설치된 같은 이름보다 앞선다.
+    // 앱 시작 전에 지정한다. 이미 생성된 화면과 글꼴 객체는 자동으로 갱신하지 않는다.
+    void set_ui_typeface_families(std::vector<std::u8string> families);
+
+    // 파일·바이트로 읽은 face 여럿을 OS에 설치하지 않고 한 가족 이름으로 등록한다.
+    // 등록한 이름은 설치된 가족처럼 쓰인다 — 기본 UI 글꼴 목록, 설정의 글꼴 가족(`font_settings`), 설치 목록
+    // (`installed_font_families`)에 나오고, 굵기·기울임(`font_weight`·`font_slant`)을 요청하면 가족 안에서 가장 가까운
+    // face를 고른다. 가변 글꼴 face 하나만 넣어도 `wght` 축으로 모든 굵기를 낸다.
+    //  - 같은 이름을 다시 등록하면 face 목록을 바꾼다. nullptr face는 버리고, 남은 face가 없으면 등록을 지운다.
+    //  - 빈 이름이나 NUL이 든 이름은 무시한다. 이름 비교는 정확히 같은 글자만 같다.
+    //  - 글꼴 cache를 비운다. 이미 생성된 화면은 다음 배치부터 새 가족으로 그린다.
+    void register_font_family(std::u8string family, std::vector<sk_sp<SkTypeface>> faces);
+    // 등록을 지운다. 없는 이름이면 아무 일도 하지 않는다.
+    void unregister_font_family(std::u8string_view family);
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/text/font_style.h:4-48" data-path="include/luil/text/font_style.h" data-start="4"><script type="text/plain">
+    // 글꼴의 굵기다. CSS·OpenType의 `wght`와 같은 수(1~1000)다.
+    //  - 이름 사이의 값(350 같은 것)은 `static_cast<font_weight>(350)`으로 넣는다. 가변 글꼴은 그 값 그대로 그리고,
+    //    굵기별 face만 있는 글꼴은 가장 가까운 face를 고른다. 범위 밖 값은 1~1000으로 자른다.
+    enum class font_weight : int
+    {
+        thin = 100,
+        extra_light = 200,
+        light = 300,
+        regular = 400,
+        medium = 500,
+        semibold = 600,
+        bold = 700,
+        extra_bold = 800,
+        black = 900,
+    };
+
+    // 글꼴의 기울임이다.
+    enum class font_slant
+    {
+        upright,
+        italic,
+    };
+
+    // 글꼴에 거는 모양이다 (docs/font-style-design.md).
+    // 굵기와 기울임을 한 값으로 들고 다닌다 — 글꼴 등록부·측정·그리기가 이 값 하나로 같은 face를 찾고, 다음 글꼴
+    // 처리(폭·자간 같은 것)도 이 값에 칸을 늘려 같은 길을 탄다.
+    //  - 기본값(regular·upright)은 받은 face를 그대로 쓴다는 뜻이다. 굵은 파일을 읽은 앱 글꼴은 기본값이어도 굵다.
+    struct font_style
+    {
+        font_weight weight { font_weight::regular };
+        font_slant slant { font_slant::upright };
+
+        [[nodiscard]] bool operator==(const font_style&) const noexcept = default;
+    };
+
+    // 이 굵기 이상을 요청했는데 찾은 face가 이보다 가늘면 획을 덧칠해 메운다.
+    // 브라우저의 `font-synthesis`와 같은 기준이다 — 굵기가 하나뿐인 글꼴도 굵게 요청한 글은 굵어 보인다.
+    inline constexpr font_weight synthetic_bold_threshold { font_weight::semibold };
+
+    // 굵기를 1~1000으로 자른 수다.
+    [[nodiscard]] constexpr int font_weight_value(const font_weight weight) noexcept
+    {
+        const int value { static_cast<int>(weight) };
+        return value < 1 ? 1 : value > 1000 ? 1000 : value;
+    }
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/font_scale.h:6-15" data-path="include/luil/ui/font_scale.h" data-start="6"><script type="text/plain">
+    // 논리 글자 크기를 시스템 글자 크기로 바꾸고 화면 배율을 곱한다.
+    // Windows의 기본은 logical_size * display_scale다. 아이콘·여백에는 쓰지 않는다.
+    [[nodiscard]] float scaled_font_size(float logical_size, float display_scale = 1.0f) noexcept;
+
+    // 글과 고정 여백을 함께 담을 논리 높이다. 앱의 고정 높이 행을 만들 때 쓴다.
+    [[nodiscard]] float text_line_height(float logical_size, float padding) noexcept;
+
+    // 플랫폼이 읽은 변환 표다. sizes[n]은 n sp의 dp 크기다. 빈 표는 기본 배율이다.
+    // Android의 비선형 글자 확대를 보존한다. 유한한 단조 증가 표만 받으며 어느 thread에서나 읽을 수 있다.
+    [[nodiscard]] bool set_system_font_sizes(std::vector<float> sizes);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>함수·값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>load_typeface_bytes</code> · <code>load_typeface_file</code></td><td>실패하면 <code>nullptr</code>. 돌려받은 값이 데이터를 소유한다. 한 번 읽어 나눠 쓴다</td></tr>
+                  <tr><td><code>load_codicon_typeface</code></td><td>Windows는 실행 파일 resource에서 부를 때마다 새 typeface를 짓는다. Android·Apple은 프로세스에 하나다</td></tr>
+                  <tr><td><code>set_ui_typeface_families</code></td><td>앱 시작 전에. 주석의 "Segoe UI"는 Windows의 기본이다 — 플랫폼마다 다르다</td></tr>
+                  <tr><td><code>register_font_family</code></td><td>nullptr face는 버린다. 깨진 UTF-8 이름도 무시한다. 글꼴 cache를 비운다</td></tr>
+                  <tr><td><code>font_weight</code></td><td>1~1000으로 자른다. 이름 사이 값은 <code>static_cast</code>로</td></tr>
+                  <tr><td><code>synthetic_bold_threshold</code></td><td><code>semibold</code>. 그 아래(<code>medium</code> 등)는 덧칠하지 않는다</td></tr>
+                  <tr><td><code>scaled_font_size</code></td><td>표가 없으면 <code>logical × display_scale</code>. 아이콘·여백에는 쓰지 않는다</td></tr>
+                  <tr><td><code>set_system_font_sizes</code></td><td>플랫폼 host가 부른다. 빈 표는 초기화, 첫 값이 0이 아니거나 단조 증가가 아니면 거절</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">글을 보이는 element는 상태를 들지 않는다. 누를 수 있는 것은 markdown 링크와 경로 막대뿐이다. 둘 다 앱이 준 콜백이 지은 <code>input_action</code>을 돌려줄 뿐이다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>나오는 것</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>markdown 링크 왼쪽 클릭</td><td><code>activate_link(destination)</code>이 돌려준 액션 하나. <code>destination</code>은 엔티티를 푼 href다</td><td>앱 화면을 열거나 <code>open_url</code>로 연다</td></tr>
+              <tr><td>초점 선 링크에서 Enter · Space</td><td>같은 액션. 좌표는 링크 상자의 가운데다</td><td>〃</td></tr>
+              <tr><td>tooltip 안 링크 클릭</td><td>같은 액션. 같은 링크에서 눌렀다 떼야 한다. 좌표는 내용 tree 기준이다</td><td>〃</td></tr>
+              <tr><td>tooltip 안 누름이 취소됨</td><td>없다. 누르는 사이 내용이 바뀌었거나, 다른 버튼이거나, 입력이 유실된 경우다</td><td>—</td></tr>
+              <tr><td>경로 조각 왼쪽 클릭 · Enter · Space</td><td><code>navigate(key)</code>. 지금 자리는 내지 않는다</td><td>그 자리로 간다</td></tr>
+              <tr><td>조각 가운데 버튼</td><td><code>middle_click(key)</code>. 지금 자리도 낸다</td><td>새 탭 따위</td></tr>
+              <tr><td>조각 오른쪽 버튼</td><td><code>context_menu(key, context)</code>. 지금 자리도 낸다</td><td>문맥 메뉴를 연다</td></tr>
+              <tr><td>꺾쇠 단추</td><td><code>open_children(key, context)</code></td><td>아래 단계를 메뉴로 연다. 앵커는 <code>breadcrumb_chevron_id(owner, key)</code></td></tr>
+              <tr><td>"…" 단추</td><td><code>open_collapsed(keys, context)</code>. 접힌 조각의 키를 앞에서부터 담는다</td><td>접힌 경로를 메뉴로 연다. 앵커는 <code>breadcrumb_collapsed_id(owner)</code></td></tr>
+              <tr><td>막대 폭이 바뀜</td><td>없다. 배치가 다시 접는다</td><td>지난 배치가 접은 수는 <code>collapsed()</code>가 준다</td></tr>
+              <tr><td>tooltip이 뜨고 닫힘</td><td>없다. hover와 시계는 input thread가, 그림은 tree가 맡는다</td><td>열림 상태를 들지 않는다</td></tr>
+              <tr><td>label · glyph · badge</td><td>없다. <code>set_tooltip</code>을 달면 hit 대상이 될 뿐이다</td><td>—</td></tr>
+              <tr><td>시스템 글자 크기가 바뀜</td><td><code>make_metrics_message</code>가 새 <code>window_metrics</code>로 다시 불린다 (<code>text_scale</code>)</td><td>다시 배치한다. 고정 행 높이를 다시 잰다</td></tr>
+              <tr><td>Windows에서 글꼴을 설치·삭제</td><td>없다. host가 글꼴 cache와 관리자를 놓는다</td><td>이미 잰 폭은 다음 배치에서 고쳐진다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>콜백(<code>activate_link</code>·<code>navigate</code>·…)은 어느 스레드에서 불려도 되게 쓴다 — <a class="xref" href="#build-markdown">링크 메시지를 받아 처리한다</a>의 설명과 같다. <code>ui_action_context</code>에는 element id, 좌표, 수정자가 든다. 키보드로 실행하면 좌표는 element의 한가운데다.</p></div>
+
+        <h3>tooltip의 시간과 자리</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">시계</span><span>포인터가 실제로 움직여 들어왔을 때만 선다. 포인터가 머문 채 tree가 바뀌어 밑의 element가 바뀌면 세우지 않는다.</span></div>
+          <div role="listitem"><span class="who">지연</span><span>문자열은 500 ms(<code>tooltip_delay</code>), 커스텀은 <code>tooltip_config::delay</code>다. 지연이 끝나는 시각은 tree가 다음 frame으로 예약한다.</span></div>
+          <div role="listitem"><span class="who">자리</span><span>지연이 끝날 때까지는 같은 element 안의 마지막 포인터 자리를 따르고, 그 뒤로 멈춘다. 상자는 포인터 아래 커서 그림 높이(20 × 배율)만큼 내려 서고, 아래로 넘치면 포인터 위로 뒤집은 뒤 창 안으로 민다.</span></div>
+          <div role="listitem"><span class="who">수명</span><span>커스텀 상자는 대상·상자·둘 사이의 다리를 지나는 동안 열려 있다. 내용이 상자보다 길면 세로 휠로 흘린다.</span></div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>닫는 것</th><th>커스텀·markdown tooltip</th><th>문자열 tooltip</th></tr></thead>
+            <tbody>
+              <tr><td>hover가 다른 element로 옮김 · 표면을 떠남</td><td class="yes">닫는다</td><td class="yes">닫는다</td></tr>
+              <tr><td>끌기 시작 · 파일 끌기 진입</td><td class="yes">닫는다</td><td class="yes">닫는다</td></tr>
+              <tr><td>상자 밖 누름 · 상자 밖 휠</td><td class="yes">닫는다</td><td class="no">길을 찾지 못했다</td></tr>
+              <tr><td>아무 키 (Esc는 그것으로 쓰인다)</td><td class="yes">닫는다</td><td class="no">닫지 않는다</td></tr>
+              <tr><td>창이 활성을 잃음</td><td class="yes">닫는다</td><td class="no">닫지 않는다</td></tr>
+              <tr><td>유실된 입력의 몸짓 취소 (<code>cancel_dropped_gestures</code>)</td><td class="yes">닫는다</td><td class="yes">닫는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>문자열 tooltip 열의 "닫지 않는다"·"길을 찾지 못했다"는 코드를 따라가 본 결과다 — 키·활성 상실의 닫기 조건이 커스텀 내용만 본다. 실기에서 확인하지 않았다. 설계 문서의 "Esc·다른 키 입력이 오면 닫는다"는 커스텀 내용 이야기로 읽는다.</p></div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">글 element는 대부분 Tab 자리가 아니다. 키를 받는 것은 열 수 있는 markdown 링크와 경로 막대뿐이고, tooltip 안으로는 초점이 가지 않는다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="키">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>어디서</th><th>하는 일</th></tr></thead>
+                <tbody>
+                  <tr><td>Tab · Shift+Tab</td><td>markdown</td><td><code>activate_link</code>가 있는 링크마다 한 자리다. 없으면 자리도 없다</td></tr>
+                  <tr><td>Enter · Space</td><td>초점 선 링크 · 조각 · 꺾쇠 · "…"</td><td>왼쪽 클릭과 같은 길이다. 수정자와 함께면 앱 단축키로 흐른다</td></tr>
+                  <tr><td>Enter · Space</td><td>지금 자리 조각</td><td>할 일이 없다 (왼쪽 클릭 액션이 없다). 키가 앱으로 흐른다</td></tr>
+                  <tr><td>Tab</td><td>경로 막대</td><td>막대 전체가 한 자리다. 들어오면 첫 구성원 — 보이는 "…"가 있으면 그것, 없으면 보이는 첫 조각이다</td></tr>
+                  <tr><td>← · →</td><td>막대 안</td><td>조각·꺾쇠·"…" 사이를 돈다. <strong>끝에서 처음으로 돈다</strong></td></tr>
+                  <tr><td>Home · End</td><td>막대 안</td><td>첫·끝 구성원으로 간다. 돌지 않는다</td></tr>
+                  <tr><td>↑ · ↓</td><td>막대 안</td><td>가로 묶음이라 막대의 키가 아니다. 앱으로 흐른다</td></tr>
+                  <tr><td>Esc</td><td>떠 있는 커스텀 tooltip</td><td>닫고 그 키를 쓴다</td></tr>
+                  <tr><td>그 밖의 키</td><td>떠 있는 커스텀 tooltip</td><td>닫는다. 키는 그대로 흐른다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>편집이나 키보드 탐색이 필요한 판은 tooltip이 아니라 popup이다 (<a class="xref" href="popups.html">팝업과 메뉴</a>). 초점 테와 Tab 순서의 일반 규칙은 <a class="xref" href="accessibility.html">접근성</a>에 있다.</p></div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>대상</th><th>역할</th><th>이름</th><th>그 밖</th></tr></thead>
+                <tbody>
+                  <tr><td><code>label_element</code></td><td><code>static_text</code></td><td>글 전체 (줄여 그려도 원문)</td><td>Tab 자리가 아니다</td></tr>
+                  <tr><td><code>markdown_element</code></td><td><code>static_text</code></td><td>블록 글을 줄바꿈으로 이은 것. 목록 머리 "• "·"N. "가 들어간다</td><td>링크는 자식이다</td></tr>
+                  <tr><td>markdown 링크</td><td><code>link</code></td><td>그 링크에 든 조각 글을 이은 것</td><td><code>activate_link</code>가 있을 때만 Tab 자리와 실행이 있다</td></tr>
+                  <tr><td><code>glyph_element</code></td><td><code>description</code>이 있으면 <code>image</code></td><td><code>description</code></td><td>비면 장식이라 역할이 없다</td></tr>
+                  <tr><td><code>badge_element</code></td><td><code>static_text</code></td><td><code>text</code>만</td><td><strong>tone(경고·오류)은 이름에 없다</strong></td></tr>
+                  <tr><td><code>breadcrumb_element</code></td><td><code>navigation</code></td><td><code>name</code></td><td>navigation 랜드마크로 선다</td></tr>
+                  <tr><td>경로 조각</td><td><code>link</code></td><td><code>label</code>. 지금 자리면 "label · <code>current_label</code>"</td><td>지금 자리도 Tab 자리다</td></tr>
+                  <tr><td>꺾쇠 단추</td><td><code>button</code></td><td>"label · <code>children_label</code>" (tooltip 글)</td><td><code>open_children</code>가 있을 때만 선다</td></tr>
+                  <tr><td>"…" 단추</td><td><code>button</code></td><td><code>collapsed_label</code></td><td><code>open_collapsed</code>와 <code>collapsed_label</code>이 둘 다 있을 때만 접근 tree에 선다</td></tr>
+                  <tr><td>tooltip 내용</td><td>접근 tree에 없다</td><td>—</td><td>요약은 대상의 <code>set_tooltip</code> 글이 도움말(UIA HelpText)로 나른다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li>이름은 <code>set_access_name</code> → <code>search_label</code> → tooltip 글 순으로 찾는다. 툴팁 글은 눈으로 읽는 글이라 컨테이너에는 <code>set_access_name</code>을 쓴다.</li>
+                <li>바뀌는 상태 글은 <code>set_live_region(access_live::polite)</code>로 알린다. 그 요소나 안쪽 글이 바뀌면 platform이 읽게 한다. <code>alert</code> 역할은 정하지 않아도 assertive다.</li>
+              </ul>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>역할</th><th>Windows UIA</th><th>macOS</th><th>iOS</th></tr></thead>
+                <tbody>
+                  <tr><td><code>static_text</code></td><td>Text</td><td>AXStaticText (이름을 AXValue로 읽는다)</td><td><code>UIAccessibilityTraitStaticText</code></td></tr>
+                  <tr><td><code>link</code></td><td>Hyperlink</td><td>AXLink</td><td><code>UIAccessibilityTraitLink</code></td></tr>
+                  <tr><td><code>image</code></td><td>Image</td><td>AXImage</td><td><code>UIAccessibilityTraitImage</code></td></tr>
+                  <tr><td><code>navigation</code></td><td>Group + navigation 랜드마크</td><td>AXGroup · AXLandmarkNavigation</td><td>랜드마크 컨테이너 (<code>UIAccessibilityContainerTypeLandmark</code>)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>Android에는 접근성 다리가 없다 (<a class="xref" href="platforms.html">플랫폼과 host</a>).</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">줄 바꿈·말줄임·정렬·markdown·tooltip 규칙은 core의 같은 C++다. 다른 것은 글꼴이 어디서 오는가와 시스템 글자 크기를 싣는가다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>항목</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td>기본 UI 글꼴</td><td>Segoe UI</td><td>sans-serif</td><td>.AppleSystemUIFont</td><td>.AppleSystemUIFont</td></tr>
+              <tr><td>글꼴 관리자</td><td>DirectWrite (목록 갱신을 검사하는 collection)</td><td>Skia의 Android 관리자 + FreeType, <code>/system/etc/fonts.xml</code></td><td>CoreText</td><td>macOS와 같은 코드</td></tr>
+              <tr><td>대체 글꼴의 언어</td><td>사용자 기본 locale</td><td>host가 넣은 값</td><td>선호 언어의 첫째</td><td>macOS와 같다</td></tr>
+              <tr><td>실행 중 글꼴 설치</td><td><code>WM_FONTCHANGE</code>에 cache와 관리자를 놓는다</td><td>길이 없다</td><td>CoreText가 스스로 반영한다</td><td>macOS와 같다</td></tr>
+              <tr><td>Codicons</td><td>실행 파일 resource. 앱마다 <code>.rc</code> 조각이 필요하고, 없으면 시작하지 못한다. <code>load_codicon_typeface</code>는 부를 때마다 새 typeface다</td><td>라이브러리에 박은 바이트. 프로세스에 하나다</td><td>〃</td><td>〃</td></tr>
+              <tr><td>시스템 글자 크기</td><td>설정의 텍스트 크기(<code>TextScaleFactor</code>, 1~2.25)를 선형 표로 싣는다. <code>window_config::follow_text_scale = false</code>면 끈다</td><td>글꼴 크기(SP)를 0~256의 비선형 표로 싣는다</td><td class="no">싣지 않는다</td><td>Dynamic Type — <code>UIFontMetrics</code>(Body)로 옮긴 표</td></tr>
+              <tr><td><code>window_metrics::text_scale</code></td><td>12px 글이 커진 비</td><td>〃</td><td>1 (설정하지 않는다)</td><td>〃</td></tr>
+              <tr><td>tooltip</td><td colspan="4">어디서나 마우스·펜 hover만 세운다. 터치는 hover를 남기지 않고, 키보드 초점도 tooltip을 세우지 않는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>헤더 주석(<code>set_ui_typeface_families</code>)과 몇 설계 문서는 "빈 목록이면 Segoe UI"라고 하지만, 코드는 플랫폼의 기본 가족을 쓴다 — 위 표가 코드다.</li>
+            <li>헤더 <code>font_scale.h</code>의 "Windows의 기본은 <code>logical_size * display_scale</code>"도 낡았다. <code>follow_text_scale</code>이 기본 참이라 Windows도 텍스트 크기를 싣는다. Android의 실제 표는 기기와 설정마다 달라 여기서 정할 수 없다.</li>
+            <li><strong>글자 모양 잡기(HarfBuzz)</strong>는 빌드 옵션 <code>LUIL_ENABLE_TEXT_SHAPING</code>(기본 꺼짐)이다. 켜면 label·markdown·여러 줄 칸도 HarfBuzz로 배치한다. 끄면 코드포인트마다 대체 글꼴을 고르는 단순 배치다. 시험·예제 preset은 켠다. 끝 말줄임의 후보도 켠 구성은 "앞부분 + …"를 함께 재고, 끈 구성은 따로 재서 더한다.</li>
+            <li>줄 나눔 규칙은 어느 플랫폼에서나 내장 UAX #14 표 하나다 (<a class="xref" href="text.html#s5">줄 나눔</a>). OS의 줄 나눔 엔진을 쓰지 않는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다. 주석·설계 문서와 코드가 다르면 코드를 따랐다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>label의 기본 색은 흐린 보조 글자색이다.</strong> <code>color</code>의 기본이 <code>dim</code>이라 <code>secondary_foreground</code>로 그린다. 제목·값에는 <code>label_color_role::primary</code>를 적는다.</li>
+          <li><strong><code>padding</code>은 바탕이 없어도 글을 들인다.</strong> 주석은 "바탕이 있을 때"지만 코드는 늘 좌우를 줄인다. 위아래는 들이지 않는다.</li>
+          <li><strong>글이 빈 label은 바탕도 그리지 않는다.</strong> <code>notice</code>·<code>raised</code> 띠를 빈 글로 자리만 잡아 둘 수 없다.</li>
+          <li><strong>접는 label은 상자를 자르지 않고, 한 줄이어도 위에 붙는다.</strong> 칸이 줄 수보다 낮으면 아래 줄이 이웃을 덮는다. 높이는 <code>measure_wrap</code>·<code>preferred_size</code>로 받거나 <code>max_lines</code>로 막는다. 한 줄 label은 세로 가운데인데 <code>wrap</code>이면 위에서부터 쌓는다.</li>
+          <li><strong>손으로 지은 측정 문맥은 앱 스타일을 모른다.</strong> <code>measure_context { .scale, .measurer }</code>만 적으면 정책 칸이 빈 글을 내장 스타일(<code>hangul_words</code>)로 잰다. 앱이 <code>unicode</code>를 골랐다면 화면과 줄 수가 갈린다. <code>.style</code>을 싣거나 칸에 정책을 적는다. 빈 칸을 <code>== hangul_words</code>로 견주면 거짓이니, 견줄 때는 <code>line_break_for</code>로 푼 값을 쓴다.</li>
+          <li><strong>접지 않는 글의 줄바꿈은 공백이다.</strong> 앱 스타일의 기본 <code>single_line_break::space</code> 때문에 한 줄 label·tooltip·배지의 <code>\n</code>이 사라진다. 여러 줄은 <code>wrap</code>을 켠다.</li>
+          <li><strong>markdown은 시스템 글자 크기를 따르지 않는다.</strong> 블록 크기는 <code>font_size</code> × 화면 배율이다. label과 나란히 두면 사용자가 글자를 키울 때 markdown만 작다.</li>
+          <li><strong>markdown의 <code>block_spacing = 0</code>은 8이 된다.</strong> 0 이하는 기본값으로 되돌린다. <code>line_height</code>도 글자 크기의 1.5배보다 작게 줄 수 없다. 넘치면 말줄임 없이 아래 블록이 잘린다.</li>
+          <li><strong>markdown 코드 블록이 고정폭이 아니다.</strong> <code>code_family</code>가 비면 코드 글꼴은 UI 글꼴이다. 설계 문서의 "코드 블록은 고정폭"은 이름을 줄 때의 이야기다.</li>
+          <li><strong>맨 URL은 링크가 아니다.</strong> 켠 확장은 취소선뿐이다. 표·체크박스·맨 URL·www·이메일 자동 링크가 없고, <code>&lt;https://…&gt;</code> 꼴의 CommonMark 자동 링크만 링크다. HTML은 글로 보인다.</li>
+          <li><strong><code>activate_link</code>가 없는 링크는 누를 수 없다.</strong> 강조색·밑줄로 그리고 <code>link</code>로 읽히지만 hit도 Tab 자리도 실행도 없다.</li>
+          <li><strong>측정기를 실은 배치 문맥에서는 markdown이 그려지지 않는다.</strong> <code>measurer</code>가 있으면 측정기 overload로 배치하는데, 그 결과에는 그림 자료가 없다. test용 고정 폭 측정기를 실은 채 화면을 그리면 빈 판이다.</li>
+          <li><strong>markdown 생성자는 예외를 던질 수 있다.</strong> 파싱이 생성자 안이다. 너무 큰 입력은 <code>std::length_error</code>, 파서 실패는 <code>std::runtime_error</code>다.</li>
+          <li><strong><code>make_markdown_tooltip</code>은 부를 때마다 파싱하고 잰다.</strong> 결과는 불변이니 한 번 지어 들고 있는다. 그 순간의 글꼴과 내장 스타일로 재므로 글꼴을 바꾸면 다시 짓는다.</li>
+          <li><strong>tooltip은 마우스·펜 hover로만 뜬다.</strong> 터치와 키보드 초점으로는 뜨지 않는다. 헤더의 "포인터 자리가 없으면(키보드 초점·…·터치)"은 놓는 자리의 규칙일 뿐이다. 모바일에서 꼭 필요한 정보를 tooltip에만 두지 않는다.</li>
+          <li><strong>닫힘 규칙은 커스텀 내용에만 있다.</strong> 키·바깥 누름·활성 상실로 닫히는 것은 커스텀·markdown tooltip이다. 문자열 tooltip은 hover가 바뀌거나 포인터가 떠나거나 끌기가 시작돼야 사라진다 (코드 기준, 실기 미확인).</li>
+          <li><strong>문자열 tooltip은 한 줄, 높이 22 고정이다.</strong> 글자는 시스템 글자 크기로 커지지만 상자는 그대로라, 큰 글자에서 위아래가 잘린다. 긴 글은 창 폭에서 잘린다. 여러 줄 도움말은 markdown tooltip을 쓴다.</li>
+          <li><strong>배지 높이는 label 한 줄과 같지 않다.</strong> 헤더 주석은 "같은 식"이라 하지만 배지는 <code>font_size + 7</code>, label은 <code>scaled_font_size(font_size) + 7</code>이다. 시스템 글자 표가 서면 갈린다 — 표가 <code>{0, 2}</code>면 12px label은 31, 배지는 19다. 경로 막대는 24로 고정이다. 글은 커지는데 알약·막대는 그대로라 큰 글자에서 글이 넘칠 수 있다 (실기 미확인).</li>
+          <li><strong>배지 폭은 잴 수 있다.</strong> 예제·test 주석의 "배치 시점에는 잴 수 없다"는 낡았다. <code>preferred_size</code>가 알약 폭을 답한다. 맞춤 칸(<code>add_fit</code>)에 담으면 글이 잘리지 않는다.</li>
+          <li><strong>배지의 심각도는 접근성 이름에 없다.</strong> 경고 배지 "3"은 그냥 "3"으로 읽힌다. 뜻을 귀로도 전하려면 글에 담거나 감싸는 요소의 이름에 적는다.</li>
+          <li><strong>"…" 단추는 <code>open_collapsed</code>가 없어도 선다.</strong> 누를 것이 없는 Tab 자리이고 접근 tree에도 없다. <code>collapsed_label</code>이 비어도 접근 tree에서 빠진다.</li>
+          <li><strong><code>has_children</code>만으로는 꺾쇠 단추가 서지 않는다.</strong> <code>open_children</code>도 있어야 한다. 없으면 흐린 꺾쇠 그림뿐이다. 지금 자리 조각은 링크로 읽히지만 실행이 없어 Enter·Space가 앱으로 흐른다.</li>
+          <li><strong>기본 UI 글꼴은 플랫폼마다 다르다.</strong> 주석의 "Segoe UI"는 Windows의 값이다. Android는 sans-serif, Apple은 .AppleSystemUIFont다.</li>
+          <li><strong>없는 글꼴 이름은 조용히 기본 글꼴이 된다.</strong> <code>font_settings</code>의 오타는 오류가 없다. 이름은 <code>installed_font_families()</code>에서 확인한다. 코드 글꼴도 못 찾으면 UI 글꼴이다.</li>
+          <li><strong>Windows도 텍스트 크기를 따른다.</strong> <code>font_scale.h</code>의 주석과 달리 <code>follow_text_scale</code>이 기본 참이다. iOS는 Dynamic Type을 따르고, macOS만 따르지 않는다. 고정 높이 행은 <code>text_line_height</code>로 짓는다.</li>
+          <li><strong><code>glyph_element</code>는 대체 글꼴을 쓰지 않는다.</strong> 아이콘 글꼴에 없는 코드포인트는 빈칸이다. Windows의 <code>load_codicon_typeface()</code>는 부를 때마다 새 typeface이니 직접 쓰면 한 번 받아 둔다.</li>
+          <li><strong>글꼴 등록과 기본 목록 변경은 이미 잰 폭을 고치지 않는다.</strong> cache를 비워 다음 배치부터 새 face다. 바꾼 뒤 frame을 다시 짓는다. <code>register_font_family</code>는 깨진 UTF-8 이름도 조용히 버린다.</li>
+          <li><strong><code>text_layout_request</code>의 크기는 물리 픽셀이다.</strong> 논리 크기를 넣으면 고배율 화면에서 글이 작다. <code>scaled_font_size(size, scale)</code>를 넣는다. 측정기 overload로 지은 배치는 그릴 수 없다 — 줄마다 그림 자료가 없다.</li>
+          <li><strong>문맥의 측정기는 굵기·기울임·<code>face</code>보다 앞선다.</strong> 굵은 글을 test 측정기로 재면 보통 굵기 폭이다. 앱 글꼴(<code>typeface</code>)만은 그 글꼴로 잰다. 그리는 쪽도 <code>size * scale</code>로 손수 지은 <code>SkFont</code>는 시스템 글자 크기를 놓친다 — <code>make_text_font</code>로 얻는다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>label이 왜 회색인가?</summary><div class="faq-a"><p class="faq-short">기본 <code>color</code>가 <code>dim</code>이라서다. <code>.color = luil::label_color_role::primary</code>를 적는다.</p><p><code>dim</code>은 테마의 <code>secondary_foreground</code>, <code>primary</code>는 <code>primary_foreground</code>, <code>error</code>는 <code>error_accent</code>다. 색 값은 그리기 시점에 테마가 정한다 (<a class="xref" href="theming.html">테마</a>).</p></div></details>
+          <details class="faq"><summary>긴 설명을 두 줄까지만 보이고 나머지는 "…"로 하려면?</summary><div class="faq-a"><p class="faq-short"><code>wrap = true</code>, <code>max_lines = 2</code>다.</p><p>마지막 보이는 줄이 남은 글을 한 줄로 펴서 끝을 줄인다. 칸 높이는 <code>2 × height_for</code>나 <code>preferred_size</code>로 준다 — 상자를 자르지 않으니 칸이 낮으면 아래 줄이 이웃을 덮는다 (<a class="xref" href="#build-label">라벨</a>).</p></div></details>
+          <details class="faq"><summary>칸 높이를 배치 전에 알아야 한다 (스크롤 내용 높이 합산).</summary><div class="faq-a"><p class="faq-short"><code>label_element::measure_wrap(config, context, width).height</code>다. 그리기와 같은 규칙이다.</p><p>문맥에는 <code>.scale</code>·<code>.measurer</code>와 함께 <code>.style</code>을 싣는다. 스타일이 없으면 정책 칸이 빈 글을 내장 정책으로 재서 화면과 줄 수가 갈릴 수 있다. 직접 그리는 글은 <code>measure_text_block</code>이 같은 값을 준다.</p></div></details>
+          <details class="faq"><summary>파일 경로가 잘릴 때 파일 이름을 남기려면?</summary><div class="faq-a"><p class="faq-short"><code>.elide = luil::text_elide::start</code>(앞을 줄인다)나 <code>middle</code>(앞뒤를 남긴다)이다.</p><p>한 줄일 때만 듣는다. 여러 줄 글은 늘 마지막 줄의 끝을 줄인다. 자르는 자리는 글자소 경계라 결합 글자가 갈리지 않는다 (<a class="xref" href="text.html#s1">글자소</a>).</p></div></details>
+          <details class="faq"><summary>한국어가 음절 중간에서 갈린다 (또는 어절에서만 갈린다).</summary><div class="faq-a"><p class="faq-short">줄 나눔 정책이다. 칸의 <code>line_break</code>, 비면 앱 스타일의 <code>text.wrapPolicy</code>다.</p><p><code>hangul_words</code>는 어절에서, <code>unicode</code>는 음절 사이에서도 바꾼다. 칸에 적은 값이 스타일보다 앞선다. 규칙 자체는 <a class="xref" href="text.html#s5">글과 유니코드</a>에 있다.</p></div></details>
+          <details class="faq"><summary>마크다운 링크를 누르면 무엇이 오나?</summary><div class="faq-a"><p class="faq-short"><code>activate_link(destination)</code>이 돌려준 <code>input_action</code> 하나다.</p><p>보통 <code>make_app_action</code>으로 싼 앱 메시지이고, 앱의 <code>handle</code>이 logic thread에서 받는다. 라이브러리는 주소를 열지 않는다. 콜백이 없으면 링크는 표시만 한다.</p></div></details>
+          <details class="faq"><summary>http 링크를 브라우저로 열려면?</summary><div class="faq-a"><p class="faq-short"><code>handle</code>에서 <code>luil::open_url(destination)</code>을 부른다.</p><p>기본으로 http·https·mailto만 열고 <code>file:</code>이나 실행 파일 scheme은 막는다 (<a class="xref" href="services.html">플랫폼 서비스</a>). 앱 안 주소는 <code>app:</code> 같은 scheme으로 갈라 앱 메시지로 바꾼다.</p></div></details>
+          <details class="faq"><summary>마크다운에서 표·체크박스·맨 URL 자동 링크가 안 된다.</summary><div class="faq-a"><p class="faq-short">MD4C 확장 중 취소선만 켰다. <code>&lt;https://…&gt;</code> 꼴만 자동 링크다.</p><p>표·작업 목록·맨 URL·www·이메일 확장과 HTML은 켜지 않았다. HTML 태그는 글로 보이고, 이미지는 대체 글만 읽는다. 외부 자원을 가져오지 않는다.</p></div></details>
+          <details class="faq"><summary><code>block_spacing</code>을 0으로 줬는데 블록 사이가 8만큼 벌어진다.</summary><div class="faq-a"><p class="faq-short">0 이하는 기본값 8로 되돌린다. 간격은 양수여야 한다.</p><p><code>font_size</code>(12)와 <code>line_height</code>(18)도 같다. 실제 줄 높이는 <code>line_height</code>와 글자 크기의 1.5배 중 큰 값이다. 마지막 블록 뒤 간격은 높이에 넣지 않는다.</p></div></details>
+          <details class="faq"><summary>마크다운 코드 블록이 고정폭이 아니다.</summary><div class="faq-a"><p class="faq-short"><code>ui_frame</code>의 <code>fonts</code>에 <code>code_family</code>를 준다.</p><p>비어 있으면 코드 글꼴은 UI 글꼴이다. 데모는 Windows에서 <code>Cascadia Mono</code>를 준다 (<a class="xref" href="#build-fonts">글꼴 불러오기와 크기</a>). 없는 이름이면 조용히 UI 글꼴이다.</p></div></details>
+          <details class="faq"><summary>툴팁에 굵은 제목·코드·링크를 넣고 싶다.</summary><div class="faq-a"><p class="faq-short"><code>set_tooltip_content(luil::make_markdown_tooltip({ .text = … }, 폭))</code>이다.</p><p>요약 문자열은 <code>set_tooltip</code>에 따로 둔다. 화면에는 markdown이 서고, 문자열은 보조 기술의 이름·도움말로 남는다. 링크는 <code>activate_link</code>를 줄 때만 눌린다 (<a class="xref" href="#build-markdown">마크다운과 툴팁</a>).</p></div></details>
+          <details class="faq"><summary>툴팁 지연을 바꾸려면?</summary><div class="faq-a"><p class="faq-short">커스텀·markdown tooltip은 <code>tooltip_config::delay</code>다. 문자열 tooltip은 500 ms 고정이다.</p><p><code>make_markdown_tooltip</code>에는 셋째 인자 <code>appearance</code>로 준다. 음수는 0이다.</p></div></details>
+          <details class="faq"><summary>툴팁이 휴대폰에서, 또는 Tab으로 초점을 옮겼을 때 안 뜬다.</summary><div class="faq-a"><p class="faq-short">tooltip은 마우스·펜 hover로만 뜬다.</p><p>터치는 hover를 남기지 않고, 키보드 초점은 tooltip 대상을 세우지 않는다. 꼭 필요한 정보는 화면의 글로 둔다. 보조 기술에는 <code>set_tooltip</code> 글이 도움말로 간다.</p></div></details>
+          <details class="faq"><summary>아이콘은 어떻게 그리나? 어떤 글리프가 있나?</summary><div class="faq-a"><p class="faq-short"><code>glyph_element</code>에 Codicons 코드포인트(예: <code>codicons::icon_chevron_right</code>)를 준다.</p><p>목록은 생성 헤더 <code>luil/generated/codicons.h</code>다. 색을 비우면 <code>primary_foreground</code>다. 뜻이 있는 아이콘은 <code>description</code>을 주어 <code>image</code>로 읽히게 한다.</p></div></details>
+          <details class="faq"><summary>내 아이콘 글꼴(TTF)을 쓰려면?</summary><div class="faq-a"><p class="faq-short"><code>load_typeface_file</code>로 한 번 읽어 <code>glyph_config::typeface</code>에 준다.</p><p>실패하면 <code>nullptr</code>이니 확인한다. 돌려받은 값이 데이터를 소유하므로 element마다 다시 읽지 않고 나눠 쓴다. 그 글꼴에 없는 코드포인트는 그리지 않는다 (<a class="xref" href="#build-icons">글리프·배지·경로 막대</a>).</p></div></details>
+          <details class="faq"><summary>앱에 포함한 글꼴을 UI 기본 글꼴로 하려면?</summary><div class="faq-a"><p class="faq-short">시작할 때 <code>register_font_family</code>로 가족을 등록하고 <code>set_ui_typeface_families</code>로 앞에 둔다.</p><p>OS에 설치하지 않는다. 굵기별 face 여럿이나 가변 글꼴 하나로 된다. 등록한 이름은 설치된 같은 이름보다 앞선다. 이미 잰 폭은 다음 배치부터 바뀐다.</p></div></details>
+          <details class="faq"><summary>사용자가 OS에서 글자를 키우면 따라가나?</summary><div class="faq-a"><p class="faq-short">Windows·Android·iOS는 따른다. macOS는 읽지 않는다.</p><p>바뀌면 metrics 메시지가 다시 오고 앱이 다시 배치한다. label·단추·직접 그린 글은 커지고, markdown·배지 높이·경로 막대 높이·문자열 tooltip 상자는 그대로다. 앱의 고정 높이 행은 <code>text_line_height</code>로 짓는다 (<a class="xref" href="#concepts">논리 크기와 시스템 글자 크기</a>).</p></div></details>
+          <details class="faq"><summary>Windows에서 텍스트 크기 설정을 무시하고 싶다 (옛 고정 화면).</summary><div class="faq-a"><p class="faq-short"><code>window_config::follow_text_scale = false</code>다.</p><p>그러면 글자는 화면 배율만 따른다. 고정 높이 화면을 <code>text_line_height</code>로 옮길 때까지의 물러섬이다.</p></div></details>
+          <details class="faq"><summary>배지 폭을 글에 맞추려면?</summary><div class="faq-a"><p class="faq-short">맞춤 칸(<code>add_fit</code>)이나 layer에 담는다. <code>preferred_size</code>가 알약 폭을 답한다.</p><p>폭은 담는 쪽이 준다. 준 폭이 좁으면 글이 잘린다 — 배지가 옆 UI를 침범하지 않는다. 높이는 <code>height_for</code>(<code>font_size + 7</code>)다.</p></div></details>
+          <details class="faq"><summary>경고 배지를 글리프 없이 만들 수 있나?</summary><div class="faq-a"><p class="faq-short">없다. <code>warning</code>·<code>error</code>는 늘 글리프를 붙인다.</p><p>고대비는 경고색과 오류색을 같은 전경색으로 접는다. 색만으로는 둘을 가를 수 없어 tone이 글리프까지 정한다. 다만 접근성 이름에는 tone이 없으니 글이나 감싸는 이름에 뜻을 담는다.</p></div></details>
+          <details class="faq"><summary>경로 막대의 "…"를 누르면 어떤 조각이 접혔는지 어떻게 아나? 메뉴는 어디에 띄우나?</summary><div class="faq-a"><p class="faq-short"><code>open_collapsed(keys, context)</code>의 <code>keys</code>가 접힌 조각의 키를 앞에서부터 담는다.</p><p>메뉴의 앵커는 <code>breadcrumb_collapsed_id(owner)</code>, 꺾쇠는 <code>breadcrumb_chevron_id(owner, key)</code>로 찾는다. 문맥의 x·y는 누른 점이다 (<a class="xref" href="menus.html">메뉴</a>).</p></div></details>
+          <details class="faq"><summary>사진 위에 글을 얹어 읽히게 하려면?</summary><div class="faq-a"><p class="faq-short">직접 그리는 element에서 <code>draw_text_block</code>에 <code>halo_color</code>·<code>halo_width</code>를 준다.</p><p>모든 줄의 테두리를 먼저 칠하고 글자를 얹는다. 돌려받은 사각형(물리 픽셀)으로 글 뒤 바탕을 깔 수도 있다 (<a class="xref" href="#build-draw">직접 그리는 글</a>).</p></div></details>
+          <details class="faq"><summary>caret·선택 사각형을 직접 계산하려면?</summary><div class="faq-a"><p class="faq-short"><code>make_text_layout</code>으로 짓고 <code>caret_rect</code>·<code>hit_test</code>·<code>selection_rects</code>를 쓴다.</p><p>offset은 UTF-8 byte다. 크기와 폭은 물리 픽셀이다. 편집 칸이 필요하면 직접 짓지 말고 <a class="xref" href="text-input.html">글 입력</a>의 칸을 쓴다.</p></div></details>
+          <details class="faq"><summary>바뀌는 상태 글을 스크린 리더가 저절로 읽게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>label->set_live_region(luil::access_live::polite)</code>다.</p><p>급한 알림은 <code>assertive</code>다. 그 요소나 안쪽 글이 바뀌면 platform이 읽게 알린다 (<a class="xref" href="accessibility.html">접근성</a>).</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/font_style.h" target="_blank" rel="noopener">include/luil/text/font_style.h</a><span class="n">최상위 기호 5</span></div>
+            <div class="hdr-syms"><a href="api.html#font-weight" title="열거형"><span class="kb e">E</span>font_weight</a><a href="api.html#font-slant" title="열거형"><span class="kb e">E</span>font_slant</a><a href="api.html#font-style" title="구조체"><span class="kb t">S</span>font_style</a><a href="api.html#synthetic-bold-threshold" title="상수"><span class="kb ">k</span>synthetic_bold_threshold</a><a href="api.html#font-weight-value" title="함수"><span class="kb f">f</span>font_weight_value</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/fonts.h" target="_blank" rel="noopener">include/luil/text/fonts.h</a><span class="n">최상위 기호 7</span></div>
+            <div class="hdr-syms"><a href="api.html#load-typeface-bytes" title="함수"><span class="kb f">f</span>load_typeface_bytes</a><a href="api.html#load-typeface-file" title="함수"><span class="kb f">f</span>load_typeface_file</a><a href="api.html#load-codicon-typeface" title="함수"><span class="kb f">f</span>load_codicon_typeface</a><a href="api.html#installed-font-families" title="함수"><span class="kb f">f</span>installed_font_families</a><a href="api.html#set-ui-typeface-families" title="함수"><span class="kb f">f</span>set_ui_typeface_families</a><a href="api.html#register-font-family" title="함수"><span class="kb f">f</span>register_font_family</a><a href="api.html#unregister-font-family" title="함수"><span class="kb f">f</span>unregister_font_family</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/badge_element.h" target="_blank" rel="noopener">include/luil/ui/badge_element.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#badge-tone" title="열거형"><span class="kb e">E</span>badge_tone</a><a href="api.html#badge-config" title="구조체"><span class="kb t">S</span>badge_config</a><a href="api.html#badge-element" title="클래스"><span class="kb t">C</span>badge_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/breadcrumb_element.h" target="_blank" rel="noopener">include/luil/ui/breadcrumb_element.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#breadcrumb-segment" title="구조체"><span class="kb t">S</span>breadcrumb_segment</a><a href="api.html#breadcrumb-config" title="구조체"><span class="kb t">S</span>breadcrumb_config</a><a href="api.html#breadcrumb-segment-id" title="함수"><span class="kb f">f</span>breadcrumb_segment_id</a><a href="api.html#breadcrumb-chevron-id" title="함수"><span class="kb f">f</span>breadcrumb_chevron_id</a><a href="api.html#breadcrumb-collapsed-id" title="함수"><span class="kb f">f</span>breadcrumb_collapsed_id</a><a href="api.html#breadcrumb-element" title="클래스"><span class="kb t">C</span>breadcrumb_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/font_scale.h" target="_blank" rel="noopener">include/luil/ui/font_scale.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#scaled-font-size" title="함수"><span class="kb f">f</span>scaled_font_size</a><a href="api.html#text-line-height" title="함수"><span class="kb f">f</span>text_line_height</a><a href="api.html#set-system-font-sizes" title="함수"><span class="kb f">f</span>set_system_font_sizes</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/glyph_element.h" target="_blank" rel="noopener">include/luil/ui/glyph_element.h</a><span class="n">최상위 기호 2</span></div>
+            <div class="hdr-syms"><a href="api.html#glyph-config" title="구조체"><span class="kb t">S</span>glyph_config</a><a href="api.html#glyph-element" title="클래스"><span class="kb t">C</span>glyph_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/label_element.h" target="_blank" rel="noopener">include/luil/ui/label_element.h</a><span class="n">최상위 기호 5</span></div>
+            <div class="hdr-syms"><a href="api.html#label-color-role" title="열거형"><span class="kb e">E</span>label_color_role</a><a href="api.html#label-background-role" title="열거형"><span class="kb e">E</span>label_background_role</a><a href="api.html#label-config" title="구조체"><span class="kb t">S</span>label_config</a><a href="api.html#label-wrap" title="별칭"><span class="kb t">=</span>label_wrap</a><a href="api.html#label-element" title="클래스"><span class="kb t">C</span>label_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/markdown_element.h" target="_blank" rel="noopener">include/luil/ui/markdown_element.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#markdown-span" title="구조체"><span class="kb t">S</span>markdown_span</a><a href="api.html#markdown-block" title="구조체"><span class="kb t">S</span>markdown_block</a><a href="api.html#parse-markdown" title="함수"><span class="kb f">f</span>parse_markdown</a><a href="api.html#markdown-config" title="구조체"><span class="kb t">S</span>markdown_config</a><a href="api.html#markdown-element" title="클래스"><span class="kb t">C</span>markdown_element</a><a href="api.html#make-markdown-tooltip" title="함수"><span class="kb f">f</span>make_markdown_tooltip</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/text_block.h" target="_blank" rel="noopener">include/luil/ui/text_block.h</a><span class="n">최상위 기호 10</span></div>
+            <p class="hdr-desc">앱 typeface를 소유권과 함께 값으로 담는다. 설정을 지우는 모든 자리가 `SkTypeface`의 정의를 봐야 한다.</p>
+            <div class="hdr-syms"><a href="api.html#text-align" title="열거형"><span class="kb e">E</span>text_align</a><a href="api.html#text-elide" title="열거형"><span class="kb e">E</span>text_elide</a><a href="api.html#text-vertical-align" title="열거형"><span class="kb e">E</span>text_vertical_align</a><a href="api.html#text-font" title="구조체"><span class="kb t">S</span>text_font</a><a href="api.html#make-text-font" title="함수"><span class="kb f">f</span>make_text_font</a><a href="api.html#text-block-style" title="구조체"><span class="kb t">S</span>text_block_style</a><a href="api.html#text-block-layout" title="구조체"><span class="kb t">S</span>text_block_layout</a><a href="api.html#text-block-line-height" title="함수"><span class="kb f">f</span>text_block_line_height</a><a href="api.html#measure-text-block" title="함수"><span class="kb f">f</span>measure_text_block</a><a href="api.html#draw-text-block" title="함수"><span class="kb f">f</span>draw_text_block</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/text_layout.h" target="_blank" rel="noopener">include/luil/ui/text_layout.h</a><span class="n">최상위 기호 18</span></div>
+            <div class="hdr-syms"><a href="api.html#text-layout-face" title="열거형"><span class="kb e">E</span>text_layout_face</a><a href="api.html#text-layout-backend" title="열거형"><span class="kb e">E</span>text_layout_backend</a><a href="api.html#text-layout-style" title="구조체"><span class="kb t">S</span>text_layout_style</a><a href="api.html#text-layout-request" title="구조체"><span class="kb t">S</span>text_layout_request</a><a href="api.html#text-layout-size" title="구조체"><span class="kb t">S</span>text_layout_size</a><a href="api.html#text-layout-cluster" title="구조체"><span class="kb t">S</span>text_layout_cluster</a><a href="api.html#text-layout-run" title="구조체"><span class="kb t">S</span>text_layout_run</a><a href="api.html#text-layout-stop" title="구조체"><span class="kb t">S</span>text_layout_stop</a><a href="api.html#text-layout-line" title="구조체"><span class="kb t">S</span>text_layout_line</a><a href="api.html#text-layout" title="클래스"><span class="kb t">C</span>text_layout</a><a href="api.html#make-text-layout" title="함수"><span class="kb f">f</span>make_text_layout</a><a href="api.html#ui-text-shaping-enabled" title="함수"><span class="kb f">f</span>ui_text_shaping_enabled</a><a href="api.html#invalidate-text-layouts" title="함수"><span class="kb f">f</span>invalidate_text_layouts</a><a href="api.html#text-layout-revision" title="함수"><span class="kb f">f</span>text_layout_revision</a><a href="api.html#text-layout-cache-statistics" title="구조체"><span class="kb t">S</span>text_layout_cache_statistics</a><a href="api.html#text-layout-cache-usage" title="함수"><span class="kb f">f</span>text_layout_cache_usage</a><a href="api.html#clear-text-layout-cache" title="함수"><span class="kb f">f</span>clear_text_layout_cache</a><a href="api.html#draw-text-layout" title="함수"><span class="kb f">f</span>draw_text_layout</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>

@@ -2329,25 +2329,28 @@ table.t tr.hi th {
   padding: 0;
 }
 
+/* 항목 안의 글이 굵은 글·코드와 섞여도 한 덩어리로 흐르게 번호만 따로 세운다 (grid로 두면 글 조각마다 칸이 갈린다) */
 .recap li {
   counter-increment: recap;
-  display: grid;
-  grid-template-columns: 2.2em minmax(0, 1fr);
-  gap: 10px;
-  padding: 12px 14px;
+  position: relative;
+  padding: 12px 14px 12px calc(14px + 2.2em + 10px);
   border: 1px solid var(--line);
   border-radius: var(--r-row);
   background: var(--panel);
   font-size: var(--fs-sm);
   line-height: 1.7;
+  min-width: 0;
 }
 
 .recap li::before {
   content: counter(recap, decimal-leading-zero);
+  position: absolute;
+  left: 14px;
+  top: 12px;
   font-family: var(--font-code);
   font-size: var(--fs-xs);
+  line-height: 1.7rem;
   color: var(--accent-ink);
-  padding-top: 3px;
 }
 
 /* ---------- 앞뒤 문서 ---------- */

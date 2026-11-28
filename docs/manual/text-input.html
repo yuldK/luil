@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>텍스트 입력과 서식 글 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — text_input_element·text_area_element로 한 줄 칸, 폼, 숫자 칸, 메모, 문서 보기, 코드 편집기, 서식 있는 글 편집기를 만드는 법과 키·IME·플랫폼 차이.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  .t kbd, .prose kbd { font-family: var(--font-code); font-size: 0.86em; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--fg-2); background: var(--panel); white-space: nowrap; }
+  .t td.k { white-space: nowrap; }
+  @media (max-width: 560px) { .t td.k { white-space: normal; } }
+/*LAB-CSS*/
+</style>
+</head>
+<body data-page="text-input">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>텍스트 입력과 서식 글</h1>
+      <p class="summary">luil의 글 칸은 둘이다. 한 줄 칸 <code>text_input_element</code>와 여러 줄 칸 <code>text_area_element</code>. 글·caret·선택·칸의 실행 취소 기록은 모두 앱의 <code>text_edit_state</code>에 있고, 칸은 frame마다 그 사본을 받아 그린다. 키와 IME가 만든 편집은 요청 메시지로 앱에 돌아오고, 앱이 <code>apply_text_edit</code>로 고친다. 숫자 칸·코드 편집기·서식 있는 글 편집기는 이 위에 얹는 설정과 도우미다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>dialog_elements.h</code>·<code>text_area_element.h</code>·<code>text_input_options.h</code>·<code>text_input_state.h</code>·<code>text_document.h</code>·<code>syntax_highlighter.h</code>·<code>rich_text.h</code>·<code>rich_text_commands.h</code>·<code>text_format.h</code>·<code>number_input.h</code></dd></div>
+          <div><dt>실습</dt><dd><a class="xref" href="#lab-number">숫자 칸 — 거르기·검사·증감</a> · <a class="xref" href="#lab-links">주소 찾기 — <code>detect_text_links</code></a></dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="text.html">텍스트 처리</a> · <a class="xref" href="input.html">입력과 초점</a> · <a class="xref" href="messaging.html">스레드 경계 메시징</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>한 줄 칸·여러 줄 칸·코드 칸·서식 글 가운데 무엇을 쓸지 고른다.</li>
+            <li>칸의 글을 앱 상태로 들고, 편집 요청·조합 이벤트·확정 메시지를 <code>handle</code>에서 처리한다.</li>
+            <li>거르기·숫자 검사·링크·구문 색·서식을 칸에 얹는다.</li>
+            <li>어떤 키가 칸에서 끝나고 어떤 키가 앱에 닿는지, 플랫폼마다 무엇이 다른지 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="build-single">
+        <header class="sec-head">
+          <h2>만들기: 한 줄 칸과 폼</h2>
+          <p class="lede">smoke</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:172-175" data-path="examples/widgets/app.h" data-start="172"><script type="text/plain">
+        // 텍스트 초안과 IME 조합 표시 상태다.
+        // 확정 글의 진실은 언제나 이 초안이고, 조합 글은 표시 상태일 뿐이다.
+        luil::text::text_edit_state note {};
+        std::optional<luil::text_composition_event> composition {};
+</script></div>
+        <div class="code" data-lang="cpp" data-label="Enter로 확정, Esc로 되돌리기 (직접 작성)" data-compile="pre-commit"><script type="text/plain">
+constexpr luil::ui_element_kind kind_title_input { luil::application_element_kind(0) };
+constexpr luil::text_input_target target_title { static_cast<luil::text_input_target>(1) };
+
+struct edit_intent
+{
+    luil::text_edit_request request {};
+};
+struct composition_intent
+{
+    luil::text_composition_event event {};
+};
+// 확정(Enter·칸 떠남·모바일 확정 단추)과 되돌리기(Esc)다.
+struct title_commit_intent
+{
+};
+struct title_revert_intent
+{
+};
+
+struct title_state
+{
+    luil::text::text_edit_state draft {};
+    std::optional<luil::text_composition_event> composition {};
+    // 마지막으로 확정한 값이다. 초안과 따로 든다.
+    std::u8string committed {};
+};
+
+[[nodiscard]] std::unique_ptr<luil::text_input_element> make_title_field(const title_state& state)
+{
+    luil::text_input_config config {};
+    config.placeholder = u8"제목";
+    // 소프트 키보드의 확정 단추다. Android·iOS host만 읽는다.
+    config.submit = luil::make_message_action(title_commit_intent {});
+    config.input.action = luil::text_input_action::done;
+    auto field { std::make_unique<luil::text_input_element>(
+        luil::ui_element_id { kind_title_input, u8"title" }, luil::make_text_input_view(state.draft, state.composition, target_title), std::move(config)) };
+    // 데스크톱의 Enter·Esc다. 한 줄 칸은 둘 다 쓰지 않으므로 칸에 단 key_handler에 먼저 닿는다.
+    field->set_key_handler([](const luil::key_pressed_event& event) -> std::optional<std::vector<luil::input_action>> {
+        if (event.shortcut_modifier_down())
+            return std::nullopt;
+        if (event.key == luil::key_code::enter)
+            return std::vector<luil::input_action> { luil::make_app_action(title_commit_intent {}) };
+        if (event.key == luil::key_code::escape)
+            return std::vector<luil::input_action> { luil::make_app_action(title_revert_intent {}) };
+        return std::nullopt;
+    });
+    // Tab·다른 곳 누름으로 칸을 떠나도 확정한다.
+    field->set_focus_leave_action(luil::make_message_action(title_commit_intent {}));
+    field->set_access_name(u8"제목");
+    return field;
+}
+
+// logic thread의 handle 갈래다. 처리했으면 참이다.
+bool handle_title(title_state& state, const luil::app_message& message)
+{
+    if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr && edit->request.target == target_title)
+    {
+        luil::apply_text_edit(state.draft, edit->request);
+        return true;
+    }
+    if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr && composition->event.target == target_title)
+    {
+        if (composition->event.composing)
+            state.composition = composition->event;
+        else
+            state.composition.reset();
+        return true;
+    }
+    if (message.get<title_commit_intent>() != nullptr)
+    {
+        state.committed = state.draft.text;
+        return true;
+    }
+    if (message.get<title_revert_intent>() != nullptr)
+    {
+        // 밖에서 온 값으로 갈아 끼운다. 칸의 실행 취소 기록도 함께 비운다.
+        luil::text::text_edit_set_text(state.draft, state.committed, true);
+        return true;
+    }
+    return false;
+}
+</script></div>
+        <script type="text/plain" id="pre-commit" data-prelude>
+#include "luil/text/text_edit.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/dialog_elements.h"
+#include "luil/ui/ui_interaction.h"
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+      </section>
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/text_format.h" target="_blank" rel="noopener">include/luil/text/text_format.h</a><span class="n">최상위 기호 14</span></div>
+            <div class="hdr-syms"><a href="api.html#text--text-mark" title="열거형"><span class="kb e">E</span>text_mark</a><a href="api.html#text--operator" title="함수"><span class="kb f">f</span>operator|</a><a href="api.html#text--operator-2" title="함수"><span class="kb f">f</span>operator&amp;</a><a href="api.html#text--has-mark" title="함수"><span class="kb f">f</span>has_mark</a><a href="api.html#text--text-mark-run" title="구조체"><span class="kb t">S</span>text_mark_run</a><a href="api.html#text--text-format-link" title="구조체"><span class="kb t">S</span>text_format_link</a><a href="api.html#text--text-format" title="구조체"><span class="kb t">S</span>text_format</a><a href="api.html#text--text-marks-at" title="함수"><span class="kb f">f</span>text_marks_at</a><a href="api.html#text--text-marks-cover" title="함수"><span class="kb f">f</span>text_marks_cover</a><a href="api.html#text--text-format-with-mark" title="함수"><span class="kb f">f</span>text_format_with_mark</a><a href="api.html#text--text-format-with-link" title="함수"><span class="kb f">f</span>text_format_with_link</a><a href="api.html#text--text-format-shifted" title="함수"><span class="kb f">f</span>text_format_shifted</a><a href="api.html#text--text-format-slice" title="함수"><span class="kb f">f</span>text_format_slice</a><a href="api.html#text--text-format-bytes" title="함수"><span class="kb f">f</span>text_format_bytes</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/dialog_elements.h" target="_blank" rel="noopener">include/luil/ui/dialog_elements.h</a><span class="n">최상위 기호 21</span></div>
+            <div class="hdr-syms"><a href="api.html#dialog-move-message-factory" title="별칭"><span class="kb t">=</span>dialog_move_message_factory</a><a href="api.html#dialog-caption-config" title="구조체"><span class="kb t">S</span>dialog_caption_config</a><a href="api.html#dialog-caption-element" title="클래스"><span class="kb t">C</span>dialog_caption_element</a><a href="api.html#text-button-visual" title="열거형"><span class="kb e">E</span>text_button_visual</a><a href="api.html#text-button-config" title="구조체"><span class="kb t">S</span>text_button_config</a><a href="api.html#text-button-fill" title="열거형"><span class="kb e">E</span>text_button_fill</a><a href="api.html#text-button-fill-for" title="함수"><span class="kb f">f</span>text_button_fill_for</a><a href="api.html#text-button-icon-size" title="상수"><span class="kb ">k</span>text_button_icon_size</a><a href="api.html#text-button-icon-gap" title="상수"><span class="kb ">k</span>text_button_icon_gap</a><a href="api.html#text-button-padding" title="상수"><span class="kb ">k</span>text_button_padding</a><a href="api.html#text-button-minimum-width" title="상수"><span class="kb ">k</span>text_button_minimum_width</a><a href="api.html#text-button-height" title="상수"><span class="kb ">k</span>text_button_height</a><a href="api.html#text-button-element" title="클래스"><span class="kb t">C</span>text_button_element</a><a href="api.html#text-input-number" title="구조체"><span class="kb t">S</span>text_input_number</a><a href="api.html#text-input-config" title="구조체"><span class="kb t">S</span>text_input_config</a><a href="api.html#text-input-glyph-size" title="상수"><span class="kb ">k</span>text_input_glyph_size</a><a href="api.html#text-input-clear-size" title="상수"><span class="kb ">k</span>text_input_clear_size</a><a href="api.html#text-input-icon-gap" title="상수"><span class="kb ">k</span>text_input_icon_gap</a><a href="api.html#text-input-spin-width" title="상수"><span class="kb ">k</span>text_input_spin_width</a><a href="api.html#text-input-error-height" title="상수"><span class="kb ">k</span>text_input_error_height</a><a href="api.html#text-input-element" title="클래스"><span class="kb t">C</span>text_input_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/rich_text.h" target="_blank" rel="noopener">include/luil/ui/rich_text.h</a><span class="n">최상위 기호 12</span></div>
+            <div class="hdr-syms"><a href="api.html#rich-text-command" title="열거형"><span class="kb e">E</span>rich_text_command</a><a href="api.html#rich-text-state" title="구조체"><span class="kb t">S</span>rich_text_state</a><a href="api.html#rich-text-state-of" title="함수"><span class="kb f">f</span>rich_text_state_of</a><a href="api.html#apply-rich-text-command" title="함수"><span class="kb f">f</span>apply_rich_text_command</a><a href="api.html#set-rich-text-link" title="함수"><span class="kb f">f</span>set_rich_text_link</a><a href="api.html#rich-text-presenter" title="클래스"><span class="kb t">C</span>rich_text_presenter</a><a href="api.html#rich-text-fragment" title="구조체"><span class="kb t">S</span>rich_text_fragment</a><a href="api.html#rich-text-html-limits" title="구조체"><span class="kb t">S</span>rich_text_html_limits</a><a href="api.html#rich-text-to-html" title="함수"><span class="kb f">f</span>rich_text_to_html</a><a href="api.html#rich-text-from-html" title="함수"><span class="kb f">f</span>rich_text_from_html</a><a href="api.html#rich-text-copy-request" title="함수"><span class="kb f">f</span>rich_text_copy_request</a><a href="api.html#rich-text-paste" title="함수"><span class="kb f">f</span>rich_text_paste</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/rich_text_commands.h" target="_blank" rel="noopener">include/luil/ui/rich_text_commands.h</a><span class="n">최상위 기호 10</span></div>
+            <div class="hdr-syms"><a href="api.html#rich-text-bold-command-id" title="상수"><span class="kb ">k</span>rich_text_bold_command_id</a><a href="api.html#rich-text-italic-command-id" title="상수"><span class="kb ">k</span>rich_text_italic_command_id</a><a href="api.html#rich-text-underline-command-id" title="상수"><span class="kb ">k</span>rich_text_underline_command_id</a><a href="api.html#rich-text-code-command-id" title="상수"><span class="kb ">k</span>rich_text_code_command_id</a><a href="api.html#rich-text-link-command-id" title="상수"><span class="kb ">k</span>rich_text_link_command_id</a><a href="api.html#rich-text-clear-format-command-id" title="상수"><span class="kb ">k</span>rich_text_clear_format_command_id</a><a href="api.html#rich-text-command-labels" title="구조체"><span class="kb t">S</span>rich_text_command_labels</a><a href="api.html#make-rich-text-commands" title="함수"><span class="kb f">f</span>make_rich_text_commands</a><a href="api.html#rich-text-command-of" title="함수"><span class="kb f">f</span>rich_text_command_of</a><a href="api.html#make-rich-text-key-handler" title="함수"><span class="kb f">f</span>make_rich_text_key_handler</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/syntax_highlighter.h" target="_blank" rel="noopener">include/luil/ui/syntax_highlighter.h</a><span class="n">최상위 기호 5</span></div>
+            <div class="hdr-syms"><a href="api.html#syntax-line-lexer" title="별칭"><span class="kb t">=</span>syntax_line_lexer</a><a href="api.html#syntax-unlimited-budget" title="상수"><span class="kb ">k</span>syntax_unlimited_budget</a><a href="api.html#syntax-highlighter-config" title="구조체"><span class="kb t">S</span>syntax_highlighter_config</a><a href="api.html#syntax-highlight-stats" title="구조체"><span class="kb t">S</span>syntax_highlight_stats</a><a href="api.html#syntax-highlighter" title="클래스"><span class="kb t">C</span>syntax_highlighter</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/text_area_element.h" target="_blank" rel="noopener">include/luil/ui/text_area_element.h</a><span class="n">최상위 기호 8</span></div>
+            <div class="hdr-syms"><a href="api.html#text-area-wrap-cache" title="클래스"><span class="kb t">C</span>text_area_wrap_cache</a><a href="api.html#text-face" title="열거형"><span class="kb e">E</span>text_face</a><a href="api.html#text-area-config" title="구조체"><span class="kb t">S</span>text_area_config</a><a href="api.html#text-area-font-size" title="상수"><span class="kb ">k</span>text_area_font_size</a><a href="api.html#text-area-line-height" title="상수"><span class="kb ">k</span>text_area_line_height</a><a href="api.html#text-area-padding-x" title="상수"><span class="kb ">k</span>text_area_padding_x</a><a href="api.html#text-area-padding-y" title="상수"><span class="kb ">k</span>text_area_padding_y</a><a href="api.html#text-area-element" title="클래스"><span class="kb t">C</span>text_area_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/text_document.h" target="_blank" rel="noopener">include/luil/ui/text_document.h</a><span class="n">최상위 기호 14</span></div>
+            <div class="hdr-syms"><a href="api.html#text-color-role" title="열거형"><span class="kb e">E</span>text_color_role</a><a href="api.html#text-background-role" title="열거형"><span class="kb e">E</span>text_background_role</a><a href="api.html#line-background-role" title="열거형"><span class="kb e">E</span>line_background_role</a><a href="api.html#gutter-kind" title="열거형"><span class="kb e">E</span>gutter_kind</a><a href="api.html#text-span" title="구조체"><span class="kb t">S</span>text_span</a><a href="api.html#line-decoration" title="구조체"><span class="kb t">S</span>line_decoration</a><a href="api.html#gutter-column" title="구조체"><span class="kb t">S</span>gutter_column</a><a href="api.html#text-highlight" title="구조체"><span class="kb t">S</span>text_highlight</a><a href="api.html#text-link" title="구조체"><span class="kb t">S</span>text_link</a><a href="api.html#text-spans-in-range" title="함수"><span class="kb f">f</span>text_spans_in_range</a><a href="api.html#text-highlights-in-range" title="함수"><span class="kb f">f</span>text_highlights_in_range</a><a href="api.html#text-links-in-range" title="함수"><span class="kb f">f</span>text_links_in_range</a><a href="api.html#text-link-at" title="함수"><span class="kb f">f</span>text_link_at</a><a href="api.html#detect-text-links" title="함수"><span class="kb f">f</span>detect_text_links</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/text_input_options.h" target="_blank" rel="noopener">include/luil/ui/text_input_options.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#text-input-kind" title="열거형"><span class="kb e">E</span>text_input_kind</a><a href="api.html#text-input-action" title="열거형"><span class="kb e">E</span>text_input_action</a><a href="api.html#text-input-options" title="구조체"><span class="kb t">S</span>text_input_options</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/text_input_state.h" target="_blank" rel="noopener">include/luil/ui/text_input_state.h</a><span class="n">최상위 기호 1</span></div>
+            <div class="hdr-syms"><a href="api.html#text-input-view" title="구조체"><span class="kb t">S</span>text_input_view</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>

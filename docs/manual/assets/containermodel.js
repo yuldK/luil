@@ -9,6 +9,9 @@
  *  - src/host/app_delegate.cpp        make_window_metrics의 배율 다듬기
  * C++은 float(32비트)로 센다. 같은 답을 내려고 연산마다 Math.fround로 float에 맞춘다.
  * 원본 C++을 컴파일한 대조기로 무작위 입력을 견주어 같음을 확인했다 (containers.html의 실습 설명).
+ *  - 대조기는 grid_element.cpp·flexible_lengths.h·wrap_element.h·layout_metrics.h를 그대로 컴파일한다.
+ *  - 줄 시작점(arrange 안의 람다)과 make_window_metrics의 배율 다듬기는 같은 식을 대조기에 옮겨 적어 견주었다.
+ *  - wrapSlots는 tests/wrap_element_tests.cpp가 잠근 자리와 견주었다.
  *
  *   flexible_share { weight, minimum, maximum }              (물리든 논리든 같은 단위)
  *   grid_track     { kind: "fixed"|"fit"|"flexible", length, weight, minimum }   (논리 픽셀)

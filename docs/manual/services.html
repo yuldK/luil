@@ -1,0 +1,2838 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>플랫폼 서비스와 네트워크 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — HTTP·WebSocket·SMB client와 파일 감시는 어느 thread에서 일하고 답을 어떻게 logic thread로 보내나, 비밀 저장소와 플랫폼 도구는 무엇을 하고 플랫폼마다 무엇이 다른가.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  .loop.from0 { counter-reset: loop -1; }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  /* 표의 "있다/없다" 칸 */
+  .t td.no { color: var(--fg-3); }
+  /* 실습: 응답 몸의 갈래 (assets/services-lab.js) */
+  .bk-grid { display: grid; gap: 14px; }
+  @media (min-width: 1180px) { .bk-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .bk-side, .bk-out { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .bk-field { display: grid; gap: 4px; font-size: var(--fs-xs); color: var(--fg-2); min-width: 0; }
+  .bk-field > span { font-family: var(--font-code); color: var(--fg-3); }
+  .bk-field input[type="text"], .bk-field select, .bk-field textarea { width: 100%; min-width: 0; box-sizing: border-box; font-family: var(--font-code); font-size: 12px; }
+  .bk-field textarea { min-height: 52px; resize: vertical; }
+  .bk-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .bk-row label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+  .bk-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+  .bk-chips button { font-family: var(--font-code); font-size: 11px; padding: 2px 7px; border: 1px solid var(--line-2); border-radius: var(--r-control); background: var(--panel); color: var(--fg-2); cursor: pointer; }
+  .bk-chips button:hover { border-color: var(--accent); color: var(--fg); }
+  .bk-chips button[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); color: var(--fg); }
+  .bk-note { font-size: 11.5px; color: var(--fg-3); overflow-wrap: anywhere; }
+  .bk-note.bad { color: var(--error); }
+  .bk-mt { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .bk-mt dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .bk-mt dd { margin: 0; overflow-wrap: anywhere; font-family: var(--font-code); font-size: 11.5px; }
+  .bk-steps { margin: 0; padding: 0; list-style: none; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .bk-steps li { display: grid; grid-template-columns: 1.6em minmax(0, 1fr); gap: 8px; padding: 7px 12px; border-top: 1px solid var(--line); font-size: 12.5px; color: var(--fg-3); background: var(--panel); }
+  .bk-steps li:first-child { border-top: 0; }
+  .bk-steps li .ci { font-size: 14px; line-height: 1.4; }
+  .bk-steps li.pass { color: var(--fg-2); }
+  .bk-steps li.hit { color: var(--fg); background: var(--accent-wash); }
+  .bk-steps li.hit .ci { color: var(--accent-ink); }
+  .bk-steps li.skip { opacity: 0.6; }
+  .bk-steps code { font-size: 11.5px; }
+  .bk-verdict { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+  .bk-verdict .tag { font-family: var(--font-code); font-size: 12px; padding: 2px 8px; border-radius: var(--r-control); border: 1px solid var(--accent); background: var(--accent-wash); color: var(--fg); }
+  .bk-verdict .tag.src { border-color: var(--line-2); background: var(--panel); color: var(--fg-2); }
+  .bk-slots { display: grid; gap: 0; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .bk-slots > div { display: grid; grid-template-columns: 7.2em minmax(0, 1fr); gap: 10px; padding: 6px 12px; border-top: 1px solid var(--line); font-size: 12px; background: var(--bg); }
+  .bk-slots > div:first-child { border-top: 0; }
+  .bk-slots .k { font-family: var(--font-code); font-size: 11.5px; color: var(--fg-3); }
+  .bk-slots .v { color: var(--fg-2); overflow-wrap: anywhere; }
+  .bk-slots .v.on { color: var(--fg); }
+  .bk-slots .v.err { color: var(--error); }
+  .bk-slots .v pre { margin: 4px 0 0; padding: 6px 8px; font-family: var(--font-code); font-size: 11.5px; white-space: pre-wrap; overflow-wrap: anywhere; background: var(--sunk); border-radius: var(--r-row); color: var(--fg); }
+</style>
+</head>
+<body data-page="services">
+<header class="topbar"></header>
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>플랫폼 서비스와 네트워크</h1>
+      <p class="summary">앱이 OS와 망에 일을 시키는 부품들이다. HTTP·WebSocket·SMB client와 파일 감시자는 저마다 thread를 갖고 결과를 <code>deliver</code> 함수 하나로 내보낸다. 앱은 그 자리에서 값을 logic thread로 옮기기만 한다. 비밀 저장소·파일 교체·주소 열기 같은 플랫폼 도구는 부른 thread에서 끝나는 동기 함수다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>http_client.h</code>·<code>http_message.h</code>·<code>http_body.h</code>·<code>http_media_type.h</code>·<code>websocket_client.h</code>·<code>smb_client.h</code>·<code>file_watcher.h</code>·<code>secret_store.h</code>·<code>platform_services.h</code></dd></div>
+          <div><dt>실습</dt><dd>응답 몸의 갈래 (Content-Type → <code>http_body_kind</code>)</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="threads.html">스레드 모델</a> · <a class="xref" href="messaging.html">스레드 경계 메시징</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>답이 어느 thread에서 나와 어떻게 logic thread의 <code>handle</code>에 닿는지 안다.</li>
+            <li>표(ticket)·취소·<code>stop()</code>의 규칙으로 "보내는 중" 표시가 영원히 남지 않게 한다.</li>
+            <li>HTTP·WebSocket·SMB·파일 감시·비밀 저장소를 저장소 예제 원문대로 세운다.</li>
+            <li>네 플랫폼에서 무엇이 다르고 무엇이 같은지, 주석과 코드가 어디서 다른지 미리 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 부품을 쓰나</h2>
+          <p class="lede">망에 나가는 셋과 파일 감시는 thread를 가진 비동기 부품이다. 나머지는 부른 자리에서 끝나는 동기 함수다. 어느 쪽인지가 앱의 코드 모양을 정한다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB09;</i>비동기 · thread를 가진 부품</h4>
+            <ul>
+              <li><code>net::http_client</code> — HTTP·HTTPS. 한 번짜리 요청과 되풀이 요청.</li>
+              <li><code>net::websocket_client</code> — ws·wss 연결 하나.</li>
+              <li><code>net::smb_client</code> — SMB 공유 읽기·공유 목록·같은 망의 서버 찾기.</li>
+              <li><code>file_watcher</code> — 폴더·파일의 변경을 묶어 알린다.</li>
+              <li>결과는 <code>deliver</code> 하나로 온다. 앱은 그 자리에서 <code>post_app_message</code>로 옮긴다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA7B;</i>동기 · 플랫폼 도구</h4>
+            <ul>
+              <li><code>store_secret</code>·<code>load_secret</code>·<code>erase_secret</code> — 비밀 저장소.</li>
+              <li><code>replace_file_atomically</code>, <code>file_lock</code> — 파일.</li>
+              <li><code>open_url</code>, <code>reveal_in_file_manager</code>, <code>launch_program</code> — 셸.</li>
+              <li><code>single_instance</code>, <code>set_background_priority</code>, <code>blocking_io_canceller</code>, <code>user_first_weekday</code>·<code>user_ui_languages</code>.</li>
+              <li>부른 thread에서 끝난다. 답은 <code>platform_result</code>·<code>secret_store_result</code> 값이다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEBCC;</i>UI thread의 요청 · 파일 목록 클립보드</h4>
+            <ul>
+              <li><code>platform_services.h</code>에 없다. 요청은 <code>ui_events.h</code>의 값이다.</li>
+              <li>넣기 <code>clipboard_files_copy_request</code>, 읽기 <code>clipboard_files_paste_request</code>.</li>
+              <li>답과 바뀜은 delegate 훅 <code>make_file_clipboard_message</code>·<code>make_clipboard_changed_message</code>가 앱 메시지로 짓는다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>JSON API를 부르고 화면에 보인다</td><td><code>http_client::send</code> + <code>http_body::json</code></td><td><a class="xref" href="#build-http">HTTP 요청과 답</a></td></tr>
+              <tr><td>그림 주소를 받아 보인다</td><td><code>parse.image</code> + <code>image_element</code></td><td><a class="xref" href="#build-http-image">HTTP 그림</a></td></tr>
+              <tr><td>취소 단추, 주기적인 상태 조회</td><td><code>cancel</code> · <code>start_heartbeat</code></td><td><a class="xref" href="#build-http-cancel">취소와 되풀이</a></td></tr>
+              <tr><td>답이 몰려도 "보내는 중"이 남지 않게</td><td><code>post_app_message_ticketed</code></td><td><a class="xref" href="#build-http-drop">답을 잃지 않기</a></td></tr>
+              <tr><td>채팅·실시간 알림</td><td><code>websocket_client</code></td><td><a class="xref" href="#build-websocket">WebSocket</a></td></tr>
+              <tr><td>NAS의 공유를 둘러본다 (Android·iOS)</td><td><code>smb_client</code></td><td><a class="xref" href="#build-smb">SMB</a></td></tr>
+              <tr><td>설정 파일이 바뀌면 다시 읽는다</td><td><code>file_watcher</code></td><td><a class="xref" href="#build-watch">파일 감시</a></td></tr>
+              <tr><td>토큰·암호를 기기에 둔다</td><td><code>store_secret</code>·<code>load_secret</code></td><td><a class="xref" href="#build-secret">비밀 저장소</a></td></tr>
+              <tr><td>설정을 깨지지 않게 저장, 링크 열기, 둘째 실행의 인자 넘기기</td><td><code>replace_file_atomically</code> · <code>open_url</code> · <code>single_instance</code></td><td><a class="xref" href="#build-tools">파일과 셸 도구</a></td></tr>
+              <tr><td>탐색기와 파일을 복사·잘라내기·붙여넣기</td><td><code>clipboard_files_copy_request</code> · <code>clipboard_files_paste_request</code></td><td><a class="xref" href="#build-clipboard">파일 목록 클립보드</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>무엇이 어느 플랫폼에 서나</h3>
+        <div class="prose">
+          <p>luil이 세우는 플랫폼은 Windows·Android·macOS·iOS 넷이다. iOS는 대부분 macOS 파일을 분기 없이 함께 쓴다. 헤더 주석에는 "Windows·Android"나 "Android 전용"만 적힌 자리가 있지만, 아래 표는 빌드 규칙(<code>src/CMakeLists.txt</code>)과 소스를 따른 것이다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>부품</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td><code>http_client</code></td><td>WinHTTP 비동기 세션</td><td>JNI <code>HttpURLConnection</code></td><td><code>NSURLSession</code></td><td><code>NSURLSession</code> (macOS 파일)</td></tr>
+              <tr><td><code>websocket_client</code></td><td>WinHTTP WebSocket</td><td>Java <code>WebSocketTransport</code> (APK에 실어야 한다)</td><td><code>NSURLSessionWebSocketTask</code></td><td>macOS 파일</td></tr>
+              <tr><td><code>smb_client</code></td><td class="no">없다 (<code>create</code>가 nullptr)</td><td><code>LUIL_ENABLE_SMB=ON</code>이면 libsmb2</td><td class="no">없다</td><td><code>LUIL_ENABLE_SMB=ON</code>이면 libsmb2</td></tr>
+              <tr><td><code>file_watcher</code></td><td><code>ReadDirectoryChangesW</code> + I/O 완료 포트</td><td>inotify + eventfd</td><td>FSEvents (감시마다 stream)</td><td>kqueue</td></tr>
+              <tr><td>비밀 저장소</td><td>자격 증명 관리자</td><td>Keystore AES-GCM + 앱 내부 파일</td><td>Keychain 일반 암호</td><td>macOS 파일</td></tr>
+              <tr><td><code>replace_file_atomically</code></td><td>write-through + <code>MoveFileExW</code></td><td><code>fsync</code> + <code>rename</code> + 폴더 <code>fsync</code></td><td><code>F_FULLFSYNC</code> + <code>rename</code></td><td>macOS 파일</td></tr>
+              <tr><td><code>single_instance</code></td><td>이름 있는 뮤텍스 + <code>WM_COPYDATA</code></td><td class="no">늘 첫째, <code>unsupported</code></td><td><code>flock</code> 잠금 파일 + Unix 소켓</td><td class="no">늘 첫째, <code>unsupported</code></td></tr>
+              <tr><td><code>open_url</code></td><td><code>ShellExecuteExW</code></td><td>VIEW Intent</td><td><code>NSWorkspace</code></td><td><code>UIApplication</code> — 비동기로 넘기고 늘 <code>ok</code></td></tr>
+              <tr><td><code>reveal_in_file_manager</code></td><td><code>SHOpenFolderAndSelectItems</code></td><td class="no"><code>unsupported</code></td><td><code>NSWorkspace</code></td><td class="no"><code>unsupported</code></td></tr>
+              <tr><td><code>launch_program</code></td><td><code>CreateProcessW</code></td><td class="no"><code>unsupported</code></td><td><code>posix_spawnp</code></td><td class="no"><code>unsupported</code></td></tr>
+              <tr><td><code>file_lock</code></td><td><code>LockFileEx</code></td><td><code>flock</code></td><td><code>flock</code></td><td><code>flock</code></td></tr>
+              <tr><td><code>set_background_priority</code></td><td>스레드 배경 모드</td><td>nice 10 / 0</td><td>QoS utility / default</td><td>macOS 파일</td></tr>
+              <tr><td><code>blocking_io_canceller</code></td><td><code>CancelSynchronousIo</code></td><td class="no"><code>unsupported</code></td><td class="no"><code>unsupported</code></td><td class="no"><code>unsupported</code></td></tr>
+              <tr><td>파일 목록 클립보드</td><td><code>CF_HDROP</code> + Preferred DropEffect</td><td class="no">넣기 무시, 읽기는 <code>supported</code> 거짓</td><td>붙여넣기 판의 파일 URL</td><td class="no">넣기 무시, 읽기는 <code>supported</code> 거짓</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>"macOS 파일"은 iOS 빌드가 macOS 구현 파일을 그대로 쓴다는 뜻이다. iOS 기기에서 직접 돌려 본 결과는 이 문서에 없다. 플랫폼 층의 짜임은 <a class="xref" href="platforms.html">플랫폼과 host</a>에 있다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: thread를 가진 부품과 배출구 하나</h2>
+          <p class="lede">망과 파일 감시의 부품은 자기 thread에서 일하고 결과를 <code>deliver</code> 함수 하나로 내보낸다. 요청마다 callback을 받지 않는다. 앱은 그 자리에서 값을 logic thread로 옮기고, 앱 상태는 logic thread의 <code>handle</code>에서만 바꾼다.</p>
+        </header>
+        <h3>HTTP 요청 하나가 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">logic thread</span><span><code>handle</code>이 요청을 짓고 <code>send(request, error)</code>를 부른다. 0이 아닌 표(<code>http_ticket</code>)를 앱 상태에 적는다.</span></div>
+          <div role="listitem"><span class="who">OS</span><span>WinHTTP·<code>HttpURLConnection</code>·<code>NSURLSession</code>이 선을 탄다. Android는 요청마다 떼어 낸 worker가 JNI 호출로 몬다.</span></div>
+          <div role="listitem"><span class="who">client thread</span><span>완료를 받아 몸을 값으로 푼다. JSON은 수십 ms, 그림은 초 단위까지 걸린다. 그래서 OS callback에서도 logic thread에서도 하지 않는다. 전체 마감과 되풀이 회차의 시계도 이 thread가 돈다.</span></div>
+          <div role="listitem"><span class="who">client thread</span><span><code>deliver(response)</code>가 불린다. 앱이 할 일은 <code>post_app_message</code>로 값을 옮기는 것 하나다.</span></div>
+          <div role="listitem"><span class="who">app inbox</span><span>1024칸 큐다. 차 있으면 새 메시지를 <strong>조용히 버린다</strong> (<code>reject_newest</code>).</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span><code>handle</code>이 <code>response.ticket</code>으로 흐름을 가르고 상태를 바꾼 뒤 표를 잊는다. 다음 frame이 새 값으로 지어진다.</span></div>
+        </div>
+        <div class="prose">
+          <p>배출구가 하나뿐인 것은 판단이다. 요청마다 callback을 받으면 앱 상태를 남의 thread에서 만지는 코드가 생긴다. <code>http_response</code>·<code>http_body</code>의 무거운 슬롯은 참조 공유이고 <code>app_message</code>도 공유 소유의 불변 상자라, 큰 몸도 thread를 건너는 값 복사가 싸다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>부품</th><th>일하는 thread</th><th><code>deliver</code>가 불리는 thread</th><th>앱이 메서드를 부르는 곳</th></tr></thead>
+            <tbody>
+              <tr><td><code>http_client</code></td><td>Windows: OS thread pool의 callback이 전이만 하고 client의 pump thread가 몸을 푼다. Android: 요청마다 떼어 낸 worker + pump. macOS·iOS: 동시 1의 delegate 큐 + pump</td><td>pump thread (client가 하나 소유)</td><td>어느 thread든. <code>stop</code>만 막힌다</td></tr>
+              <tr><td><code>websocket_client</code></td><td>client마다 reader·writer 둘 (<code>create</code>가 띄운다)</td><td>reader thread</td><td><code>send_text</code>·<code>send_binary</code>·<code>close</code>는 잠금 안에서 큐에 넣을 뿐이다. <code>stop</code>은 어느 앱 thread든 멱등</td></tr>
+              <tr><td><code>smb_client</code></td><td>요청마다 떼어 낸 worker + 배달 thread 하나</td><td>배달 thread</td><td>어느 thread든</td></tr>
+              <tr><td><code>file_watcher</code></td><td>감시 thread 하나 (OS 기다림·묶음 짓기·배달)</td><td>감시 thread</td><td>어느 thread든. <code>deliver</code> 안의 <code>stop</code>만 안 된다</td></tr>
+              <tr><td>비밀 저장소·플랫폼 도구</td><td>부른 thread (동기)</td><td>—</td><td>비밀 저장소는 UI thread를 피한다 (Android Keystore는 수십 ms)</td></tr>
+              <tr><td><code>send_to_primary</code></td><td>부른 thread가 시한(기본 3 s)까지 막힌다</td><td>—</td><td>둘째 프로세스의 어느 thread든</td></tr>
+              <tr><td><code>on_instance_arguments</code> (받는 쪽)</td><td>Windows: UI thread의 주 창 프로시저 안. macOS: 배경 thread가 받아 메인 thread(luil UI thread)에서 부른다</td><td>—</td><td>게시만 하고 돌아온다</td></tr>
+              <tr><td>파일 목록 클립보드</td><td>UI thread가 읽고, delegate 훅이 지은 메시지가 app inbox로 간다</td><td>—</td><td>요청은 어느 thread든 (<code>post_clipboard_request</code>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><code>deliver</code> 안에서 <code>stop</code>을 부르지 않는다. 자기 thread를 join하게 된다. debug 빌드는 assert로 잡는다. 같은 부품에 새 일을 거는 것은 된다 — HTTP는 <code>send</code>·<code>cancel</code>·<code>start_heartbeat</code>, SMB는 <code>send</code>·<code>cancel</code>, 감시는 <code>add</code>·<code>remove</code>.</li>
+            <li><code>deliver</code>가 던지면: HTTP는 그 답만 버리고, WebSocket은 삼키고, 감시는 "받지 않았다"(거짓)로 본다.</li>
+            <li><code>deliver</code>를 비워 두면 HTTP의 답은 조용히 버려지고, 감시는 받은 것으로 본다.</li>
+          </ul>
+        </div>
+
+        <h3>표(ticket)와 "정확히 하나"</h3>
+        <div class="prose">
+          <p>요청을 받아들였다는 표시는 0이 아닌 표다. 받아들인 요청의 답은 <strong>정확히 하나</strong> 온다. 0이면 손잡이가 서기 전의 거절이라 <code>error</code>에 이유가 있고 답은 오지 않는다. 가르는 선은 "손잡이가 섰는가" 하나다. 그래서 앱의 상태 기계는 "표를 받았으면 답을 기다린다" 한 줄이면 된다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>부품</th><th>받아들임</th><th>답의 수</th><th>취소하면</th><th><code>stop()</code>이 먼저 오면</th></tr></thead>
+            <tbody>
+              <tr><td><code>http_client</code></td><td><code>http_ticket</code> ≠ 0</td><td>하나. 되풀이는 회차마다 하나 — 표는 그대로이고 <code>sequence</code>가 1부터 늘며 마지막만 <code>last</code>다</td><td><code>cancelled</code>를 실은 답이 그래도 온다</td><td>답이 앱에 닿지 않는다고 본다</td></tr>
+              <tr><td><code>smb_client</code></td><td><code>smb_ticket</code> ≠ 0</td><td>하나</td><td><code>cancelled</code> 답 하나</td><td>배달하지 않은 답은 버린다</td></tr>
+              <tr><td><code>file_watcher</code></td><td><code>file_watch_ticket</code> ≠ 0</td><td>묶음 여럿. 끝 묶음(<code>end</code>가 <code>none</code>이 아닌 것)은 정확히 하나</td><td><code>remove</code> 뒤 남은 변경을 담은 <code>removed</code> 묶음이 마지막이다</td><td>내지 않은 변경은 버린다</td></tr>
+              <tr><td><code>websocket_client</code></td><td>표가 없다. client 하나가 연결 하나다</td><td>사건마다 <code>sequence</code>가 1부터 는다. <code>closed</code>는 한 번</td><td><code>close(code, reason)</code>가 Close frame을 예약하고 <code>closed</code>로 끝난다</td><td><code>stop()</code>이 돌아오기 <strong>전에</strong> <code>closed</code>(오류 <code>stopped</code>, 코드 1006)가 올 수 있다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">취소는 답을 지우지 않는다</span>HTTP의 <code>cancel(ticket)</code> 뒤에도 <code>cancelled</code>를 실은 답이 온다. 취소가 답을 지우면 앱은 "아직 오는 중"과 "접었다"를 따로 들고 있어야 하고, 둘이 어긋나는 순간 화면에 영원히 도는 표시가 남는다. 모르는 표나 이미 끝난 표의 <code>cancel</code>은 아무 일도 하지 않는다.</div></div>
+
+        <h3>오류는 예외가 아니라 값이다</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>뜻</th></tr></thead>
+            <tbody>
+              <tr><td><code>http_response::error</code></td><td>전송의 실패다. <code>kind</code>(15갈래)·<code>message</code>·<code>native_error</code>. <strong>4xx·5xx는 오류가 아니다</strong> — 답이 왔으므로 <code>error.empty()</code>가 참이다</td></tr>
+              <tr><td><code>http_response::ok()</code></td><td><code>error.empty()</code>이고 상태가 2xx일 때만 참이다</td></tr>
+              <tr><td><code>http_response::status_code</code></td><td>0이면 상태 줄도 오지 못했다</td></tr>
+              <tr><td><code>http_body::parse_error</code></td><td>몸을 값으로 옮기다 일어난 일이다. 전송 오류와 따로다. 비어 있지 않아도 값이 서 있을 수 있다</td></tr>
+              <tr><td><code>websocket_event</code>의 <code>error</code>·<code>close_code</code>·<code>close_reason</code></td><td><code>closed</code>의 이유다. 오류가 비면 깨끗한 닫기다. <code>close_code</code>의 기본값은 1006이다</td></tr>
+              <tr><td><code>smb_response::error</code></td><td><code>kind</code>(11갈래)·<code>message</code>(libsmb2의 글, 암호 없음)·<code>native_error</code>. <code>ok()</code>는 <code>error.empty()</code>다</td></tr>
+              <tr><td><code>file_change_batch</code>의 <code>end</code>·<code>error</code>·<code>rescan</code>·<code>retried</code></td><td>감시의 끝(<code>removed</code>·<code>lost</code>)과 넘침, 다시 낸 묶음인지</td></tr>
+              <tr><td><code>platform_result</code> · <code>secret_store_result</code></td><td><code>status</code>(<code>ok</code>·<code>not_found</code>·<code>unsupported</code>·<code>failed</code>, 비밀 저장소는 <code>already_exists</code>도)와 개발자가 읽을 영문 <code>error</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p><code>native_error</code>의 출처는 백엔드마다 다르다. Windows는 WinHTTP 코드(글 끝에 16진), Android는 0이고 글에 Java 예외의 클래스와 글, Apple은 <code>NSError</code> 코드(글 끝에 십진)다.</p>
+        </div>
+
+        <h3>시한</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>자리</th><th>기본값</th><th>규칙</th></tr></thead>
+            <tbody>
+              <tr><td><code>connect_timeout</code> · <code>send_timeout</code> · <code>receive_timeout</code></td><td>10 s · 30 s · 30 s</td><td>그 구간에서 이만큼 아무 일이 없으면 접는다. <code>receive_timeout</code>은 조각 <strong>사이</strong>의 상한이다</td></tr>
+              <tr><td><code>total_timeout</code></td><td>60 s (0이면 없음)</td><td>처음부터 끝까지다. 천천히 흘리는 서버를 막는 유일한 값이다. <strong>바닥이지 천장이 아니다</strong> — thread가 앞선 몸을 푸는 중이면 늦게 끊는다</td></tr>
+              <tr><td><code>http_heartbeat::interval</code></td><td>5 s (100 ms 아래로 내려가지 않는다)</td><td>답을 받은 <strong>뒤부터</strong> 쉰다. 실제 주기는 <code>interval</code> + 왕복이다</td></tr>
+              <tr><td><code>websocket_request::connect_timeout</code></td><td>10 s</td><td>열린 뒤의 쉼에는 걸리지 않는다</td></tr>
+              <tr><td><code>websocket_client_config::close_timeout</code></td><td>3 s</td><td>로컬 Close를 보낸 뒤 상대의 답을 기다리는 상한</td></tr>
+              <tr><td><code>smb_request::timeout</code></td><td>30 s (0이면 없음)</td><td>연결부터 답까지다. 연결을 기다린 시간과 한 번의 재시도도 그 안이다</td></tr>
+              <tr><td><code>smb_discovery_request::window</code></td><td>3 s (100 ms–60 s)</td><td>찾기를 끝내고 한 번 답한다</td></tr>
+              <tr><td><code>file_watcher_config::settle</code> · <code>max_delay</code></td><td>100 ms · 1 s</td><td>마지막 변경 뒤 조용하면, 또는 첫 변경 뒤 이만큼이면 묶음을 낸다</td></tr>
+              <tr><td><code>instance_send_options::timeout</code></td><td>3 s</td><td>첫째의 창이 설 때까지와 답을 기다림을 합친 시한</td></tr>
+              <tr><td><code>stop_budget</code> (HTTP·SMB·감시)</td><td>1 s</td><td><code>stop()</code>이 남은 것을 기다리는 상한</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>구간 시한은 플랫폼마다 다르게 걸린다. Android에는 보내기 구간이 없고, Apple은 셋 중 가장 긴 값 하나만 쓴다 (<a class="xref" href="#platforms">플랫폼 차이</a>).</p>
+        </div>
+
+        <h3>HTTP 몸은 이미 값으로 풀려 온다</h3>
+        <div class="prose">
+          <p>답의 <code>body</code>는 client thread에서 <code>decode_http_body</code>가 푼 값이다. 갈래(<code>http_body_kind</code>)를 정하는 차례는 넷이다.</p>
+          <ol>
+            <li>바이트가 비었으면 <code>empty</code>다. Content-Type이 무엇이라 적혔든 그렇다 (출처 <code>absent</code>).</li>
+            <li>요청의 <code>parse.assume_kind</code>가 있으면 그 갈래다 (<code>assumed</code>).</li>
+            <li>Content-Type이 없거나, 읽을 수 없거나, <code>application/octet-stream</code>이면 앞 바이트에서 그림 서명 다섯만 본다. 그림이 아니면 <code>bytes</code>다 (<code>sniffed</code>).</li>
+            <li>아니면 Content-Type이 말한 대로다 (<code>declared</code>): json → image(svg는 <code>bytes</code>) → html → text → 그 밖은 <code>bytes</code>.</li>
+          </ol>
+          <p>갈래는 서버가 한 말이다. 푸는 데 실패해도 갈래는 낮아지지 않고 이유가 <code>parse_error</code>에 적힌다. 깨진 JSON도 <code>kind == json</code>이고 <code>json</code> 슬롯은 비어 있다. 아래 <a class="xref" href="#lab">실습</a>에서 Content-Type과 몸을 바꿔 가며 갈래를 본다.</p>
+        </div>
+
+        <h3>종료: <code>stop()</code>은 언제, 무엇을 남기나</h3>
+        <div class="prose">
+          <p><code>app_host::shutdown()</code>은 UI thread에서 이 차례로 간다. 부품의 자리는 0단계와 3단계다.</p>
+        </div>
+        <div class="loop from0" role="list">
+          <div role="listitem"><span class="who">UI thread</span><span><code>logic_driver::cancel()</code> — 오래 걸리는 일을 일찍 접게 알린다. HTTP의 <code>cancel_all()</code> 자리다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>종료 메시지(<code>make_close_message</code>)를 app inbox에 넣는다. 차 있으면 마감까지 다시 넣어 본다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>종료 메시지를 처리하고 종료 저장을 낸다. UI thread는 그 확인을 기다린다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span><code>logic_driver::stop_workers()</code> — 모든 부품의 <code>stop()</code> 자리다. <code>deliver</code>가 쥔 host보다 먼저 멈춘다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>app inbox를 닫고 logic thread를 join한다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>input thread를 join한다.</span></div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>부품</th><th><code>stop()</code>이 하는 일</th><th>마지막 답</th></tr></thead>
+            <tbody>
+              <tr><td><code>http_client</code></td><td>새 요청 거절 → 되풀이표를 비우고 pump를 멈춤(이 뒤로 <code>deliver</code> 없음) → 날아가는 요청을 접고 <code>stop_budget</code>까지 기다림 → 세션을 닫음. 예산을 넘기면 문맥과 세션을 일부러 남긴다</td><td>세 백엔드 모두 배달을 먼저 끄고 남은 요청을 <code>stopped</code>로 접는다. 그래서 <code>stopped</code> 답이 앱에 닿는다고 기대하지 않는다 (test도 "0개도 옳다"고 적는다)</td></tr>
+              <tr><td><code>smb_client</code></td><td>받기를 닫고, 진행 중인 요청을 끊고, 배달 thread를 거둔다</td><td>아직 배달하지 않은 답은 버린다</td></tr>
+              <tr><td><code>file_watcher</code></td><td>새 <code>add</code> 거절 → thread join(이 뒤로 <code>deliver</code> 없음) → OS 감시를 풀고 예산 안에서 버퍼를 돌려받음</td><td>내지 않은 변경은 버린다</td></tr>
+              <tr><td><code>websocket_client</code></td><td>연결을 끊고 reader·writer를 join한다. 돌아온 뒤에는 <code>deliver</code>가 없다</td><td><strong>돌아오기 전에</strong> reader가 <code>closed</code>(오류 <code>stopped</code>, 코드 1006)를 낼 수 있다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>소멸자도 모두 <code>stop()</code>을 부른다. 그래도 소멸자에 맡기지 않는다. <code>deliver</code>가 쥔 host·<code>this</code>보다 <strong>먼저</strong> 멈춰야 해서 <code>stop_workers()</code>에서 부른다.</li>
+            <li><code>cancel()</code>과 <code>stop_workers()</code>는 <strong>UI thread에서</strong> 불린다. logic thread가 소유한 client는 원자적 손잡이로만 본다 — 데모의 <code>live_client_</code>가 그 꼴이다.</li>
+            <li>앱이 살아 있는 동안 client를 멈출 때(화면을 닫거나 다시 붙을 때)도 같다. <code>stop()</code> 뒤에는 남은 표의 답이 오지 않는다고 보고 앱이 그 표를 직접 잊는다.</li>
+          </ul>
+          <p>종료 단계 전체와 시간 예산은 <a class="xref" href="threads.html#s8">스레드 모델의 종료 절차</a>에 있다.</p>
+        </div>
+
+        <h3>app inbox는 차면 조용히 버린다</h3>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">버려진 답은 다시 오지 않는다</span>app inbox는 1024칸이고 넘치면 새 메시지를 버린다(<code>reject_newest</code>). <code>post_app_message</code>는 버린 것을 알리지 않는다. <code>post_app_message_ticketed</code>는 버렸으면 0을 돌려준다. 파일 감시의 <code>deliver</code>만 <code>bool</code>을 돌려주어, 거짓이면 감시자가 그 묶음을 다음 변경과 합쳐 다시 낸다. HTTP·SMB·WebSocket의 <code>deliver</code>는 <code>void</code>라 inbox가 버린 답은 그것으로 끝이다. 표를 기다리던 화면이 영원히 "보내는 중"에 남는다 — 대책은 <a class="xref" href="#build-http-drop">답을 잃지 않기</a>.</div></div>
+        <div class="prose">
+          <p>유실된 수는 <code>app_inbox_statistics()</code>의 <code>rejected</code>가 센다. 넘칠 때의 정책은 <a class="xref" href="messaging.html#s4">스레드 경계 메시징</a>에 있다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-http">
+        <header class="sec-head">
+          <h2>만들기: HTTP 요청과 답</h2>
+          <p class="lede">client 하나를 logic이 시작할 때 세운다. <code>deliver</code>는 답을 logic thread로 옮기기만 하고, 보낸 쪽은 받은 표를 상태에 적었다가 답이 오면 그 표로 흐름을 가른다.</p>
+        </header>
+        <h3>client 세우기</h3>
+        <div class="prose">
+          <p>데모의 셸(<code>logic_driver</code>)은 host 포인터를 원자적 손잡이로 든다. <code>deliver</code>는 client의 thread에서 불리고, host 포인터는 UI thread가 <code>bind_host</code>로 준다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:321-329" data-path="examples/demo_main.cpp" data-start="321"><script type="text/plain">
+            // 창과 host가 준비된 직후 UI thread가 알려 주는 자리다.
+            // 배출구(`deliver`)가 답을 logic thread로 나르려면 이 포인터가 필요하다.
+            //  - `on_started`는 메시지 루프 **전**에 불리고 첫 요청은 사람이 눌러야
+            //    나가므로, 붙기 전에 답이 올 창은 없다.
+            void bind_host(luil::win32::app_host& host) noexcept
+            {
+                host_.store(&host);
+                files_.bind_host(host);
+            }
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:336-361" data-path="examples/demo_main.cpp" data-start="336"><script type="text/plain">
+            void start() override
+            {
+                server_ = std::make_unique<luil::testing::loopback_http_server>();
+                server_->set_handler(make_network_handler());
+                if (server_->port() != 0)
+                {
+                    network_.set_base_url(server_->url(""));
+                    webview_.set_base_url(server_->url(""));
+                }
+                webview_.load_assets();
+                live_server_.store(server_.get());
+
+                luil::net::http_client_config config {};
+                config.user_agent = u8"luil-demo";
+                // 되돌이 주소를 두드리므로 시스템 proxy를 타지 않는다 — proxy가
+                // 127.0.0.1을 가로채면 예제의 성패를 남의 설정이 정한다.
+                config.use_system_proxy = false;
+                // **배출구는 client가 소유한 thread에서 불린다.** 여기서 하는 일은
+                // 값을 logic thread로 나르는 것 하나다 (http_client.h의 계약).
+                config.deliver = [this](luil::net::http_response response) {
+                    if (luil::win32::app_host* const host { host_.load() }; host != nullptr)
+                        host->post_app_message(luil::app_message { network_response_intent { std::move(response) } });
+                };
+                client_ = luil::net::http_client::create(std::move(config), client_error_);
+                live_client_.store(client_.get());
+            }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="338-346" data-title="되돌이 서버">데모는 프로세스 안에 HTTP 서버를 세워 오프라인에서 돈다. <code>luil::testing::loopback_http_server</code>는 <code>tests/</code>의 시험 도구이지 라이브러리 API가 아니다.</li>
+            <li data-lines="348-352" data-title="설정">User-Agent를 정한다. <code>use_system_proxy = false</code>는 되돌이 주소라서다. 실제 앱은 기본값(참)을 둔다.</li>
+            <li data-lines="353-358" data-title="배출구">client thread에서 불린다. 하는 일은 답을 앱 메시지에 담아 <code>post_app_message</code>로 넘기는 것 하나다.</li>
+            <li data-lines="359-360" data-title="세우기">실패하면 nullptr이고 이유가 <code>client_error_</code>에 적힌다. UI thread가 종료 때 볼 원자적 손잡이(<code>live_client_</code>)도 여기서 채운다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>client는 앱 하나에 하나면 넉넉하다. 연결은 host별로 안에서 다시 쓰인다.</li>
+            <li>Android에서는 host가 JavaVM을 적기 전에 <code>create</code>를 부르면 실패한다. host가 선 뒤(logic의 <code>start</code>)에 세운다.</li>
+          </ul>
+        </div>
+
+        <h3>GET으로 JSON 받기 — 보내기</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1084-1110" data-path="examples/demo_main.cpp" data-start="1084"><script type="text/plain">
+            // 주소 하나를 보낸다. 표를 페이지에게 되돌려 주는 것까지가 이 함수다 —
+            // 페이지는 그 표로 자기 흐름을 알아본다 (http-client-design.md).
+            void send_network_request(const network_send_intent& request)
+            {
+                if (client_ == nullptr)
+                {
+                    network_.note_sent(request, {}, client_error_.empty() ? std::u8string { u8"The HTTP client is not available." } : client_error_);
+                    return;
+                }
+
+                luil::net::http_request outgoing {};
+                outgoing.url = request.url;
+                outgoing.method = request.post ? luil::net::http_method::post : luil::net::http_method::get;
+                if (request.post)
+                {
+                    outgoing.body = luil::net::http_text_body(u8"데모가 보낸 몸이다.");
+                    outgoing.content_type = u8"text/plain; charset=utf-8";
+                }
+                // **밖에서 오는 그림에는 상한을 건다** (http_body.h의 그 문단).
+                // 미리 보기 칸이 커질 수 있는 만큼만 잡으면 장 수가 곱해져도 안전하다.
+                outgoing.parse.image.decode = { .max_width = 1600, .max_height = 1600 };
+
+                std::u8string error {};
+                const luil::net::http_ticket ticket { client_->send(std::move(outgoing), error) };
+                network_pending_ = ticket;
+                network_.note_sent(request, ticket, error);
+            }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1088-1092" data-title="client가 없을 때">세우기가 실패했으면 보내지 않고 그 이유를 화면에 넘긴다.</li>
+            <li data-lines="1094-1101" data-title="요청 짓기"><code>http_request</code>는 값이다. 주소와 동사를 넣고, POST면 몸과 Content-Type을 싣는다.</li>
+            <li data-lines="1102-1104" data-title="그림 상한">요청마다 몸을 푸는 규칙(<code>parse</code>)을 준다. 밖에서 오는 그림에는 디코드 상한을 건다.</li>
+            <li data-lines="1106-1109" data-title="표를 쥔다"><code>send</code>가 돌려준 표를 상태에 적는다. 0이면 거절이고 <code>error</code>에 이유가 있다 — 그때는 답이 오지 않는다.</li>
+          </ol>
+        </div>
+
+        <h3>받기 — 셸의 <code>handle</code></h3>
+        <div class="prose">
+          <p>네트워크 메시지는 client를 든 셸이 먼저 받는다. 답이 온 흐름은 표를 잊는다. 잊지 않으면 취소 단추가 끝난 표를 겨누고, <code>cancel</code>은 모르는 표에 아무 일도 하지 않는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:404-417,436-447" data-path="examples/demo_main.cpp" data-start="404"><script type="text/plain">
+            void handle(luil::app_message message) override
+            {
+                // 네트워크 메시지는 셸이 먼저 받는다 — client를 든 것이 셸이고
+                // 페이지는 그 답만 본다 (컨텍스트 메뉴 선택과 같은 자리다).
+                if (const auto* const send { message.get<network_send_intent>() }; send != nullptr)
+                {
+                    send_network_request(*send);
+                    return;
+                }
+                if (message.get<network_cancel_intent>() != nullptr)
+                {
+                    cancel_network_request();
+                    return;
+                }
+⋯@436
+                if (const auto* const answer { message.get<network_response_intent>() }; answer != nullptr)
+                {
+                    // **답이 온 흐름은 표를 잊는다.** 잊지 않으면 취소가 이미 끝난
+                    // 표를 겨누고, `cancel`은 모르는 표에 아무 일도 하지 않으므로
+                    // (http_client.h) 단추가 눌리는데 아무 일도 없는 자리가 생긴다.
+                    if (answer->response.ticket == network_pending_)
+                        network_pending_ = {};
+                    if (answer->response.last && answer->response.ticket == network_heartbeat_)
+                        network_heartbeat_ = {};
+                    static_cast<void>(network_.handle(message));
+                    return;
+                }
+</script></div>
+
+        <h3>페이지의 상태와 갈래별 처리</h3>
+        <div class="prose">
+          <p>페이지는 표가 유효한 동안을 "오는 중"으로 본다. 맥박(되풀이) 흐름은 표를 따로 든다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/network_page.h:153-175" data-path="examples/demo/network_page.h" data-start="153"><script type="text/plain">
+        // 본문 흐름이다. 표가 유효한 동안이 "오는 중"이다.
+        luil::net::http_ticket pending_ {};
+        // 마지막으로 온 본문 답이다 (맥박은 여기 들어오지 않는다).
+        luil::net::http_response last_ {};
+        bool has_last_ { false };
+        // 그 답을 부른 동사와 길이다 ("GET /status").
+        std::u8string request_line_ {};
+        // `send`가 손잡이도 세우지 못하고 거절한 이유다.
+        std::u8string send_error_ {};
+        // 결과 칸에 세울 글줄이다 (json의 `dump(2)`·글 몸통·바이트 요약).
+        std::vector<std::u8string> preview_lines_ {};
+        // 움직이는 그림이 그대로 도는 자리다 (`image_element`의 재생 시계).
+        luil::image_playback playback_ {};
+
+        // 맥박 흐름이다. 표는 되풀이 **전체**의 이름이라 회차마다 바뀌지 않는다.
+        luil::net::http_ticket heartbeat_ {};
+        bool heartbeat_on_ { false };
+        std::u8string heartbeat_error_ {};
+        std::uint64_t beat_round_ { 0 };
+        std::chrono::milliseconds beat_elapsed_ { 0 };
+        int beat_status_ { 0 };
+
+        std::size_t in_flight_ { 0 };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/network_page.cpp:530-592" data-path="examples/demo/network_page.cpp" data-start="530"><script type="text/plain">
+    void network_page::take_response(const luil::net::http_response& response)
+    {
+        // **표가 흐름을 가른다** (http-client-design.md).
+        // 되풀이의 표는 회차마다 바뀌지 않으므로 맥박은 이 한 줄로 알아본다.
+        if (heartbeat_ && response.ticket == heartbeat_)
+        {
+            beat_round_ = response.sequence;
+            beat_elapsed_ = response.elapsed;
+            beat_status_ = response.status_code;
+            // 더 오지 않는다고 답한 회차에서 표를 잊는다.
+            if (response.last)
+            {
+                heartbeat_ = {};
+                heartbeat_on_ = false;
+            }
+            return;
+        }
+        // 모르는 표는 지나간 흐름의 늦은 답이다 — 새 요청이 이미 그 자리를
+        // 가져갔으므로 화면을 뒤집게 두지 않는다.
+        if (pending_ == luil::net::http_ticket {} || response.ticket != pending_)
+            return;
+
+        pending_ = {};
+        last_ = response;
+        has_last_ = true;
+        preview_lines_.clear();
+        preview_scroll_ = 0.0f;
+        playback_ = {};
+
+        const luil::net::http_body& body { last_.body };
+        switch (body.kind)
+        {
+        case luil::net::http_body_kind::json:
+            if (body.json != nullptr)
+                preview_lines_ = take_lines(from_utf8(body.json->dump(2, ' ', false, nlohmann::json::error_handler_t::replace)), json_preview_lines);
+            else
+                preview_lines_.push_back(u8"json으로 풀리지 않았다 — 아래 줄이 이유다.");
+            break;
+        case luil::net::http_body_kind::text:
+            preview_lines_ = take_lines(body.as_text(), text_preview_lines);
+            break;
+        case luil::net::http_body_kind::image:
+            // 값을 채우는 것이 곧 재생의 시작이다 (image_element.h).
+            // 네트워크에서 온 gif가 여기서 그대로 돈다.
+            if (body.image.valid())
+                playback_.started = std::chrono::steady_clock::now();
+            else
+                preview_lines_.push_back(u8"그림을 풀지 못했다 — 아래 줄이 이유다.");
+            break;
+        case luil::net::http_body_kind::html:
+            preview_lines_.push_back(u8"HTML은 지금 읽지 않는다 — webview의 자리다.");
+            preview_lines_.push_back(
+                u8"받아 둔 것: " + size_text(body.data().size()) + u8", charset " + (last_.content_type.charset.empty() ? std::u8string { u8"(없음)" } : last_.content_type.charset));
+            break;
+        case luil::net::http_body_kind::bytes:
+            preview_lines_.push_back(u8"우리가 풀지 않는 바이트다 — " + size_text(body.data().size()) + u8". 실패가 아니라 정직한 답이다.");
+            preview_lines_.push_back(u8"앞 16 byte: " + hex_preview(body.data()));
+            break;
+        case luil::net::http_body_kind::empty:
+            preview_lines_.push_back(u8"몸이 없다.");
+            break;
+        }
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="532-546" data-title="맥박은 표 하나로">되풀이의 표는 회차마다 바뀌지 않는다. 그 표면 회차 번호(<code>sequence</code>)와 상태를 적고, <code>last</code>에서 표를 잊는다.</li>
+            <li data-lines="547-550" data-title="늦은 답 거르기">모르는 표는 지나간 흐름의 늦은 답이다. 새 요청이 이미 그 자리를 가져갔으므로 화면을 뒤집게 두지 않는다.</li>
+            <li data-lines="552-557" data-title="표를 잊고 답을 쥔다">답은 불변 값이라 통째로 들어도 싸다. 미리 보기 줄은 답이 왔을 때 한 번 짓는다 — frame마다 <code>dump(2)</code>를 부르지 않는다.</li>
+            <li data-lines="559-567" data-title="json"><code>json</code> 슬롯이 비었으면 풀리지 않은 것이다. 이유는 <code>parse_error</code>에 있다. 갈래는 그래도 <code>json</code>이다.</li>
+            <li data-lines="568-578" data-title="text · image">글은 <code>as_text()</code>로 읽는다. 그림은 <code>image.valid()</code>로 성패를 가르고, 값이 서면 재생 시계를 건다.</li>
+            <li data-lines="579-590" data-title="html · bytes · empty">html은 바이트와 charset만 남긴다. bytes는 실패가 아니라 "우리가 풀지 않는 몸"이다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>가장 작은 꼴은 test에 있다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/http_client_tests.cpp:238-260" data-path="tests/http_client_tests.cpp" data-start="238"><script type="text/plain">
+TEST_CASE("http client delivers a parsed json body", "[net][client]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([](const loopback_request&) { return canned("application/json", R"({"a":1})"); });
+
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+    const http_ticket ticket { send_to(*client, server.url("/json")) };
+    REQUIRE(static_cast<bool>(ticket));
+    REQUIRE(sink.wait_for(1, 10s));
+
+    const http_response response { sink.at(0) };
+    CHECK(response.error.empty());
+    CHECK(response.ok());
+    CHECK(response.status_code == 200);
+    CHECK(response.ticket == ticket);
+    CHECK(response.sequence == 0);
+    CHECK(response.last);
+    REQUIRE(response.body.kind == http_body_kind::json);
+    REQUIRE(response.body.json != nullptr);
+    CHECK(response.body.json->at("a") == 1);
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><strong>404도 답이다.</strong> <code>error.empty()</code>가 참이고 <code>ok()</code>가 거짓이며 몸은 평소대로 풀린다. 데모의 <code>/missing</code>은 <code>application/problem+json</code> 404라 json으로 풀린다.</li>
+            <li>한 번짜리 답은 <code>sequence == 0</code>, <code>last == true</code>다.</li>
+            <li><code>json</code> 슬롯은 <code>std::shared_ptr&lt;const nlohmann::json&gt;</code>이다. 공개 헤더는 <code>json_fwd.hpp</code>만 들이므로 값을 읽는 파일이 <code>&lt;nlohmann/json.hpp&gt;</code>를 include한다.</li>
+          </ul>
+        </div>
+
+        <h3>POST로 보내기</h3>
+        <div class="code" data-lang="cpp" data-src="tests/http_client_tests.cpp:405-430" data-path="tests/http_client_tests.cpp" data-start="405"><script type="text/plain">
+TEST_CASE("http client sends a post body and its content type", "[net][client]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([](const loopback_request&) { return canned("application/json", R"({"ok":true})"); });
+
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+
+    const std::vector<std::uint8_t> body { request_bytes(R"({"name":"x"})") };
+    http_request request {};
+    request.url = server.url("/submit");
+    request.method = http_method::post;
+    request.content_type = u8"application/json";
+    request.body = body;
+    std::u8string error {};
+    REQUIRE(static_cast<bool>(client->send(std::move(request), error)));
+    REQUIRE(sink.wait_for(1, 10s));
+
+    const std::vector<loopback_request> seen { server.requests() };
+    REQUIRE(seen.size() == 1);
+    CHECK(seen[0].method == "POST");
+    CHECK(seen[0].header("content-type").value_or("") == "application/json");
+    CHECK(seen[0].body == body);
+    CHECK(sink.at(0).error.empty());
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>글을 몸 바이트로 옮기는 도우미는 <code>http_text_body</code>다. <code>dump()</code>한 JSON 글을 그대로 넣는 자리다.</li>
+            <li>몸이 있으면 <code>content_type</code>이 Content-Type이 된다. 비어 있으면 <code>headers</code>에 적은 Content-Type을 존중하고, 둘 다 없을 때만 <code>application/octet-stream</code>이다.</li>
+            <li><strong>몸이 있는 요청은 재지정을 따라가지 않는다.</strong> 307이 와도 3xx가 답으로 온다. 앱이 <code>Location</code>을 보고 다시 보낸다.</li>
+            <li>GET·HEAD에 몸을 싣지 않는다. Android·Apple은 <code>send</code>가 그 자리에서 거절하고(표 0), Windows는 그대로 보낸다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-http-image">
+        <header class="sec-head">
+          <h2>만들기: HTTP로 그림 받기</h2>
+          <p class="lede">요청에 디코드 상한을 걸고, 답의 <code>body.image</code>를 <code>image_element</code>에 그대로 싣는다. 디코딩은 이미 client thread에서 끝나 있다.</p>
+        </header>
+        <div class="prose">
+          <p>밖에서 오는 4000×3000 사진 하나가 48 MB이고, 움직이는 그림이면 장 수가 곱해진다. 그래서 상한은 거의 언제나 채운다. 데모는 보낼 때 건다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1102-1104" data-path="examples/demo_main.cpp" data-start="1102"><script type="text/plain">
+                // **밖에서 오는 그림에는 상한을 건다** (http_body.h의 그 문단).
+                // 미리 보기 칸이 커질 수 있는 만큼만 잡으면 장 수가 곱해져도 안전하다.
+                outgoing.parse.image.decode = { .max_width = 1600, .max_height = 1600 };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/network_page.cpp:776-797" data-path="examples/demo/network_page.cpp" data-start="776"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> network_page::make_preview() const
+    {
+        luil::panel_config config {};
+        config.corner_radius = 6.0f;
+        config.background = [](const luil::ui_color_palette& palette) { return palette.input_background; };
+        auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_network_preview, u8"panel" }, config) };
+
+        luil::stack_config inner {};
+        inner.padding = luil::edge_insets::all(12.0f);
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"network-preview" }, inner) };
+        if (has_last_ && last_.body.kind == luil::net::http_body_kind::image && last_.body.image.valid())
+        {
+            // 움직이는 그림이면 그대로 돈다 — 파일에서 읽은 것과 같은 값이라
+            // 재생 시계 하나면 된다 (image-anim-design.md).
+            column->add_flexible(std::make_unique<luil::image_element>(luil::ui_element_id { kind_network_preview, u8"image" },
+                luil::image_config { .fit = luil::image_fit::contain, .description = request_line_, .animation = last_.body.image, .playback = playback_ }));
+        }
+        else
+            column->add_flexible(make_lines_view());
+        panel->set_content(std::move(column));
+        return panel;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>움직이는 gif도 파일에서 읽은 것과 같은 값(<code>ui_animated_image</code>)이라 재생 시계 하나로 돈다. 그림 쪽 규칙은 <a class="xref" href="media.html">이미지·영상·웹·잉크</a>에 있다.</li>
+            <li>갈래가 <code>image</code>인데 디코딩이 실패해도 갈래는 <code>image</code>이고 이유는 <code>parse_error</code>다. 잘린 그림을 받아들이는 설정이면 그림과 <code>parse_error</code>가 함께 선다. 그래서 데모는 <code>body.image.valid()</code>로 가른다.</li>
+            <li>섬네일이면 <code>parse.image.animated = false</code>로 첫 장만 푼다. 한 장이 필요한 자리는 <code>still_image()</code>다.</li>
+            <li>svg는 <code>bytes</code>로 온다. 앱이 <code>decode_svg_bytes</code>로 연다 (<code>LUIL_ENABLE_SVG</code>를 켠 구성).</li>
+            <li>받는 몸 전체의 상한은 <code>max_body_bytes</code>(기본 64 MiB)다. 디코드 상한과 따로다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-http-cancel">
+        <header class="sec-head">
+          <h2>만들기: HTTP 취소와 되풀이 요청</h2>
+          <p class="lede">취소는 표 하나를 겨눈다. 답은 그래도 하나 온다. 주기적인 조회는 <code>start_heartbeat</code> 하나로 걸고, 멈추는 것도 같은 <code>cancel</code>이다.</p>
+        </header>
+        <h3>취소 단추</h3>
+        <div class="prose">
+          <p>단추는 겨눌 본문 흐름이 있을 때만 연다. <code>in_flight()</code>로 열면 맥박만 도는 동안에도 열려 누르는 것이 맥박을 접는 일이 된다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/network_page.cpp:765-772" data-path="examples/demo/network_page.cpp" data-start="765"><script type="text/plain">
+        auto cancel { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_network_cancel }, luil::text_button_config { .text = u8"취소" }) };
+        cancel->set_cursor(luil::ui_cursor::hand);
+        cancel->set_tooltip(u8"보낸 요청을 접는다 (답은 그래도 온다)");
+        // 겨눌 본문 흐름이 없으면 잠근다. `in_flight()`로 열면 맥박만 도는 동안에도
+        // 열려, 누르는 것이 맥박을 접는 일이 된다 — 단추의 과녁은 본문 하나뿐이다.
+        cancel->set_enabled(static_cast<bool>(pending_));
+        cancel->set_action(luil::ui_trigger::left_click, luil::make_message_action(network_cancel_intent {}));
+        row->add(std::move(cancel), 88.0f);
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1112-1121" data-path="examples/demo_main.cpp" data-start="1112"><script type="text/plain">
+            void cancel_network_request()
+            {
+                if (client_ == nullptr)
+                    return;
+                // 취소는 **본문 흐름 하나**를 겨눈다. `cancel_all()`은 되풀이표까지
+                // 비우므로 심장 박동이 도는 중에 느린 요청 하나를 접는 자리에서는
+                // 지나치다 — 겨눌 것이 없으면 아무 일도 하지 않는다 (단추도 잠겨 있다).
+                if (network_pending_)
+                    client_->cancel(network_pending_);
+            }
+</script></div>
+        <div class="prose">
+          <p>답(<code>cancelled</code>)은 그래도 오고, 셸의 <code>handle</code>이 표를 잊는다. test가 "정확히 한 번"을 잠근다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/http_client_tests.cpp:1141-1165" data-path="tests/http_client_tests.cpp" data-start="1141"><script type="text/plain">
+TEST_CASE("http client answers a cancelled request exactly once", "[net][client]")
+{
+    loopback_http_server server {};
+    REQUIRE(server.port() != 0);
+    server.set_handler([](const loopback_request&) {
+        loopback_response response { canned("text/plain", "late") };
+        response.delay_before_headers = 1500ms;
+        return response;
+    });
+
+    collector sink {};
+    const std::unique_ptr<http_client> client { make_client(sink) };
+    const http_ticket ticket { send_to(*client, server.url("/slow")) };
+    REQUIRE(static_cast<bool>(ticket));
+
+    client->cancel(ticket);
+    // 모르는 표는 아무 일도 하지 않는다.
+    client->cancel(http_ticket { ticket.value + 1000u });
+    REQUIRE(sink.wait_for(1, 10s));
+
+    CHECK(sink.at(0).error.kind == http_error_kind::cancelled);
+    CHECK(sink.at(0).ticket == ticket);
+    std::this_thread::sleep_for(2s);
+    CHECK(sink.size() == 1);
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>손잡이를 꾸미는 사이 취소가 지나갔으면 선을 건드리지 않고 접는다. 취소된 POST가 뒤늦게 서버에 닿지 않는다 (WinHTTP 백엔드 코드).</li>
+            <li><code>cancel_all()</code>은 날아가 있는 것 전부와 되풀이표를 접는다. 종료 0단계(<code>logic_driver::cancel</code>)의 자리다. 맥박이 도는 중에 느린 요청 하나를 접는 자리에는 지나치다.</li>
+          </ul>
+        </div>
+
+        <h3>되풀이 요청 (맥박)</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1123-1149" data-path="examples/demo_main.cpp" data-start="1123"><script type="text/plain">
+            void toggle_network_heartbeat(const bool on)
+            {
+                if (on == false)
+                {
+                    // 멈추는 것도 한 번짜리와 같은 `cancel` 하나다 (3.12).
+                    if (client_ != nullptr && network_heartbeat_)
+                        client_->cancel(network_heartbeat_);
+                    network_heartbeat_ = {};
+                    network_.note_heartbeat_stopped();
+                    return;
+                }
+
+                const std::u8string url { network_.heartbeat_url() };
+                if (client_ == nullptr || url.empty())
+                {
+                    network_.note_heartbeat({}, client_ == nullptr ? client_error_ : std::u8string { u8"The loopback server is not listening." });
+                    return;
+                }
+
+                luil::net::http_request request {};
+                request.url = url;
+                std::u8string error {};
+                const luil::net::http_heartbeat schedule { .interval = std::chrono::milliseconds { 1000 }, .immediate = true, .max_rounds = 0 };
+                const luil::net::http_ticket ticket { client_->start_heartbeat(std::move(request), schedule, error) };
+                network_heartbeat_ = ticket;
+                network_.note_heartbeat(ticket, error);
+            }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>요청은 한 번짜리와 같은 <code>http_request</code>이고, 시간표(<code>http_heartbeat</code>)만 더한다. <code>immediate</code>가 참이면 첫 회차가 곧바로 나간다. <code>max_rounds</code> 0은 <code>cancel</code>·<code>stop</code>까지다.</li>
+            <li>다음 회차는 답을 배달한 <strong>뒤에</strong> 잰다. 회차가 겹치지 않는다.</li>
+            <li><strong>전송 오류와 4xx·5xx로는 멈추지 않는다.</strong> 네트워크가 돌아오는 것을 보는 것이 되풀이 요청이 있는 이유다. 멈추는 것은 <code>cancel</code>·<code>max_rounds</code>·<code>stop</code>과 영원히 실패할 오류뿐이다 — <code>invalid_url</code>·<code>unsupported_scheme</code>·<code>invalid_header</code>, 그리고 <code>invalid_method</code>. 헤더 주석은 앞의 셋만 들지만 코드(<code>failure_is_permanent</code>)는 넷을 본다.</li>
+            <li>쉬는 중에 취소하면 날아가는 회차가 없으니 마지막 답을 지어 낸다. 그 <code>sequence</code>는 지금까지 낸 회차 수라 앞 회차와 같은 번호다 (WinHTTP 백엔드 코드에서 읽은 것이고, test는 회차 없이 취소한 0만 본다). 중복은 <code>sequence</code>가 아니라 <code>last</code>로 가른다.</li>
+          </ul>
+        </div>
+        <div class="prose">
+          <p>"몇 번 틀리면 물러선다"는 앱 정책이라 손잡이가 없다. <code>sequence</code>와 <code>error</code>를 세어 <code>cancel</code>하고 더 긴 <code>interval</code>로 다시 건다. 저장소에 그 예제가 없어 묶어 썼다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="연달아 틀리면 물러서는 맥박 (직접 작성)" data-compile="pre-beat"><script type="text/plain">
+struct beat_state
+{
+    luil::net::http_ticket ticket {};
+    int failures { 0 };
+    std::chrono::milliseconds interval { 5000 };
+};
+
+// logic thread에서 부른다. 첫 회차는 쉬고 시작한다.
+void start_beat(luil::net::http_client& client, beat_state& state, std::u8string url)
+{
+    luil::net::http_request request {};
+    request.url = std::move(url);
+    request.total_timeout = std::chrono::seconds { 10 };
+    std::u8string error {};
+    state.ticket = client.start_heartbeat(std::move(request), { .interval = state.interval, .immediate = false, .max_rounds = 0 }, error);
+    state.failures = 0;
+}
+
+// `deliver`가 앱 메시지로 나른 답을 logic thread의 `handle`이 여기로 넘긴다.
+void on_beat(luil::net::http_client& client, beat_state& state, const luil::net::http_response& response, const std::u8string& url)
+{
+    // 표가 흐름을 가른다. 지난 흐름의 늦은 답(취소한 흐름의 마지막 답 포함)은 거른다.
+    if (state.ticket == luil::net::http_ticket {} || response.ticket != state.ticket)
+        return;
+    // 이 표로 더 오지 않는다 (영구 오류·회차 소진·취소·stop).
+    if (response.last)
+    {
+        state.ticket = {};
+        return;
+    }
+    // 전송 오류와 4xx·5xx는 흐름을 멈추지 않는다. 연달아 틀린 수는 앱이 센다.
+    state.failures = response.ok() ? 0 : state.failures + 1;
+    if (state.failures < 5)
+        return;
+    // 멈추는 것은 `cancel` 하나다. 그래도 `cancelled`를 실은 마지막 답이 오지만 위의 표 비교가 거른다.
+    client.cancel(state.ticket);
+    state.interval = std::min(state.interval * 2, std::chrono::milliseconds { 60000 });
+    start_beat(client, state, url);
+}
+</script></div>
+        <script type="text/plain" id="pre-beat" data-prelude>
+#include "luil/net/http_client.h"
+
+#include <algorithm>
+#include <chrono>
+#include <string>
+#include <utility>
+
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p><code class="free">start_beat</code>가 표 0을 받으면(주소가 틀렸거나 상한에 걸렸다) <code class="free">on_beat</code>는 아무 답도 받지 않는다. 그 이유는 <code>start_heartbeat</code>의 <code>error</code>에 있다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-http-drop">
+        <header class="sec-head">
+          <h2>만들기: HTTP 답을 잃지 않기</h2>
+          <p class="lede">app inbox가 차서 답이 버려지면 그 표의 답은 다시 오지 않는다. <code>post_app_message_ticketed</code>의 0을 보고 잃은 표를 따로 적어 둔다.</p>
+        </header>
+        <div class="prose">
+          <p>HTTP의 <code>deliver</code>는 <code>void</code>다. 파일 감시처럼 "받지 못했다"를 돌려줄 길이 없다. 그 표를 기다리던 화면이 "보내는 중"에 멈추지 않게 하려면 게시가 실패한 것을 앱이 알아채야 한다. 저장소에 예제가 없어 묶어 썼다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="게시가 버려진 표를 모으기 (직접 작성)" data-compile="pre-drop"><script type="text/plain">
+struct fetch_done_intent
+{
+    luil::net::http_response response {};
+};
+
+// client thread와 logic thread가 함께 보는 "잃은 표" 목록이다.
+struct lost_tickets
+{
+    std::mutex mutex {};
+    std::vector<luil::net::http_ticket> tickets {};
+};
+
+[[nodiscard]] std::unique_ptr<luil::net::http_client> make_client(luil::app_host& host, lost_tickets& lost, std::u8string& error)
+{
+    luil::net::http_client_config config {};
+    // client가 소유한 thread에서 불린다. 짧게 끝내고 값만 나른다.
+    config.deliver = [&host, &lost](luil::net::http_response response) {
+        const luil::net::http_ticket ticket { response.ticket };
+        if (host.post_app_message_ticketed(luil::app_message { fetch_done_intent { std::move(response) } }) != 0)
+            return;
+        const std::lock_guard lock { lost.mutex };
+        lost.tickets.push_back(ticket);
+    };
+    return luil::net::http_client::create(std::move(config), error);
+}
+
+// logic thread가 frame을 짓기 전에 부른다. 잃은 표를 기다리던 화면을 "실패"로 돌린다.
+[[nodiscard]] std::vector<luil::net::http_ticket> take_lost(lost_tickets& lost)
+{
+    const std::lock_guard lock { lost.mutex };
+    return std::exchange(lost.tickets, {});
+}
+</script></div>
+        <script type="text/plain" id="pre-drop" data-prelude>
+#include "luil/app/app_host.h"
+#include "luil/net/http_client.h"
+
+#include <memory>
+#include <mutex>
+#include <string>
+#include <utility>
+#include <vector>
+
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><code>post_app_message_ticketed</code>는 받았으면 0보다 큰 수를, 버렸으면 0을 돌려준다. <code>post_app_message</code>는 같은 일을 하고 알리지 않는다.</li>
+            <li><code class="free">lost_tickets</code>와 host는 client보다 오래 살아야 한다. <code>stop_workers()</code>에서 client를 먼저 멈추면 그 뒤로 <code>deliver</code>가 불리지 않는다.</li>
+            <li>잃은 것은 답 하나다. 되풀이 흐름이면 다음 회차는 그대로 온다. 한 번짜리면 그 표로는 더 오지 않으니 앱이 표를 잊고 실패로 보인다.</li>
+            <li>버려진 수만 알면 될 때는 <code>app_inbox_statistics()</code>의 <code>rejected</code>를 본다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-websocket">
+        <header class="sec-head">
+          <h2>만들기: WebSocket 주고받기</h2>
+          <p class="lede">client 하나가 연결 하나다. <code>create</code>가 reader·writer thread를 띄우고, 사건은 reader thread의 <code>deliver</code>로 온다. 다시 붙는 것은 새 client다.</p>
+        </header>
+        <div class="prose">
+          <p>저장소에는 WebSocket을 쓰는 예제 앱이 없다. 주고받기의 규칙은 test가 원문으로 보인다. 아래 test는 바깥 echo 서버(<code>LUIL_WS_PORT</code>)가 있을 때만 도는 묶음(<code>[.live]</code>)이다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/selected_nodes_tests.cpp:200-207" data-path="tests/selected_nodes_tests.cpp" data-start="200"><script type="text/plain">
+    std::unique_ptr<luil::net::websocket_client> connect(ws_log& log, const std::string& path, luil::net::websocket_client_config config = {})
+    {
+        config.deliver = [&log](luil::net::websocket_event event) { log.push(std::move(event)); };
+        std::u8string error {};
+        auto client { luil::net::websocket_client::create({ .url = ws_url(path), .connect_timeout = 3000ms }, std::move(config), error) };
+        REQUIRE(client != nullptr);
+        return client;
+    }
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="tests/selected_nodes_tests.cpp:1066-1113" data-path="tests/selected_nodes_tests.cpp" data-start="1066"><script type="text/plain">
+TEST_CASE("websocket: echo of text, binary, empty, Korean, and large messages", "[selected][websocket][.live]")
+{
+    if (env("LUIL_WS_PORT").has_value() == false)
+        SKIP("LUIL_WS_PORT is not set");
+    ws_log log {};
+    auto client { connect(log, "/echo") };
+    REQUIRE(log.wait([](const auto& e) { return has_kind(e, luil::net::websocket_event_kind::opened) || has_kind(e, luil::net::websocket_event_kind::closed); }));
+    REQUIRE(has_kind(log.snapshot(), luil::net::websocket_event_kind::opened));
+    REQUIRE(client->send_text(u8"hello"));
+    REQUIRE(client->send_text(u8""));
+    REQUIRE(client->send_text(u8"한글 메시지 ✓"));
+    const std::vector<std::uint8_t> binary { 0, 1, 2, 0xff, 0x80 };
+    REQUIRE(client->send_binary(binary));
+    REQUIRE(client->send_binary({}));
+    std::vector<std::uint8_t> big(200000);
+    for (std::size_t i { 0 }; i < big.size(); ++i)
+        big[i] = static_cast<std::uint8_t>(i * 7);
+    REQUIRE(client->send_binary(big));
+    REQUIRE(log.wait([](const auto& e) { return count_kind(e, luil::net::websocket_event_kind::text) + count_kind(e, luil::net::websocket_event_kind::binary) >= 6; }, 8000ms));
+    const auto events { log.snapshot() };
+    std::vector<luil::net::websocket_event> data {};
+    for (const auto& e : events)
+        if (e.kind == luil::net::websocket_event_kind::text || e.kind == luil::net::websocket_event_kind::binary)
+            data.push_back(e);
+    REQUIRE(data.size() == 6);
+    CHECK(text_of(data[0]) == "hello");
+    CHECK(data[1].kind == luil::net::websocket_event_kind::text);
+    CHECK(text_of(data[1]).empty());
+    CHECK(text_of(data[2]) == std::string { reinterpret_cast<const char*>(u8"한글 메시지 ✓") });
+    CHECK(data[3].kind == luil::net::websocket_event_kind::binary);
+    CHECK(*data[3].data == binary);
+    CHECK(data[4].kind == luil::net::websocket_event_kind::binary);
+    CHECK(data[4].data->empty());
+    CHECK(*data[5].data == big);
+    // sequence는 1부터 늘기만 한다.
+    for (std::size_t i { 1 }; i < events.size(); ++i)
+        CHECK(events[i].sequence == events[i - 1].sequence + 1);
+    // 정상 닫기
+    REQUIRE(client->close(1000, u8"done"));
+    CHECK_FALSE(client->send_text(u8"after close"));
+    REQUIRE(log.wait([](const auto& e) { return has_kind(e, luil::net::websocket_event_kind::closed); }, 5000ms));
+    const auto closed { log.snapshot().back() };
+    CHECK(closed.kind == luil::net::websocket_event_kind::closed);
+    CHECK(closed.close_code == 1000);
+    CHECK(closed.error.empty());
+    client->stop();
+    client->stop();
+}
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1070-1073" data-title="열림을 기다린다"><code>create</code>가 돌아온 순간은 아직 열리지 않았을 수 있다. <code>opened</code>나 <code>closed</code> 가운데 먼저 오는 것을 기다린다.</li>
+            <li data-lines="1074-1083" data-title="보내기">글은 <code>send_text</code>, 바이트는 <code>send_binary</code>다. 빈 메시지도 메시지다. 큐에 넣고 곧 돌아오며, 거짓이면 넣지 못한 것이다.</li>
+            <li data-lines="1084-1099" data-title="받기">조각난 메시지는 다시 이어 한 사건으로 온다. <code>data</code>는 공유 불변 바이트라 앱 메시지로 옮겨도 싸다.</li>
+            <li data-lines="1100-1102" data-title="순번"><code>sequence</code>는 client마다 1부터 하나씩 는다.</li>
+            <li data-lines="1103-1110" data-title="닫기"><code>close(1000, …)</code> 뒤로 보내기는 거짓이다. 상대가 답하면 <code>closed</code>가 코드 1000과 빈 오류로 온다.</li>
+            <li data-lines="1111-1112" data-title="멈추기"><code>stop()</code>은 멱등이다. 돌아온 뒤로 <code>deliver</code>가 없다.</li>
+          </ol>
+        </div>
+        <h3>앱 상태와 <code>handle</code></h3>
+        <div class="prose">
+          <p>앱 상태와 메시지 갈래까지 갖춘 꼴은 저장소에 없어 묶어 썼다. 다시 붙을 때마다 세대 번호를 올려, 지난 연결의 늦은 사건이 지금 화면을 덮지 않게 한다.</p>
+        </div>
+        <div class="code tall" data-lang="cpp" data-label="채팅 연결 하나 (직접 작성)" data-compile="pre-ws"><script type="text/plain">
+// reader thread의 deliver가 logic thread로 나르는 값이다. 어느 연결의 사건인지 세대 번호를 붙인다.
+struct chat_event_intent
+{
+    std::uint64_t generation { 0 };
+    luil::net::websocket_event event {};
+};
+
+// 앱 상태다. logic thread만 만진다.
+struct chat_state
+{
+    std::uint64_t generation { 0 };
+    bool open { false };
+    std::vector<std::u8string> lines {};
+    std::u8string ended {};
+};
+
+class chat
+{
+public:
+    // logic thread에서 연다. host는 client보다 오래 산다 (stop_workers에서 먼저 멈춘다).
+    //  - 재접속도 이 함수다. 새 client를 세우고 세대 번호를 올린다.
+    //  - 종료 신호(`make_close_message`)를 처리한 뒤에는 부르지 않는다. UI thread의 `stop_from_ui`와 겹치지 않게 한다.
+    void connect(luil::app_host& host, std::u8string url)
+    {
+        stop();
+        const std::uint64_t generation { ++state_.generation };
+        luil::net::websocket_client_config config {};
+        config.deliver = [&host, generation](luil::net::websocket_event event) {
+            host.post_app_message(luil::app_message { chat_event_intent { generation, std::move(event) } });
+        };
+        std::u8string error {};
+        client_ = luil::net::websocket_client::create({ .url = std::move(url) }, std::move(config), error);
+        live_.store(client_.get());
+        state_.open = false;
+        state_.ended = client_ == nullptr ? error : std::u8string {};
+    }
+
+    bool handle(const luil::app_message& message)
+    {
+        const auto* const received { message.get<chat_event_intent>() };
+        if (received == nullptr)
+            return false;
+        // 지난 연결의 늦은 사건은 지금 화면을 덮지 않는다.
+        if (received->generation != state_.generation)
+            return true;
+        const luil::net::websocket_event& event { received->event };
+        switch (event.kind)
+        {
+        case luil::net::websocket_event_kind::opened:
+            state_.open = true;
+            break;
+        case luil::net::websocket_event_kind::text:
+            if (event.data != nullptr)
+                state_.lines.emplace_back(reinterpret_cast<const char8_t*>(event.data->data()), event.data->size());
+            break;
+        case luil::net::websocket_event_kind::binary:
+            break;
+        case luil::net::websocket_event_kind::closed:
+            // 받은 client마다 정확히 하나 온다. 오류가 없으면 상대(또는 우리)의 정상 닫기다.
+            state_.open = false;
+            state_.ended = event.error.empty() ? std::u8string { u8"닫힘 " } + event.close_reason : event.error.message;
+            break;
+        }
+        return true;
+    }
+
+    // 열리기 전·닫는 중·큐 포화·잘못된 UTF-8이면 거짓이다. 숨은 큐가 없다.
+    [[nodiscard]] bool say(const std::u8string_view text)
+    {
+        return client_ != nullptr && state_.open && client_->send_text(text);
+    }
+
+    [[nodiscard]] bool leave()
+    {
+        return client_ != nullptr && client_->close(1000, u8"bye");
+    }
+
+    // logic_driver::stop_workers(UI thread)에서 부른다. 원자적 손잡이로만 본다.
+    void stop_from_ui() noexcept
+    {
+        if (luil::net::websocket_client* const client { live_.load() }; client != nullptr)
+            client->stop();
+    }
+
+    [[nodiscard]] const chat_state& state() const noexcept
+    {
+        return state_;
+    }
+
+private:
+    void stop() noexcept
+    {
+        live_.store(nullptr);
+        if (client_ != nullptr)
+            client_->stop();
+        client_.reset();
+    }
+
+    std::unique_ptr<luil::net::websocket_client> client_ {};
+    std::atomic<luil::net::websocket_client*> live_ { nullptr };
+    chat_state state_ {};
+};
+</script></div>
+        <script type="text/plain" id="pre-ws" data-prelude>
+#include "luil/app/app_host.h"
+#include "luil/net/websocket_client.h"
+
+#include <atomic>
+#include <cstdint>
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><strong>보내기가 거짓인 경우.</strong> 아직 열리지 않았다, 닫는 중이다, 보낼 큐가 찼다(기본 64개·8 MiB), 메시지가 <code>max_message_bytes</code>보다 크다, <code>send_text</code>의 글이 올바른 UTF-8이 아니다. 숨은 무한 큐가 없다.</li>
+            <li><code>close</code>는 이유 123바이트 이하, 코드 1000–1014(1004·1005·1006 제외)·3000–4999만 받는다.</li>
+            <li>URL·설정 오류는 <code>create</code>가 실패한다. 연결·TLS·upgrade 오류는 <code>closed</code> 사건으로 온다. <code>closed</code>는 연결에 실패해도 client마다 정확히 한 번 온다.</li>
+            <li>URL은 소문자 <code>ws://</code>·<code>wss://</code>로 시작하고 ASCII(32–126)만 쓴다. 한글 경로는 escape해서 넣는다. 자격 증명(<code>@</code>)·공백·<code>#</code>은 받지 않는다.</li>
+            <li>끊겨도 저절로 다시 붙지 않는다. 다시 붙는 것은 새 client다 — 위 <code class="free">connect</code>가 그 자리다.</li>
+            <li><code>stop()</code>이 돌아오기 전에 <code>closed</code>(오류 <code>stopped</code>, 코드 1006)가 올 수 있다. <code>deliver</code>가 쥔 host는 <code>stop()</code>이 끝날 때까지 살아 있어야 한다.</li>
+            <li>Android는 Java 전송부(<code>WebSocketTransport</code>)를 APK에 실어야 한다. 없으면 모든 조작이 "Include the luil Java transport in the APK." 오류다. minify를 켠 앱은 <code>luil-websocket.pro</code> 규칙도 싣는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-smb">
+        <header class="sec-head">
+          <h2>만들기: SMB 공유 둘러보기</h2>
+          <p class="lede">계약은 <code>http_client</code>와 같은 모양이다. 받은 요청마다 표 하나와 답 하나가 있고, 답은 client의 배달 thread에서 차례로 온다. 같은 서버·공유·계정의 연결은 잠시 쉬게 두었다 다시 쓴다.</p>
+        </header>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">Android와 iOS, 그리고 <code>LUIL_ENABLE_SMB=ON</code>일 때만 선다</span>기본은 꺼져 있다. Windows·macOS와 끈 구성에서는 <code>create</code>가 nullptr이고 <code>supported()</code>가 거짓이다. 헤더 주석과 "지원 안 함" 오류 글은 "Android 전용"이라 적지만, 빌드 규칙은 iOS에서도 libsmb2로 세우고 모바일 데모도 iOS에서 같은 client를 세운다. Windows에서 공유를 읽으려면 운영체제의 SMB(UNC 경로)를 쓴다.</div></div>
+        <h3>client 세우기</h3>
+        <div class="prose">
+          <p>모바일 데모는 delegate가 host가 선 뒤(<code>on_started</code>) client를 세워 logic에 메시지로 넘긴다. SMB를 세우지 않은 구성이면 <code>create</code>가 nullptr이라 넘기지 않는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/android_main.cpp:29-40" data-path="examples/mobile_demo/android_main.cpp" data-start="29"><script type="text/plain">
+        // 시작할 때 권한의 지금 상태를 알리고, SMB가 있는 구성이면 client를 세워 logic에 넘긴다. 답은 client의 배달
+        // thread에서 앱 메시지가 된다. client는 logic이 `stop_workers`에서 멈추고, delegate가 host보다 오래 살며 쥔다.
+        void on_started(luil::app_host& host) override
+        {
+            host.post_app_message(luil::app_message { mobile_demo::local_network_intent { host.permission(luil::app_permission::local_network) } });
+            host.post_app_message(luil::app_message { mobile_demo::notification_permission_intent { host.permission(luil::app_permission::notifications) } });
+            luil::net::smb_client_config config {};
+            config.deliver = [&host](luil::net::smb_response response) { host.post_app_message(luil::app_message { mobile_demo::smb_result_intent { std::move(response) } }); };
+            std::u8string error {};
+            smb_ = luil::net::smb_client::create(std::move(config), error);
+            if (smb_ != nullptr)
+                host.post_app_message(luil::app_message { mobile_demo::smb_client_intent { smb_.get() } });
+</script></div>
+        <div class="prose">
+          <p>페이지는 client 포인터를 함수 묶음으로 감싸 쥔다. 서버 없이 상태를 시험하는 test가 같은 길로 가짜 함수를 넣는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/smb_page.cpp:198-212" data-path="examples/mobile_demo/smb_page.cpp" data-start="198"><script type="text/plain">
+        if (const auto* const attach { message.get<smb_client_intent>() }; attach != nullptr)
+        {
+            if (attach->client == nullptr)
+                transport_ = {};
+            else
+            {
+                luil::net::smb_client* const client { attach->client };
+                transport_.send = [client](luil::net::smb_request request, std::u8string& error) { return client->send(std::move(request), error); };
+                transport_.cancel = [client](const luil::net::smb_ticket ticket) { client->cancel(ticket); };
+                transport_.stop = [client] { client->stop(); };
+                transport_.close_idle = [client] { client->close_idle(); };
+                transport_.discover = [client](const luil::net::smb_discovery_request request, std::u8string& error) { return client->discover(request, error); };
+            }
+            return true;
+        }
+</script></div>
+        <h3>상태와 보내기</h3>
+        <div class="prose">
+          <p>보낸 요청의 표와 경로를 쥐어 늦은 답을 거른다. 보내기 전에 앞 요청을 취소하고 표를 바꿔 쥔다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/smb_page.h:129-146" data-path="examples/mobile_demo/smb_page.h" data-start="129"><script type="text/plain">
+        // 지금 보는 폴더다 (공유 안의 경로).
+        std::u8string folder_ {};
+        // 보낸 요청과 그 경로다. 늦게 온 답이 지금 화면을 덮지 않게 표로 맞춘다.
+        luil::net::smb_ticket pending_ {};
+        luil::net::smb_operation pending_operation_ { luil::net::smb_operation::list };
+        std::u8string pending_path_ {};
+        std::uint64_t pending_offset_ { 0 };
+        std::size_t pending_length_ { 0 };
+        // 읽고 있는 파일과 다음 구간의 시작이다. 마지막 구간이 요청보다 짧았으면(파일 끝) 더 읽지 않는다.
+        std::u8string file_ {};
+        std::uint64_t next_offset_ { 0 };
+        bool more_ { false };
+        std::vector<luil::net::smb_entry> entries_ {};
+        // 보이는 공유(디스크이고 숨지 않은 것)와 걸러 낸 공유의 수다.
+        std::vector<luil::net::smb_share> shares_ {};
+        std::size_t hidden_shares_ { 0 };
+        // 찾기로 찾은 서버다.
+        std::vector<luil::net::smb_server_found> servers_ {};
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/smb_page.cpp:432-468" data-path="examples/mobile_demo/smb_page.cpp" data-start="432"><script type="text/plain">
+    void smb_page::cancel_pending()
+    {
+        if (pending_ && transport_.cancel != nullptr)
+            transport_.cancel(pending_);
+        pending_ = {};
+    }
+
+    void smb_page::send(const luil::net::smb_operation operation, std::u8string path, const std::uint64_t offset, const std::size_t length)
+    {
+        cancel_pending();
+        // 응답 대기·실패 중에 이전 폴더의 행을 새 경로로 열지 않는다.
+        if (operation == luil::net::smb_operation::list)
+            entries_.clear();
+        if (transport_.send == nullptr)
+            return;
+        const std::optional<luil::net::smb_location> where { location() };
+        if (where.has_value() == false || (operation != luil::net::smb_operation::shares && where->share.empty()))
+        {
+            status_ = u8"주소를 \"서버/공유\"로 적는다.";
+            detail_ = u8"예: 192.168.0.10/photos (서버만 적으면 공유 목록)";
+            return;
+        }
+        luil::net::smb_request request {};
+        request.location = *where;
+        request.operation = operation;
+        request.path = path;
+        request.offset = offset;
+        request.length = length;
+        std::u8string error {};
+        pending_ = transport_.send(std::move(request), error);
+        pending_operation_ = operation;
+        pending_path_ = std::move(path);
+        pending_offset_ = offset;
+        pending_length_ = length;
+        status_ = pending_ ? std::u8string { u8"기다리는 중…" } : std::u8string { u8"보내지 못함" };
+        detail_ = pending_ ? std::u8string {} : error;
+    }
+</script></div>
+        <h3>받기</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/mobile_demo/smb_page.cpp:315-380" data-path="examples/mobile_demo/smb_page.cpp" data-start="315"><script type="text/plain">
+        if (const auto* const result { message.get<smb_result_intent>() }; result != nullptr)
+        {
+            const luil::net::smb_response& response { result->response };
+            if (pending_ == luil::net::smb_ticket {} || response.ticket != pending_)
+                return true;
+            pending_ = {};
+            // 걸린 시간과 쓴 연결이다. 같은 서버를 다시 부르면 두 번째부터 "다시 씀"과 짧아진 시간이 보인다.
+            const std::u8string elapsed { u8" (" + number_text(static_cast<std::uint64_t>(response.elapsed.count())) + u8" ms" + connection_text(response.connection) + u8")" };
+            if (response.ok() == false)
+            {
+                // libsmb2의 글을 그대로 적는다. 서버가 없는 쪽에서 사람이 알려 줄 수 있는 단서가 이것이다.
+                status_ = error_name(response.error.kind) + elapsed;
+                detail_ = response.error.message;
+                return true;
+            }
+            if (response.operation == luil::net::smb_operation::discover)
+            {
+                servers_ = response.servers;
+                status_ = u8"서버 " + number_text(servers_.size()) + u8"개" + elapsed;
+                detail_ = servers_.empty() ? std::u8string { u8"같은 네트워크에서 답한 SMB 서버가 없다." } : std::u8string {};
+            }
+            else if (response.operation == luil::net::smb_operation::shares)
+            {
+                // 디스크이고 숨지 않은 공유만 보인다. 관리용·`$`로 끝나는 공유와 프린터·파이프는 센다.
+                shares_.clear();
+                for (const luil::net::smb_share& share : response.shares)
+                    if (share.kind == luil::net::smb_share_kind::disk && share.special == false && share.name.ends_with(u8'$') == false)
+                        shares_.push_back(share);
+                hidden_shares_ = response.shares.size() - shares_.size();
+                entries_.clear();
+                folder_.clear();
+                file_.clear();
+                more_ = false;
+                detail_.clear();
+                status_ = u8"공유 " + number_text(shares_.size()) + u8"개, 숨김 " + number_text(hidden_shares_) + u8"개" + elapsed;
+            }
+            else if (response.operation == luil::net::smb_operation::list)
+            {
+                shares_.clear();
+                folder_ = pending_path_;
+                file_.clear();
+                more_ = false;
+                entries_ = response.entries;
+                std::ranges::sort(
+                    entries_, [](const luil::net::smb_entry& left, const luil::net::smb_entry& right) { return left.directory != right.directory ? left.directory : left.name < right.name; });
+                detail_.clear();
+                status_ = u8"/" + folder_ + u8" — 항목 " + number_text(entries_.size()) + u8"개" + elapsed;
+            }
+            else if (response.operation == luil::net::smb_operation::read)
+            {
+                file_ = pending_path_;
+                next_offset_ = pending_offset_ + response.data.size();
+                more_ = response.data.size() == pending_length_;
+                if (pending_offset_ == 0)
+                {
+                    status_ = u8"앞 " + size_text(response.data.size()) + u8" 읽음" + elapsed;
+                    detail_ = pending_path_ + u8": " + preview_of(response.data);
+                }
+                else
+                {
+                    status_ = size_text(pending_offset_) + u8"부터 " + size_text(response.data.size()) + u8" 읽음" + elapsed;
+                    detail_ = more_ ? pending_path_ + u8" — 다음 구간을 누르면 이어 읽는다." : pending_path_ + u8" — 파일 끝이다.";
+                }
+            }
+            return true;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="317-320" data-title="늦은 답 거르기">표가 다르면 지나간 요청의 답이다. 맞으면 표를 잊는다.</li>
+            <li data-lines="321-329" data-title="실패">걸린 시간과 쓴 연결(<code>connection</code>)은 진단이다. 실패면 <code>error.message</code>에 libsmb2의 글이 그대로 있다. 암호는 들어 있지 않다.</li>
+            <li data-lines="330-335" data-title="서버 찾기"><code>discover</code>의 답은 <code>servers</code>다. 빈 목록도 성공이다.</li>
+            <li data-lines="336-350" data-title="공유 목록">서버가 준 것은 다 온다. 디스크이고 관리용이 아니며 <code>$</code>로 끝나지 않는 공유만 보이는 것은 앱의 거르기다.</li>
+            <li data-lines="351-362" data-title="폴더">항목은 서버가 준 차례로 온다. 폴더 먼저·이름순 정렬은 앱이 한다.</li>
+            <li data-lines="363-378" data-title="읽기 (구간)">큰 파일은 구간으로 나눠 읽는다. 받은 길이가 요청보다 짧으면 파일 끝이다.</li>
+          </ol>
+        </div>
+        <h3>쉬는 연결 닫기와 멈추기</h3>
+        <div class="prose">
+          <p>앱이 뒤로 가면 <code>close_idle</code>을 부르는 메시지를 낸다. 돌아왔을 때 망이 바뀌었어도 끊긴 연결을 다시 쓰지 않게 하려는 것이다. 멈추는 것은 logic의 <code>stop_workers</code>다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/android_main.cpp:84-93" data-path="examples/mobile_demo/android_main.cpp" data-start="84"><script type="text/plain">
+        // 앱이 뒤로 가면 SMB의 쉬는 연결을 닫는다. 돌아와서 망이 바뀌었어도 끊긴 연결을 다시 쓰지 않는다.
+        //  - 앞으로 오면 지역 값을 다시 읽는다. 지역 설정에서 첫 요일을 바꾸고 돌아온 자리다.
+        [[nodiscard]] luil::app_message make_lifecycle_message(const luil::app_lifecycle lifecycle) override
+        {
+            if (lifecycle == luil::app_lifecycle::foreground)
+                return read_locale();
+            if (lifecycle != luil::app_lifecycle::background)
+                return {};
+            return luil::app_message { mobile_demo::smb_close_idle_intent {} };
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:134-138" data-path="examples/mobile_demo/app.cpp" data-start="134"><script type="text/plain">
+    void mobile_driver::stop_workers()
+    {
+        smb_.stop();
+        files_.stop();
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>Android 17부터 같은 망의 NAS에 붙으려면 먼저 로컬 네트워크 권한(<code>app_permission::local_network</code>)을 받는다. 없으면 연결이 시간 상한까지 기다리다 실패한다. iOS에는 묻는 API가 없어 첫 접속에 시스템이 묻는다.</li>
+            <li><code>read</code> 하나의 길이는 1 이상 <code>max_read_bytes</code>(16 MiB) 이하다. 동시 요청은 <code>max_in_flight</code>(4)까지이고, 넘기면 줄 세우지 않고 표 0으로 거절한다.</li>
+            <li>쓰기(만들기·지우기·이름 바꾸기)는 없다. 인증은 NTLM만이고 SMB 2.02–3.1.1이다.</li>
+            <li>NAS의 주소를 모르면 <code>discover</code>가 같은 망에서 찾는다. <code>smb_server_found::server()</code>가 <code>smb_location::server</code>에 넣을 꼴을 짓는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-watch">
+        <header class="sec-head">
+          <h2>만들기: 파일 감시</h2>
+          <p class="lede">감시자 하나가 thread 하나를 갖고 여러 경로를 본다. 변경은 잠시 모여 묶음으로 오고, <code>deliver</code>는 받았는지를 <code>bool</code>로 답한다. 거짓이면 감시자가 그 묶음을 다음 변경과 합쳐 다시 낸다.</p>
+        </header>
+        <h3>세우고 걸기</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/mobile_demo/files_page.h:82-102" data-path="examples/mobile_demo/files_page.h" data-start="82"><script type="text/plain">
+    // delegate가 `on_started`에서 부른다. 감시자를 세우고 폴더를 건 결과를 driver에 넘긴다. 감시자는 delegate가 host보다 오래 쥔다.
+    //  - inline인 것은 페이지 소스만 묶는 core test가 감시자 구현 없이 링크되게 하려는 것이다. 부르는 진입점만 구현을 링크한다.
+    [[nodiscard]] inline std::unique_ptr<luil::file_watcher> start_files_watch(luil::app_host& host, const std::filesystem::path& folder)
+    {
+        file_watcher_intent intent {};
+        intent.folder = folder.u8string();
+        std::error_code ignored {};
+        std::filesystem::create_directories(folder, ignored);
+        luil::file_watcher_config config {};
+        // 감시 thread에서 불린다. inbox가 받았는지를 답해야 넘쳐도 감시자가 그 묶음을 다시 낸다.
+        config.deliver = [&host](luil::file_change_batch batch) { return host.post_app_message_ticketed(luil::app_message { files_batch_intent { std::move(batch) } }) != 0; };
+        std::unique_ptr<luil::file_watcher> watcher { luil::file_watcher::create(std::move(config), intent.error) };
+        if (watcher != nullptr)
+        {
+            intent.ticket = watcher->add(intent.folder, luil::file_watch_scope::folder, intent.error);
+            luil::file_watcher* const raw { watcher.get() };
+            intent.stop = [raw] { raw->stop(); };
+        }
+        host.post_app_message(luil::app_message { std::move(intent) });
+        return watcher;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="86-89" data-title="폴더">감시할 폴더를 앱이 만든다. Android 데모는 앱 내부 저장소(<code>internalDataPath</code>) 아래를 쓴다. luil은 그 경로를 내주는 공개 접근자를 두지 않는다.</li>
+            <li data-lines="90-92" data-title="받았는지 답하기">감시 thread에서 불린다. <code>post_app_message_ticketed</code>가 0이 아니면 inbox가 받은 것이다. 이 답이 거짓이면 묶음은 버려지지 않는다.</li>
+            <li data-lines="93-99" data-title="세우고 걸기"><code>create</code>로 thread를 세우고 <code>add</code>로 경로를 건다. 표가 0이면 걸지 못한 것이고 <code>error</code>에 이유가 있다. 멈추는 함수는 원자적 손잡이 대신 감시자 포인터를 잡은 함수로 넘긴다.</li>
+            <li data-lines="100-101" data-title="logic에 넘기기">표와 멈추는 함수를 메시지로 logic에 넘긴다. 감시자 자체는 delegate가 host보다 오래 쥔다.</li>
+          </ol>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl"><code>add</code> 먼저, 읽기는 그다음</span>감시는 처음 목록을 주지 않는다. 앱이 <code>add</code>를 먼저 하고 그다음 폴더를 읽는다. 거꾸로 하면 그 사이의 변경을 놓친다. 다른 thread에서 <code>add</code>를 부르면 감시 thread가 감시를 걸 때까지 기다린다 — 돌아온 뒤의 변경은 놓치지 않는다.</div></div>
+        <h3>페이지의 상태와 받기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/files_page.h:59-80" data-path="examples/mobile_demo/files_page.h" data-start="59"><script type="text/plain">
+    class files_page
+    {
+    public:
+        bool handle(const luil::app_message& message);
+        [[nodiscard]] page_content build(float width, float scale);
+
+        // 감시자를 멈춘다. 묶음이 앱 host를 거쳐 오므로 host보다 먼저 부른다 (`stop_workers`).
+        void stop()
+        {
+            if (stop_ != nullptr)
+                stop_();
+        }
+
+    private:
+        void run(files_operation operation);
+
+        std::u8string folder_ {};
+        luil::file_watch_ticket ticket_ {};
+        std::function<void()> stop_ {};
+        std::u8string state_ { u8"감시: 아직 걸지 않음" };
+        std::u8string text_ { u8"변경: 아직 없음" };
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/files_page.cpp:85-107" data-path="examples/mobile_demo/files_page.cpp" data-start="85"><script type="text/plain">
+    bool files_page::handle(const luil::app_message& message)
+    {
+        if (const auto* const attach { message.get<file_watcher_intent>() }; attach != nullptr)
+        {
+            folder_ = attach->folder;
+            ticket_ = attach->ticket;
+            stop_ = attach->stop;
+            state_ = ticket_ ? u8"감시: 켜짐" : u8"감시: 걸지 못함 (" + attach->error + u8")";
+            return true;
+        }
+        if (const auto* const delivered { message.get<files_batch_intent>() }; delivered != nullptr)
+        {
+            // 늦게 온 다른 표의 묶음이 지금 화면을 덮지 않게 표로 맞춘다.
+            if (ticket_ == luil::file_watch_ticket {} || delivered->batch.ticket != ticket_)
+                return true;
+            text_ = describe_file_change_batch(delivered->batch);
+            if (delivered->batch.end != luil::file_watch_end::none)
+            {
+                ticket_ = {};
+                state_ = u8"감시: 끝남";
+            }
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>다른 표의 묶음은 거른다. 끝 묶음(<code>end</code>가 <code>none</code>이 아닌 것) 뒤로 그 표에는 묶음이 없으니 표를 잊는다. 멈추는 것은 <code>stop_workers</code>의 <code>files_.stop()</code>이다 (<a class="xref" href="#build-smb">SMB 조각</a>의 <code>stop_workers</code>).</p>
+        </div>
+        <h3>Windows 데스크톱 데모</h3>
+        <div class="prose">
+          <p>데스크톱 데모는 페이지가 감시자를 직접 쥐고, UI thread의 <code>stop_workers</code>가 원자적 손잡이(<code>live_watcher_</code>)로 멈춘다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/files_page.cpp:157-190" data-path="examples/demo/files_page.cpp" data-start="157"><script type="text/plain">
+    void files_page::stop_watcher() noexcept
+    {
+        if (luil::file_watcher* const watcher { live_watcher_.load() }; watcher != nullptr)
+            watcher->stop();
+    }
+
+    void files_page::ensure_watcher()
+    {
+        if (watch_ticket_)
+            return;
+        std::u8string error {};
+        if (watcher_ == nullptr)
+        {
+            luil::file_watcher_config config {};
+            // 감시 thread에서 불린다. host가 받았는지를 답해야 inbox가 넘쳐도 감시자가 그 묶음을 다시 낸다.
+            config.deliver = [this](luil::file_change_batch batch) {
+                luil::win32::app_host* const host { host_.load() };
+                return host != nullptr && host->post_app_message_ticketed(luil::app_message { files_watch_batch_intent { std::move(batch) } }) != 0;
+            };
+            watcher_ = luil::file_watcher::create(std::move(config), error);
+            live_watcher_.store(watcher_.get());
+            if (watcher_ == nullptr)
+            {
+                watch_state_ = u8"감시: 세우지 못함 (" + error + u8")";
+                return;
+            }
+        }
+        if (watch_folder_.empty())
+            watch_folder_ = std::filesystem::temp_directory_path() / (L"luil-demo-watch-" + std::to_wstring(process_id()));
+        std::error_code created {};
+        std::filesystem::create_directories(watch_folder_, created);
+        watch_ticket_ = watcher_->add(watch_folder_.u8string(), luil::file_watch_scope::folder, error);
+        watch_state_ = watch_ticket_ ? u8"감시: 켜짐 " + watch_folder_.u8string() : u8"감시: 걸지 못함 (" + error + u8")";
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/files_page.cpp:439-451" data-path="examples/demo/files_page.cpp" data-start="439"><script type="text/plain">
+        if (const auto* const delivered { message.get<files_watch_batch_intent>() }; delivered != nullptr)
+        {
+            if (delivered->batch.ticket != watch_ticket_)
+                return true;
+            watch_text_ = describe_file_change_batch(delivered->batch);
+            // 끝 묶음 뒤로 그 표에는 묶음이 없다. 다음 단추가 다시 건다.
+            if (delivered->batch.end != luil::file_watch_end::none)
+            {
+                watch_ticket_ = {};
+                watch_state_ = u8"감시: 끝남";
+            }
+            return true;
+        }
+</script></div>
+        <h3>묶음 읽기</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>칸</th><th>뜻</th></tr></thead>
+            <tbody>
+              <tr><td><code>changes</code></td><td>같은 경로는 한 항목으로 합쳐 있다. 한 경로는 묶음 안에서 한 번만 나온다. 묶음은 묶기 시작한 때와 지금 사이의 순 변화다 — 생겼다 사라진 파일은 묶음에 없다</td></tr>
+              <tr><td><code>file_change::kind</code></td><td><code>created</code>·<code>removed</code>·<code>modified</code>·<code>renamed</code>. <code>modified</code>는 "바뀌었을 수 있다"이지 쓰기가 끝났다는 뜻이 아니다</td></tr>
+              <tr><td><code>path</code> · <code>old_path</code></td><td>감시 경로 기준 상대 경로이고 구분자는 <code>/</code>다. <code>old_path</code>는 <code>renamed</code>만 채운다. <code>file</code> 감시는 그 파일의 이름이다</td></tr>
+              <tr><td><code>rescan</code></td><td>넘쳤다(OS 큐 넘침이나 <code>max_changes</code> 4096). <code>changes</code>는 일부이거나 비었으니 그 범위를 다시 훑는다</td></tr>
+              <tr><td><code>end</code> · <code>error</code></td><td><code>removed</code>는 앱이 <code>remove</code>했다. <code>lost</code>는 대상이 사라졌거나 OS가 감시를 끊었고, <code>error</code>가 개발자용 이유다</td></tr>
+              <tr><td><code>retried</code></td><td>앞서 <code>deliver</code>가 거절한 묶음을 다시 낸 것이다. 그 사이의 변경이 합쳐졌을 수 있다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>범위는 셋이다: <code>folder</code>(바로 아래), <code>subtree</code>(그 아래 전부), <code>file</code>(부모 폴더를 보고 이름으로 거른다 — 지워졌다 다시 생겨도 이어지고 아직 없어도 걸린다).</li>
+            <li>편집기의 "임시 파일에 쓰고 이름 바꾸기" 저장은 <code>file</code> 감시에서 그 파일의 항목 하나로 온다.</li>
+            <li>폴더 하나를 옮기거나 지우면 그 아래 항목마다 알리지 않을 수 있다. 그 경로 아래 전부가 바뀐 것으로 본다.</li>
+            <li>읽다가 해석에 실패하면(쓰는 중이었다) 이전 값을 지키고 다음 묶음을 기다린다. 쓰는 쪽이 luil 앱이면 <a class="xref" href="#build-tools"><code>replace_file_atomically</code></a>로 쓴다.</li>
+            <li>묶음을 글로 옮기는 꼴은 데스크톱 데모의 <code>describe_file_change_batch</code>에 있다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-secret">
+        <header class="sec-head">
+          <h2>만들기: 비밀 저장소</h2>
+          <p class="lede">항목은 <code>service</code>(앱·기능의 묶음)와 <code>name</code>(계정·서버 같은 항목 이름)의 짝이고 값은 바이트다. 세 함수 모두 부른 thread에서 끝나는 동기 호출이라 UI thread에서 부르지 않는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:27-51" data-path="examples/demo/basics_page.cpp" data-start="27"><script type="text/plain">
+        // 비밀 저장소를 한 바퀴 돌린다: 쓰기 → 읽기 → 덮어쓰기 → 읽기 → 지우기 → 없는지 읽기 (secret-store-design.md).
+        // 사람이 읽을 결과 한 줄을 돌려준다. 단계가 어긋나면 그 자리와 OS의 이유를 적는다.
+        [[nodiscard]] std::u8string check_secret_store()
+        {
+            constexpr std::u8string_view service { u8"luil-demo" };
+            constexpr std::u8string_view name { u8"sample" };
+            const auto bytes = [](const std::u8string_view text) { return std::vector<std::uint8_t> { text.begin(), text.end() }; };
+            const auto failed = [](const std::u8string_view step, const luil::secret_store_result& result) {
+                return std::u8string { step } + u8"에서 멈췄다 — " + (result.status == luil::secret_store_status::unsupported ? std::u8string { u8"이 플랫폼에는 저장소가 없다" } : result.error);
+            };
+            std::vector<std::uint8_t> read {};
+            if (const auto result { luil::store_secret(service, name, bytes(u8"첫 값")) }; result.status != luil::secret_store_status::ok)
+                return failed(u8"쓰기", result);
+            if (const auto result { luil::load_secret(service, name, read) }; result.status != luil::secret_store_status::ok || read != bytes(u8"첫 값"))
+                return failed(u8"읽기", result);
+            if (const auto result { luil::store_secret(service, name, bytes(u8"둘째 값")) }; result.status != luil::secret_store_status::ok)
+                return failed(u8"덮어쓰기", result);
+            if (const auto result { luil::load_secret(service, name, read) }; result.status != luil::secret_store_status::ok || read != bytes(u8"둘째 값"))
+                return failed(u8"다시 읽기", result);
+            if (const auto result { luil::erase_secret(service, name) }; result.status != luil::secret_store_status::ok)
+                return failed(u8"지우기", result);
+            if (const auto result { luil::load_secret(service, name, read) }; result.status != luil::secret_store_status::not_found)
+                return failed(u8"지운 뒤 읽기", result);
+            return u8"쓰기·읽기·덮어쓰기·지우기를 모두 확인했다 (luil-demo/sample).";
+        }
+</script></div>
+        <div class="prose">
+          <p>모바일 데모는 같은 함수를 logic thread의 <code>handle</code>에서 부른다. Android Keystore 호출은 수십 ms까지 걸린다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/device_page.cpp:200-205" data-path="examples/mobile_demo/device_page.cpp" data-start="200"><script type="text/plain">
+        if (message.get<secret_check_intent>() != nullptr)
+        {
+            // logic thread에서 돈다 — Keystore 호출은 수십 ms까지 걸려 UI thread의 자리가 아니다.
+            secret_report_ = check_secret_store();
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>값은 바이트다. 글은 UTF-8 바이트로 넣는다. 상한은 <code>secret_store_maximum_bytes</code>(2560바이트)이고 넘으면 모든 플랫폼에서 <code>failed</code>다. Windows 자격 증명의 상한에 넷을 맞춘 값이다.</li>
+            <li>같은 짝에 다시 쓰면 덮는다. 지울 항목이 없으면 <code>not_found</code>라 "이미 없다"를 실패와 가른다. <code>load_secret</code>이 실패하면 받을 vector를 비운다.</li>
+            <li>값은 이 기기·이 사용자에게만 열린다. Windows는 같은 사용자의 다른 프로세스도 읽을 수 있다.</li>
+          </ul>
+        </div>
+        <h3>어디에 어떤 이름으로 놓이나</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th>저장소</th><th>OS 쪽 이름</th><th>이름 규칙</th></tr></thead>
+            <tbody>
+              <tr><td>Windows</td><td>자격 증명 관리자의 일반 자격 증명, 이 기기에 둔다</td><td><code>luil-v2:&lt;hex(service)&gt;-&lt;hex(name)&gt;</code> — 소문자 16진이라 OS가 대소문자를 무시해도 바이트 구분이 남는다</td><td>둘 다 비지 않은 올바른 UTF-8, 인코딩한 이름이 OS 상한 안</td></tr>
+              <tr><td>Android</td><td>Keystore의 AES-256-GCM 키(<code>service</code>마다 하나)로 암호화한 앱 내부 파일</td><td>키 별칭 <code>luil-secret:&lt;hex(service)&gt;</code>, 파일 <code>&lt;files&gt;/luil-secrets/&lt;hex(service)&gt;-&lt;hex(name)&gt;</code></td><td>비지 않으면 된다 (UTF-8 검사를 하지 않는다)</td></tr>
+              <tr><td>macOS · iOS</td><td>Keychain 일반 암호 (서비스 = <code>service</code>, 계정 = <code>name</code>)</td><td>—</td><td>올바른 UTF-8이고 <strong>NUL이 없어야</strong> 한다 (keychain이 NUL에서 자른다)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>설계 문서는 Android 키 별칭을 <code>luil-secret:&lt;service&gt;</code>라 적는다. 코드는 <code>service</code>를 16진으로 붙인다. Keystore를 직접 들여다보는 도구로 찾을 때는 16진 이름을 찾는다.</li>
+            <li>이름 규칙이 플랫폼마다 달라, 한 플랫폼에서 되는 이름이 다른 플랫폼에서 <code>failed</code>일 수 있다. NUL이 든 이름은 Windows가 받고 macOS가 거절한다.</li>
+            <li>Android에서 앱을 지웠다 다시 깔거나 백업으로 옮겨 온 파일은 키가 없어 풀리지 않는다. 그 파일을 지우고 <code>not_found</code>로 답하므로 앱은 다시 로그인하게 한다.</li>
+            <li>옛 Windows 항목(<code>luil:&lt;service&gt;/&lt;name&gt;</code>)은 <code>migrate_legacy_win32_secret</code>이 새 키로 복사한다. 새 항목이 있으면 <code>already_exists</code>, Windows 밖에서는 <code>unsupported</code>다. 옛 항목은 지우지 않는다.</li>
+            <li>헤더 주석과 설계 문서에는 iOS가 없지만 iOS 빌드는 macOS 파일을 분기 없이 쓴다. 그 파일은 서명 없는 개발 빌드에서도 돌도록 데이터 보호 keychain 대신 macOS의 파일 기반 로그인 keychain을 전제로 적혀 있다. iOS 기기에서 어떻게 동작하는지는 코드로 확인할 수 없다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-tools">
+        <header class="sec-head">
+          <h2>만들기: 파일과 셸 도구</h2>
+          <p class="lede"><code>platform_services.h</code>의 도구는 부른 thread에서 끝나고 <code>platform_result</code>를 돌려준다. 데모는 모두 logic thread의 <code>handle</code>에서 부른다.</p>
+        </header>
+        <h3>파일을 원자적으로 바꾸기</h3>
+        <div class="prose">
+          <p>읽는 쪽은 언제나 옛 파일 전체나 새 파일 전체를 본다. 같은 폴더의 임시 파일에 다 쓰고 디스크까지 내린 뒤 이름을 바꾸기 때문이다. 데모는 창 배치를 저장할 때 쓴다. 폴더는 앱이 먼저 만든다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:249-261" data-path="examples/demo_main.cpp" data-start="249"><script type="text/plain">
+        void save_placement(const luil::win32::window_placement& placement)
+        {
+            const std::filesystem::path path { placement_file_path() };
+            if (path.empty())
+                return;
+            std::error_code error {};
+            std::filesystem::create_directories(path.parent_path(), error);
+            if (error)
+                return;
+            // 통째로 바꾼다 — 종료하다 끊겨도 지난 배치 파일이 반쪽으로 남지 않는다 (platform-services-design.md).
+            const std::string text { format_placement(placement) };
+            static_cast<void>(luil::replace_file_atomically(path.u8string(), { reinterpret_cast<const std::uint8_t*>(text.data()), text.size() }));
+        }
+</script></div>
+        <div class="prose">
+          <p>그 저장은 종료 메시지를 처리하는 logic thread에서 일어난다 (종료 2단계).</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:531-540" data-path="examples/demo_main.cpp" data-start="531"><script type="text/plain">
+                if (message.get<close_intent>() != nullptr)
+                {
+                    // 종료 저장이다.
+                    // 배치 보고는 종료 신호보다 먼저 게시되므로(같은 채널의 순서)
+                    // placement_는 닫히던 순간의 값이다.
+                    if (placement_.valid())
+                        save_placement(placement_);
+                    closed_.store(true);
+                    return;
+                }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/platform_services_tests.cpp:86-103" data-path="tests/platform_services_tests.cpp" data-start="86"><script type="text/plain">
+TEST_CASE("A file is replaced whole and leaves no temporary file behind", "[platform]")
+{
+    const scratch_folder folder {};
+    const std::u8string path { folder.file(L"설정.json") };
+    REQUIRE(luil::replace_file_atomically(path, bytes_of("first")).ok());
+    REQUIRE(read_text(path) == "first");
+    REQUIRE(luil::replace_file_atomically(path, bytes_of("second, longer contents")).ok());
+    REQUIRE(read_text(path) == "second, longer contents");
+    // 짧아진 내용에 옛 꼬리가 남지 않는다.
+    REQUIRE(luil::replace_file_atomically(path, bytes_of("3")).ok());
+    REQUIRE(read_text(path) == "3");
+    REQUIRE(files_in(folder.path()) == 1u);
+
+    // 폴더를 만들지 않는다.
+    const luil::platform_result missing { luil::replace_file_atomically(folder.file(L"없는 폴더/a.txt"), bytes_of("x")) };
+    REQUIRE(missing.status == luil::platform_status::failed);
+    REQUIRE(missing.error.find(u8"folder") != std::u8string::npos);
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>폴더를 만들지 않는다. 없으면 <code>failed</code>다.</li>
+            <li>임시 파일 이름은 네 플랫폼 모두 <code>&lt;경로&gt;.&lt;pid&gt;.tmp</code>다. 그래서 <strong>같은 프로세스의 두 thread가 같은 파일을 동시에 바꾸면 임시 파일이 겹친다.</strong> 한 파일의 저장은 한 thread로 모은다.</li>
+            <li>POSIX 쪽(Android·macOS·iOS)은 임시 파일을 <code>0600</code>으로 만들고 그 파일이 결과가 되므로, 바꾼 파일의 권한이 <code>0600</code>이 된다.</li>
+            <li>위 두 항목은 코드에서 읽은 것이다. test는 내용·남는 임시 파일·없는 폴더만 본다.</li>
+          </ul>
+        </div>
+
+        <h3>브라우저로 주소 열기</h3>
+        <div class="prose">
+          <p>라이브러리는 링크를 열지 않는다. 링크 메시지를 받은 앱이 <code>open_url</code>을 부른다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:164-170" data-path="examples/demo/basics_page.cpp" data-start="164"><script type="text/plain">
+        if (const auto* const link { message.get<open_link_intent>() }; link != nullptr)
+        {
+            // 라이브러리는 링크를 열지 않는다 — 여는 것은 앱이고, `open_url`은 허용한 scheme(http·https·mailto)만 연다.
+            const luil::platform_result result { luil::open_url(link->destination) };
+            link_report_ = result.ok() ? link->destination + u8" 를 열었다." : link->destination + u8" 를 열지 못했다 — " + result.error;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>허용 판정(<code>url_scheme_allowed</code>)의 규칙은 test가 표로 잠근다. 기본 목록은 <code>http</code>·<code>https</code>·<code>mailto</code>다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/platform_services_tests.cpp:173-209" data-path="tests/platform_services_tests.cpp" data-start="173"><script type="text/plain">
+TEST_CASE("Only URLs whose scheme is on the allow list may be opened", "[platform]")
+{
+    const luil::open_url_options defaults {};
+    const auto allowed = [&defaults](const std::u8string_view url) { return luil::url_scheme_allowed(url, defaults.schemes); };
+    REQUIRE(allowed(u8"https://example.com/path?q=1"));
+    REQUIRE(allowed(u8"http://example.com"));
+    REQUIRE(allowed(u8"mailto:someone@example.com"));
+    // scheme은 대소문자를 가리지 않는다.
+    REQUIRE(allowed(u8"HTTPS://EXAMPLE.COM"));
+    REQUIRE(allowed(u8"MailTo:someone@example.com"));
+    REQUIRE(allowed(u8"https://例え.jp/경로"));
+
+    REQUIRE(allowed(u8"javascript:alert(1)") == false);
+    REQUIRE(allowed(u8"file:///C:/Windows/System32/calc.exe") == false);
+    REQUIRE(allowed(u8"C:\\Windows\\System32\\calc.exe") == false);
+    REQUIRE(allowed(u8"calc.exe") == false);
+    REQUIRE(allowed(u8"example.com/a:b") == false);
+    REQUIRE(allowed(u8"//example.com") == false);
+    REQUIRE(allowed(u8"") == false);
+    REQUIRE(allowed(u8":") == false);
+    REQUIRE(allowed(u8"https:") == false);
+    REQUIRE(allowed(u8"1http://example.com") == false);
+    REQUIRE(allowed(u8"ht tp://example.com") == false);
+    // OS가 공백·제어 문자를 걸러 읽으면 막은 scheme이 되살아난다.
+    REQUIRE(allowed(u8" http://example.com") == false);
+    REQUIRE(allowed(u8"http://example.com ") == false);
+    REQUIRE(allowed(u8"java\tscript:alert(1)") == false);
+    REQUIRE(allowed(u8"https://example.com/\n") == false);
+    REQUIRE(allowed(u8"https://example.com/\u0085") == false);
+
+    // 사용자 지정 목록은 기본 목록을 대신한다. 목록 쪽 대소문자도 가리지 않는다.
+    const std::vector<std::u8string> custom { u8"VSCODE", u8"git+ssh" };
+    REQUIRE(luil::url_scheme_allowed(u8"vscode://file/a.txt", custom));
+    REQUIRE(luil::url_scheme_allowed(u8"git+ssh://host/repo.git", custom));
+    REQUIRE(luil::url_scheme_allowed(u8"https://example.com", custom) == false);
+    REQUIRE(luil::url_scheme_allowed(u8"https://example.com", {}) == false);
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>자기 scheme을 열려면 <code>open_url(url, { .schemes = { u8"myapp" } })</code>처럼 목록을 넘긴다. 넘긴 목록은 기본 목록을 <strong>대신한다</strong>. 빈 목록은 아무것도 열지 않는다.</li>
+            <li>공백으로 시작·끝나거나 제어 문자가 섞인 주소는 거짓이다. OS가 그것들을 걸러 읽으면 막은 scheme이 되살아나기 때문이다. 도메인(피싱)은 보지 않는다.</li>
+            <li><strong><code>ok</code>는 "넘겼다"까지다.</strong> Windows는 브라우저가 열었는지 모른다. Android 10+는 앞에 없는 앱의 Activity를 OS가 조용히 막아도 <code>ok</code>다. iOS는 메인 큐에 비동기로 넘기고 <strong>늘 <code>ok</code></strong>다 — 헤더 주석의 "열 앱이 없으면 <code>not_found</code>"는 iOS에서 오지 않는다.</li>
+            <li>사용자가 링크를 누른 그 순간처럼 앱이 앞에 있을 때 부른다. Android는 앞에 보이지 않는 앱이 띄우는 Activity를 막는다.</li>
+          </ul>
+        </div>
+
+        <h3>둘째 실행의 인자를 첫째로 넘기기</h3>
+        <div class="prose">
+          <p>파일을 더블 클릭해 앱을 또 띄우면, 둘째가 인자를 첫째에 넘기고 끝나는 꼴이다. <code>single_instance</code>를 이름 하나로 세우면 첫째인지 알 수 있다. 데모의 둘째 쪽은 <code>--send-to-first</code>가 있을 때만 보내고 끝낸다. 실행 파일 경로(argv[0])는 빼고 보낸다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1592-1612" data-path="examples/demo_main.cpp" data-start="1592"><script type="text/plain">
+    // `--send-to-first`가 있으면 그 플래그를 뺀 나머지 인자를 첫째 인스턴스에 보내고 종료 코드를 돌려준다. 없으면 빈 값이다.
+    //  - 종료 코드: 첫째가 받았으면 0, 첫째의 주 창이 시한 안에 없거나 이 프로세스가 첫째면 3, 그 밖의 실패는 4다.
+    //  - `parse_arguments`가 모르는 인자를 거절하므로 이 분기가 그 앞에 선다. 플래그가 없으면 둘째도 평소처럼 뜬다.
+    [[nodiscard]] std::optional<int> send_to_first_instance(const luil::single_instance& instance, const std::vector<std::u8string>& arguments)
+    {
+        std::vector<std::u8string> forwarded {};
+        bool requested { false };
+        for (std::size_t index = 1; index < arguments.size(); ++index)
+        {
+            if (const std::u8string_view argument { arguments[index] }; argument == u8"--send-to-first")
+                requested = true;
+            else
+                forwarded.push_back(arguments[index]);
+        }
+        if (requested == false)
+            return std::nullopt;
+        const luil::platform_result result { instance.send_to_primary(forwarded) };
+        if (result.ok())
+            return 0;
+        return result.status == luil::platform_status::not_found ? 3 : 4;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1736-1742" data-path="examples/demo_main.cpp" data-start="1736"><script type="text/plain">
+
+    // 같은 세션에서 둘째로 뜬 데모도 막지 않고 띄운다 — 데모는 창을 여럿 띄워 보는 자리이기도 하다. 제목만 다르다.
+    //  - 프로세스가 끝날 때까지 쥔다. wWinMain의 지역이라 메시지 루프가 끝난 뒤에 놓인다.
+    const luil::single_instance instance { u8"luil-demo" };
+    // 인자를 첫째에 넘기는 일만 하는 둘째는 창을 띄우지 않고 끝낸다.
+    if (const std::optional<int> sent { send_to_first_instance(instance, *arguments) }; sent.has_value())
+        return *sent;
+</script></div>
+        <div class="prose">
+          <p>첫째 쪽은 <code>window_environment::instance</code>를 단다. instance는 창보다 오래 산다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1789-1798" data-path="examples/demo_main.cpp" data-start="1789"><script type="text/plain">
+    luil::win32::window_environment environment {};
+    if (config.smoke_test == false)
+    {
+        environment.driver = &driver;
+        environment.policy = &policy;
+        environment.delegate = &delegate;
+        // 첫째이면 같은 이름의 둘째가 보낸 인자를 주 창이 받는다. instance는 wWinMain의 지역이라 창보다 오래 산다.
+        environment.instance = &instance;
+    }
+    return luil::win32::run_application_window(config, environment);
+</script></div>
+        <div class="prose">
+          <p>받는 훅은 UI thread의 창 프로시저 안에서 불린다. 보낸 쪽이 답을 기다리므로 게시만 하고, 표가 0이 아닌지를 답한다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1574-1583" data-path="examples/demo_main.cpp" data-start="1574"><script type="text/plain">
+            // 같은 이름의 둘째 인스턴스가 보낸 인자와 작업 폴더다. 창 페이지가 받아 한 줄로 보인다.
+            //  - 보낸 쪽이 끝나기를 기다리므로 게시만 하고, 표가 0이 아닌지를 답한다 (file-watch-design.md의 `deliver`와 같다).
+            //    앞으로 세우기는 라이브러리가 콜백 뒤에 한다.
+            [[nodiscard]] bool on_instance_arguments(luil::win32::app_host& host, const luil::instance_arguments& arguments) override
+            {
+                // 이 데모가 끝나는 중에 COM이 띄운 둘째가 알림 표식을 넘길 수 있다. 파일 인자가 아니라 받기만 하고 보이지 않는다.
+                if (luil::notification_launch(arguments.arguments))
+                    return true;
+                return host.post_app_message_ticketed(luil::app_message { instance_arguments_intent { arguments } }) != 0;
+            }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/windows_page.cpp:692-696" data-path="examples/demo/windows_page.cpp" data-start="692"><script type="text/plain">
+        if (const auto* const received { message.get<instance_arguments_intent>() }; received != nullptr)
+        {
+            instance_arguments_ = received->arguments;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><strong>훅을 만들지 않으면 둘째는 늘 <code>failed</code>다.</strong> <code>on_instance_arguments</code>의 기본 구현은 거짓을 답한다. 창은 그래도 앞으로 선다.</li>
+            <li><strong>macOS도 받는다.</strong> <code>luil::macos::application_environment::instance</code>를 달고, 앱 delegate가 <code>win32::window_delegate</code>를 구현했으면 macOS host가 그 <code>on_instance_arguments</code>를 메인 thread에서 부른다. 설계 문서 머리는 "Win32 전용"이라 적지만, 같은 문서의 macOS 절과 코드는 macOS도 받는다. 훅의 선언 자리가 Win32 헤더일 뿐이다.</li>
+            <li>Android·iOS에서는 둘째가 생기지 않는다. <code>primary()</code>는 늘 참이고 <code>status()</code>·<code>send_to_primary</code>는 <code>unsupported</code>다. 앱을 다시 여는 요청은 Intent 쪽으로 온다.</li>
+            <li><code>send_to_primary</code>는 부른 thread를 시한(기본 3 s)까지 막는다. 시한이 지난 보내기도 첫째가 나중에 받을 수 있어, 다시 보내면 받는 쪽이 중복을 견뎌야 한다. <code>not_found</code>는 시한 안에 첫째의 주 창이 서지 않았거나 이 객체가 첫째라는 뜻이다.</li>
+            <li>인자는 명령 줄과 같이 믿을 수 없는 입력이다. 같은 데스크톱의 어느 프로세스든 보낼 수 있고 받는 쪽은 보낸 프로세스를 모른다. 관리자 권한으로 도는 첫째가 낮은 권한 둘째의 인자를 받으려면 <code>instance_from_lower_integrity</code>를 켠다 — 끄면 그 둘째는 접근 거부 <code>failed</code>다.</li>
+          </ul>
+        </div>
+
+        <h3>파일 관리자에서 보이기 · 외부 프로그램 띄우기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/windows_page.cpp:507-526" data-path="examples/demo/windows_page.cpp" data-start="507"><script type="text/plain">
+        // 플랫폼 도구는 logic thread에서 부른다. 탐색기와 메모장은 따로 뜨는 창이라 이쪽은 결과만 적는다.
+        if (message.get<reveal_executable_intent>() != nullptr)
+        {
+            const std::filesystem::path executable { executable_path() };
+            const luil::platform_result result { luil::reveal_in_file_manager(executable.u8string()) };
+            platform_report_ = result.ok() ? u8"탐색기에서 실행 파일을 골라 두었다." : u8"탐색기를 열지 못했다 — " + result.error;
+            return true;
+        }
+        if (message.get<launch_notepad_intent>() != nullptr)
+        {
+#if defined(__APPLE__)
+            // macOS의 메모장 자리는 텍스트 편집기다. 앱은 `open -a`로 띄운다.
+            const std::vector<std::u8string> arguments { u8"-a", u8"TextEdit" };
+            const luil::platform_result result { luil::launch_program(u8"/usr/bin/open", arguments) };
+#else
+            const luil::platform_result result { luil::launch_program(u8"notepad.exe", {}) };
+#endif
+            platform_report_ = result.ok() ? u8"메모장을 띄웠다." : u8"메모장을 띄우지 못했다 — " + result.error;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>reveal_in_file_manager</code>는 파일 관리자를 열고 그 파일을 고른 채로 둔다. 없는 경로는 <code>not_found</code>다. Windows는 부르는 thread에서 COM을 연다. Android·iOS는 <code>unsupported</code>다 (헤더 주석에는 Android만 적혀 있다).</li>
+            <li><code>launch_program</code>: Windows는 인자를 Windows 명령 줄 규칙으로 따옴표 처리해 <code>CreateProcessW</code>로 띄우고 프로그램은 PATH에서 찾는다. macOS는 <code>posix_spawnp</code>에 argv를 그대로 넘기고 <code>show_window</code>는 쓰지 않으며, 신호로 끝나면 <code>exit_code</code>가 비어 있다. Android·iOS는 <code>unsupported</code>다.</li>
+            <li><code>launch_options::wait</code>를 켜면 끝날 때까지 기다려 <code>exit_code</code>를 싣는다. Windows는 시한 없이 기다리므로 logic thread에서 켜지 않는다.</li>
+          </ul>
+        </div>
+
+        <h3>그 밖의 도구</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>도구</th><th>하는 일</th><th>주의</th></tr></thead>
+            <tbody>
+              <tr><td><code>file_lock</code></td><td>파일 하나의 배타 잠금. 없으면 파일을 만든다</td><td>기다리지 않는다. 이미 잠겨 있으면 <code>locked()</code>가 거짓이고 <code>status()</code>는 <code>ok</code>다 — 잠그지 못한 것은 오류가 아니라 답이다. 같은 프로세스의 두 객체도 서로 막는다</td></tr>
+              <tr><td><code>set_background_priority</code></td><td><strong>부른 thread</strong>를 배경 우선순위로 내리거나 되돌린다</td><td>색인·섬네일처럼 사용자를 기다리게 하지 않는 일에 쓴다. 다른 thread에는 걸리지 않는다</td></tr>
+              <tr><td><code>blocking_io_canceller</code></td><td>지은 thread의 막힌 동기 I/O를 다른 thread에서 끊는다</td><td>Windows만 된다. Android·macOS·iOS는 <code>unsupported</code>다 (헤더 주석에는 Android만 적혀 있다). 막힌 I/O가 없으면 <code>not_found</code></td></tr>
+              <tr><td><code>user_first_weekday</code> · <code>user_ui_languages</code></td><td>지역 설정의 주 첫 요일, 표시 언어 태그</td><td>부를 때마다 OS에 묻는다. 시작할 때와 앞으로 올 때(<code>app_lifecycle::foreground</code>) 읽어 둔다. 라이브러리는 스스로 쓰지 않는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/android_main.cpp:126-130" data-path="examples/mobile_demo/android_main.cpp" data-start="126"><script type="text/plain">
+        // 지역 질의는 부를 때마다 OS에 묻는다. 페이지 대신 delegate가 읽어 메시지로 넣는다.
+        [[nodiscard]] static luil::app_message read_locale()
+        {
+            return luil::app_message { mobile_demo::device_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } };
+        }
+</script></div>
+      </section>
+
+      <section class="sec" id="build-clipboard">
+        <header class="sec-head">
+          <h2>만들기: 파일 목록 클립보드</h2>
+          <p class="lede">OS 파일 관리자와 파일을 복사·잘라내기·붙여넣기로 주고받는다. 클립보드는 UI thread의 것이라 앱은 요청을 값으로 내고, 답과 바뀜은 delegate 훅이 지은 앱 메시지로 받는다.</p>
+        </header>
+        <h3>요청은 액션이다</h3>
+        <div class="prose">
+          <p>단추가 클립보드 요청을 그대로 돌려준다. logic thread가 정한 순간에 넣을 때는 <code>app_host::post_clipboard_request</code>를 부른다. 잘라 온 것을 옮긴 뒤 비울 때는 읽은 번호(<code>expected_sequence</code>)를 싣는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/files_page.cpp:606-626" data-path="examples/demo/files_page.cpp" data-start="606"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> files_page::make_buttons() const
+    {
+        luil::stack_config config {};
+        config.direction = luil::stack_direction::row;
+        config.spacing = 8.0f;
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"files-buttons" }, config) };
+        const auto add = [&row](const std::u8string& owner, std::u8string text, std::vector<luil::input_action> actions, const bool enabled) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_files_button, owner }, luil::text_button_config { .text = std::move(text) }) };
+            button->set_action(luil::ui_trigger::left_click, [actions = std::move(actions)](const luil::ui_action_context&) { return actions; });
+            button->set_enabled(enabled);
+            row->add(std::move(button), 110.0f);
+        };
+        const std::vector<std::u8string> paths { selected_paths() };
+        add(u8"files-copy", u8"복사", { luil::clipboard_files_copy_request { paths, luil::file_clipboard_intent::copy } }, paths.empty() == false);
+        add(u8"files-cut", u8"잘라내기", { luil::clipboard_files_copy_request { paths, luil::file_clipboard_intent::cut }, luil::make_app_action(files_cut_intent {}) }, paths.empty() == false);
+        add(u8"files-paste", u8"붙여넣기", { luil::clipboard_files_paste_request { 1u } }, true);
+        // 잘라 온 것을 옮긴 뒤 클립보드를 비운다. 읽은 순간의 번호일 때만이라, 그 사이 다른 것을 복사했으면 남는다.
+        add(u8"files-clear", u8"옮긴 뒤 비우기", { luil::clipboard_files_copy_request { {}, luil::file_clipboard_intent::copy, pasted_sequence_ }, luil::make_app_action(files_clear_intent {}) },
+            pasted_sequence_.has_value());
+        return row;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>경로는 UTF-8 절대 경로다. 하나라도 절대 경로가 아니면 아무것도 넣지 않는다.</li>
+            <li><strong>빈 목록은 클립보드를 비운다.</strong> 잘라 둔 항목을 붙여 넣어 옮긴 뒤 같은 항목이 다시 붙지 않게 하는 자리다.</li>
+            <li>파일을 옮기거나 지우지 않는다. 잘라내기는 받는 쪽에 "옮겨 달라"는 뜻만 싣는다. 옮기는 것은 앱이다.</li>
+          </ul>
+        </div>
+        <h3>답과 바뀜은 delegate 훅이 짓는다</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1547-1556" data-path="examples/demo_main.cpp" data-start="1547"><script type="text/plain">
+            // 파일 클립보드의 답과 변화다. 파일 페이지가 받는다.
+            [[nodiscard]] luil::app_message make_file_clipboard_message(const luil::file_clipboard_content& content) override
+            {
+                return luil::app_message { files_clipboard_read_intent { content } };
+            }
+
+            [[nodiscard]] luil::app_message make_clipboard_changed_message(const luil::clipboard_change& change) override
+            {
+                return luil::app_message { files_clipboard_changed_intent { change } };
+            }
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/files_page.cpp:396-432" data-path="examples/demo/files_page.cpp" data-start="396"><script type="text/plain">
+        if (const auto* const changed { message.get<files_clipboard_changed_intent>() }; changed != nullptr)
+        {
+            // 잘라 둔 표시는 `owned`만으로 정하지 않는다. 같은 앱이 글을 복사하거나 비워도 임자는 이 앱이다.
+            // 잘라 넣은 뒤 처음 온 번호를 적어 두고, 그 번호의 파일 목록일 때만 표시를 남긴다.
+            const luil::clipboard_change& change { changed->change };
+            const bool ours { change.owned && change.has_files };
+            if (cut_pending_ && ours)
+            {
+                cut_pending_ = false;
+                cut_sequence_ = change.sequence;
+            }
+            else if (cut_keys_.empty() == false && (ours == false || cut_sequence_ != change.sequence))
+            {
+                cut_keys_.clear();
+                cut_pending_ = false;
+                cut_sequence_.reset();
+            }
+            return true;
+        }
+        if (const auto* const read { message.get<files_clipboard_read_intent>() }; read != nullptr)
+        {
+            const luil::file_clipboard_content& content { read->content };
+            if (content.supported == false)
+                clipboard_text_ = u8"이 플랫폼은 파일 클립보드를 다루지 않는다";
+            else if (content.paths.empty())
+                clipboard_text_ = u8"붙일 파일이 없다";
+            else
+            {
+                clipboard_text_ = count_text(content.paths.size()) + (content.intent == luil::file_clipboard_intent::cut ? u8" 옮기기" : u8" 복사") + u8": " + content.paths.front();
+                if (content.paths.size() > 1u)
+                    clipboard_text_ += u8" 외";
+            }
+            // 잘라 온 것을 옮겼으면 클립보드를 비울 차례다. 읽은 번호를 들고 있다가 그 번호일 때만 비운다.
+            pasted_sequence_.reset();
+            if (content.intent == luil::file_clipboard_intent::cut && content.paths.empty() == false)
+                pasted_sequence_ = content.sequence;
+            return true;
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="398-401" data-title="잘라 둔 표시">임자(<code>owned</code>)만 보지 않는다. 같은 앱이 글을 복사하거나 클립보드를 비워도 임자는 이 앱이다. <code>owned &amp;&amp; has_files</code>일 때만 "우리 것"이다.</li>
+            <li data-lines="402-412" data-title="번호로 맞추기">잘라 넣은 뒤 처음 온 번호를 적어 두고, 그 번호의 파일 목록일 때만 표시를 남긴다.</li>
+            <li data-lines="417-427" data-title="읽은 목록"><code>supported</code>가 거짓이면 이 플랫폼에 파일 클립보드가 없다. 목록이 비면 붙일 파일이 없다. 읽기를 청하면 답은 늘 온다.</li>
+            <li data-lines="428-431" data-title="옮긴 뒤 비울 번호">잘라 온 목록이면 읽은 번호를 든다. 옮긴 뒤 그 번호로 비우면, 그 사이 사용자가 다른 것을 복사했을 때는 지우지 않는다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>Android·iOS는 넣기를 무시하고, 읽기 답의 <code>supported</code>가 거짓이다.</li>
+            <li>헤더 주석(<code>make_clipboard_changed_message</code>)은 "지금은 Win32만 알린다"고 적지만 macOS·iOS host도 바뀜 알림을 부른다. 바뀜 메시지가 Windows에서만 온다고 짜지 않는다.</li>
+            <li><code>file_clipboard_content::sequence</code>와 <code>clipboard_change::sequence</code>는 클립보드가 바뀔 때마다 느는 번호다. 지원하지 않는 플랫폼은 0이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 기호는 <a class="xref" href="api.html#net--http-client-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="http_client_config">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/net/http_client.h:12-66" data-path="include/luil/net/http_client.h" data-start="12"><script type="text/plain">
+    struct http_client_config
+    {
+        // 다 풀린 답을 앱에게 건네는 **유일한** 자리다.
+        //
+        // **client가 소유한 thread에서 불린다** — logic thread도 UI thread도 아니다.
+        // 앱이 여기서 할 일은 값을 자기 thread로 나르는 것 하나이고, 이 저장소에서
+        // 그 길은 `app_host::post_app_message`다 (thread-safe, 막히지 않는다):
+        //
+        //     config.deliver = [&host](luil::net::http_response response) {
+        //         host.post_app_message(luil::app_message { fetch_done { std::move(response) } });
+        //     };
+        //
+        //  - **요청마다 callback을 받지 않는 이유가 여기 있다.** 그러면 앱 상태를
+        //    이 thread에서 만지는 코드가 자연스러워지고, 이 라이브러리에서 스레드를
+        //    건너는 길은 메시지 하나여야 한다 (docs/concepts/threading-model.md).
+        //  - 짧아야 한다. 여기서 오래 머물면 다음 답의 파싱과 되풀이 요청의 다음
+        //    회차가 그만큼 늦는다 (thread가 하나다).
+        //  - 여기서 `send`·`cancel`·`start_heartbeat`을 불러도 된다 (이어지는
+        //    요청을 거는 자연스러운 자리다). **`stop`만은 부르면 안 된다** —
+        //    자기 자신을 join하게 된다. debug 빌드가 assert로 잡는다.
+        //  - 던지면 삼키고 그 답만 버린다 (thread 진입 함수를 벗어난 예외는 곧
+        //    `terminate`다). 계약은 던지지 않는 것이다.
+        //  - 비어 있으면 답이 조용히 버려진다 (test의 자리다).
+        std::function<void(http_response)> deliver {};
+
+        // User-Agent 헤더다.
+        std::u8string user_agent { u8"luil" };
+        // 시스템 proxy 설정을 따른다. 거짓이면 곧바로 나간다 —
+        // 되돌이 주소를 쓰는 test와 데모의 자리다 (CI 기계의 proxy가 127.0.0.1을
+        // 가로채면 test가 소음이 된다).
+        bool use_system_proxy { true };
+
+        // 동시에 선을 타고 있을 수 있는 요청 수다.
+        //
+        // **상한을 넘긴 `send`는 큐에 쌓지 않고 그 자리에서 거절한다.** 숨은 큐는
+        // 문제를 메모리로 미루는 것이고 (messaging.md가 무한 큐에 내린 판정),
+        // 무엇보다 앱이 "지금 밀렸다"를 봐야 물러설 수 있다.
+        std::size_t max_in_flight { 32 };
+
+        // UTF-8이 아닌 charset을 옮기는 갈고리다.
+        // 비어 있으면 `codepage_text_transcoder()`를 쓴다 — Windows에서는 앱이 아무것도
+        // 하지 않아도 euc-kr이 읽힌다. Android의 기본값은 utf-16만 옮긴다. macOS는 CoreFoundation의 표로 옮긴다.
+        http_text_transcoder transcode {};
+
+        // `stop()`이 남은 손잡이가 닫히기를 기다릴 상한이다.
+        //
+        // 기본값이 1초인 것은 종료 예산의 산술 때문이다: `app_host::shutdown`이
+        // 1·2단계에 3초, join 앞 확인에 1초를 쓰고 그 사이 3단계에서 이것이
+        // 불린다 — 셋을 합쳐 세션 종료 유예(기본 5초) 안이다. 실제로는
+        // `logic_driver::cancel()`에서 `cancel_all()`을 먼저 부르면 수 ms다.
+        std::chrono::milliseconds stop_budget { 1000 };
+        // 아직 마지막 응답을 배달하지 않은 ticket의 상한이다. 대기 중인 heartbeat도
+        // 포함한다. 마지막 배달 callback이 반환하면 자리가 난다.
+        std::size_t max_pending_responses { 128 };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>deliver</code></td><td>빈 함수</td><td>client 소유 thread에서 불린다. 짧게 끝낸다. 안에서 <code>send</code>·<code>cancel</code>·<code>start_heartbeat</code>는 되고 <code>stop</code>은 안 된다. 던지면 그 답만 버린다. 비어 있으면 답이 조용히 버려진다</td></tr>
+                  <tr><td><code>user_agent</code></td><td><code>"luil"</code></td><td>올바른 UTF-8이 아니면 <code>create</code>가 실패한다. WebSocket client에는 이 칸이 없다 (Windows·Apple 전송부는 <code>luil</code>을 쓴다)</td></tr>
+                  <tr><td><code>use_system_proxy</code></td><td>참</td><td>거짓이면 곧바로 나간다. Windows는 요청 손잡이마다 직접 연결을 다시 못박는다</td></tr>
+                  <tr><td><code>max_in_flight</code></td><td>32</td><td>넘긴 <code>send</code>는 줄 세우지 않고 그 자리에서 거절한다 (표 0). Apple은 host당 연결 수도 이 값으로 묶는다</td></tr>
+                  <tr><td><code>transcode</code></td><td>비어 있음 → <code>codepage_text_transcoder()</code></td><td>UTF-8이 아닌 charset을 옮기는 갈고리다. 기본 변환은 플랫폼마다 다르다 (<a class="xref" href="#platforms">플랫폼 차이</a>)</td></tr>
+                  <tr><td><code>stop_budget</code></td><td>1000 ms</td><td><code>stop()</code>이 손잡이가 닫히기를 기다릴 상한. 넘기면 문맥과 세션을 일부러 남긴다</td></tr>
+                  <tr><td><code>max_pending_responses</code></td><td>128</td><td>마지막 답을 아직 배달하지 않은 표의 상한(쉬는 되풀이도 센다). 넘으면 거절한다 — 느린 <code>deliver</code>가 새 요청에 배압을 건다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="http_request">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/net/http_message.h:87-155" data-path="include/luil/net/http_message.h" data-start="87"><script type="text/plain">
+    // 요청 하나다. 값이고, client에 넘기면 복사되어 client가 든다.
+    struct http_request
+    {
+        // 절대 URL이다 (http·https만). 다른 scheme은 선을 건드리지 않고 거절된다.
+        std::u8string url {};
+        http_method method { http_method::get };
+        // 확장 메서드의 이름이다. `method`가 `extension`일 때만 쓰고, 대소문자를 그대로 선에 싣는다
+        // (메서드 이름은 대소문자를 가린다).
+        //  - RFC 9110의 token이어야 한다 (`is_http_token`). 아니면 요청 전체가 거절된다 (`invalid_method`).
+        //  - `extension`이 아닌데 비어 있지 않거나, 표준 동사(GET·HEAD·POST·PUT·PATCH·DELETE·OPTIONS)나
+        //    CONNECT를 적어도 거절된다. 표준 동사는 `method`의 값으로 적고, CONNECT는 전송의 몫이다.
+        std::u8string method_name {};
+        // 더 붙일 헤더다. 같은 이름이 있으면 갈아 끼운다.
+        //  - 이름·값에 CR·LF·NUL이 있으면 요청 전체가 거절된다 (`invalid_header`).
+        //    헤더 주입은 밖에서 온 값이 그대로 실리는 앱이 부르는 사고다.
+        //  - `Host`·`Content-Length`는 넣지 않는다. 전송이 채우는 것이라 우리 것이
+        //    이기지 못한다.
+        std::vector<http_header> headers {};
+        // 보낼 몸이다. 비어 있으면 몸 없는 요청이다.
+        //  - Android·macOS는 GET·HEAD에 몸을 실을 수 없어 그 요청을 선을 건드리기 전에 거절한다
+        //    (`system_error`). Android는 몸 있는 GET을 몰래 POST로 바꾸고, macOS(NSURLSession)는 보내지 않은 채
+        //    뜻이 다른 오류로 실패하기 때문이다.
+        std::vector<std::uint8_t> body {};
+        // 몸의 Content-Type이다. 몸이 있는데 비어 있으면
+        // `application/octet-stream`으로 나간다.
+        std::u8string content_type {};
+
+        // 받은 바이트를 값으로 바꿀 규칙이다.
+        http_body_parse_options parse {};
+        // 받아들일 몸의 상한이다. 압축되지 않은 `Content-Length`가 이보다 크면
+        // **읽기 전에** 끊고, 그 밖의 답은 읽는 동안 넘는 순간 끊는다.
+        //  - 압축을 풀어 받으면 상한은 **푼 뒤의** 크기에 걸린다. 헤더의 길이는
+        //    압축된 크기라 상한과 견줄 값이 아니다 — 그런 답은 미리 끊지 않고
+        //    누적으로만 잰다 (압축 폭탄도 그 누적이 막는다).
+        std::size_t max_body_bytes { default_http_body_limit };
+
+        // **몸이 있는 요청은 이 값과 무관하게 재지정을 따라가지 않는다.**
+        // 전송이 이미 보낸 몸을 재지정된 요청에 다시 실어 주지 않으므로,
+        // 307·308을 따라가면 몸 없는 요청이 조용히 대신 나간다 — POST가 200을
+        // 받았는데 아무것도 안 만들어지는 종류의 버그다. 그래서 그 자리는 앱에게
+        // 돌려준다: 3xx를 답으로 받아 `Location`을 보고 다시 보낸다.
+        //  - 따라간 303은 GET으로 묻는다 (HEAD는 그대로). 301·302의 POST도 GET이 된다.
+        //  - **확장 메서드는 동사를 바꾸지 않는다.** 301·302·307·308은 같은 동사로 따라가고, 303은
+        //    따라가지 않는다 — 303은 GET으로 다시 물으라는 뜻이라, 따라가면 PROPFIND가 조용히 GET이
+        //    된다. 그 303이 그대로 답이다 (`Location`은 헤더에 있다).
+        http_redirect_policy redirects { http_redirect_policy::follow };
+        // 따라갈 재지정의 최대 횟수다.
+        int max_redirects { 10 };
+        // gzip·deflate를 받고 자동으로 푼다 (OS가 지원하지 않으면 조용히 꺼지고
+        // 요청은 그대로 성공한다).
+        //  - macOS(NSURLSession)는 푸는 것을 끌 수 없다. 거짓이면 서버에 압축하지 말라고 청할 뿐이고,
+        //    그래도 압축해 온 답은 푼 바이트로 온다.
+        bool decompress { true };
+
+        // 각 구간의 상한이다.
+        std::chrono::milliseconds connect_timeout { 10000 };
+        std::chrono::milliseconds send_timeout { 30000 };
+        // 조각 **사이**의 상한이다.
+        std::chrono::milliseconds receive_timeout { 30000 };
+        // 요청 하나가 처음부터 끝까지 쓸 수 있는 시간이다. 0이면 걸지 않는다.
+        //
+        // **왜 따로 있는가.** 위 셋은 각각 "이 구간에서 이만큼 아무 일도 없으면
+        // 접는다"이지 "언제까지 끝난다"가 아니다. 1초에 한 바이트씩 흘리는 서버는
+        // 어느 구간 상한에도 걸리지 않고 영영 붙잡는다 — 이것이 그 구멍을 막는다.
+        // 앱이 화면에 "얼마 안에 답이 온다"를 약속할 수 있는 값은 이것뿐이다.
+        //  - 바닥이지 천장이 아니다. client가 앞선 답의 몸을 푸는 중이면 그만큼
+        //    늦게 끊는다 (thread가 하나다 — http_client.h의 계약).
+        std::chrono::milliseconds total_timeout { 60000 };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>url</code></td><td>빈 글</td><td>http·https 절대 URL만. 다른 scheme은 선을 건드리지 않고 거절한다. CR·LF·NUL이 있으면 <code>invalid_url</code></td></tr>
+                  <tr><td><code>method</code></td><td><code>get</code></td><td><code>remove</code>가 DELETE로 나간다. 표준 밖 동사는 <code>extension</code></td></tr>
+                  <tr><td><code>method_name</code></td><td>빈 글</td><td><code>extension</code>일 때만 쓰는 이름(PROPFIND 따위), 대소문자 그대로 선에 실린다. RFC 9110 token이어야 한다. 표준 동사(대문자)나 CONNECT를 적으면 <code>invalid_method</code></td></tr>
+                  <tr><td><code>headers</code></td><td>빈 목록</td><td>같은 이름은 갈아 끼운다. 이름은 token, 이름·값에 CR·LF·NUL이 있으면 요청 전체가 <code>invalid_header</code>. <code>Host</code>·<code>Content-Length</code>는 넣지 않는다</td></tr>
+                  <tr><td><code>body</code> · <code>content_type</code></td><td>비어 있음</td><td>GET·HEAD에 몸을 실으면 Android·Apple은 거절한다. Content-Type 규칙은 <a class="xref" href="#build-http">POST로 보내기</a></td></tr>
+                  <tr><td><code>parse</code></td><td>기본</td><td>요청마다 받은 바이트를 푸는 규칙 (<code>http_body</code> 탭)</td></tr>
+                  <tr><td><code>max_body_bytes</code></td><td>64 MiB</td><td>압축 안 된 <code>Content-Length</code>가 크면 읽기 전에 끊고, 그 밖은 누적으로 잰다. 압축을 풀면 <strong>푼 뒤의</strong> 크기에 건다</td></tr>
+                  <tr><td><code>redirects</code> · <code>max_redirects</code></td><td><code>follow</code> · 10</td><td>몸이 있으면 정책과 무관하게 따라가지 않는다. https→http는 따라가지 않는다. 다른 출처로 가면 남길 헤더만 남긴다 (<a class="xref" href="#security">보안과 한계</a>)</td></tr>
+                  <tr><td><code>decompress</code></td><td>참</td><td>gzip·deflate를 청하고 푼다. Apple은 끌 수 없다 — 거짓이면 <code>identity</code>를 청할 뿐이다</td></tr>
+                  <tr><td><code>connect_timeout</code> · <code>send_timeout</code> · <code>receive_timeout</code> · <code>total_timeout</code></td><td>10 s · 30 s · 30 s · 60 s</td><td><a class="xref" href="#concepts">개념의 시한 표</a></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="code" data-lang="cpp" data-src="include/luil/net/http_message.h:228-253" data-path="include/luil/net/http_message.h" data-start="228"><script type="text/plain">
+
+    // 되풀이 요청의 쉼이 이보다 짧으면 이 값으로 올린다.
+    //
+    // 0을 넘기는 것은 "가능한 한 빨리"라는 뜻이 되어 서버를 두드리는 고리가 되고,
+    // 그것을 막는 것은 라이브러리의 일이다 (`animation_frame_minimum`이 0 ms짜리
+    // gif에 이미 선 그 자리다).
+    inline constexpr std::chrono::milliseconds http_minimum_heartbeat_interval { 100 };
+
+    // 되풀이하는 요청의 시간표다.
+    struct http_heartbeat
+    {
+        // **답을 받은 뒤부터** 다음 요청까지 쉬는 시간이다.
+        //
+        // 고정 박자가 아니라 이렇게 정한 것이 이 타입의 유일한 판단이다. 고정
+        // 박자면 서버가 느려진 순간 요청이 겹쳐 쌓이고, 그때부터 겹침 정책(건너뛰기·
+        // 앞엣것 취소·줄 세우기)이라는 것을 앱이 골라야 한다. 답을 받고 나서 재는
+        // 규칙에서는 **겹칠 수가 없어** 정할 것이 아예 없다 — 대신 실제 주기는
+        // `interval + 왕복시간`이다. 죽은 서버를 때리지 않는 것은 덤이다.
+        //  - `http_minimum_heartbeat_interval` 아래로는 내려가지 않는다.
+        std::chrono::milliseconds interval { 5000 };
+        // 참이면 첫 회차를 곧바로 보낸다 (로그인 직후의 첫 상태 조회).
+        // 거짓이면 `interval`을 쉬고 시작한다.
+        bool immediate { true };
+        // 몇 회차까지 돌 것인가. 0이면 `cancel`이나 `stop`까지 끝없이 돈다.
+        std::uint64_t max_rounds { 0 };
+    };
+</script></div>
+          </section>
+          <section data-tab="http_response">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/net/http_message.h:255-301" data-path="include/luil/net/http_message.h" data-start="255"><script type="text/plain">
+    // 답 하나다.
+    //
+    // 받아들인 요청 하나에 정확히 하나가 오고, 되풀이 요청은 회차마다 하나씩 온다.
+    // **불변이고 복사가 싸다** — 무거운 것은 `http_body` 안에서 참조 공유다.
+    // client의 thread가 지어 앱의 logic thread로 건너가는 값이라 그 성질이 곧
+    // 요건이다 (`ui_image`·게시된 tree와 같은 계약이다).
+    struct http_response
+    {
+        http_ticket ticket {};
+        // 한 번짜리 요청은 0이다. 되풀이 요청은 1부터 센다 — 첫 회차가 나가기 전에
+        // 취소된 되풀이의 마지막 답만 0이다 (회차가 없었다는 뜻이다).
+        std::uint64_t sequence { 0 };
+        // 이 표로 더 오지 않는다. 한 번짜리는 늘 참이고, 되풀이 요청은 취소·회차
+        // 소진·`stop`·영원히 실패할 오류에서 참이다 — 앱이 자기 표를 잊어도 되는
+        // 시점을 이 한 줄이 말한다.
+        bool last { true };
+
+        // HTTP 상태 코드다. **0이면 상태 줄까지도 오지 못한 것이다**
+        // (`error`가 이유를 안다).
+        int status_code { 0 };
+        // 상태 줄의 이유 글이다 ("Not Found"). 서버가 짓는 값이라 비어 있을 수 있다.
+        // macOS(NSURLSession)는 이 글을 내주지 않아 늘 비어 있다.
+        std::u8string reason {};
+        // 재지정을 따라간 뒤의 최종 URL이다. 따라가지 않았으면 요청한 URL이다.
+        std::u8string final_url {};
+        // 답의 헤더 전부다 (온 차례대로, 이름은 서버가 적은 대소문자 그대로).
+        // macOS(NSURLSession)는 헤더를 사전으로 내주어 차례가 남지 않고, 같은 이름의 줄은 쉼표로 이은 한 줄이다.
+        std::vector<http_header> headers {};
+        // 헤더에서 가른 Content-Type이다 (몸이 비어도 채워진다).
+        // `body.kind`가 `assume_kind`로 뒤집혔어도 여기는 서버가 말한 그대로다.
+        http_media_type content_type {};
+        http_body body {};
+        http_error error {};
+        // 요청을 낸 때부터 몸을 다 받은 때까지다 (파싱 시간은 빼고 잰다 —
+        // 네트워크를 재는 값이라야 앱이 상한을 정할 수 있다).
+        std::chrono::milliseconds elapsed { 0 };
+
+        // 답이 왔고 2xx인가.
+        //  - 404를 "성공"이라 부르지 않기 위해 `error.empty()`와 갈라 둔다.
+        //    통신이 됐는지만 묻고 싶으면 `error.empty()`를 본다. 요즘 서버는
+        //    400·404의 몸에 이유를 싣고, 그것을 전송 실패로 뭉개면 앱이 사람에게
+        //    아무 말도 못 한다 — 그래서 몸은 어느 쪽이든 평소대로 풀린다.
+        [[nodiscard]] bool ok() const noexcept;
+
+        // 헤더 하나의 값이다 (대소문자를 가리지 않는다). 없으면 빈 view다.
+        [[nodiscard]] std::u8string_view header(std::u8string_view name) const noexcept;
+    };
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/net/http_message.h:157-209" data-path="include/luil/net/http_message.h" data-start="157"><script type="text/plain">
+    enum class http_error_kind
+    {
+        // 오류가 없다. **4xx·5xx도 여기다** — 답이 온 것은 사고가 아니다.
+        none,
+        // URL을 읽지 못했다 (선을 건드리지 않았다).
+        invalid_url,
+        // http·https가 아니다 (선을 건드리지 않았다).
+        unsupported_scheme,
+        // 헤더 이름·값이 규칙에 맞지 않는다 (선을 건드리지 않았다).
+        invalid_header,
+        // 확장 메서드의 이름이 token이 아니거나 `method`와 어긋난다 (선을 건드리지 않았다).
+        invalid_method,
+        // 이름을 풀지 못했다.
+        name_not_resolved,
+        // 연결하지 못했다 (거절·닿지 않음).
+        cannot_connect,
+        // 답을 받는 중에 연결이 끊겼다 (몸이 잘렸다).
+        connection_lost,
+        // TLS가 성립하지 않았다 (인증서·프로토콜·https에서 http로 내려가는 재지정).
+        // `message`에 자세한 이유가 있다.
+        secure_failure,
+        // 구간 상한이나 `total_timeout`을 넘겼다.
+        timed_out,
+        // 앱이 `cancel`했다.
+        cancelled,
+        // 재지정을 `max_redirects`보다 많이 만났다.
+        too_many_redirects,
+        // `max_body_bytes`를 넘었다.
+        body_too_large,
+        // `stop()` 중에 끊겼다.
+        stopped,
+        // 그 밖의 시스템 오류다. `native_error`가 원본 코드다.
+        system_error,
+    };
+
+    // 실패는 예외가 아니라 값이다 (`utf_conversion_error`와 같은 성격이다).
+    struct http_error
+    {
+        http_error_kind kind { http_error_kind::none };
+        // 사람이 아니라 개발자가 읽을 진단 영문이다. 사람에게 보일 문장은 앱이
+        // 짓는다 (`load_image_file`의 오류 글과 같은 규약이다). 끝에 원본 코드를
+        // 16진으로 붙인다 (`make_hresult_error`가 이미 선 모양이다).
+        std::u8string message {};
+        // 시스템이 답한 코드다. 타입을 드러내지 않으려고 `unsigned long`이다
+        // (`utf_conversion_error::native_error`가 이미 선 자리다). 0이면 시스템이
+        // 말한 것이 없다.
+        unsigned long native_error { 0 };
+
+        [[nodiscard]] bool empty() const noexcept
+        {
+            return kind == http_error_kind::none;
+        }
+    };
+</script></div>
+            <div class="prose">
+              <p><code>send</code>·<code>start_heartbeat</code>의 거절은 글(<code>error</code>)만 돌려준다. 아래 갈래가 값으로 앱 손에 닿는 것은 답의 <code>error.kind</code>에서다.</p>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th><code>http_error_kind</code></th><th>뜻</th><th>앱이 보는 자리</th></tr></thead>
+                <tbody>
+                  <tr><td><code>none</code></td><td>오류 없음. <strong>4xx·5xx도 여기다</strong></td><td>답</td></tr>
+                  <tr><td><code>invalid_url</code></td><td>URL을 읽지 못했다 (선 전)</td><td>대개 <code>send</code>의 거절. Android는 <code>java.net.URL</code>이 읽지 못한 주소를 답으로도 낸다</td></tr>
+                  <tr><td><code>unsupported_scheme</code></td><td>http·https가 아니다</td><td>대개 거절</td></tr>
+                  <tr><td><code>invalid_header</code></td><td>헤더 이름·값 규칙 위반</td><td>대개 거절</td></tr>
+                  <tr><td><code>invalid_method</code></td><td>확장 메서드 이름 위반</td><td>대개 거절. 되풀이를 멈추는 영구 오류다 (헤더 주석의 목록에는 빠져 있다)</td></tr>
+                  <tr><td><code>name_not_resolved</code> · <code>cannot_connect</code></td><td>이름을 풀지 못했다 · 연결 거절·닿지 않음</td><td>답</td></tr>
+                  <tr><td><code>connection_lost</code></td><td>받는 중에 끊겼다</td><td>답. 반쪽 몸은 버린다 (몸은 비어 있다)</td></tr>
+                  <tr><td><code>secure_failure</code></td><td>TLS가 서지 않았다. <code>message</code>에 이유</td><td>답. Android 평문 정책과 Apple ATS의 거절도 이것이다</td></tr>
+                  <tr><td><code>timed_out</code></td><td>구간 상한이나 <code>total_timeout</code></td><td>답</td></tr>
+                  <tr><td><code>cancelled</code></td><td>앱이 <code>cancel</code>했다</td><td>답 (정확히 하나)</td></tr>
+                  <tr><td><code>too_many_redirects</code></td><td><code>max_redirects</code> 초과</td><td>답</td></tr>
+                  <tr><td><code>body_too_large</code></td><td><code>max_body_bytes</code> 초과</td><td>답. 보낼 몸이 <code>DWORD</code>에 담기지 않으면(4 GiB 이상) Windows는 <code>send</code>에서 거절한다</td></tr>
+                  <tr><td><code>stopped</code></td><td><code>stop()</code> 중에 끊겼다</td><td>배달이 먼저 꺼져 앱에 닿지 않는다고 본다</td></tr>
+                  <tr><td><code>system_error</code></td><td>그 밖. <code>native_error</code>가 원본 코드</td><td>답. 몸 있는 GET·HEAD(Android·Apple)와 동시 상한 초과는 거절이지만, 되풀이 회차가 그 상한에 걸리면 지어 낸 답으로 온다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="http_body">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/net/http_body.h:42-81" data-path="include/luil/net/http_body.h" data-start="42"><script type="text/plain">
+
+    // 이 요청의 그림을 어떻게 풀 것인가.
+    struct http_image_options
+    {
+        // 디코드 시점의 축소 상한이다. 뜻과 규칙은 `image_decode_options` 그대로다.
+        //  - **네트워크에서 오는 그림에는 거의 언제나 채워야 한다.** 밖에서 오는
+        //    4000×3000 사진 하나가 48 MB이고, 움직이는 것이면 장 수가 곱해진다.
+        image_decode_options decode {};
+        // 참이면 `decode_animated_image_bytes`로 푼다 (기본값).
+        // 거짓이면 첫 장만 `decode_image_bytes`로 풀어 한 장짜리 값으로 담는다 —
+        // 목록의 섬네일처럼 움직일 이유가 없는 자리에서 장 수만큼의 메모리와
+        // 시간을 아낀다. 어느 쪽이든 값이 서는 자리는 `http_body::image` 하나다.
+        bool animated { true };
+    };
+
+    // 바이트를 값으로 바꾸는 규칙 묶음이다. 요청마다 다르게 줄 수 있다.
+    struct http_body_parse_options
+    {
+        // 채우면 Content-Type도 냄새도 보지 않고 이 갈래로 푼다.
+        // **서버가 틀린 것을 앱이 아는 자리다** — json을 `text/plain`으로 내는
+        // API가 흔하고, 그것을 라이브러리가 몰래 고쳐 주는 것과 앱이 시켜서 하는
+        // 것은 성격이 아주 다르다 (`media_type_invites_sniffing`의 주석과 짝이다).
+        std::optional<http_body_kind> assume_kind {};
+        http_image_options image {};
+        // json으로 풀기를 시도할 바이트 상한이다. 넘으면 갈래는 `json`인 채로
+        // `parse_error`가 서고 `json`은 비어 있다 — 바이트는 그대로 남는다.
+        //  - 몸 전체 상한(`http_request::max_body_bytes`)과 따로다. 64 MiB를 받는
+        //    것은 되어도 64 MiB를 DOM으로 펴는 것은 아니다.
+        std::size_t max_json_bytes { 16u * 1024u * 1024u };
+        // json 중첩 깊이 상한이다. 넘는 가지는 짓지 않고 `parse_error`가 선다.
+        //  - **파서가 아니라 파괴자 때문에 필요하다.** 파싱은 제 스택을 쓰지만
+        //    깊게 중첩된 값을 **버릴 때**는 재귀라, `[[[[...`를 십만 겹 보낸
+        //    서버가 우리 stack을 넘긴다. 짓지 않으면 버릴 것도 없다.
+        int max_json_depth { 256 };
+        // 참이면 html도 `text`를 함께 채운다 (규칙은 text와 같다).
+        // 기본은 거짓이다 — html의 소비자는 webview이고 그쪽은 바이트와 charset을
+        // 받는다. 미리 UTF-8로 옮겨 두면 파서가 필요로 하는 charset을 버리는
+        // 셈이고, 2 MB짜리 문서가 메모리에서 두 벌이 된다. 눈으로 보려는 앱만 켠다.
+        bool html_as_text { false };
+    };
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/net/http_body.h:82-134" data-path="include/luil/net/http_body.h" data-start="82"><script type="text/plain">
+
+    // 답의 몸 한 덩이다. **갈래 하나와 슬롯 넷이 한 struct에 산다.**
+    //
+    // variant도 lazy accessor도 아닌 이유가 이 타입의 요점이다.
+    //  - variant면 원본 바이트가 갈래에 밀려난다. 그런데 실패를 사람에게 보일 때
+    //    필요한 것이 정확히 그 바이트다 ("JSON이라더니 이렇게 왔다"). 게다가
+    //    `nlohmann::json`과 `ui_animated_image`가 든 variant는 어차피 큰 쪽만큼
+    //    크므로 아끼는 것도 없다.
+    //  - **lazy accessor는 더 나쁘다.** 늦게 풀면 푸는 자리가 *부르는 쪽의 thread*가
+    //    되는데, 이 값을 받아 보는 쪽은 대개 그리기다 — 그림 디코딩이 수십 ms에서
+    //    초 단위인 것(image_decode.h)을 생각하면 창이 그만큼 멎는다. 값은
+    //    **채널을 건너기 전에 이미 다 풀려 있어야** 하고, 그것을 강제하는 것이
+    //    이 struct다.
+    // 무거운 슬롯은 전부 참조 공유라 복사가 싸고, 만들어진 뒤 바뀌지 않는다 —
+    // thread를 건너도 새 동기화가 없다 (`ui_image`와 같은 계약이다).
+    struct http_body
+    {
+        http_body_kind kind { http_body_kind::empty };
+        http_body_kind_source kind_source { http_body_kind_source::absent };
+        // **언제나 있다.** 어떤 갈래로 풀렸든, 풀리다 실패했든 받은 바이트 그대로다
+        // (압축은 이미 풀려 있다). 몸이 없으면 비어 있다.
+        //  - null일 수 있으므로 읽는 것은 `data()`다.
+        std::shared_ptr<const std::vector<std::uint8_t>> bytes {};
+        // `kind == json`이고 파싱이 성공했을 때만 선다.
+        //  - **shared_ptr인 것이 판정이다.** 공개 헤더가 `json_fwd.hpp`만 들이므로
+        //    umbrella 헤더를 쓰는 소비자가 nlohmann 본체를 열지 않아도 이 타입을
+        //    지나칠 수 있고, 값이 참조 공유라 복사가 싸며, `null` 문서와 "풀리지
+        //    않았다"가 섞이지 않는다 — json의 `null`은 어엿한 값이라 `is_null()`
+        //    로는 그 둘을 못 가른다.
+        std::shared_ptr<const nlohmann::json> json {};
+        // `kind == image`이고 디코딩이 성공했을 때만 선다.
+        // 움직이지 않는 파일도 여기로 온다 (한 장짜리 값이고 `animated()`가 거짓).
+        ui_animated_image image {};
+        // `kind == text`(또는 `html_as_text`를 켠 html)이고 글로 옮겨졌을 때만 선다.
+        // **언제나 올바른 UTF-8이다.** 읽는 것은 `as_text()`다.
+        std::shared_ptr<const std::u8string> text {};
+        // 값이 바이트를 그대로 옮긴 것이 아니면 이유가 적힌다 (진단용 영문).
+        //
+        // **비어 있지 않다고 값이 없는 것은 아니다.** 깨진 UTF-8을 U+FFFD로 바꿔
+        // 담은 글이 그 자리다 — 글은 쓸 수 있고, 원문과 다르다는 사실만 여기 남는다.
+        // 슬롯이 비었는지는 각 슬롯이 답한다 (`json == nullptr`·`image.valid()`).
+        std::u8string parse_error {};
+
+        // 없으면 빈 span·빈 view다 (부르는 쪽이 null을 검사하지 않게 한다).
+        [[nodiscard]] std::span<const std::uint8_t> data() const noexcept;
+        [[nodiscard]] std::u8string_view as_text() const noexcept;
+
+        // 우리가 푸는 갈래이고 그 값이 실제로 서 있는가.
+        [[nodiscard]] bool parsed() const noexcept;
+        // 움직임이 필요 없는 자리를 위한 한 장이다 (`image.frame_image(0)`).
+        // 그림이 없으면 빈 이미지다 — 범위 검사를 부르는 쪽에 떠넘기지 않는다.
+        [[nodiscard]] const ui_image& still_image() const noexcept;
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>assume_kind</code></td><td>없음</td><td>Content-Type도 냄새도 보지 않고 이 갈래로 푼다. 서버가 틀린 것을 <strong>앱이</strong> 아는 자리다. 빈 몸은 그래도 <code>empty</code></td></tr>
+                  <tr><td><code>image.decode</code></td><td>상한 없음</td><td>네트워크 그림에는 거의 언제나 채운다 (<code>max_width</code>·<code>max_height</code>·<code>max_source_pixels</code>…)</td></tr>
+                  <tr><td><code>image.animated</code></td><td>참</td><td>거짓이면 첫 장만 푼다. 값은 여전히 <code>image</code> 하나다</td></tr>
+                  <tr><td><code>max_json_bytes</code></td><td>16 MiB</td><td>넘으면 갈래는 <code>json</code>, 슬롯은 비고 <code>parse_error</code></td></tr>
+                  <tr><td><code>max_json_depth</code></td><td>256</td><td>짓기 <strong>전에</strong> 잰다 (깊은 값을 버릴 때의 재귀 때문이다). 음수는 0으로 본다</td></tr>
+                  <tr><td><code>html_as_text</code></td><td>거짓</td><td>참이면 html도 <code>text</code>를 채운다. <code>parsed()</code>는 그래도 거짓이다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose">
+              <p>갈래표는 <code>http_media_type.h</code>의 <code>classify_media_type</code>·<code>media_type_invites_sniffing</code>·<code>sniff_body_kind</code>가 전부다. <a class="xref" href="#lab">실습</a>이 그 함수들을 옮긴 것이다.</p>
+            </div>
+          </section>
+          <section data-tab="websocket_client">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/net/websocket_client.h:10-59" data-path="include/luil/net/websocket_client.h" data-start="10"><script type="text/plain">
+    enum class websocket_event_kind { opened, text, binary, closed };
+
+    struct websocket_event
+    {
+        websocket_event_kind kind { websocket_event_kind::closed };
+        std::uint64_t sequence { 0 };
+        // 완성된 메시지다. 빈 메시지도 배달한다. 공유 불변 값이라 app_message로 복사가 싸다.
+        std::shared_ptr<const std::vector<std::uint8_t>> data {};
+        std::uint16_t close_code { 1006 };
+        std::u8string close_reason {};
+        http_error error {};
+    };
+
+    struct websocket_request
+    {
+        std::u8string url {};
+        std::chrono::milliseconds connect_timeout { 10000 };
+    };
+
+    struct websocket_client_config
+    {
+        // reader thread에서만 부른다. HTTP처럼 post_app_message로 옮긴다. 여기서 stop/소멸은 금지다.
+        std::function<void(websocket_event)> deliver {};
+        std::size_t max_message_bytes { 8u * 1024u * 1024u };
+        std::size_t max_pending_messages { 64 };
+        std::size_t max_pending_bytes { 8u * 1024u * 1024u };
+        std::chrono::milliseconds close_timeout { 3000 };
+    };
+
+    // 연결 하나다. reader와 writer를 소유해 수신 대기가 송신을 막지 않는다. 재접속은 새 client로 명시한다.
+    class websocket_client final
+    {
+    public:
+        websocket_client(const websocket_client&) = delete;
+        websocket_client& operator=(const websocket_client&) = delete;
+        ~websocket_client();
+        // URL·설정 오류는 여기서 실패한다. 연결·TLS·upgrade 오류는 closed 이벤트로 온다.
+        [[nodiscard]] static std::unique_ptr<websocket_client> create(websocket_request request, websocket_client_config config, std::u8string& error);
+        // 큐가 찼거나 연결이 아직 열리지 않았거나 닫는 중이면 false다. 숨은 무한 큐가 없다.
+        [[nodiscard]] bool send_text(std::u8string_view text);
+        [[nodiscard]] bool send_binary(std::span<const std::uint8_t> bytes);
+        [[nodiscard]] bool close(std::uint16_t code = 1000, std::u8string_view reason = {});
+        // 연결을 끊고 join한다. 돌아온 뒤에는 deliver가 없다. 어느 앱 thread에서든 멱등으로 부른다.
+        void stop() noexcept;
+
+    private:
+        struct engine;
+        explicit websocket_client(std::unique_ptr<engine> engine);
+        std::unique_ptr<engine> engine_ {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>websocket_request::url</code></td><td>빈 글</td><td>소문자 <code>ws://</code>·<code>wss://</code>로 시작, ASCII(32–126)만, 공백·탭·CR·LF·<code>#</code>·NUL 없음, authority에 <code>@</code> 없음</td></tr>
+                  <tr><td><code>websocket_request::connect_timeout</code></td><td>10 s</td><td>0 이하이거나 2³¹−1 ms를 넘으면 <code>create</code>가 실패한다</td></tr>
+                  <tr><td><code>deliver</code></td><td>빈 함수</td><td>reader thread에서만 불린다. 여기서 <code>stop</code>·소멸 금지. 던지면 삼킨다</td></tr>
+                  <tr><td><code>max_message_bytes</code></td><td>8 MiB</td><td>받을 메시지 하나의 상한이자 보낼 메시지의 상한. 0이거나 64 MiB를 넘으면 <code>create</code> 실패</td></tr>
+                  <tr><td><code>max_pending_messages</code> · <code>max_pending_bytes</code></td><td>64 · 8 MiB</td><td>보낼 큐의 상한. 넘으면 <code>send_*</code>가 거짓. 0이면 <code>create</code> 실패</td></tr>
+                  <tr><td><code>close_timeout</code></td><td>3 s</td><td>로컬 Close 뒤 상대 답을 기다리는 상한. 넘기면 1006과 <code>timed_out</code>. 음수면 <code>create</code> 실패. macOS·iOS는 기다리지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="smb_client">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/net/smb_client.h:21-69" data-path="include/luil/net/smb_client.h" data-start="21"><script type="text/plain">
+    // SMB 공유 하나에 붙는 정보다.
+    struct smb_location
+    {
+        // 서버다. IP 주소나 DNS 이름이고 포트를 붙일 수 있다 ("192.168.0.10", "nas.example:4445",
+        // "[fe80::1]:445"). 기본 포트는 445다.
+        //  - `.local` 이름(mDNS)은 client가 먼저 같은 네트워크에 물어 푼다 (Android의 이름 풀기는 풀지 않는다). 풀지
+        //    못하면 그 이름 그대로 운영체제에 맡긴다.
+        std::u8string server {};
+        // 공유 이름이다 ("photos"). 슬래시를 넣지 않는다. 공유 목록(`smb_operation::shares`)은 이것을 보지 않는다.
+        std::u8string share {};
+        // 도메인(작업 그룹)이다. 비면 서버가 정한다.
+        std::u8string domain {};
+        // 사용자 이름이다. 비면 `guest`로 붙는다.
+        std::u8string user {};
+        // 암호다. **client는 이것을 기록에 남기지 않는다** (오류 글·logcat에도).
+        std::u8string password {};
+        // SMB3 암호화를 요구한다. 서버가 하지 못하면 연결이 실패한다. 끄면 서버가 요구할 때만 서명한다.
+        bool encrypt { false };
+    };
+
+    enum class smb_operation
+    {
+        // 폴더의 항목을 읽는다 (`.`과 `..`은 뺀다).
+        list,
+        // 항목 하나의 상태를 읽는다.
+        stat,
+        // 파일의 한 구간을 읽는다 (`offset`부터 `length`까지).
+        read,
+        // 서버의 공유 목록을 읽는다 (srvsvc `NetShareEnumAll`). 위치에는 서버와 계정만 있으면 되고 공유·경로는 보지 않는다.
+        // 같은 계정의 `IPC$` 연결로 하고, 그 연결도 다시 쓴다.
+        shares,
+        // 같은 네트워크의 SMB 서버를 찾는다. `send`로는 보내지 않는다 — `smb_client::discover`가 내는 답의 갈래다.
+        discover,
+    };
+
+    // 요청 하나다. 값이고, client에 넘기면 복사되어 client가 든다.
+    struct smb_request
+    {
+        smb_location location {};
+        smb_operation operation { smb_operation::list };
+        // 공유 안의 경로다. `/`로 나누고 앞뒤의 `/`는 있어도 없어도 된다. 비면 공유의 맨 위다.
+        std::u8string path {};
+        // `read`의 시작 자리와 최대 길이다 (바이트). 파일 끝을 넘으면 거기까지만 온다. 길이는 1 이상이고
+        // `smb_client_config::max_read_bytes` 이하여야 한다.
+        std::uint64_t offset { 0 };
+        std::size_t length { 0 };
+        // 연결부터 답까지의 상한이다. 0이면 걸지 않는다.
+        std::chrono::milliseconds timeout { 30000 };
+    };
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/net/smb_client.h:222-240" data-path="include/luil/net/smb_client.h" data-start="222"><script type="text/plain">
+
+    struct smb_client_config
+    {
+        // 유일한 답의 출구다. client의 배달 thread에서 차례로 불린다. 짧게 끝내고 앱 메시지로 넘긴다
+        // (`app_host::post_app_message`). 안에서 `send`·`cancel`을 불러도 되고 `stop`은 부르지 않는다.
+        std::function<void(smb_response)> deliver {};
+        // 동시에 도는 요청의 상한이다. 넘는 `send`는 숨은 줄 없이 바로 거절된다.
+        std::size_t max_in_flight { 4 };
+        // `read` 하나가 받을 수 있는 최대 길이다 (기본 16 MiB). 큰 파일은 구간으로 나눠 읽는다.
+        std::size_t max_read_bytes { 16u * 1024u * 1024u };
+        // `stop`이 진행 중인 요청을 기다리는 상한이다.
+        std::chrono::milliseconds stop_budget { 1000 };
+        // 쉬는 연결을 닫기까지의 시간이다 (연결 다시 쓰기). 같은 서버·공유·도메인·사용자·암호·암호화 요구의 요청이 이 안에
+        // 다시 오면 연결·로그온·공유 연결을 건너뛴다. 0이면 다시 쓰지 않고 요청마다 닫는다 (다시 쓰기 전의 동작).
+        std::chrono::milliseconds idle_timeout { 30000 };
+        // 서버(호스트와 포트) 하나에 동시에 두는 연결(쓰는 중·쉬는 중)의 상한이다. 모두 쓰는 중이면 요청이 하나가 돌아올
+        // 때까지 기다리고, 그 시간도 `timeout`에 든다. 기본값은 기본 `max_in_flight`와 같아 줄이지 않으면 기다릴 일이 없다.
+        std::size_t max_connections_per_server { 4 };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>smb_location::server</code></td><td>빈 글</td><td>IP나 DNS 이름, 포트 가능(기본 445). <code>.local</code>은 client가 먼저 mDNS로 푼다. 비거나 공백·<code>/</code>·<code>\</code>·제어 문자가 있으면 <code>send</code>가 거절</td></tr>
+                  <tr><td><code>share</code></td><td>빈 글</td><td>공유 이름, 슬래시 없음, 80자 이하. <code>shares</code> 요청은 보지 않는다</td></tr>
+                  <tr><td><code>user</code> · <code>password</code></td><td>빈 글</td><td>사용자가 비면 <code>guest</code>. 암호는 오류 글·로그에 남기지 않는다</td></tr>
+                  <tr><td><code>encrypt</code></td><td>거짓</td><td>SMB3 암호화를 요구한다. 서버가 못 하면 연결 실패</td></tr>
+                  <tr><td><code>smb_request::path</code></td><td>빈 글 (맨 위)</td><td><code>/</code>로 나눈다. <code>\</code>·제어 문자 금지</td></tr>
+                  <tr><td><code>offset</code> · <code>length</code></td><td>0 · 0</td><td><code>read</code>만. 1 ≤ <code>length</code> ≤ <code>max_read_bytes</code></td></tr>
+                  <tr><td><code>timeout</code></td><td>30 s</td><td>0이면 없음, 음수는 거절</td></tr>
+                  <tr><td><code>max_in_flight</code></td><td>4</td><td>넘으면 줄 없이 거절. 0이면 <code>create</code> 실패</td></tr>
+                  <tr><td><code>idle_timeout</code></td><td>30 s</td><td>쉬는 연결을 닫기까지. 0이면 다시 쓰지 않는다. 열쇠는 서버·공유·도메인·사용자·암호·암호화다</td></tr>
+                  <tr><td><code>max_connections_per_server</code></td><td>4</td><td>모두 쓰는 중이면 기다리고, 그 시간도 <code>timeout</code>에 든다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="code" data-lang="cpp" data-src="include/luil/net/smb_client.h:129-153" data-path="include/luil/net/smb_client.h" data-start="129"><script type="text/plain">
+    enum class smb_error_kind
+    {
+        // 오류가 없다.
+        none,
+        // 요청이 규칙에 맞지 않는다 (선을 건드리지 않았다).
+        invalid_request,
+        // 이 구성에는 SMB가 없다.
+        unsupported,
+        // 서버에 닿지 못했다 (이름 풀기, 연결 거절, 닿지 않음, 로컬 네트워크 권한 없음).
+        cannot_connect,
+        // 사용자 이름이나 암호가 맞지 않는다.
+        logon_failure,
+        // 공유나 항목에 접근할 권한이 없다.
+        access_denied,
+        // 공유나 경로가 없다.
+        not_found,
+        // `timeout`을 넘겼다.
+        timed_out,
+        // 앱이 `cancel`했다.
+        cancelled,
+        // `stop()` 중에 끊겼다.
+        stopped,
+        // 그 밖의 SMB·시스템 오류다. `message`에 libsmb2의 글이 그대로 있다.
+        failed,
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th><code>smb_error_kind</code></th><th>언제</th></tr></thead>
+                <tbody>
+                  <tr><td><code>invalid_request</code></td><td>요청 규칙 위반. <code>send</code>가 표 0과 글로 거절한다</td></tr>
+                  <tr><td><code>unsupported</code></td><td>이 구성에 SMB가 없다</td></tr>
+                  <tr><td><code>cannot_connect</code></td><td>닿지 못했다 — 이름 풀기·거절, 그리고 로컬 네트워크 권한이 없을 때</td></tr>
+                  <tr><td><code>logon_failure</code> · <code>access_denied</code> · <code>not_found</code></td><td>사용자 이름·암호 · 권한 없음 · 공유나 경로 없음</td></tr>
+                  <tr><td><code>timed_out</code> · <code>cancelled</code></td><td><code>timeout</code> 초과 · 앱이 <code>cancel</code>했다</td></tr>
+                  <tr><td><code>stopped</code></td><td><code>stop()</code> 중에 끊겼다. 배달 thread를 먼저 거두므로 앱에 닿지 않는다고 본다</td></tr>
+                  <tr><td><code>failed</code></td><td>그 밖. <code>message</code>에 libsmb2의 글</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="file_watcher">
+            <div class="code" data-lang="cpp" data-src="include/luil/app/file_watcher.h:85-107" data-path="include/luil/app/file_watcher.h" data-start="85"><script type="text/plain">
+    struct file_watcher_config
+    {
+        // 묶음을 앱에 건네는 유일한 자리다. **감시 thread에서 불린다.** 받았으면 참이다.
+        //
+        //     config.deliver = [&host](luil::file_change_batch batch) {
+        //         return host.post_app_message_ticketed(luil::app_message { watch_intent { std::move(batch) } }) != 0;
+        //     };
+        //
+        //  - 거짓이면 감시자가 그 묶음을 버리지 않는다. 다음 변경과 합쳐 `settle` 뒤에 다시 낸다. app inbox가
+        //    포화해 메시지를 버려도 변경이 조용히 사라지지 않게 하는 자리다 (`post_app_message`는 버린 것을 알리지 않는다).
+        //  - 여기서 `add`·`remove`는 불러도 된다. `stop`은 안 된다. 자기 자신을 join한다. debug 빌드가 assert로 잡는다.
+        //  - 던지면 삼키고 거절로 본다.
+        //  - 비어 있으면 묶음을 받은 것으로 보고 버린다 (test의 자리다).
+        std::function<bool(file_change_batch)> deliver {};
+        // 마지막 변경 뒤 이만큼 조용하면 묶음을 낸다. 편집기의 저장은 수 ms 안에 끝난다.
+        std::chrono::milliseconds settle { 100 };
+        // 변경이 그치지 않아도 첫 변경 뒤 이만큼이면 낸다. 쉬지 않고 쓰는 로그도 1초마다 보인다.
+        std::chrono::milliseconds max_delay { 1000 };
+        // 감시 하나의 묶음에 담을 상한이다. 넘으면 비우고 `rescan`이다.
+        std::size_t max_changes { 4096 };
+        // `stop()`이 OS가 감시 버퍼를 놓기를 기다릴 상한이다. `net::http_client_config::stop_budget`과 같은 종료 예산 산술 안이다.
+        std::chrono::milliseconds stop_budget { 1000 };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>deliver</code></td><td>빈 함수</td><td>감시 thread에서 불린다. 받았으면 참. 거짓이거나 던지면 다음 변경과 합쳐 <code>settle</code> 뒤 다시 낸다. 비어 있으면 받은 것으로 본다</td></tr>
+                  <tr><td><code>settle</code> · <code>max_delay</code></td><td>100 ms · 1 s</td><td>쓰기가 끝났다는 유일한 짐작이 <code>settle</code>이다</td></tr>
+                  <tr><td><code>max_changes</code></td><td>4096</td><td>넘으면 비우고 <code>rescan</code>. <code>file</code> 감시는 부모 폴더 전체로 센다</td></tr>
+                  <tr><td><code>stop_budget</code></td><td>1 s</td><td>넘기면 OS 버퍼를 일부러 남긴다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="platform_services">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/app/platform_services.h:12-37,53-60,118-137" data-path="include/luil/app/platform_services.h" data-start="12"><script type="text/plain">
+namespace luil {
+    // 플랫폼 도구의 답이다 (platform-services-design.md).
+    enum class platform_status
+    {
+        ok,
+        // 대상이 없다 (경로, 또는 취소할 I/O).
+        not_found,
+        // 이 플랫폼에는 그 일이 없다.
+        unsupported,
+        // OS가 거절했다. `error`가 그 이유를 든다.
+        failed,
+    };
+
+    struct platform_result
+    {
+        platform_status status { platform_status::failed };
+        // 개발자가 읽을 진단 영문이다. `ok`면 비었다.
+        std::u8string error {};
+        // `launch_program`을 기다렸으면 그 종료 코드다.
+        std::optional<int> exit_code {};
+
+        [[nodiscard]] bool ok() const noexcept
+        {
+            return status == platform_status::ok;
+        }
+    };
+⋯@53
+    struct instance_send_options
+    {
+        // 첫 창이 설 때까지의 기다림과 답을 기다림을 합친 시한이다.
+        std::chrono::milliseconds timeout { 3000 };
+        // 첫째의 보이는 주 창을 앞으로 세운다. 숨은 주 창(`ui_frame::main_hidden`)은 보이게 하지 않는다.
+        //  - 다르게 하려는 앱은 거짓으로 보내고 자기 `focus_request`를 쓴다.
+        bool activate { true };
+    };
+⋯@118
+    struct launch_options
+    {
+        // 비어 있으면 부른 프로세스의 지금 폴더다.
+        std::u8string working_directory {};
+        // 거짓이면 콘솔 창을 띄우지 않는다.
+        bool show_window { true };
+        // 참이면 끝날 때까지 기다려 `exit_code`를 싣는다.
+        bool wait { false };
+    };
+
+    // 외부 프로그램을 띄운다. 인자는 Windows 명령 줄 규칙(따옴표 안의 백슬래시와 따옴표)으로 이어 넘긴다.
+    //  - Android는 `unsupported`다 (다른 앱은 프로세스가 아니라 Intent로 열린다. 주소는 `open_url`이 연다).
+    [[nodiscard]] platform_result launch_program(std::u8string_view program, std::span<const std::u8string> arguments, const launch_options& options = {});
+
+    struct open_url_options
+    {
+        // 열어도 되는 scheme이다. 대소문자를 가리지 않는다.
+        //  - 글 안의 링크처럼 믿을 수 없는 주소가 들어오는 길이라, 실행 파일·`file:`·스크립트 scheme을 기본으로 막는다.
+        std::vector<std::u8string> schemes { u8"http", u8"https", u8"mailto" };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>instance_send_options::timeout</code></td><td>3 s</td><td>첫째의 창이 설 때까지와 답을 기다림을 합친 시한. Windows는 50 ms마다 다시 찾는다</td></tr>
+                  <tr><td><code>instance_send_options::activate</code></td><td>참</td><td>첫째의 보이는 주 창을 앞으로. 숨은 주 창은 보이게 하지 않는다</td></tr>
+                  <tr><td><code>launch_options::working_directory</code></td><td>빈 글</td><td>비면 부른 프로세스의 지금 폴더</td></tr>
+                  <tr><td><code>launch_options::show_window</code></td><td>참</td><td>거짓이면 콘솔 창을 띄우지 않는다 (Windows). macOS는 쓰지 않는다</td></tr>
+                  <tr><td><code>launch_options::wait</code></td><td>거짓</td><td>참이면 끝날 때까지 기다려 <code>exit_code</code>를 싣는다</td></tr>
+                  <tr><td><code>open_url_options::schemes</code></td><td><code>http</code>·<code>https</code>·<code>mailto</code></td><td>대소문자 무시. 넘긴 목록은 기본 목록을 대신한다</td></tr>
+                  <tr><td><code>window_environment::instance</code></td><td>nullptr</td><td>첫째이면 주 창이 둘째의 인자를 받는다. 창보다 오래 살아야 한다. macOS는 <code>macos::application_environment::instance</code></td></tr>
+                  <tr><td><code>window_environment::instance_from_lower_integrity</code></td><td>거짓</td><td>관리자 권한 첫째가 낮은 권한 둘째의 인자를 받는다 (UIPI를 연다)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="secret_store">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/app/secret_store.h:11-51" data-path="include/luil/app/secret_store.h" data-start="11"><script type="text/plain">
+    // 비밀 저장소의 답이다 (secret-store-design.md).
+    enum class secret_store_status
+    {
+        ok,
+        // 읽거나 지우거나 옮길 항목이 없다.
+        not_found,
+        // 이 플랫폼·구성에 저장소가 없다.
+        unsupported,
+        // 입력이 잘못됐거나 OS가 거절했다. `error`가 그 이유를 든다.
+        failed,
+        // 이전하려는 항목의 새 키에 이미 값이 있다.
+        already_exists,
+    };
+
+    struct secret_store_result
+    {
+        secret_store_status status { secret_store_status::failed };
+        // 개발자가 읽을 진단 영문이다. `ok`면 비었다.
+        std::u8string error {};
+    };
+
+    // 값 하나의 상한이다 (바이트). Windows 자격 증명의 상한에 모든 플랫폼을 맞춘다.
+    inline constexpr std::size_t secret_store_maximum_bytes { 2560 };
+
+    // 항목은 `service`(앱·기능의 묶음)와 `name`(계정·서버 같은 항목 이름)의 짝이다. 둘 다 비어 있으면 안 된다.
+    //  - Windows: 자격 증명 관리자의 일반 자격 증명이다. 비어 있지 않은 UTF-8 이름 쌍을 바이트로 구분한다.
+    //  - Android: Keystore의 AES-GCM 키(`service`마다 하나)로 암호화한 앱 내부 파일이다.
+    //  - macOS: 로그인 keychain의 일반 암호 항목(서비스 `service`, 계정 `name`)이다. NUL을 품은 이름은 `failed`다 (keychain이 NUL에서 자른다).
+    //  - 동기 호출이다. UI thread에서 부르지 않는다 (Android Keystore는 수십 ms까지 걸린다).
+
+    // 같은 짝에 다시 쓰면 덮는다. 상한을 넘으면 `failed`다.
+    [[nodiscard]] secret_store_result store_secret(std::u8string_view service, std::u8string_view name, std::span<const std::uint8_t> secret);
+    // 성공하면 `secret`에 값을 담는다. 실패하면 `secret`을 비운다.
+    [[nodiscard]] secret_store_result load_secret(std::u8string_view service, std::u8string_view name, std::vector<std::uint8_t>& secret);
+    // 없으면 `not_found`다.
+    [[nodiscard]] secret_store_result erase_secret(std::u8string_view service, std::u8string_view name);
+
+    // Windows의 옛 `luil:<service>/<name>` 항목을 새 키로 복사한다. 옛 항목의 소유권을 확인한 앱만 호출한다.
+    // 다른 프로세스의 쓰기·삭제가 없는 동안 호출한다. 새 항목이 있으면 `already_exists`, 옛 항목이 없으면 `not_found`다.
+    // `ok`면 복사했다. 결과와 관계없이 옛 항목은 보존한다. Windows 이외에서는 `unsupported`다.
+    [[nodiscard]] secret_store_result migrate_legacy_win32_secret(std::u8string_view service, std::u8string_view name);
+</script></div>
+            <div class="prose">
+              <p>주석은 Windows·Android·macOS만 들지만 iOS도 macOS 구현을 쓴다. 이름 규칙과 OS 쪽 이름은 <a class="xref" href="#build-secret">비밀 저장소 조각</a>의 표에 있다.</p>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/file_watcher.h" target="_blank" rel="noopener">include/luil/app/file_watcher.h</a><span class="n">최상위 기호 8</span></div>
+            <div class="hdr-syms"><a href="api.html#file-watch-ticket" title="구조체"><span class="kb t">S</span>file_watch_ticket</a><a href="api.html#file-watch-scope" title="열거형"><span class="kb e">E</span>file_watch_scope</a><a href="api.html#file-change-kind" title="열거형"><span class="kb e">E</span>file_change_kind</a><a href="api.html#file-change" title="구조체"><span class="kb t">S</span>file_change</a><a href="api.html#file-watch-end" title="열거형"><span class="kb e">E</span>file_watch_end</a><a href="api.html#file-change-batch" title="구조체"><span class="kb t">S</span>file_change_batch</a><a href="api.html#file-watcher-config" title="구조체"><span class="kb t">S</span>file_watcher_config</a><a href="api.html#file-watcher" title="클래스"><span class="kb t">C</span>file_watcher</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/platform_services.h" target="_blank" rel="noopener">include/luil/app/platform_services.h</a><span class="n">최상위 기호 17</span></div>
+            <div class="hdr-syms"><a href="api.html#platform-status" title="열거형"><span class="kb e">E</span>platform_status</a><a href="api.html#platform-result" title="구조체"><span class="kb t">S</span>platform_result</a><a href="api.html#replace-file-atomically" title="함수"><span class="kb f">f</span>replace_file_atomically</a><a href="api.html#instance-arguments" title="구조체"><span class="kb t">S</span>instance_arguments</a><a href="api.html#instance-send-options" title="구조체"><span class="kb t">S</span>instance_send_options</a><a href="api.html#single-instance" title="클래스"><span class="kb t">C</span>single_instance</a><a href="api.html#file-lock" title="클래스"><span class="kb t">C</span>file_lock</a><a href="api.html#reveal-in-file-manager" title="함수"><span class="kb f">f</span>reveal_in_file_manager</a><a href="api.html#launch-options" title="구조체"><span class="kb t">S</span>launch_options</a><a href="api.html#launch-program" title="함수"><span class="kb f">f</span>launch_program</a><a href="api.html#open-url-options" title="구조체"><span class="kb t">S</span>open_url_options</a><a href="api.html#url-scheme-allowed" title="함수"><span class="kb f">f</span>url_scheme_allowed</a><a href="api.html#open-url" title="함수"><span class="kb f">f</span>open_url</a><a href="api.html#set-background-priority" title="함수"><span class="kb f">f</span>set_background_priority</a><a href="api.html#blocking-io-canceller" title="클래스"><span class="kb t">C</span>blocking_io_canceller</a><a href="api.html#user-first-weekday" title="함수"><span class="kb f">f</span>user_first_weekday</a><a href="api.html#user-ui-languages" title="함수"><span class="kb f">f</span>user_ui_languages</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/secret_store.h" target="_blank" rel="noopener">include/luil/app/secret_store.h</a><span class="n">최상위 기호 7</span></div>
+            <div class="hdr-syms"><a href="api.html#secret-store-status" title="열거형"><span class="kb e">E</span>secret_store_status</a><a href="api.html#secret-store-result" title="구조체"><span class="kb t">S</span>secret_store_result</a><a href="api.html#secret-store-maximum-bytes" title="상수"><span class="kb ">k</span>secret_store_maximum_bytes</a><a href="api.html#store-secret" title="함수"><span class="kb f">f</span>store_secret</a><a href="api.html#load-secret" title="함수"><span class="kb f">f</span>load_secret</a><a href="api.html#erase-secret" title="함수"><span class="kb f">f</span>erase_secret</a><a href="api.html#migrate-legacy-win32-secret" title="함수"><span class="kb f">f</span>migrate_legacy_win32_secret</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/net/http_body.h" target="_blank" rel="noopener">include/luil/net/http_body.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#net--http-text-transcoder" title="별칭"><span class="kb t">=</span>http_text_transcoder</a><a href="api.html#net--codepage-text-transcoder" title="함수"><span class="kb f">f</span>codepage_text_transcoder</a><a href="api.html#net--http-image-options" title="구조체"><span class="kb t">S</span>http_image_options</a><a href="api.html#net--http-body-parse-options" title="구조체"><span class="kb t">S</span>http_body_parse_options</a><a href="api.html#net--http-body" title="구조체"><span class="kb t">S</span>http_body</a><a href="api.html#net--decode-http-body" title="함수"><span class="kb f">f</span>decode_http_body</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/net/http_client.h" target="_blank" rel="noopener">include/luil/net/http_client.h</a><span class="n">최상위 기호 2</span></div>
+            <div class="hdr-syms"><a href="api.html#net--http-client-config" title="구조체"><span class="kb t">S</span>http_client_config</a><a href="api.html#net--http-client" title="클래스"><span class="kb t">C</span>http_client</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/net/http_media_type.h" target="_blank" rel="noopener">include/luil/net/http_media_type.h</a><span class="n">최상위 기호 8</span></div>
+            <div class="hdr-syms"><a href="api.html#net--http-body-kind" title="열거형"><span class="kb e">E</span>http_body_kind</a><a href="api.html#net--http-body-is-parsed" title="함수"><span class="kb f">f</span>http_body_is_parsed</a><a href="api.html#net--http-body-kind-source" title="열거형"><span class="kb e">E</span>http_body_kind_source</a><a href="api.html#net--http-media-type" title="구조체"><span class="kb t">S</span>http_media_type</a><a href="api.html#net--parse-media-type" title="함수"><span class="kb f">f</span>parse_media_type</a><a href="api.html#net--classify-media-type" title="함수"><span class="kb f">f</span>classify_media_type</a><a href="api.html#net--media-type-invites-sniffing" title="함수"><span class="kb f">f</span>media_type_invites_sniffing</a><a href="api.html#net--sniff-body-kind" title="함수"><span class="kb f">f</span>sniff_body_kind</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/net/http_message.h" target="_blank" rel="noopener">include/luil/net/http_message.h</a><span class="n">최상위 기호 17</span></div>
+            <div class="hdr-syms"><a href="api.html#net--http-method" title="열거형"><span class="kb e">E</span>http_method</a><a href="api.html#net--http-method-name" title="함수"><span class="kb f">f</span>http_method_name</a><a href="api.html#net--is-http-token" title="함수"><span class="kb f">f</span>is_http_token</a><a href="api.html#net--http-header" title="구조체"><span class="kb t">S</span>http_header</a><a href="api.html#net--find-header" title="함수"><span class="kb f">f</span>find_header</a><a href="api.html#net--http-header-crosses-origins" title="함수"><span class="kb f">f</span>http_header_crosses_origins</a><a href="api.html#net--http-text-body" title="함수"><span class="kb f">f</span>http_text_body</a><a href="api.html#net--http-redirect-policy" title="열거형"><span class="kb e">E</span>http_redirect_policy</a><a href="api.html#net--default-http-body-limit" title="상수"><span class="kb ">k</span>default_http_body_limit</a><a href="api.html#net--http-request" title="구조체"><span class="kb t">S</span>http_request</a><a href="api.html#net--http-error-kind" title="열거형"><span class="kb e">E</span>http_error_kind</a><a href="api.html#net--http-error" title="구조체"><span class="kb t">S</span>http_error</a><a href="api.html#net--http-ticket" title="구조체"><span class="kb t">S</span>http_ticket</a><a href="api.html#net--http-minimum-heartbeat-interval" title="상수"><span class="kb ">k</span>http_minimum_heartbeat_interval</a><a href="api.html#net--http-heartbeat" title="구조체"><span class="kb t">S</span>http_heartbeat</a><a href="api.html#net--http-response" title="구조체"><span class="kb t">S</span>http_response</a><a href="api.html#net--http-status-is-success" title="함수"><span class="kb f">f</span>http_status_is_success</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/net/smb_client.h" target="_blank" rel="noopener">include/luil/net/smb_client.h</a><span class="n">최상위 기호 15</span></div>
+            <p class="hdr-desc">SMB 공유를 읽는 client다 (docs/smb-client-design.md).  **Android 전용이고 `LUIL_ENABLE_SMB`를 켠 구성에서만 선다.** libsmb2(LGPL-2.1, 따로 싼 `libsmb2.so`) 위에 선다. 그 밖의 구성(Windows, 끈 Android)에서는 `create`가 nullptr로 답한다 — Windows는 운영체제의 SMB가 있다.  계약은 `http_client`와 같은 모양이다: 받은 요청마다 표 하나와 답 하나, 답은 client의 thread 하나에서 차례로 배달, 취소, `stop`. 같은 서버·공유·계정의 연결은 잠시 쉬게 두었다 다시 쓴다 (`smb_client_config::idle_timeout`). 같은 네트워크의 NAS에 붙는 Android 17 앱은 먼저 로컬 네트워크 권한을 받아야 한다 (`app_host::request_permission(app_permission::local_network)`). 없으면 연결이 시간 상한까지 기다리다 실패한다.</p>
+            <div class="hdr-syms"><a href="api.html#net--smb-location" title="구조체"><span class="kb t">S</span>smb_location</a><a href="api.html#net--smb-operation" title="열거형"><span class="kb e">E</span>smb_operation</a><a href="api.html#net--smb-request" title="구조체"><span class="kb t">S</span>smb_request</a><a href="api.html#net--smb-entry" title="구조체"><span class="kb t">S</span>smb_entry</a><a href="api.html#net--smb-share-kind" title="열거형"><span class="kb e">E</span>smb_share_kind</a><a href="api.html#net--smb-share" title="구조체"><span class="kb t">S</span>smb_share</a><a href="api.html#net--smb-server-found" title="구조체"><span class="kb t">S</span>smb_server_found</a><a href="api.html#net--smb-discovery-request" title="구조체"><span class="kb t">S</span>smb_discovery_request</a><a href="api.html#net--smb-error-kind" title="열거형"><span class="kb e">E</span>smb_error_kind</a><a href="api.html#net--smb-error" title="구조체"><span class="kb t">S</span>smb_error</a><a href="api.html#net--smb-ticket" title="구조체"><span class="kb t">S</span>smb_ticket</a><a href="api.html#net--smb-connection-use" title="열거형"><span class="kb e">E</span>smb_connection_use</a><a href="api.html#net--smb-response" title="구조체"><span class="kb t">S</span>smb_response</a><a href="api.html#net--smb-client-config" title="구조체"><span class="kb t">S</span>smb_client_config</a><a href="api.html#net--smb-client" title="클래스"><span class="kb t">C</span>smb_client</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/net/websocket_client.h" target="_blank" rel="noopener">include/luil/net/websocket_client.h</a><span class="n">최상위 기호 5</span></div>
+            <div class="hdr-syms"><a href="api.html#net--websocket-event-kind" title="열거형"><span class="kb e">E</span>websocket_event_kind</a><a href="api.html#net--websocket-event" title="구조체"><span class="kb t">S</span>websocket_event</a><a href="api.html#net--websocket-request" title="구조체"><span class="kb t">S</span>websocket_request</a><a href="api.html#net--websocket-client-config" title="구조체"><span class="kb t">S</span>websocket_client_config</a><a href="api.html#net--websocket-client" title="클래스"><span class="kb t">C</span>websocket_client</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>

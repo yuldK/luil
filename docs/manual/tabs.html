@@ -1,0 +1,2184 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>탭 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — tab_bar_element로 고르기·닫기·끌어서 순서 바꾸기·넘침·떼어 내기를 하고, 키보드와 보조 기술의 길을 앱이 채우며, 탭과 페이지를 화면 전환으로 잇는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  /* 막대의 조립 그림 — 치수는 그림일 뿐이다 (luil의 실제 렌더링이 아니다) */
+  .anat { margin: 0; display: grid; gap: 8px; }
+  .anat-bar { display: flex; align-items: stretch; gap: 0; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--sunk); overflow: hidden; font-size: 12.5px; min-height: 52px; }
+  .anat-btn { flex: none; width: 34px; display: grid; place-items: center; color: var(--fg-2); border-left: 1px dashed var(--line-2); font-family: var(--font-code); }
+  .anat-btn:first-child { border-left: 0; border-right: 1px dashed var(--line-2); }
+  .anat-strip { flex: 1 1 auto; min-width: 0; position: relative; display: flex; align-items: flex-end; overflow: hidden; padding-top: 16px; }
+  .anat-strip::before { content: "tab_strip › tab_lane"; position: absolute; top: 2px; left: 6px; font-family: var(--font-code); font-size: 10px; color: var(--fg-3); }
+  .anat-tab { flex: none; width: 118px; display: flex; align-items: center; gap: 6px; padding: 7px 8px 8px 10px; color: var(--fg-2); border-right: 1px solid var(--line); white-space: nowrap; }
+  .anat-tab .nm { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .anat-tab .x { flex: none; font-size: 11px; color: var(--fg-3); }
+  .anat-tab.sel { background: var(--panel); color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
+  .anat-tab.cut { width: 70px; opacity: 0.75; }
+  .anat-keys { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--fs-xs); color: var(--fg-3); }
+  .anat-keys code { font-size: 11px; }
+</style>
+</head>
+<body data-page="tabs">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>탭</h1>
+      <p class="summary"><code>tab_bar_element</code>는 탭을 가로로 늘어놓는 막대다. 고른 탭·순서·스크롤 값은 앱 상태이고, 막대는 앱이 준 factory로 메시지만 낸다. 앱은 frame마다 <code>tab_bar_config</code>로 막대를 새로 짓고, 탭이 보일 내용(페이지)은 막대 밖에 따로 둔다. 닫기 단추는 마우스와 손가락만 닿으므로 키보드와 보조 기술의 길은 앱이 명령으로 채운다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>tab_bar_element.h</code>·<code>tab_bar_element.cpp</code>·<code>ui_style.h</code>·<code>strip_element.h</code>·<code>page_transition_element.h</code>·<code>examples/demo/tabs_page.cpp</code></dd></div>
+          <div><dt>실습</dt><dd>없음</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="input.html#s7">입력과 초점 — 묶음</a> · <a class="xref" href="lists.html">목록과 트리 뷰</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>고르기·닫기·끌어서 순서 바꾸기·컨텍스트 메뉴를 앱 상태로 받아 막대를 다시 짓는다.</li>
+            <li>탭이 넘칠 때 줄이기·흘리기·한 탭씩 넘기기·넘침 메뉴를 고르고, 고른 탭을 드러낸다.</li>
+            <li>닫기 단추에 닿지 못하는 키보드·보조 기술 사용자를 위해 Ctrl+W와 메뉴 명령을 단다.</li>
+            <li>탭을 다른 창으로 떼어 내고 다시 받으며, 탭과 페이지를 화면 전환으로 잇는다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 것을 쓰나</h2>
+          <p class="lede">문서처럼 열고 닫고 끌어 옮기는 것이면 탭 막대다. 정해진 몇 개의 보기를 고르기만 하면 선택 묶음이, 손가락으로 장을 넘기면 pager가 맞다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB7F;</i><code>tab_bar_element</code></h4>
+            <ul>
+              <li>문서·파일처럼 개수가 바뀌는 탭. 닫기·끌기·떼어 내기·넘침이 있다.</li>
+              <li>보조 기술에는 <code>tab_list</code>와 <code>tab</code>이다.</li>
+              <li>내용 영역은 앱이 막대 밖에 짓는다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB4C;</i><code>choice_group_element</code></h4>
+            <ul>
+              <li><code>choice_style::toggle</code>이면 가로로 늘어선 선택 묶음(segmented control)이다.</li>
+              <li>닫거나 옮길 일이 없는 고정된 몇 개의 보기 전환.</li>
+              <li>보조 기술에는 <code>radio_group</code>과 <code>radio_button</code>이다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA9C;</i><code>pager_element</code></h4>
+            <ul>
+              <li>장을 가로로 늘어놓고 손가락으로 넘긴다. 넘김은 연속 값(offset)이다.</li>
+              <li>고르는 막대가 없다. 필요하면 탭 막대나 선택 묶음과 함께 쓴다.</li>
+              <li>보조 기술에는 <code>pane</code>이다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>탭을 누르면 고르고, ×로 닫는다</td><td><code>select</code> · <code>close</code> + <code>tab_item::closable</code></td><td><a class="xref" href="#build-basic">기본</a></td></tr>
+              <tr><td>끌어서 순서를 바꾼다</td><td><code>move</code> (앞·뒤를 싣는다)</td><td><a class="xref" href="#build-move">끌어서 옮기기</a></td></tr>
+              <tr><td>키보드로 닫고 다음 탭으로 간다</td><td>앱 명령 (<code>match_command</code>) · 컨텍스트 메뉴</td><td><a class="xref" href="#build-keys">키보드 명령</a></td></tr>
+              <tr><td>탭이 많을 때</td><td><code>min_tab_width</code> · <code>overflow_mode</code> · <code>overflow</code></td><td><a class="xref" href="#build-overflow">넘침</a></td></tr>
+              <tr><td>읽지 않은 개수·저장하지 않음 점</td><td><code>tab_badge</code> · <code>tab_indicator</code></td><td><a class="xref" href="#build-badges">배지와 표시</a></td></tr>
+              <tr><td>모양 바꾸기, 설정 화면의 견본</td><td><code>ui_style::tab_bar</code> · <code>tab_bar_config::preview</code></td><td><a class="xref" href="#build-style">모양과 견본</a></td></tr>
+              <tr><td>창 밖으로 끌어 새 창으로 떼어 내기</td><td><code>unclaimed_drop</code> · <code>receive</code></td><td><a class="xref" href="#build-detach">떼어 내기</a></td></tr>
+              <tr><td>탭마다 페이지를 보이고 밀기 전환을 단다</td><td><code>page_transition_element</code></td><td><a class="xref" href="#build-pages">페이지와 전환</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 막대는 그리고, 앱이 든다</h2>
+          <p class="lede">element는 frame마다 새로 선다. 어느 탭이 골라졌는지 기억하지 않는다 — 고르기 메시지를 받은 앱이 <code>selected</code>를 바꿔 다음 frame에 넘겨야 그림과 접근 tree가 바뀐다.</p>
+        </header>
+        <h3>누가 무엇을 드나</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>상태</th><th>임자</th><th>어디로 들어가나</th></tr></thead>
+            <tbody>
+              <tr><td>탭 목록과 순서</td><td>앱</td><td><code>tab_bar_config::items</code> — 차례가 곧 그리기 순서</td></tr>
+              <tr><td>고른 탭</td><td>앱</td><td><code>tab_bar_config::selected</code> (키)</td></tr>
+              <tr><td>가로 스크롤 값</td><td>앱</td><td><code>tab_bar_config::scroll_offset</code> (논리 픽셀). 범위 밖은 배치가 다듬고 <code>scroll_offset()</code>으로 되읽는다</td></tr>
+              <tr><td>실제 탭 폭·넘침 여부·최대 스크롤</td><td>element (배치가 정한다)</td><td><code>tab_width()</code> · <code>overflowing()</code> · <code>maximum_scroll()</code> — 배치 뒤에 읽는다</td></tr>
+              <tr><td>컨텍스트 메뉴·넘침 메뉴의 내용과 열림</td><td>앱</td><td>popup으로 띄운다</td></tr>
+              <tr><td>페이지 내용</td><td>앱</td><td>막대 밖의 아무 element</td></tr>
+              <tr><td>모양</td><td>앱 스타일</td><td><code>ui_style::tab_bar</code>, 막대 하나만이면 <code>tab_bar_config::style</code></td></tr>
+              <tr><td>hover·눌림·끌기·초점</td><td>controller</td><td><code>interaction_snapshot</code>으로 그린다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>조립과 id</h3>
+        <figure class="anat">
+          <div class="anat-bar" aria-hidden="true">
+            <span class="anat-btn">&#x2039;</span>
+            <div class="anat-strip">
+              <span class="anat-tab sel"><span class="nm">보고서</span><span class="x">&#x2715;</span></span>
+              <span class="anat-tab"><span class="nm">메모</span><span class="x">&#x2715;</span></span>
+              <span class="anat-tab cut"><span class="nm">일정</span></span>
+            </div>
+            <span class="anat-btn">&#x203A;</span>
+            <span class="anat-btn">&#x22EF;</span>
+            <span class="anat-btn">+</span>
+          </div>
+          <figcaption class="anat-keys"><span>앞·뒤 단추 <code>tab_step_back</code> · <code>tab_step_forward</code></span><span>탭 <code>{ tab, key }</code></span><span>닫기 <code>{ tab_close, key }</code></span><span>넘침 메뉴 <code>tab_overflow</code></span><span>꼬리 — 앱의 element</span></figcaption>
+        </figure>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>부품</th><th>id</th><th>있을 때</th></tr></thead>
+            <tbody>
+              <tr><td>막대</td><td><code>{ tab_bar, owner }</code></td><td>늘</td></tr>
+              <tr><td>띠 (<code>strip_element</code>)와 레인</td><td><code>{ tab_strip, owner }</code> · <code>{ tab_lane, owner }</code></td><td>늘. 넘치면 띠가 흘린다</td></tr>
+              <tr><td>탭</td><td><code>{ tab, key }</code> — <strong>owner가 붙지 않는다</strong></td><td>항목마다</td></tr>
+              <tr><td>닫기 단추</td><td><code>{ tab_close, key }</code></td><td><code>closable</code>이고 <code>close</code> factory가 있을 때</td></tr>
+              <tr><td>넘침 메뉴 단추</td><td><code>{ tab_overflow, owner }</code></td><td><code>overflow</code>가 있고 넘칠 때</td></tr>
+              <tr><td>앞·뒤 단추</td><td><code>{ tab_step_back, owner }</code> · <code>{ tab_step_forward, owner }</code></td><td><code>tab_overflow_mode::step</code>이고 <code>scroll</code>이 있고 넘칠 때</td></tr>
+              <tr><td>꼬리 (새 탭 단추)</td><td>앱이 지은 element의 id</td><td><code>trailing</code>이 있을 때</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>막대의 자식 차례는 띠 → 앞·뒤 단추 → 넘침 단추 → 꼬리다. 단추들이 띠보다 나중에 담겨 위에 그려지고 hit도 먼저 가져간다. 자동화 id는 <code class="free">&lt;kind의 수&gt;:&lt;owner&gt;</code>라 키 <code class="free">doc-1</code>의 탭은 <code class="free">17:doc-1</code>이다 (<a class="xref" href="accessibility.html#concepts">접근성 — id가 정체성이다</a>).</p></div>
+        <h3>메시지가 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>탭을 누르거나, 초점 탭에서 Space·Enter·Shift+F10을 친다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller가 그 탭의 액션을 부르고, 액션이 앱의 factory(<code>select</code>·<code>close</code>·<code>context_menu</code>…)로 메시지를 만든다. 보통 <code>make_app_action(intent)</code>다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱이 메시지를 처리해 고른 키·순서·스크롤 값을 바꾼다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>다음 frame에 바뀐 <code>tab_bar_config</code>로 막대를 새로 짓는다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>새 tree를 그리고, 발행본 대조가 새로 골라진 탭을 보조 기술에 알린다.</span></div>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">factory는 메시지만 만든다</span>탭의 액션은 상태를 바꾸지 않고 메시지를 돌려준다. 보조 기술의 고르기는 UI thread에서 <strong>계획</strong>으로 factory를 부르고 그 결과를 버리기도 한다. factory 안에서 앱 상태를 바꾸지 않는다 (<a class="xref" href="accessibility.html#build-actions">접근성 — 명령 받기</a>).</div></div>
+      </section>
+
+      <section class="sec" id="build-basic">
+        <header class="sec-head">
+          <h2>만들기: 고르기·닫기·메뉴·넘침</h2>
+          <p class="lede">모바일 데모의 탭 페이지다. 메시지 형식을 정하고, frame마다 막대와 내용 영역을 짓고, 메시지를 받아 상태를 바꾼다.</p>
+        </header>
+        <div class="prose"><p>먼저 이 화면의 메시지다. 앱이 정의하는 평범한 구조체다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/tabs_page.h:15-58" data-path="examples/mobile_demo/tabs_page.h" data-start="15"><script type="text/plain">
+    // --- 이 페이지의 메시지 ---
+    struct tab_select_intent
+    {
+        std::u8string key {};
+    };
+
+    struct tab_close_intent
+    {
+        std::u8string key {};
+    };
+
+    struct tab_reorder_intent
+    {
+        std::u8string moved {};
+        std::u8string target {};
+    };
+
+    struct tab_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    struct tab_overflow_intent
+    {
+        bool open { false };
+    };
+
+    // 탭을 길게 눌렀다(우클릭). 좌표는 물리 픽셀(창 좌표)이다.
+    struct tab_menu_intent
+    {
+        std::u8string key {};
+        float x { 0.0f };
+        float y { 0.0f };
+    };
+
+    // 탭 컨텍스트 메뉴에서 고른 명령이다.
+    struct tab_menu_command_intent
+    {
+        std::u8string command {};
+    };
+
+    struct tab_menu_close_intent
+    {
+    };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/mobile_demo/tabs_page.cpp:100-160" data-path="examples/mobile_demo/tabs_page.cpp" data-start="100"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> tabs_page::build(const float width, const float height, const float scale)
+    {
+        static_cast<void>(width);
+        static_cast<void>(height);
+        static_cast<void>(scale);
+        bar_ = nullptr;
+
+        luil::tab_bar_config bar_config {};
+        bar_config.owner = std::u8string { bar_owner };
+        for (const tab_entry& tab : tabs_)
+        {
+            luil::tab_item item {};
+            item.key = tab.key;
+            item.label = tab.label;
+            item.icon = luil::codicons::icon_file;
+            item.closable = true;
+            bar_config.items.push_back(std::move(item));
+        }
+        bar_config.selected = selected_;
+        // 휴대폰 폭에 두세 개가 들어가 넘침을 바로 볼 수 있는 폭이다.
+        bar_config.tab_width = 140.0f;
+        bar_config.scroll_offset = scroll_;
+        bar_config.select = [](const std::u8string& key) { return luil::make_app_action(tab_select_intent { key }); };
+        bar_config.close = [](const std::u8string& key) { return luil::make_app_action(tab_close_intent { key }); };
+        bar_config.reorder = [](const std::u8string& moved, const std::u8string& target) { return luil::make_app_action(tab_reorder_intent { moved, target }); };
+        // 길게 누른 자리에 컨텍스트 메뉴를 띄운다 (마우스로는 우클릭이다).
+        bar_config.context_menu = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(tab_menu_intent { key, context.x, context.y }); };
+        bar_config.overflow = luil::make_message_action(tab_overflow_intent { true });
+        bar_config.overflow_tooltip = u8"넘친 탭 보기";
+        // 넘친 레인을 손가락으로 옆으로 쓸어 넘긴다. 휠과 같은 메시지다.
+        bar_config.scroll = [](const float value) { return luil::make_app_action(tab_scroll_intent { value }); };
+        auto bar { std::make_unique<luil::tab_bar_element>(std::move(bar_config)) };
+        bar_ = bar.get();
+
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(page_padding);
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tabs" }, config) };
+        column->add(make_label(luil::ui_element_id { kind_text, u8"tabs-hint" }, u8"옆으로 쓸어 넘기고 끌어서 옮긴다.", note_text_size, luil::label_color_role::dim), note_line_height);
+        column->add(make_label(luil::ui_element_id { kind_text, u8"tabs-hint-2" }, u8"길게 누르면 탭 메뉴가, 넘치면 오른쪽 끝에 넘침 메뉴가 나온다.", note_text_size, luil::label_color_role::dim),
+            note_line_height);
+        column->add_gap(8.0f);
+        column->add(std::move(bar), tab_bar_height);
+        column->add_gap(16.0f);
+
+        // 내용 영역은 앱 몫이다: 고른 탭을 보여 주는 판이다.
+        std::u8string current { u8"열린 탭이 없다" };
+        for (const tab_entry& tab : tabs_)
+            if (tab.key == selected_)
+                current = tab.label + u8" 내용";
+        luil::panel_config surface_panel {};
+        surface_panel.background = [](const luil::ui_color_palette& palette) { return palette.surface_background; };
+        surface_panel.corner_radius = 6.0f;
+        auto content_panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_page_panel, u8"tab-content" }, std::move(surface_panel)) };
+        luil::stack_config content_config {};
+        content_config.padding = luil::edge_insets::all(16.0f);
+        auto content { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tab-content" }, content_config) };
+        content->add(make_label(luil::ui_element_id { kind_text, u8"tab-current" }, std::move(current), body_text_size, luil::label_color_role::primary), body_line_height);
+        content_panel->set_content(std::move(content));
+        column->add_flexible(std::move(content_panel));
+        return column;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="107-117" data-title="탭 항목">키·이름·아이콘·닫을 수 있음. 키가 탭 id의 owner가 되므로 frame을 넘어 같아야 한다.</li>
+            <li data-lines="118-121" data-title="앱 상태">고른 키와 스크롤 값을 넘긴다. 막대는 이 값으로만 그린다.</li>
+            <li data-lines="122-124" data-title="고르기·닫기·순서">factory가 있는 동작만 선다. 닫기 단추는 <code>closable</code>과 <code>close</code>가 모두 있어야 생긴다. 이 데모는 앞·뒤를 싣지 않는 옛 <code>reorder</code>를 쓴다 — 아래 경고를 본다.</li>
+            <li data-lines="125-130" data-title="메뉴·넘침·쓸기">길게 누르기·우클릭은 <code>context_menu</code>다. <code>overflow_tooltip</code>이 넘침 단추의 접근 이름이다. <code>scroll</code>이 있으면 넘칠 때 띠를 손가락으로 쓸어 넘긴다.</li>
+            <li data-lines="131-132" data-title="막대 포인터">넘침 메뉴 popup을 막대 자리에 띄우려고 이번 build의 막대를 쥔다. frame이 게시되기 전까지만 쓴다.</li>
+            <li data-lines="134-142" data-title="배치">막대는 고정 높이 한 줄이다.</li>
+            <li data-lines="144-159" data-title="내용 영역">고른 탭의 내용은 앱이 막대 밖에 짓는다.</li>
+          </ol>
+        </div>
+        <div class="prose"><p>메시지 처리다. 고르면 키를 바꾸고, 닫으면 목록에서 빼고, 메뉴를 열면 자리를 적는다. 순서 바꾸기 갈래는 아래에 따로 뗐다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/tabs_page.cpp:26-66,85-98" data-path="examples/mobile_demo/tabs_page.cpp" data-start="26"><script type="text/plain">
+    bool tabs_page::handle(const luil::app_message& message)
+    {
+        if (const auto* const select { message.get<tab_select_intent>() }; select != nullptr)
+        {
+            selected_ = select->key;
+            // 넘침 메뉴에서 골랐을 수도 있으니 함께 닫는다.
+            overflow_open_ = false;
+            return true;
+        }
+        if (const auto* const close { message.get<tab_close_intent>() }; close != nullptr)
+        {
+            close_tab(close->key);
+            return true;
+        }
+        if (const auto* const menu { message.get<tab_menu_intent>() }; menu != nullptr)
+        {
+            menu_key_ = menu->key;
+            menu_x_ = menu->x;
+            menu_y_ = menu->y;
+            overflow_open_ = false;
+            return true;
+        }
+        if (const auto* const command { message.get<tab_menu_command_intent>() }; command != nullptr)
+        {
+            const std::u8string key { std::move(menu_key_) };
+            menu_key_.clear();
+            if (command->command == u8"close")
+                close_tab(key);
+            if (command->command == u8"close-others")
+            {
+                std::erase_if(tabs_, [&key](const tab_entry& tab) { return tab.key != key; });
+                if (tabs_.empty() == false)
+                    selected_ = key;
+            }
+            return true;
+        }
+        if (message.get<tab_menu_close_intent>() != nullptr)
+        {
+            menu_key_.clear();
+            return true;
+        }
+⋯@85
+        if (const auto* const scroll { message.get<tab_scroll_intent>() }; scroll != nullptr)
+        {
+            scroll_ += scroll->delta;
+            if (scroll_ < 0.0f)
+                scroll_ = 0.0f;
+            return true;
+        }
+        if (const auto* const overflow { message.get<tab_overflow_intent>() }; overflow != nullptr)
+        {
+            overflow_open_ = overflow->open;
+            return true;
+        }
+        return false;
+    }
+</script></div>
+        <div class="prose"><p>닫은 탭이 고른 탭이었으면 다음 선택은 앱이 정한다. element는 고르지 않는다. 이 데모는 오른쪽 이웃, 없으면 마지막 탭이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/tabs_page.cpp:162-174" data-path="examples/mobile_demo/tabs_page.cpp" data-start="162"><script type="text/plain">
+    void tabs_page::close_tab(const std::u8string& key)
+    {
+        for (auto position = tabs_.begin(); position != tabs_.end(); ++position)
+        {
+            if (position->key != key)
+                continue;
+            const bool was_selected { selected_ == position->key };
+            position = tabs_.erase(position);
+            if (was_selected && tabs_.empty() == false)
+                selected_ = (position != tabs_.end() ? position : tabs_.end() - 1)->key;
+            break;
+        }
+    }
+</script></div>
+        <div class="prose"><p>컨텍스트 메뉴와 넘침 메뉴는 popup이다. 메뉴 좌표는 물리 픽셀이라 배율로 나눈다.</p></div>
+        <div class="code tall" data-lang="cpp" data-src="examples/mobile_demo/tabs_page.cpp:176-233" data-path="examples/mobile_demo/tabs_page.cpp" data-start="176"><script type="text/plain">
+    std::vector<luil::ui_popup> tabs_page::make_popups(const float scale) const
+    {
+        if (menu_key_.empty() == false)
+        {
+            // 길게 누른 탭의 메뉴다. 누른 자리에 왼쪽 위를 맞춘다.
+            luil::menu_config menu {};
+            menu.owner = u8"tab-menu";
+            menu.items.push_back({ u8"close", u8"닫기", luil::codicons::icon_close });
+            luil::menu_item_config others {};
+            others.key = u8"close-others";
+            others.label = u8"다른 탭 닫기";
+            others.enabled = tabs_.size() > 1;
+            menu.items.push_back(std::move(others));
+            menu.select = [](const std::u8string& command) { return luil::make_app_action(tab_menu_command_intent { command }); };
+
+            luil::ui_popup popup {};
+            popup.id = u8"tab-menu";
+            popup.width = tab_menu_width;
+            popup.height = luil::menu_element::height_for(menu);
+            popup.x = menu_x_ / scale;
+            popup.y = menu_y_ / scale;
+            auto root { std::make_unique<luil::menu_element>(std::move(menu)) };
+            popup.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, popup.width * scale, popup.height * scale }, scale));
+            popup.dismiss = [](luil::popup_dismiss_reason) { return luil::make_app_action(tab_menu_close_intent {}); };
+            return { std::move(popup) };
+        }
+
+        if (overflow_open_ == false || bar_ == nullptr || tabs_.empty())
+            return {};
+
+        // 열린 탭 목록이다. 고른 탭에 표식을 두고 선택하면 메뉴가 함께 닫힌다.
+        luil::menu_config menu {};
+        menu.owner = u8"tab-overflow";
+        for (const tab_entry& tab : tabs_)
+        {
+            luil::menu_item_config item {};
+            item.key = tab.key;
+            item.label = tab.label;
+            if (tab.key == selected_)
+                item.icon = luil::codicons::icon_check;
+            menu.items.push_back(std::move(item));
+        }
+        menu.select = [](const std::u8string& key) { return luil::make_app_action(tab_select_intent { key }); };
+
+        // 탭 막대의 오른쪽 아래에 붙인다.
+        // 자리는 이번 frame에서 배치된 막대의 bounds를 논리 픽셀로 되돌려 얻는다.
+        const luil::rect_f bar_bounds { bar_->bounds() };
+        luil::ui_popup popup {};
+        popup.id = u8"tab-overflow";
+        popup.width = overflow_menu_width;
+        popup.height = luil::menu_element::height_for(menu);
+        popup.x = (bar_bounds.x + bar_bounds.width) / scale - overflow_menu_width;
+        popup.y = (bar_bounds.y + bar_bounds.height) / scale + 2.0f;
+        auto root { std::make_unique<luil::menu_element>(std::move(menu)) };
+        popup.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, popup.width * scale, popup.height * scale }, scale));
+        popup.dismiss = [](luil::popup_dismiss_reason) { return luil::make_app_action(tab_overflow_intent { false }); };
+        return { std::move(popup) };
+    }
+</script></div>
+        <h3>따라 하지 말 것: 데모의 순서 바꾸기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/tabs_page.cpp:67-84" data-path="examples/mobile_demo/tabs_page.cpp" data-start="67"><script type="text/plain">
+        if (const auto* const reorder { message.get<tab_reorder_intent>() }; reorder != nullptr)
+        {
+            if (reorder->moved == reorder->target)
+                return true;
+            auto find = [this](const std::u8string& key) {
+                for (auto position = tabs_.begin(); position != tabs_.end(); ++position)
+                    if (position->key == key)
+                        return position;
+                return tabs_.end();
+            };
+            const auto moved { find(reorder->moved) };
+            if (moved == tabs_.end())
+                return true;
+            const tab_entry entry { *moved };
+            tabs_.erase(moved);
+            tabs_.insert(find(reorder->target), entry);
+            return true;
+        }
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">오른쪽으로 끌면 한 칸 모자란다</span><code>reorder</code>의 약속은 "끌어 놓은 탭을 대상 탭 자리로"다. 이 처리는 옮길 탭을 지운 뒤 대상의 <strong>앞</strong>에 끼운다. 탭이 [문서 1, 문서 2, 문서 3]일 때 따라가 보면:
+          <ul>
+            <li>문서 1을 문서 2 위에 놓는다 → 81행이 지워 [2, 3], 82행이 2의 앞에 끼워 [1, 2, 3]. 바라는 것은 [2, 1, 3]이다 — 그대로다.</li>
+            <li>문서 1을 문서 3 위에 놓는다 → [2, 1, 3]. 바라는 것은 [2, 3, 1]이다.</li>
+            <li>문서 3을 문서 1 위에 놓는다(왼쪽으로) → [3, 1, 2]. 맞다.</li>
+          </ul>
+          코드를 따라 센 것이다 (코드에서 확인한 동작, 실행해 보지 않았다). 앞·뒤를 싣는 <code>move</code>를 쓰면 이 문제가 없다 — <a class="xref" href="#build-move">다음 조각</a>.</div></div>
+      </section>
+
+      <section class="sec" id="build-move">
+        <header class="sec-head">
+          <h2>만들기: 끌어서 옮기기 (<code>move</code>)</h2>
+          <p class="lede"><code>move</code>는 놓은 자리가 대상 탭의 앞인지 뒤인지를 싣고, 순서가 그대로인 자리는 아예 받지 않는다. 데스크톱 데모가 쓰는 꼴이다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:279-357" data-path="examples/demo/tabs_page.cpp" data-start="279"><script type="text/plain">
+        luil::tab_bar_config bar_config {};
+        bar_config.owner = std::u8string { bar_owner };
+        for (std::size_t index = 0; index < tabs_.size(); ++index)
+        {
+            const tab_entry& tab { tabs_[index] };
+            luil::tab_item item {};
+            item.key = tab.key;
+            item.label = tab.label;
+            item.icon = luil::codicons::icon_file;
+            item.closable = true;
+            // 배지와 상태 표시를 차례로 보인다 — 개수 배지, 저장하지 않음 점, 심각도 배지, 불러오는 중.
+            //  - 점과 진행의 뜻은 앱만 알아 설명이 없으면 보조 기술에 읽히지 않는다. 그래서 적는다.
+            switch (index % 4)
+            {
+            case 0:
+                item.badge = luil::tab_badge { .text = u8"3", .description = u8"바뀐 곳 3개" };
+                break;
+            case 1:
+                item.indicator = luil::tab_indicator { .kind = luil::tab_indicator_kind::dot, .tone = luil::badge_tone::neutral, .description = u8"저장하지 않음" };
+                break;
+            case 2:
+                item.badge = luil::tab_badge { .tone = luil::badge_tone::error, .description = u8"오류 있음" };
+                break;
+            default:
+                item.indicator = luil::tab_indicator { .kind = luil::tab_indicator_kind::busy, .description = u8"불러오는 중" };
+                break;
+            }
+            bar_config.items.push_back(std::move(item));
+        }
+        bar_config.selected = selected_;
+        bar_config.tab_width = 150.0f;
+        bar_config.min_tab_width = shrink_ ? narrow_tab_width : 0.0f;
+        bar_config.overflow_mode = step_overflow_ ? luil::tab_overflow_mode::step : luil::tab_overflow_mode::scroll;
+        bar_config.wheel_steps = step_overflow_;
+        bar_config.step_back_tooltip = u8"앞 탭 보기";
+        bar_config.step_forward_tooltip = u8"뒤 탭 보기";
+        // 막대 끝의 새 탭 단추다. 탭이 적으면 마지막 탭 뒤에 따라붙고, 넘치면 오른쪽 끝에 선다.
+        bar_config.trailing = [] {
+            const luil::button_config add { .glyph = luil::codicons::icon_add, .icon_size = 14.0f };
+            auto button { std::make_unique<luil::button_element>(luil::ui_element_id { kind_layout, u8"tabs/new-tab" }, add) };
+            button->set_tooltip(u8"새 탭 (Ctrl+T)");
+            button->set_cursor(luil::ui_cursor::hand);
+            button->set_action(luil::ui_trigger::left_click, luil::make_message_action(tab_menu_command_intent { u8"new" }));
+            return std::unique_ptr<luil::ui_element> { std::move(button) };
+        };
+        bar_config.trailing_width = new_tab_width;
+        bar_config.scroll_offset = scroll_;
+        bar_config.select = [](const std::u8string& key) { return luil::make_app_action(tab_select_intent { key }); };
+        bar_config.close = [](const std::u8string& key) { return luil::make_app_action(tab_close_intent { key }); };
+        bar_config.move = [](const std::u8string& moved, const std::u8string& target, const luil::drop_side side) { return luil::make_app_action(tab_reorder_intent { moved, target, side }); };
+        bar_config.receive = [](const luil::drag_payload& payload, const std::u8string& target, const luil::drop_side side) {
+            return luil::make_app_action(tab_attach_intent { payload.dragged_owner, target, side });
+        };
+        bar_config.unclaimed_drop = [](const luil::drag_payload& payload, const luil::drag_release& release) {
+            tab_detach_intent intent { payload.dragged_owner };
+            if (release.screen.has_value())
+                intent.anchor = luil::window_screen_anchor { *release.screen, 24.0f + payload.grab_offset_x, 34.0f + payload.grab_offset_y };
+            return luil::make_app_action(std::move(intent));
+        };
+        // 막대와 같은 식으로 탭 폭과 레인 폭을 미리 잰다 — 고른 탭을 레인 안으로 들이는 계산이 쓴다.
+        //  - 넘치면 꼬리(새 탭)·넘침 메뉴, 한 탭씩이면 앞·뒤 단추까지 레인에서 빠진다.
+        const float bar_width { std::max(0.0f, width - 48.0f) };
+        const float previous_lane { lane_width_ };
+        const float smallest { luil::fitted_tab_width(tabs_.size(), 150.0f, shrink_ ? narrow_tab_width : 0.0f, 0.0f) };
+        const bool overflowing { static_cast<float>(tabs_.size()) * smallest + new_tab_width > bar_width };
+        tab_width_ = overflowing ? smallest : luil::fitted_tab_width(tabs_.size(), 150.0f, shrink_ ? narrow_tab_width : 0.0f, bar_width - new_tab_width);
+        lane_width_ = overflowing ? std::max(0.0f, bar_width - new_tab_width - luil::tab_overflow_width - (step_overflow_ ? 2.0f * luil::tab_overflow_width : 0.0f)) : bar_width;
+        if (lane_width_ != previous_lane)
+            reveal_selected();
+        scroll_ = std::clamp(scroll_, 0.0f, std::max(0.0f, static_cast<float>(tabs_.size()) * tab_width_ - lane_width_));
+        bar_config.scroll_offset = scroll_;
+        // 우클릭(터치는 길게 누르기)한 자리에 컨텍스트 메뉴를 띄운다.
+        bar_config.context_menu = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(tab_menu_intent { key, context.x, context.y }); };
+        bar_config.overflow = luil::make_message_action(tab_overflow_intent { true });
+        bar_config.overflow_tooltip = u8"넘친 탭 보기";
+        // 넘친 레인을 손가락으로 옆으로 쓸어 넘긴다. 휠과 같은 메시지다.
+        bar_config.scroll = [](const float value) { return luil::make_app_action(tab_scroll_intent { value }); };
+        auto bar { std::make_unique<luil::tab_bar_element>(std::move(bar_config)) };
+        bar_ = bar.get();
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="279-307" data-title="탭 항목과 배지">배지와 상태 표시는 설명(<code>description</code>)을 적어야 보조 기술에 읽힌다.</li>
+            <li data-lines="308-314" data-title="폭과 넘침">줄이기(<code>min_tab_width</code>)와 넘침 방식, 칸 휠, 앞·뒤 단추의 이름이다.</li>
+            <li data-lines="315-324" data-title="꼬리">새 탭 단추다. 탭이 적으면 마지막 탭 뒤에, 넘치면 오른쪽 끝에 선다.</li>
+            <li data-lines="325-328" data-title="고르기·닫기·이동">앞·뒤를 싣는 <code>move</code>다. 있으면 <code>reorder</code> 대신 이것이 선다.</li>
+            <li data-lines="329-337" data-title="다른 창">다른 막대의 탭 받기와 받는 곳 없는 놓기다 — <a class="xref" href="#build-detach">떼어 내기</a>.</li>
+            <li data-lines="338-349" data-title="드러낼 준비">고른 탭을 레인 안으로 들이려고 막대와 같은 식으로 폭을 미리 잰다. 스크롤 값은 앱 상태라서다.</li>
+            <li data-lines="350-357" data-title="메뉴·넘침·쓸기">막대에 이름(<code>set_access_name</code>)을 주지 않은 것은 데모의 빈틈이다 — 아래 함정을 본다.</li>
+          </ol>
+        </div>
+        <div class="prose"><p>처리는 옮길 탭을 빼고, 대상의 앞이나 뒤에 다시 끼운다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:174-195" data-path="examples/demo/tabs_page.cpp" data-start="174"><script type="text/plain">
+        if (const auto* const reorder { message.get<tab_reorder_intent>() }; reorder != nullptr)
+        {
+            if (reorder->moved == reorder->target)
+                return true;
+            auto find = [this](const std::u8string& key) {
+                for (auto position = tabs_.begin(); position != tabs_.end(); ++position)
+                    if (position->key == key)
+                        return position;
+                return tabs_.end();
+            };
+            const auto moved { find(reorder->moved) };
+            if (moved == tabs_.end())
+                return true;
+            const tab_entry entry { *moved };
+            tabs_.erase(moved);
+            auto target { find(reorder->target) };
+            if (target != tabs_.end() && reorder->side == luil::drop_side::after)
+                ++target;
+            tabs_.insert(target, entry);
+            reveal_selected();
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/demo_gallery_tests.cpp:127-140" data-path="tests/demo_gallery_tests.cpp" data-start="127"><script type="text/plain">
+TEST_CASE("Tab moves insert before or after targets and stale selections cannot select a closed tab", "[demo][tabs]")
+{
+    demo::tabs_page page {};
+    send(page, demo::tab_reorder_intent { u8"tab-1", u8"tab-3", luil::drop_side::after });
+    auto order { tabs(page) };
+    REQUIRE(order[0].owner == u8"tab-2");
+    REQUIRE(order[1].owner == u8"tab-3");
+    REQUIRE(order[2].owner == u8"tab-1");
+    send(page, demo::tab_close_intent { u8"tab-1" });
+    send(page, demo::tab_select_intent { u8"tab-1" });
+    REQUIRE(selected(page, u8"tab-4"));
+    send(page, demo::tab_menu_command_intent { u8"reopen" });
+    REQUIRE(selected(page, u8"tab-1"));
+}
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>놓는 자리</th><th>무엇이 되나</th></tr></thead>
+            <tbody>
+              <tr><td>대상 탭의 앞 반쪽 / 뒤 반쪽</td><td><code>drop_side::before</code> / <code>drop_side::after</code> — 탭 상자 가운데 x로 가른다</td></tr>
+              <tr><td>마지막 탭 뒤의 빈 곳 (띠 안)</td><td>마지막 탭의 <code>after</code></td></tr>
+              <tr><td>끼울 자리 = (대상의 차례 + 뒤면 1)이 옮길 탭의 지금 자리이거나 그 다음</td><td>순서가 그대로라 받지 않는다 — 자기 자신, 바로 앞 탭의 뒤 반쪽, 바로 뒤 탭의 앞 반쪽. 강조도 메시지도 없다</td></tr>
+              <tr><td>받는 자리</td><td>탭 테두리 대신 그 틈에 accent 세로 막대(2 논리 픽셀)가 선다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code tall" data-lang="cpp" data-src="tests/tab_bar_element_tests.cpp:413-482" data-path="tests/tab_bar_element_tests.cpp" data-start="413"><script type="text/plain">
+TEST_CASE("Moving a tab names the side and refuses the spots that keep the order", "[ui][tab][drag]")
+{
+    // 탭 폭 160: a는 0–160, b는 160–320, c는 320–480이고 그 뒤는 빈 틈이다.
+    luil::tab_bar_config config { make_config(3) };
+    config.move = move_message;
+    const luil::ui_tree tree { bar_tree(std::move(config)) };
+    const luil::tab_bar_element& bar { bar_of(tree) };
+
+    const luil::ui_element& first { tab_at(bar, 0) };
+    REQUIRE(first.drag() != nullptr);
+    const luil::drag_payload payload { first.drag()->make_payload({ first.id(), 20.0f, 10.0f }) };
+
+    SECTION("그대로인 자리는 받지 않는다")
+    {
+        // 자기 자신의 두 반쪽과 바로 뒤 탭의 앞 반쪽이다. 강조도 서지 않는다.
+        REQUIRE(tree.find_drop_target(40.0f, 18.0f, payload) == nullptr);
+        REQUIRE(tree.find_drop_target(140.0f, 18.0f, payload) == nullptr);
+        REQUIRE(tree.find_drop_target(170.0f, 18.0f, payload) == nullptr);
+        REQUIRE(drop_at(tree, payload, 170.0f).empty());
+    }
+
+    SECTION("바뀌는 자리는 앞·뒤를 싣는다")
+    {
+        auto after_b { drop_at(tree, payload, 300.0f) };
+        const auto* const behind { single_message<move_intent>(after_b) };
+        REQUIRE(behind != nullptr);
+        REQUIRE(behind->moved == u8"tab-a");
+        REQUIRE(behind->target == u8"tab-b");
+        REQUIRE(behind->side == luil::drop_side::after);
+
+        auto before_c { drop_at(tree, payload, 330.0f) };
+        const auto* const ahead { single_message<move_intent>(before_c) };
+        REQUIRE(ahead != nullptr);
+        REQUIRE(ahead->target == u8"tab-c");
+        REQUIRE(ahead->side == luil::drop_side::before);
+    }
+
+    SECTION("마지막 탭 뒤의 빈 곳은 마지막 탭의 뒤다")
+    {
+        const luil::ui_element* const end { tree.find_drop_target(600.0f, 18.0f, payload) };
+        REQUIRE(end == &bar);
+        auto dropped { drop_at(tree, payload, 600.0f) };
+        const auto* const message { single_message<move_intent>(dropped) };
+        REQUIRE(message != nullptr);
+        REQUIRE(message->target == u8"tab-c");
+        REQUIRE(message->side == luil::drop_side::after);
+
+        // 이미 마지막인 탭에는 그 틈도 그대로인 자리다.
+        const luil::ui_element& last { tab_at(bar, 2) };
+        const luil::drag_payload trailing { last.drag()->make_payload({ last.id(), 20.0f, 10.0f }) };
+        REQUIRE(tree.find_drop_target(600.0f, 18.0f, trailing) == nullptr);
+        REQUIRE(tree.find_drop_target(460.0f, 18.0f, trailing) == nullptr);
+        REQUIRE(tree.find_drop_target(300.0f, 18.0f, trailing) == nullptr);
+        REQUIRE(tree.find_drop_target(20.0f, 18.0f, trailing) == &tab_at(bar, 0));
+    }
+
+    SECTION("받는 자리는 테두리 대신 틈으로 보인다")
+    {
+        REQUIRE(tab_at(bar, 1).drop()->custom_highlight);
+        REQUIRE(bar.drop()->custom_highlight);
+    }
+
+    SECTION("다른 막대의 탭은 move로 받지 않는다")
+    {
+        luil::drag_payload foreign { payload };
+        foreign.dragged_owner = u8"tab-x";
+        REQUIRE(tree.find_drop_target(300.0f, 18.0f, foreign) == nullptr);
+        REQUIRE(tree.find_drop_target(600.0f, 18.0f, foreign) == nullptr);
+    }
+}
+</script></div>
+        <div class="prose small"><p>끌기는 끌기 문턱(<code>interaction_config::drag_start_distance</code>, 6)을 넘어야 선다. 끄는 동안 Esc는 끌기를 거둔다. 끄는 탭은 <code>underline</code> 모양이면 바탕만, 그 밖의 모양이면 탭 전체를 흐리게 그린다.</p></div>
+      </section>
+
+      <section class="sec" id="build-keys">
+        <header class="sec-head">
+          <h2>만들기: 키보드로 닫고 옮기기</h2>
+          <p class="lede">라이브러리는 Ctrl+Tab·Ctrl+W·Delete를 받지 않는다. 닫기 단추는 Tab 자리도 보조 기술의 요소도 아니다. 키보드와 보조 기술 사용자가 탭을 닫고 옮기는 길은 앱이 명령과 메뉴로 단다.</p>
+        </header>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">닫기 단추에는 키보드와 보조 기술이 닿지 않는다</span>닫기 단추는 이름이 없어 접근 tree에서 접히고(이름 없는 누를 것은 <code>none</code>이다), <code>set_tab_stop(false)</code>라 Tab과 묶음 화살표에도 없다 (코드에서 확인한 동작). 막대의 묶음에는 탭·넘침 단추·꼬리만 든다. 그러니 Ctrl+W 같은 앱 명령이나 컨텍스트 메뉴의 "닫기"가 없으면 키보드만으로는 탭을 닫을 수 없다.</div></div>
+        <div class="prose"><p>데스크톱 데모는 명령표 하나를 단축키와 메뉴가 함께 쓴다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:23-32" data-path="examples/demo/tabs_page.cpp" data-start="23"><script type="text/plain">
+        [[nodiscard]] std::vector<luil::app_command> tab_commands()
+        {
+            return {
+                { .id = u8"new", .label = u8"새 탭", .shortcut = { luil::key_code::key_t, true } },
+                { .id = u8"reopen", .label = u8"닫은 탭 다시 열기", .shortcut = { luil::key_code::key_t, true, true } },
+                { .id = u8"close-current", .label = u8"현재 탭 닫기", .shortcut = { luil::key_code::key_w, true } },
+                { .id = u8"next", .label = u8"다음 탭", .shortcut = { luil::key_code::tab, true } },
+                { .id = u8"previous", .label = u8"이전 탭", .shortcut = { luil::key_code::tab, true, true } },
+            };
+        }
+</script></div>
+        <div class="prose"><p>정책의 <code>interaction_policy::on_key</code>가 이 함수를 부른다. 막대가 tree에 있고 가둠(modal)이 없을 때만 명령으로 바꾼다. 초점이 어디에 있든 창 범위로 받는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:613-620" data-path="examples/demo/tabs_page.cpp" data-start="613"><script type="text/plain">
+    std::vector<luil::input_action> tabs_page::route_key(const luil::ui_tree* const tree, const luil::key_pressed_event& event)
+    {
+        if (tree == nullptr || tree->focus_trap() != nullptr || event.surface.empty() == false || tree->find({ luil::ui_element_kind::tab_bar, std::u8string { bar_owner } }) == nullptr)
+            return {};
+        if (const auto command { luil::match_command(tab_commands(), event, luil::command_scope::window) }; command.has_value())
+            return { luil::make_app_action(tab_menu_command_intent { *command }) };
+        return {};
+    }
+</script></div>
+        <div class="prose"><p>명령 처리다. "다음·이전"은 고른 탭을 돌리고, "왼쪽·오른쪽으로 이동"은 이웃과 맞바꾼다. 끝에서 고른 탭을 드러낸다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:527-556" data-path="examples/demo/tabs_page.cpp" data-start="527"><script type="text/plain">
+        else if (command == u8"close" || command == u8"close-current")
+            close_tab(key);
+        else if (command == u8"detach")
+            static_cast<void>(handle(luil::app_message { tab_detach_intent { key } }));
+        else if (tabs_.empty() == false)
+        {
+            const auto found { std::ranges::find_if(tabs_, [&key](const tab_entry& item) { return item.key == key; }) };
+            if (found == tabs_.end())
+                return;
+            const auto index { static_cast<std::size_t>(found - tabs_.begin()) };
+            if (command == u8"next" || command == u8"previous")
+                selected_ = tabs_[(index + (command == u8"next" ? 1 : tabs_.size() - 1)) % tabs_.size()].key;
+            if (command == u8"move-left" && index > 0)
+                std::iter_swap(found, found - 1);
+            if (command == u8"move-right" && index + 1 < tabs_.size())
+                std::iter_swap(found, found + 1);
+            if (command == u8"close-others" || command == u8"close-right" || command == u8"close-all")
+            {
+                std::vector<std::u8string> keys {};
+                for (std::size_t position = 0; position < tabs_.size(); ++position)
+                    if (command == u8"close-all" || (command == u8"close-others" && position != index) || (command == u8"close-right" && position > index))
+                        keys.push_back(tabs_[position].key);
+                for (const std::u8string& close : keys)
+                    close_tab(close);
+                if (command == u8"close-others")
+                    selected_ = key;
+            }
+        }
+        reveal_selected();
+    }
+</script></div>
+        <div class="prose"><p>컨텍스트 메뉴에 같은 명령을 둔다. Shift+F10이 초점 탭의 메뉴를 열므로 보조 기술 사용자도 여기서 닫고 옮긴다. 첫 항목에 Ctrl+W를 적어 단축키를 알린다.</p></div>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:425-464" data-path="examples/demo/tabs_page.cpp" data-start="425"><script type="text/plain">
+    std::vector<luil::ui_popup> tabs_page::make_popups(const float scale) const
+    {
+        if (menu_key_.empty() == false)
+        {
+            // 우클릭한 탭의 메뉴다. 우클릭한 자리에 왼쪽 위를 맞춘다.
+            luil::menu_config menu {};
+            menu.owner = u8"tab-menu";
+            menu.items.push_back({ u8"close", u8"닫기", luil::codicons::icon_close });
+            luil::menu_item_config others {};
+            others.key = u8"close-others";
+            others.label = u8"다른 탭 닫기";
+            others.enabled = tabs_.size() > 1;
+            menu.items.push_back(std::move(others));
+            const auto found { std::ranges::find_if(tabs_, [this](const tab_entry& item) { return item.key == menu_key_; }) };
+            const bool exists { found != tabs_.end() };
+            menu.items.push_back({ .key = u8"close-right", .label = u8"오른쪽 탭 닫기", .enabled = exists && found + 1 != tabs_.end() });
+            menu.items.push_back({ .key = u8"close-all", .label = u8"모든 탭 닫기", .enabled = tabs_.empty() == false });
+            menu.items.push_back({ .key = u8"move-left", .label = u8"왼쪽으로 이동", .enabled = exists && found != tabs_.begin(), .separator_above = true });
+            menu.items.push_back({ .key = u8"move-right", .label = u8"오른쪽으로 이동", .enabled = exists && found + 1 != tabs_.end() });
+            menu.items.push_back({ .key = u8"detach", .label = u8"새 창으로 분리", .enabled = exists });
+            for (const luil::app_command& command : tab_commands())
+            {
+                if (command.id != u8"new" && command.id != u8"reopen")
+                    continue;
+                luil::menu_item_config item { luil::menu_item_from(command) };
+                item.separator_above = command.id == u8"new";
+                item.enabled = command.id != u8"reopen" || closed_.empty() == false;
+                menu.items.push_back(std::move(item));
+            }
+            menu.items.front().shortcut_text = luil::shortcut_label(luil::key_chord { luil::key_code::key_w, true });
+            menu.select = [](const std::u8string& command) { return luil::make_app_action(tab_menu_command_intent { command }); };
+
+            luil::menu_popup_config popup {};
+            popup.id = u8"tab-menu";
+            popup.x = menu_x_ / scale;
+            popup.y = menu_y_ / scale;
+            popup.scale = scale;
+            popup.dismiss = [](luil::popup_dismiss_reason) { return luil::make_app_action(tab_menu_close_intent {}); };
+            return { luil::make_menu_popup(std::move(menu), std::move(popup)) };
+        }
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>키</th><th>누가 받나</th></tr></thead>
+            <tbody>
+              <tr><td>← → · Home End</td><td>라이브러리 — 묶음 안의 초점 이동. 고르지 않는다</td></tr>
+              <tr><td>Space · Enter</td><td>라이브러리 — 초점 탭의 <code>left_click</code> = <code>select</code></td></tr>
+              <tr><td>Shift+F10</td><td>라이브러리 — 초점 탭의 <code>context_menu</code> (탭 가운데 좌표)</td></tr>
+              <tr><td>Ctrl+Tab · Ctrl+Shift+Tab · Ctrl+W · Ctrl+T · Delete</td><td><strong>앱</strong> — 라이브러리에 키 처리가 없다. 수식 키와 함께인 Tab은 초점 이동이 아니라 앱으로 흐른다</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="build-overflow">
+        <header class="sec-head">
+          <h2>만들기: 넘칠 때</h2>
+          <p class="lede">먼저 <code>min_tab_width</code>까지 고르게 줄인다. 그래도 넘치면 띠를 흘리거나(<code>scroll</code>) 한 탭씩 넘긴다(<code>step</code>). 넘침 메뉴 단추로 목록도 띄운다. 스크롤 값은 앱 상태라 고른 탭을 드러내는 것도 앱이다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>단계</th><th>규칙</th></tr></thead>
+            <tbody>
+              <tr><td>탭 폭</td><td><code>fitted_tab_width</code> — 들어가면 <code>tab_width</code>, 모자라면 같은 폭으로 나누되 <code>min_tab_width</code> 밑으로는 줄이지 않는다. 최소가 0이거나 <code>tab_width</code> 이상이면 줄이지 않는다</td></tr>
+              <tr><td>넘침 판정</td><td>탭 수 × 가장 작은 폭 + 꼬리 폭이 막대 폭보다 크면 넘친다. 단추 폭은 떼기 전의 폭으로 본다</td></tr>
+              <tr><td>단추 자리</td><td>넘칠 때만. 오른쪽부터 꼬리 → 넘침 단추 → (한 탭씩이면) 뒤 단추, 왼쪽에 앞 단추. 단추 폭은 모두 <code>tab_overflow_width</code>(28)다. 띠가 남은 자리를 갖는다</td></tr>
+              <tr><td>스크롤 다듬기</td><td>최대치는 (탭 수 × 폭 − 띠 폭)이고 0 밑이면 0이다. 값은 0과 최대치 사이로 다듬는다</td></tr>
+              <tr><td>한 탭씩</td><td><code>tab_step_offset</code> — 가는 쪽 끝의 탭 하나를 온전히 드러내는 값. 끝에 닿은 쪽 단추는 비활성이다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/tab_bar_style_tests.cpp:144-171" data-path="tests/tab_bar_style_tests.cpp" data-start="144"><script type="text/plain">
+TEST_CASE("The fitted tab width shrinks evenly down to the minimum", "[ui][tab][layout]")
+{
+    // 다 들어가면 원래 폭이다.
+    REQUIRE(luil::fitted_tab_width(4, 160.0f, 100.0f, 1000.0f) == 160.0f);
+    // 모자라면 같은 폭으로 나눈다.
+    REQUIRE(luil::fitted_tab_width(10, 160.0f, 100.0f, 1200.0f) == 120.0f);
+    // 최소 밑으로는 줄이지 않는다.
+    REQUIRE(luil::fitted_tab_width(10, 160.0f, 100.0f, 500.0f) == 100.0f);
+    // 최소가 0이거나 원래 폭 이상이면 줄이지 않는다 (처음부터의 동작).
+    REQUIRE(luil::fitted_tab_width(10, 160.0f, 0.0f, 500.0f) == 160.0f);
+    REQUIRE(luil::fitted_tab_width(10, 160.0f, 200.0f, 500.0f) == 160.0f);
+}
+
+TEST_CASE("A step reveals one whole tab at the edge it moves toward", "[ui][tab][layout]")
+{
+    // 탭 100, 띠 250, 최대 750 (탭 열 개).
+    REQUIRE(luil::tab_step_offset(0.0f, 100.0f, 250.0f, 750.0f, 1) == 50.0f);
+    REQUIRE(luil::tab_step_offset(50.0f, 100.0f, 250.0f, 750.0f, 1) == 150.0f);
+    REQUIRE(luil::tab_step_offset(150.0f, 100.0f, 250.0f, 750.0f, -1) == 100.0f);
+    REQUIRE(luil::tab_step_offset(100.0f, 100.0f, 250.0f, 750.0f, -1) == 0.0f);
+    // 두 칸은 경계 둘이다.
+    REQUIRE(luil::tab_step_offset(0.0f, 100.0f, 250.0f, 750.0f, 2) == 150.0f);
+    // 끝에서는 더 가지 않는다.
+    REQUIRE(luil::tab_step_offset(750.0f, 100.0f, 250.0f, 750.0f, 1) == 750.0f);
+    REQUIRE(luil::tab_step_offset(0.0f, 100.0f, 250.0f, 750.0f, -1) == 0.0f);
+    // 끝에서 뒤로 가면 왼쪽에 걸친 탭이 온전히 드러난다.
+    REQUIRE(luil::tab_step_offset(750.0f, 100.0f, 250.0f, 750.0f, -1) == 700.0f);
+}
+</script></div>
+        <h3>한 탭씩 넘기기와 칸 휠</h3>
+        <div class="prose"><p><code>tab_overflow_mode::step</code>은 양 끝에 앞·뒤 단추를 세운다. 단추가 내는 것은 <code>scroll</code> factory의 메시지라 <code>scroll</code>이 없으면 단추도 없다. <code>wheel_steps</code>를 켜면 휠 한 칸이 탭 하나다 — 잘게 오는 휠은 120이 찰 때까지 쌓는다.</p></div>
+        <div class="code tall" data-lang="cpp" data-src="tests/tab_bar_style_tests.cpp:228-282" data-path="tests/tab_bar_style_tests.cpp" data-start="228"><script type="text/plain">
+TEST_CASE("Step buttons sit at both ends and move one tab at a time", "[ui][tab][overflow]")
+{
+    luil::tab_bar_config config { make_config(10) };
+    with_messages(config);
+    config.tab_width = 100.0f;
+    config.overflow_mode = luil::tab_overflow_mode::step;
+    config.step_back_tooltip = u8"Previous tabs";
+    config.step_forward_tooltip = u8"Next tabs";
+    config.overflow = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+    config.overflow_tooltip = u8"All tabs";
+    luil::tab_bar_element bar { std::move(config) };
+    bar.arrange({ { 0.0f, 0.0f, 400.0f, 36.0f }, 1.0f });
+
+    // [앞] 띠 [뒤] [넘침 메뉴] 순이다.
+    const luil::ui_element* back { nullptr };
+    const luil::ui_element* forward { nullptr };
+    const luil::ui_element* menu { nullptr };
+    for (const auto& child : bar.children())
+        if (child->id().kind == luil::ui_element_kind::tab_step_back)
+            back = child.get();
+        else if (child->id().kind == luil::ui_element_kind::tab_step_forward)
+            forward = child.get();
+        else if (child->id().kind == luil::ui_element_kind::tab_overflow)
+            menu = child.get();
+    REQUIRE(back != nullptr);
+    REQUIRE(forward != nullptr);
+    REQUIRE(menu != nullptr);
+    REQUIRE(back->visible());
+    REQUIRE(back->bounds().x == 0.0f);
+    REQUIRE(bar.children()[0]->bounds().x == 28.0f);
+    REQUIRE(forward->bounds().x == 400.0f - 28.0f * 2.0f);
+    REQUIRE(menu->bounds().x == 400.0f - 28.0f);
+    // 처음이라 앞 단추는 비활성이다.
+    REQUIRE(back->enabled() == false);
+    REQUIRE(forward->enabled());
+    // 단추는 Tab 자리가 아니다. 이름은 tooltip이다.
+    REQUIRE(back->tab_stop() == false);
+    REQUIRE(forward->access_name() == u8"Next tabs");
+
+    // 띠 폭 316 — 오른쪽에 걸친 넷째 탭이 온전히 드러나는 자리(400 - 316 = 84)로 간다.
+    auto stepped { (*forward->action(luil::ui_trigger::left_click))({ forward->id(), 0.0f, 0.0f }) };
+    const auto* const scrolled { single_message<scroll_intent>(stepped) };
+    REQUIRE(scrolled != nullptr);
+    REQUIRE(scrolled->delta == 84.0f);
+
+    // 넘치지 않으면 단추가 없다.
+    luil::tab_bar_config few { make_config(2) };
+    with_messages(few);
+    few.overflow_mode = luil::tab_overflow_mode::step;
+    luil::tab_bar_element calm { std::move(few) };
+    calm.arrange({ { 0.0f, 0.0f, 400.0f, 36.0f }, 1.0f });
+    for (const auto& child : calm.children())
+        if (child->id().kind == luil::ui_element_kind::tab_step_back || child->id().kind == luil::ui_element_kind::tab_step_forward)
+            REQUIRE(child->visible() == false);
+}
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/tab_bar_style_tests.cpp:284-310" data-path="tests/tab_bar_style_tests.cpp" data-start="284"><script type="text/plain">
+TEST_CASE("The wheel moves one tab per notch and gathers fine scrolling", "[ui][tab][overflow][input]")
+{
+    luil::tab_bar_config config { make_config(10) };
+    with_messages(config);
+    config.tab_width = 100.0f;
+    config.wheel_steps = true;
+    luil::interaction_controller controller {};
+    controller.set_tree(bar_tree(std::move(config), 250.0f));
+
+    // 아래로 한 칸이면 오른쪽에 걸친 탭이 온전히 드러난다 (띠 250 → 50).
+    auto notch { controller.process(luil::mouse_wheel_event { .x = 100.0f, .y = 18.0f, .delta = -120.0f, .time = at(0) }) };
+    const auto* const first { single_message<scroll_intent>(notch) };
+    REQUIRE(first != nullptr);
+    REQUIRE(first->delta == 50.0f);
+
+    // 잘게 오는 휠은 한 칸이 찰 때까지 아무것도 내지 않는다.
+    REQUIRE(controller.process(luil::mouse_wheel_event { .x = 100.0f, .y = 18.0f, .delta = -40.0f, .time = at(10) }).empty());
+    REQUIRE(controller.process(luil::mouse_wheel_event { .x = 100.0f, .y = 18.0f, .delta = -40.0f, .time = at(20) }).empty());
+    auto filled { controller.process(luil::mouse_wheel_event { .x = 100.0f, .y = 18.0f, .delta = -40.0f, .time = at(30) }) };
+    REQUIRE(single_message<scroll_intent>(filled) != nullptr);
+
+    // 가로 휠도 한 칸에 탭 하나다 (오른쪽이 앞).
+    auto sideways { controller.process(luil::mouse_wheel_event { .x = 100.0f, .y = 18.0f, .delta = 120.0f, .time = at(40), .horizontal = true }) };
+    const auto* const horizontal { single_message<scroll_intent>(sideways) };
+    REQUIRE(horizontal != nullptr);
+    REQUIRE(horizontal->delta == 50.0f);
+}
+</script></div>
+        <h3>고른 탭 드러내기</h3>
+        <div class="prose"><p>넘침 메뉴·새 탭·키 명령으로 고른 탭이 화면 밖이면 앱이 스크롤 값을 고친다. 데스크톱 데모의 식이다. 휠은 사용자가 흘린 그대로 둔다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:496-511" data-path="examples/demo/tabs_page.cpp" data-start="496"><script type="text/plain">
+    void tabs_page::reveal_selected()
+    {
+        if (lane_width_ <= 0.0f)
+            return;
+        const auto selected { std::ranges::find_if(tabs_, [this](const tab_entry& item) { return item.key == selected_; }) };
+        if (selected == tabs_.end())
+        {
+            scroll_ = 0.0f;
+            return;
+        }
+        const float left { static_cast<float>(selected - tabs_.begin()) * tab_width_ };
+        if (left < scroll_)
+            scroll_ = left;
+        else if (left + tab_width_ > scroll_ + lane_width_)
+            scroll_ = left + tab_width_ - lane_width_;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/demo_gallery_tests.cpp:158-171" data-path="tests/demo_gallery_tests.cpp" data-start="158"><script type="text/plain">
+TEST_CASE("Tab selection reveals an offscreen tab while wheel scrolling remains under user control", "[demo][tabs]")
+{
+    demo::tabs_page page {};
+    static_cast<void>(tabs(page));
+    send(page, demo::tab_select_intent { u8"tab-8" });
+    auto tree { arranged(page.build(800.0f, 600.0f, 1.0f)) };
+    const auto* bar { dynamic_cast<const luil::tab_bar_element*>(tree.find({ luil::ui_element_kind::tab_bar, u8"demo-tabs" })) };
+    REQUIRE(bar != nullptr);
+    REQUIRE(bar->scroll_offset() > 0.0f);
+    send(page, demo::tab_scroll_intent { -10000.0f });
+    tree = arranged(page.build(800.0f, 600.0f, 1.0f));
+    bar = dynamic_cast<const luil::tab_bar_element*>(tree.find({ luil::ui_element_kind::tab_bar, u8"demo-tabs" }));
+    REQUIRE(bar->scroll_offset() == 0.0f);
+}
+</script></div>
+        <h3>휠과 키보드 초점을 띠로 보내기</h3>
+        <div class="prose"><p>정책이 있으면 휠과 초점 되살리기는 정책 몫이다. 기본 <code>on_wheel</code>·<code>on_focus_moved</code>는 빈 목록이라 ←/→로 넘친 탭에 초점을 옮겨도 띠가 저절로 흐르지 않는다. 모바일 데모는 표 없는 <code>route_reveal</code>·<code>route_wheel</code>을 돌려준다:</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:431-449" data-path="examples/mobile_demo/app.cpp" data-start="431"><script type="text/plain">
+    std::vector<luil::input_action> mobile_policy::on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta)
+    {
+        // 표를 든 페이지가 먼저다. 표 없는 짝은 좌표를 덮는 아무 흘리는 창이나 답해, 순서를 뒤집으면
+        // 표가 이름 댄 것을 감싼 페이지 창이 휠을 먼저 삼킨다.
+        if (auto actions { lists_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
+            return actions;
+        if (auto actions { tabs_page::route_wheel(tree, event, scroll_delta) }; actions.empty() == false)
+            return actions;
+        return luil::route_wheel(tree, event, scroll_delta);
+    }
+
+    std::vector<luil::input_action> mobile_policy::on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused)
+    {
+        if (auto actions { lists_page::route_reveal(tree, focused) }; actions.empty() == false)
+            return actions;
+        if (auto actions { tabs_page::route_reveal(tree, focused) }; actions.empty() == false)
+            return actions;
+        return luil::route_reveal(tree, focused);
+    }
+</script></div>
+        <div class="prose"><p>표(<code>scroll_route</code>)를 쓸 때는 되살리기에 바깥 막대가 아니라 띠(<code>tab_strip</code>)를 이름 댄다. 넘침 단추가 보일 때 막대의 bounds가 레인보다 그 단추 폭만큼 넓어서다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:622-639" data-path="examples/demo/tabs_page.cpp" data-start="622"><script type="text/plain">
+    std::vector<luil::input_action> tabs_page::route_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float delta)
+    {
+        static const luil::scroll_route routes[] {
+            { { luil::ui_element_kind::tab_bar, std::u8string { bar_owner } }, [](const float value) { return luil::make_app_action(tab_scroll_intent { value }); } },
+        };
+        return luil::route_wheel(tree, event.x, event.y, delta, routes);
+    }
+
+    std::vector<luil::input_action> tabs_page::route_reveal(const luil::ui_tree& tree, const luil::ui_element_id& focused)
+    {
+        // 휠이 대는 바깥 막대가 아니라 **안쪽 레인**을 이름 댄다.
+        // 넘침 버튼이 보일 때 막대의 bounds가 실제 레인보다 그 버튼 폭만큼 넓어,
+        // 바깥을 대면 마지막 탭이 버튼 밑에 남는다 (focus-reveal-design.md).
+        static const luil::scroll_route routes[] {
+            { { luil::ui_element_kind::tab_strip, std::u8string { bar_owner } }, [](const float value) { return luil::make_app_action(tab_scroll_intent { value }); } },
+        };
+        return luil::route_reveal(tree, focused, routes);
+    }
+</script></div>
+        <h3>넘침 메뉴</h3>
+        <div class="prose"><p>넘침 단추는 <code>overflow</code> 액션 하나다. 무엇을 띄울지는 앱이 정한다. 데스크톱 데모는 이번 build의 막대 자리 아래에 탭 목록 메뉴를 띄운다:</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:466-494" data-path="examples/demo/tabs_page.cpp" data-start="466"><script type="text/plain">
+        if (overflow_open_ == false || bar_ == nullptr || tabs_.empty())
+            return {};
+
+        // 열린 탭 목록이다. 고른 탭에 표식을 두고 선택하면 메뉴가 함께 닫힌다.
+        luil::menu_config menu {};
+        menu.owner = u8"tab-overflow";
+        for (const tab_entry& tab : tabs_)
+        {
+            luil::menu_item_config item {};
+            item.key = tab.key;
+            item.label = tab.label;
+            if (tab.key == selected_)
+                item.icon = luil::codicons::icon_check;
+            menu.items.push_back(std::move(item));
+        }
+        menu.select = [](const std::u8string& key) { return luil::make_app_action(tab_select_intent { key }); };
+
+        // 탭 막대의 오른쪽 아래에 붙인다.
+        // 자리는 이번 frame에서 배치된 막대의 bounds를 논리 픽셀로 되돌려 얻는다.
+        const luil::rect_f bar_bounds { bar_->bounds() };
+        luil::menu_popup_config popup {};
+        popup.id = u8"tab-overflow";
+        popup.width = overflow_menu_width;
+        popup.scale = scale;
+        popup.x = (bar_bounds.x + bar_bounds.width) / scale - overflow_menu_width;
+        popup.y = (bar_bounds.y + bar_bounds.height) / scale + 2.0f;
+        popup.dismiss = [](luil::popup_dismiss_reason) { return luil::make_app_action(tab_overflow_intent { false }); };
+        return { luil::make_menu_popup(std::move(menu), std::move(popup)) };
+    }
+</script></div>
+      </section>
+
+      <section class="sec" id="build-badges">
+        <header class="sec-head">
+          <h2>만들기: 배지와 상태 표시</h2>
+          <p class="lede">배지(<code>tab_badge</code>)는 이름 뒤의 개수나 심각도이고, 표시(<code>tab_indicator</code>)는 저장하지 않음 점·진행 호 같은 작은 기호다. 점의 뜻은 앱만 안다 — <code>description</code>을 적어야 보조 기술이 읽는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/tab_bar_element_tests.cpp:366-382" data-path="tests/tab_bar_element_tests.cpp" data-start="366"><script type="text/plain">
+TEST_CASE("A tab badge speaks after the tab name", "[ui][tab][accessibility]")
+{
+    // 개수가 바뀌면 이름이 바뀌어 보조 기술이 그 변화를 듣는다.
+    luil::tab_bar_config config { make_config(4) };
+    config.items[0].badge = luil::tab_badge { .text = u8"3", .description = u8"읽지 않음 3개" };
+    config.items[1].badge = luil::tab_badge { .text = u8"12" };
+    config.items[2].badge = luil::tab_badge {};
+    const luil::tab_bar_element bar { std::move(config) };
+
+    REQUIRE(tab_at(bar, 0).accessibility().name == u8"tab-a, 읽지 않음 3개");
+    REQUIRE(tab_at(bar, 1).accessibility().name == u8"tab-b, 12");
+    // 글도 설명도 없는 상태 점은 읽을 말이 없다 — 이름만 남는다.
+    REQUIRE(tab_at(bar, 2).accessibility().name == u8"tab-c");
+    REQUIRE(tab_at(bar, 3).accessibility().name == u8"tab-d");
+    // 글자 탐색은 탭에 적힌 이름만 본다.
+    REQUIRE(tab_at(bar, 0).search_label() == u8"tab-a");
+}
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/tab_bar_style_tests.cpp:437-457" data-path="tests/tab_bar_style_tests.cpp" data-start="437"><script type="text/plain">
+TEST_CASE("A tab indicator speaks after the badge and spins only when motion is allowed", "[ui][tab][accessibility]")
+{
+    luil::tab_bar_config config { make_config(2) };
+    config.items[0].label = u8"Report";
+    config.items[0].badge = luil::tab_badge { .text = u8"3", .description = u8"3 unread" };
+    config.items[0].indicator = luil::tab_indicator { .kind = luil::tab_indicator_kind::busy, .description = u8"Loading" };
+    config.items[1].label = u8"Notes";
+    config.items[1].indicator = luil::tab_indicator { .kind = luil::tab_indicator_kind::dot };
+    const auto tree { bar_tree(std::move(config), 400.0f) };
+
+    REQUIRE(tab_at(bar_of(*tree), 0).accessibility().name == u8"Report, 3 unread, Loading");
+    // 말이 없는 표시는 이름을 바꾸지 않는다.
+    REQUIRE(tab_at(bar_of(*tree), 1).accessibility().name == u8"Notes");
+
+    // 진행 중인 탭만 다음 frame을 청한다. 움직임 줄이기면 멈춘 그림이라 청하지 않는다.
+    const luil::update_context moving { .now = at(1000) };
+    const luil::update_context still { .now = at(1000), .reduce_motion = true };
+    REQUIRE(tree->next_update(moving, {}).has_value());
+    REQUIRE(tree->next_update(still, {}).has_value() == false);
+    REQUIRE(tab_at(bar_of(*tree), 1).next_update(moving, {}).has_value() == false);
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>탭의 접근 이름은 "이름, 배지의 말, 표시의 말"이다. 배지의 말은 <code>description</code>, 비면 <code>text</code>다. 개수가 바뀌면 이름이 바뀌어 보조 기술에 property 변화로 들린다.</li>
+            <li>배지가 이름보다 먼저 자리를 갖는다 — 잘린 개수는 틀린 개수로 읽혀서다. 이름이 대신 말줄임된다.</li>
+            <li>진행 호와 도는 배지는 움직임 줄이기면 멈춘 그림이다. 도는 동안은 frame을 청한다.</li>
+            <li>표시의 자리는 스타일의 <code>indicator_placement</code>가 정한다 — 아이콘 모서리 또는 닫기 단추 자리.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-style">
+        <header class="sec-head">
+          <h2>만들기: 모양과 견본 막대</h2>
+          <p class="lede">모양은 앱 스타일 <code>ui_style::tab_bar</code>가 정한다. 앱의 모든 막대에 한 모양을 주려면 그 스타일을 <code>make_arranged_tree</code>와 <code>ui_frame::style</code>에 함께 준다. 막대 하나만이면 <code>tab_bar_config::style</code>이다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>필드</th><th>값</th></tr></thead>
+            <tbody>
+              <tr><td><code>variant</code></td><td><code>underline</code>(선택 바탕 + 아래 강조선) · <code>connected</code>(선택 탭을 내용과 한 판으로) · <code>flat</code>(세로 칸막이 칸)</td></tr>
+              <tr><td><code>close_visibility</code></td><td><code>always</code> · <code>selected_or_hovered</code> — 숨은 단추 자리를 손가락으로 탭하면 닫지 않고 고른다</td></tr>
+              <tr><td><code>indicator_placement</code></td><td><code>icon_corner</code> · <code>close_slot</code></td></tr>
+              <tr><td><code>bar_background</code> · <code>selected_background</code></td><td>팔레트 역할. 선택 바탕은 내용 영역과 같은 역할이어야 이어 보인다. 두 역할이 같은 색이면(고대비) 선택 탭에 테를 두른다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose"><p>데모는 페이지마다 다른 모양을 보이려고 그 가지만 다른 스타일로 배치한다 (데모의 방편이다):</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:208-222" data-path="examples/demo/tabs_page.cpp" data-start="208"><script type="text/plain">
+        if (const auto* const setting { message.get<tab_setting_intent>() }; setting != nullptr)
+        {
+            luil::tab_bar_style& style { style_.tab_bar };
+            if (setting->setting == u8"variant")
+                style.variant = setting->value == u8"connected" ? luil::tab_bar_variant::connected : setting->value == u8"flat" ? luil::tab_bar_variant::flat : luil::tab_bar_variant::underline;
+            else if (setting->setting == u8"close")
+                style.close_visibility = setting->value == u8"hover" ? luil::tab_close_visibility::selected_or_hovered : luil::tab_close_visibility::always;
+            else if (setting->setting == u8"indicator")
+                style.indicator_placement = setting->value == u8"slot" ? luil::tab_indicator_placement::close_slot : luil::tab_indicator_placement::icon_corner;
+            else if (setting->setting == u8"overflow")
+                step_overflow_ = setting->value == u8"step";
+            else if (setting->setting == u8"width")
+                shrink_ = setting->value == u8"shrink";
+            reveal_selected();
+            return true;
+</script></div>
+        <div class="prose"><p>설정 화면에서 모양을 고르게 할 때는 눌리지 않는 견본 막대(<code>tab_bar_config::preview</code>)를 둔다. 입력·초점·접근 tree에서 빠지고 이름 하나의 그림으로 선다. 견본 탭 id에는 owner가 붙으니 견본 막대가 여럿이면 owner를 가른다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:246-268" data-path="examples/demo/tabs_page.cpp" data-start="246"><script type="text/plain">
+        // 견본이다. 모양마다 막대 하나를 그림으로만 둔다 — 누르거나 초점이 가지 않고 보조 기술에는 이름 하나로 읽힌다.
+        // 둘째 탭은 포인터가 올라간 상태로 고정해 hover의 그림도 함께 보인다.
+        auto samples { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tabs-samples" }, luil::stack_config { .direction = luil::stack_direction::row, .spacing = 16.0f }) };
+        const std::pair<luil::tab_bar_variant, std::u8string_view> variants[] {
+            { luil::tab_bar_variant::underline, u8"기본 모양 견본" },
+            { luil::tab_bar_variant::connected, u8"이어진 탭 견본" },
+            { luil::tab_bar_variant::flat, u8"평평한 칸 견본" },
+        };
+        for (const auto& [variant, name] : variants)
+        {
+            luil::tab_bar_config sample {};
+            sample.owner = u8"tabs-sample/" + std::u8string { name };
+            sample.tab_width = sample_width / 3.0f;
+            sample.selected = u8"a";
+            sample.items.push_back({ .key = u8"a", .label = u8"가", .icon = luil::codicons::icon_file, .closable = true });
+            sample.items.push_back({ .key = u8"b", .label = u8"나", .icon = luil::codicons::icon_file, .closable = true, .indicator = luil::tab_indicator {} });
+            sample.items.push_back({ .key = u8"c", .label = u8"다", .icon = luil::codicons::icon_file, .closable = true });
+            luil::tab_bar_style look { style };
+            look.variant = variant;
+            sample.style = look;
+            sample.preview = luil::tab_bar_preview { .name = std::u8string { name }, .hovered = u8"b" };
+            samples->add(std::make_unique<luil::tab_bar_element>(std::move(sample)), sample_width);
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/tab_bar_style_tests.cpp:459-486" data-path="tests/tab_bar_style_tests.cpp" data-start="459"><script type="text/plain">
+TEST_CASE("A preview bar is a picture with one name and no input", "[ui][tab][preview]")
+{
+    luil::tab_bar_config config { make_config(3) };
+    with_messages(config);
+    config.selected = u8"tab-a";
+    config.items[1].closable = true;
+    config.overflow = [](const luil::ui_action_context&) { return std::vector<luil::input_action> {}; };
+    config.preview = luil::tab_bar_preview { .name = u8"Connected tabs sample", .hovered = u8"tab-b" };
+    const auto tree { bar_tree(std::move(config), 200.0f) };
+    const luil::tab_bar_element& bar { bar_of(*tree) };
+
+    // 누를 자리도, 초점 자리도, 놓을 자리도 없다.
+    REQUIRE(tree->hit_test(30.0f, 18.0f) == nullptr);
+    REQUIRE(tree->hit_test(150.0f, 18.0f) == nullptr);
+    REQUIRE(tree->focus_order().empty());
+    REQUIRE(bar.drop() == nullptr);
+    // 견본의 탭은 탭 kind가 아니다 — 탭을 kind로 찾는 앱 코드가 견본을 집지 않고, 견본 막대가 여럿이어도 id가 겹치지 않는다.
+    REQUIRE(tree->ids_of_kind(luil::ui_element_kind::tab).empty());
+    REQUIRE(tab_at(bar, 0).id() == luil::ui_element_id { luil::ui_element_kind::tab_sample, u8"tabs/tab-a" });
+    REQUIRE(tree->duplicate_ids().empty());
+    // 닫기 단추 element도 넘침 버튼도 짓지 않는다.
+    REQUIRE(tab_at(bar, 1).children().empty());
+    REQUIRE(bar.children().size() == 1);
+    // 접근 tree에는 앱이 붙인 이름 하나로 선다.
+    REQUIRE(bar.accessibility().role == luil::access_role::image);
+    REQUIRE(bar.accessibility().name == u8"Connected tabs sample");
+    REQUIRE(luil::access_children(bar).empty());
+}
+</script></div>
+      </section>
+
+      <section class="sec" id="build-detach">
+        <header class="sec-head">
+          <h2>만들기: 다른 창으로 떼어 내기</h2>
+          <p class="lede">받는 곳 없는 자리(창 밖)에 놓으면 <code>unclaimed_drop</code>이 키와 놓은 화면 좌표를 준다. 앱이 그 탭을 새 <code>ui_window</code>로 세운다. 다시 합칠 때는 원래 막대의 <code>receive</code>가 받는다.</p>
+        </header>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:558-611" data-path="examples/demo/tabs_page.cpp" data-start="558"><script type="text/plain">
+    std::vector<luil::ui_window> tabs_page::make_windows() const
+    {
+        std::vector<luil::ui_window> windows {};
+        for (const detached_tab& item : detached_)
+        {
+            const std::u8string key { item.tab.key };
+            luil::ui_window window {};
+            window.id = u8"tab-window/" + key;
+            window.caption.title = item.tab.label + u8" — luil";
+            window.caption.close_tooltip = u8"탭으로 돌려놓기";
+            window.caption.minimize_tooltip = u8"최소화";
+            window.caption.maximize_tooltip = u8"최대화 / 복원";
+            window.width = item.width;
+            window.height = item.height;
+            window.minimum_width = 420.0f;
+            window.minimum_height = 240.0f;
+            window.x = 120.0f;
+            window.y = 100.0f;
+            window.independent = true;
+            window.screen_anchor = item.anchor;
+            window.close = [key] { return luil::make_app_action(tab_attach_intent { key }); };
+            window.metrics = [key](const float width, const float height, const float scale) { return luil::app_message { tab_window_metrics_intent { key, width, height, scale } }; };
+            const float caption_height { luil::caption_element::height_for(window.caption) };
+            const float scale { std::max(0.01f, item.scale) };
+            luil::stack_config layout {};
+            auto root { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"detached-root" }, layout) };
+            root->add(std::make_unique<luil::caption_element>(window.caption), caption_height);
+            luil::tab_bar_config bar {};
+            bar.owner = window.id;
+            bar.selected = key;
+            bar.items.push_back({ .key = key, .label = item.tab.label, .icon = luil::codicons::icon_file, .closable = true });
+            bar.select = [](const std::u8string&) { return luil::input_action {}; };
+            bar.close = [key](const std::u8string&) { return luil::make_app_action(tab_attach_intent { key }); };
+            // 창으로 떼어 낸 문서의 탭도 같은 drag payload를 낸다. 원래 막대의 receive가 받는다.
+            bar.reorder = [](const std::u8string&, const std::u8string&) { return luil::input_action {}; };
+            root->add(std::make_unique<luil::tab_bar_element>(std::move(bar)), tab_bar_height);
+            luil::stack_config body_config {};
+            body_config.padding = luil::edge_insets::all(24.0f);
+            auto body { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"detached-body" }, body_config) };
+            body->add(make_label({ kind_text, u8"detached-title" }, item.tab.label, 22.0f, luil::label_color_role::primary), 40.0f);
+            body->add(make_label({ kind_text, u8"detached-help" }, u8"탭을 원래 창의 탭 막대에 끌어 놓아 합치세요.", 12.0f, luil::label_color_role::dim), 28.0f);
+            body->add_gap(16.0f);
+            luil::text_button_config restore_config { .text = u8"원래 창으로 돌려놓기", .visual = luil::text_button_visual::accent };
+            auto restore { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"detached-restore" }, std::move(restore_config)) };
+            restore->set_cursor(luil::ui_cursor::hand);
+            restore->set_action(luil::ui_trigger::left_click, luil::make_message_action(tab_attach_intent { key }));
+            body->add(std::move(restore), { .length = luil::text_button_height, .cross_length = 200.0f });
+            root->add_flexible(std::move(body));
+            // 분리된 창의 막대도 같은 앱 스타일로 배치한다 — 고른 모양이 창마다 따로 놀지 않는다.
+            window.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, item.width * scale, item.height * scale }, scale, {}, nullptr, &style_));
+            windows.push_back(std::move(window));
+        }
+        return windows;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/demo_gallery_tests.cpp:173-189" data-path="tests/demo_gallery_tests.cpp" data-start="173"><script type="text/plain">
+TEST_CASE("Detached demo tabs publish separate windows and rejoin at the requested gap", "[demo][tabs]")
+{
+    demo::tabs_page page {};
+    send(page, demo::tab_detach_intent { u8"tab-2", luil::window_screen_anchor { { 600, 300 }, 40.0f, 20.0f } });
+    REQUIRE(tabs(page).size() == 7u);
+    const auto windows { page.make_windows() };
+    REQUIRE(windows.size() == 1u);
+    REQUIRE(windows.front().independent);
+    REQUIRE(windows.front().screen_anchor.has_value());
+    REQUIRE(windows.front().tree->find({ luil::ui_element_kind::tab, u8"tab-2" }) != nullptr);
+    send(page, demo::tab_attach_intent { u8"tab-2", u8"tab-4", luil::drop_side::after });
+    REQUIRE(page.make_windows().empty());
+    const auto order { tabs(page) };
+    REQUIRE(order[2].owner == u8"tab-4");
+    REQUIRE(order[3].owner == u8"tab-2");
+    REQUIRE(selected(page, u8"tab-2"));
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>unclaimed_drop</code>은 Esc나 캡처 상실로 거둔 끌기에는 오지 않는다. 있으면 <code>move</code>·<code>reorder</code> 없이도 탭을 끌 수 있다.</li>
+            <li>새 창의 자리는 <code>drag_release::screen</code>과 잡은 지점(<code>drag_payload::grab_offset_x</code>·<code>grab_offset_y</code>)으로 맞춘다 — 탭이 놓은 점에 그대로 온다.</li>
+            <li>다른 막대의 탭은 <code>receive</code>로 온다. <code>payload.container</code>가 출발 막대, <code>payload.dragged_owner</code>가 키다. 탭이 없는 막대면 <code>target</code>이 빈다. <code>receive_accepts</code>로 미리 거른다.</li>
+            <li>보조 창(<code>ui_frame::windows</code>)은 Android·iOS가 무시한다. 새 창은 데스크톱에서만 선다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-pages">
+        <header class="sec-head">
+          <h2>만들기: 탭과 페이지를 잇고 화면 전환을 단다</h2>
+          <p class="lede">탭 막대와 화면 전환을 함께 쓰는 예제가 저장소에 없어 손으로 썼다. 고른 탭이 바뀌면 떠나는 페이지를 따로 배치한 tree로 넘겨 밀기 전환을 시작한다.</p>
+        </header>
+        <div class="code tall" data-lang="cpp" data-label="탭 막대 + 페이지 전환 (직접 작성)" data-compile="pre-pages"><script type="text/plain">
+constexpr luil::ui_element_kind kind_layout { luil::application_element_kind(0) };
+constexpr luil::ui_element_kind kind_text { luil::application_element_kind(1) };
+constexpr std::u8string_view bar_owner { u8"editor-tabs" };
+constexpr std::u8string_view page_owner { u8"editor-page" };
+
+// --- 이 화면의 메시지 (앱이 정의한다) ---
+struct tab_select_intent
+{
+    std::u8string key {};
+};
+
+struct tab_close_intent
+{
+    std::u8string key {};
+};
+
+struct tab_move_intent
+{
+    std::u8string moved {};
+    std::u8string target {};
+    luil::drop_side side { luil::drop_side::before };
+};
+
+struct tab_scroll_intent
+{
+    float delta { 0.0f };
+};
+
+struct document
+{
+    std::u8string key {};
+    std::u8string title {};
+    bool dirty { false };
+};
+
+// 탭 막대와 그 아래 페이지다. 선택·순서·스크롤·전환은 모두 이 앱 상태가 든다 (logic thread).
+class editor_tabs
+{
+public:
+    editor_tabs()
+        : documents_ { { u8"doc-1", u8"보고서", false }, { u8"doc-2", u8"메모", true }, { u8"doc-3", u8"일정", false } }
+        , selected_ { u8"doc-1" }
+    {
+    }
+
+    // 메시지 하나를 처리한다. `now`·`reduce_motion`은 전환을 시작할 때 쓴다.
+    bool handle(const luil::app_message& message, const std::chrono::steady_clock::time_point now, const bool reduce_motion)
+    {
+        if (const auto* const select { message.get<tab_select_intent>() }; select != nullptr)
+        {
+            switch_to(select->key, now, reduce_motion);
+            return true;
+        }
+        if (const auto* const close { message.get<tab_close_intent>() }; close != nullptr)
+        {
+            close_tab(close->key, now, reduce_motion);
+            return true;
+        }
+        if (const auto* const move { message.get<tab_move_intent>() }; move != nullptr)
+        {
+            move_tab(*move);
+            return true;
+        }
+        if (const auto* const scroll { message.get<tab_scroll_intent>() }; scroll != nullptr)
+        {
+            // 범위 밖 값은 막대의 arrange가 다듬는다. 다듬은 값은 remember에서 되읽는다.
+            scroll_ = std::max(0.0f, scroll_ + scroll->delta);
+            return true;
+        }
+        return false;
+    }
+
+    // frame마다 짓는다: [탭 막대 36] [페이지(전환 요소로 감싼다)].
+    [[nodiscard]] std::unique_ptr<luil::ui_element> build() const
+    {
+        luil::tab_bar_config bar {};
+        bar.owner = std::u8string { bar_owner };
+        for (const document& item : documents_)
+        {
+            luil::tab_item tab {};
+            tab.key = item.key;
+            tab.label = item.title;
+            tab.closable = true;
+            // 점의 뜻은 앱만 안다 — 설명을 적어야 보조 기술이 "메모, 저장하지 않음"으로 읽는다.
+            if (item.dirty)
+                tab.indicator = luil::tab_indicator { .kind = luil::tab_indicator_kind::dot, .description = u8"저장하지 않음" };
+            bar.items.push_back(std::move(tab));
+        }
+        bar.selected = selected_;
+        bar.tab_width = 160.0f;
+        bar.min_tab_width = 96.0f;
+        bar.scroll_offset = scroll_;
+        bar.select = [](const std::u8string& key) { return luil::make_app_action(tab_select_intent { key }); };
+        bar.close = [](const std::u8string& key) { return luil::make_app_action(tab_close_intent { key }); };
+        // 앞·뒤를 싣는 이동이다. 순서가 그대로인 자리에서는 메시지가 오지 않는다.
+        bar.move = [](const std::u8string& moved, const std::u8string& target, const luil::drop_side side) {
+            return luil::make_app_action(tab_move_intent { moved, target, side });
+        };
+        // 있으면 넘칠 때 띠가 흘림의 임자가 된다 (터치 쓸기·route_wheel·route_reveal).
+        bar.scroll = [](const float delta) { return luil::make_app_action(tab_scroll_intent { delta }); };
+        auto tabs { std::make_unique<luil::tab_bar_element>(std::move(bar)) };
+        // 막대는 자기 글을 세우지 않는다. 이름이 없으면 탭 목록이 빈 이름으로 읽힌다.
+        tabs->set_access_name(u8"열린 문서");
+
+        luil::stack_config column_config {};
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"editor" }, column_config) };
+        column->add(std::move(tabs), 36.0f);
+        // 전환 요소로 늘 감싼다. prior가 비면 새 화면만 그리는 껍질이다.
+        column->add_flexible(std::make_unique<luil::page_transition_element>(luil::page_transition_config { std::u8string { page_owner }, motion_ }, build_page(selected_)));
+        return column;
+    }
+
+    // 배치된 tree에서 다음 전환과 스크롤에 쓸 값을 되읽는다 (make_arranged_tree 뒤에 부른다).
+    void remember(const luil::ui_tree& tree, const float scale)
+    {
+        if (const luil::ui_element* const page { tree.find({ luil::ui_element_kind::page_transition, std::u8string { page_owner } }) }; page != nullptr)
+            page_slot_ = page->bounds();
+        scale_ = scale;
+        if (const auto* const bar { dynamic_cast<const luil::tab_bar_element*>(tree.find({ luil::ui_element_kind::tab_bar, std::u8string { bar_owner } })) }; bar != nullptr)
+            scroll_ = bar->scroll_offset();
+    }
+
+    // 앱의 next_tick에 싣는다. 도는 동안의 frame은 요소의 next_update가 다시 그린다.
+    [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_tick() const noexcept
+    {
+        return luil::page_transition_end(motion_);
+    }
+
+    // 끝난 전환을 놓는다. 다음 frame은 prior 없는 tree라 덮개가 걷혀 포인터가 풀린다.
+    void tick(const std::chrono::steady_clock::time_point now)
+    {
+        if (motion_.prior != nullptr && luil::page_transition_finished(motion_, now))
+            motion_ = {};
+    }
+
+private:
+    // 고른 문서의 페이지다 (화면 본문만 — 전환 요소·modal은 넣지 않는다).
+    [[nodiscard]] static std::unique_ptr<luil::ui_element> build_page_for(const document* const item)
+    {
+        luil::stack_config page_config {};
+        page_config.padding = luil::edge_insets::all(16.0f);
+        auto page { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"page" }, page_config) };
+        luil::label_config title {};
+        title.text = item != nullptr ? item->title : std::u8string { u8"열린 문서가 없다" };
+        title.font_size = 20.0f;
+        page->add(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"page-title" }, std::move(title)), 32.0f);
+        return page;
+    }
+
+    [[nodiscard]] std::unique_ptr<luil::ui_element> build_page(const std::u8string& key) const
+    {
+        const auto found { std::ranges::find_if(documents_, [&key](const document& item) { return item.key == key; }) };
+        return build_page_for(found != documents_.end() ? &*found : nullptr);
+    }
+
+    [[nodiscard]] std::size_t index_of(const std::u8string& key) const
+    {
+        const auto found { std::ranges::find_if(documents_, [&key](const document& item) { return item.key == key; }) };
+        return static_cast<std::size_t>(found - documents_.begin());
+    }
+
+    // 고른 탭을 바꾸고, 떠나는 페이지를 따로 지은 tree로 넘겨 전환을 시작한다.
+    void switch_to(const std::u8string& key, const std::chrono::steady_clock::time_point now, const bool reduce_motion)
+    {
+        // 이미 고른 탭이거나, 지난 frame에서 온 메시지가 그 사이 닫힌 탭을 가리키면 할 일이 없다.
+        if (key == selected_ || index_of(key) == documents_.size())
+            return;
+        if (reduce_motion == false && page_slot_.width > 0.0f && page_slot_.height > 0.0f)
+        {
+            // 떠나는 화면은 selected_가 아직 옛 값일 때, 지난 frame의 자리·배율로 짓는다 (크기가 다르면 요소가 새 화면만 그린다).
+            auto prior { std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(build_page(selected_), page_slot_, scale_)) };
+            luil::page_transition_style style {};
+            style.direction = index_of(key) > index_of(selected_) ? luil::page_transition_direction::forward : luil::page_transition_direction::backward;
+            motion_ = luil::start_page_transition(std::move(prior), style, now, reduce_motion);
+        }
+        selected_ = key;
+    }
+
+    // 닫고, 고른 탭이었으면 오른쪽 이웃(없으면 왼쪽)을 고른다 (데모의 close_tab과 같은 규칙).
+    void close_tab(const std::u8string& key, const std::chrono::steady_clock::time_point now, const bool reduce_motion)
+    {
+        const std::size_t index { index_of(key) };
+        if (index == documents_.size())
+            return;
+        if (key == selected_ && documents_.size() > 1u)
+            switch_to(documents_[index + 1u < documents_.size() ? index + 1u : index - 1u].key, now, reduce_motion);
+        documents_.erase(documents_.begin() + static_cast<std::ptrdiff_t>(index));
+        if (documents_.empty())
+            selected_.clear();
+    }
+
+    // 앞·뒤를 실은 이동이다 (데스크톱 데모의 이동 처리와 같은 식).
+    //  - 메시지는 지난 frame의 tree에서 왔다. 그 사이 둘 중 하나가 닫혔으면 아무것도 하지 않는다.
+    void move_tab(const tab_move_intent& move)
+    {
+        const std::size_t from { index_of(move.moved) };
+        if (from == documents_.size() || index_of(move.target) == documents_.size() || move.moved == move.target)
+            return;
+        const document moved { documents_[from] };
+        documents_.erase(documents_.begin() + static_cast<std::ptrdiff_t>(from));
+        // 대상은 남아 있다 (위에서 확인했고 옮기는 탭과 다르다). 뒤면 그 다음 자리, 끝이면 end()다.
+        auto target { std::ranges::find_if(documents_, [&move](const document& item) { return item.key == move.target; }) };
+        if (move.side == luil::drop_side::after)
+            ++target;
+        documents_.insert(target, moved);
+    }
+
+    std::vector<document> documents_ {};
+    std::u8string selected_ {};
+    float scroll_ { 0.0f };
+    luil::page_transition motion_ {};
+    luil::rect_f page_slot_ {};
+    float scale_ { 1.0f };
+};
+
+// 키보드가 옮긴 초점(←/→로 넘친 탭)을 띠 안으로 들이고, 휠을 띠로 보낸다. 기본 구현은 둘 다 빈 목록이다.
+class editor_policy final : public luil::interaction_policy
+{
+public:
+    [[nodiscard]] std::vector<luil::input_action> on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused) override
+    {
+        return luil::route_reveal(tree, focused);
+    }
+
+    [[nodiscard]] std::vector<luil::input_action> on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta) override
+    {
+        return luil::route_wheel(tree, event, scroll_delta);
+    }
+};
+</script></div>
+        <script type="text/plain" id="pre-pages" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/label_element.h"
+#include "luil/ui/page_transition.h"
+#include "luil/ui/page_transition_element.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/tab_bar_element.h"
+#include "luil/ui/ui_events.h"
+#include "luil/ui/ui_interaction.h"
+#include "luil/ui/ui_tree.h"
+#include <algorithm>
+#include <chrono>
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li>전환은 앱 상태다. 떠나는 화면은 요소가 설 자리와 <strong>같은 크기·같은 배율</strong>로 따로 배치한 tree이고, 크기가 다르면 요소가 새 화면만 그린다. 그래서 지난 frame의 자리와 배율을 <code class="free">remember</code>로 되읽어 둔다.</li>
+            <li><code>start_page_transition</code>은 움직임 줄이기면 떠나는 화면을 버린다. 끝 시각(<code>page_transition_end</code>)을 앱의 다음 tick에 싣고, tick에서 <code>page_transition_finished</code>면 놓는다.</li>
+            <li>떠나는 화면이 있는 동안 덮개가 포인터를 막는다. 키는 막지 않고 초점은 새 화면에만 선다. 떠나는 화면은 접근 tree에 없다. 자세한 규칙은 <a class="xref" href="motion.html#s7">애니메이션 — 화면 전환</a>.</li>
+            <li>메시지는 지난 frame의 tree에서 온다. 그 사이 닫힌 탭의 고르기·이동은 아무것도 하지 않는다.</li>
+            <li>막대에 <code>set_access_name</code>으로 이름을 준다. 자기 글을 세우지 않는 컨테이너라 tooltip을 달면 빈 자리에 글 상자가 뜬다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 기호는 <a class="xref" href="api.html#tab-bar-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="tab_bar_config">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/tab_bar_element.h:132-214" data-path="include/luil/ui/tab_bar_element.h" data-start="132"><script type="text/plain">
+    struct tab_bar_config
+    {
+        // 같은 화면에 막대가 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        std::vector<tab_item> items {};
+        // 선택된 탭의 키다 (앱 상태).
+        std::u8string selected {};
+        // 탭 한 개의 폭이다 (논리 픽셀).
+        float tab_width { 160.0f };
+        // 자리가 모자랄 때 줄일 수 있는 최소 폭이다 (논리 픽셀). 0이거나 `tab_width` 이상이면 줄이지 않는다.
+        //  - 모자라면 모든 탭을 같은 폭으로 `tab_width`에서 이 값까지 줄이고, 그래도 넘칠 때만 넘침이 시작된다.
+        //  - 줄어든 폭에서는 배지와 상태 표시가 먼저 자리를 갖고 이름이 말줄임된다.
+        //  - 지금 실제 폭은 `tab_bar_element::tab_width()`로 묻는다.
+        float min_tab_width { 0.0f };
+        // 이 막대만의 스타일이다. 비어 있으면 앱 스타일(`ui_style::tab_bar`)을 따른다.
+        //  - 앱 안의 모든 탭 막대를 한 모양으로 하려면 막대마다 적지 말고 `ui_style`에 한 번 적는다 (공용 스타일).
+        //    여기는 견본 막대처럼 한 막대만 달라야 하는 자리다.
+        std::optional<tab_bar_style> style {};
+        // 가운데 버튼으로 탭을 닫는다 (`close` factory가 있고 닫을 수 있는 탭). 선택은 바뀌지 않는다.
+        bool middle_click_close { true };
+        // 넘칠 때 탭을 넘기는 방식이다.
+        tab_overflow_mode overflow_mode { tab_overflow_mode::scroll };
+        // 앞·뒤 단추의 tooltip이자 보조 기술이 읽는 이름이다 (`overflow_tooltip`과 같은 규약 — 비면 접근 tree에서 빠진다).
+        //  - 단추는 `scroll` factory가 있어야 선다 (넘기는 것도 스크롤 메시지다).
+        std::u8string step_back_tooltip {};
+        std::u8string step_forward_tooltip {};
+        // 휠(세로·가로) 한 칸에 탭 하나씩 넘긴다. 잘게 오는 휠은 쌓았다가 탭 경계에 맞춘다.
+        //  - `scroll` factory가 있어야 한다. 넘기는 방식(`overflow_mode`)과 따로 켠다.
+        bool wheel_steps { false };
+        // 막대 끝에 따라붙는 꼬리 element다 (새 탭 단추 같은 것). 탭이 적으면 마지막 탭 바로 뒤에 서고, 넘치면 오른쪽
+        // 끝에 고정된다.
+        //  - factory다 — config를 값으로 복사할 수 있게 둔다. element는 막대를 지을 때 한 번 짓는다.
+        //  - 꼬리는 막대의 초점 묶음(←/→) 안에 선다.
+        std::function<std::unique_ptr<ui_element>()> trailing {};
+        // 꼬리의 폭이다 (논리 픽셀).
+        float trailing_width { 0.0f };
+        // 있으면 견본 막대다 — 그림만 남고 동작은 하나도 서지 않는다 (`tab_bar_preview`).
+        std::optional<tab_bar_preview> preview {};
+        // 넘칠 때의 가로 스크롤 값이다 (논리 픽셀, 앱 상태).
+        // 휠을 이 값으로 옮길지는 앱 정책이 정한다. 범위 밖 값은 arrange가 다듬는다.
+        float scroll_offset { 0.0f };
+        // 없는 factory의 동작은 아예 만들지 않는다.
+        tab_message_factory select {};
+        tab_message_factory close {};
+        tab_reorder_message_factory reorder {};
+        // 탭을 우클릭하면 낸다. 터치의 길게 누르기도 우클릭이라 이 하나로 함께 선다.
+        //  - 탭의 닫기 버튼 위에서 눌러도 그 탭의 메뉴다 — 버튼은 탭의 일부로 보인다.
+        //  - 메뉴의 내용과 열림 상태는 앱 몫이다 (통상 menu_element를 popup으로 띄운다).
+        tab_context_message_factory context_menu {};
+        // 탭이 넘칠 때 오른쪽 끝에 두는 넘침 메뉴 버튼의 액션이다
+        // (통상 탭 목록 popup을 열자는 메시지 — 내용은 menu_element로 조립한다).
+        // 없으면 버튼을 만들지 않고, 있어도 넘치지 않으면 보이지 않는다.
+        ui_action overflow {};
+        // 그 버튼의 tooltip이자 **보조 기술이 읽는 이름**이다.
+        // 글리프뿐인 버튼이라 이름의 원천이 이것뿐이고, 비면 접근 tree에서
+        // 통째로 빠진다 (이름 없는 단추는 소음이다 —
+        // accessibility-action-design.md). caption 버튼의 tooltip과 같은
+        // 자리·같은 이유다: 그 말은 앱의 것이라 라이브러리가 정할 수 없다.
+        std::u8string overflow_tooltip {};
+        // 가로 스크롤 값을 이만큼 옮기자는 메시지다 (논리 픽셀).
+        // 있으면 넘칠 때 탭 레인이 가로 흘림의 임자로 선다 — 터치로 쓸어 넘기고,
+        // 표 없는 휠·초점 되살리기도 레인을 흘린다. 휠을 막대 전체로 받으려면
+        // 지금처럼 앱의 표가 이름 댄다.
+        std::function<input_action(float delta)> scroll {};
+        // 끌어 놓은 탭을 대상 탭의 앞이나 뒤로 옮기자는 메시지다. 있으면 `reorder` 대신 이것이 선다.
+        //  - 놓는 자리는 대상 탭의 앞 반쪽이면 앞, 뒤 반쪽이면 뒤다. 마지막 탭 뒤의 빈 곳은 마지막 탭의 뒤다.
+        //  - **순서가 그대로인 자리는 받지 않는다** — 자기 자신, 바로 앞 탭의 뒤 반쪽, 바로 뒤 탭의 앞 반쪽이다. 그
+        //    자리에서는 강조도 서지 않고 놓아도 메시지가 없다.
+        //  - 받는 자리는 탭 테두리 대신 그 틈에 accent 세로 막대로 보인다.
+        tab_move_message_factory move {};
+        // 다른 탭 막대(다른 창)에서 끌어 온 탭을 받는다 — 창의 탭을 다른 창으로 합치는 길이다.
+        //  - 자리 규칙과 틈 표시는 `move`와 같다. 다른 막대에서 왔으니 그대로인 자리가 없어 어디든 받는다.
+        //  - 받는 것은 탭(`ui_element_kind::tab`)뿐이다. 어느 막대에서 왔는지는 `payload.container`로 본다.
+        tab_receive_message_factory receive {};
+        // 다른 막대의 탭을 받기 전에 거르는 조건이다. 비면 모든 외부 탭을 받는다.
+        std::function<bool(const drag_payload&)> receive_accepts {};
+        // 끌던 탭을 받는 대상이 없는 자리에 놓았다 (창 밖 — 새 창으로 떼어 낼 자리, 또는 다른 창의 빈 곳).
+        //  - Esc·캡처 상실로 취소된 끌기에는 오지 않는다. 자리와 화면 좌표는 `drag_release`에 있다.
+        //  - 있으면 `reorder`·`move`가 없어도 탭을 끌 수 있다.
+        tab_release_message_factory unclaimed_drop {};
+        // 탭을 끌어 창 밖으로 나갔을 때의 포인터 모양이다 (`drag_payload::outside_cursor`).
+        ui_cursor outside_cursor { ui_cursor::inherit };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>형 · 기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td><code>std::u8string</code> · 빈 글</td><td>한 화면의 막대 여럿을 가른다 (막대·띠·레인·단추 id). 탭 id에는 붙지 않는다</td></tr>
+                  <tr><td><code>items</code> · <code>selected</code></td><td><code>std::vector&lt;tab_item&gt;</code> · <code>std::u8string</code></td><td>탭들(차례가 순서)과 고른 키. 고른 탭이 Tab의 진입 자리다</td></tr>
+                  <tr><td><code>tab_width</code> · <code>min_tab_width</code></td><td><code>float</code> · 160 · 0</td><td>탭 폭과 모자랄 때 줄일 최소 폭 (논리 픽셀)</td></tr>
+                  <tr><td><code>scroll_offset</code></td><td><code>float</code> · 0</td><td>넘칠 때의 가로 스크롤 값 (앱 상태)</td></tr>
+                  <tr><td><code>select</code> · <code>close</code></td><td><code>tab_message_factory</code></td><td>탭 누름 · 닫기 단추와 가운데 버튼. 없는 factory의 동작은 아예 서지 않는다</td></tr>
+                  <tr><td><code>move</code> · <code>reorder</code></td><td><code>tab_move_message_factory</code> · <code>tab_reorder_message_factory</code></td><td>끌어서 옮기기. 둘 다 있으면 <code>move</code>가 선다</td></tr>
+                  <tr><td><code>context_menu</code></td><td><code>tab_context_message_factory</code></td><td>우클릭·길게 누르기·Shift+F10. 좌표는 물리 픽셀</td></tr>
+                  <tr><td><code>middle_click_close</code></td><td><code>bool</code> · 참</td><td>가운데 버튼으로 닫는다 (닫을 수 있는 탭). 선택은 바뀌지 않는다</td></tr>
+                  <tr><td><code>overflow_mode</code></td><td><code>tab_overflow_mode</code> · <code>scroll</code></td><td>흘리기 / 한 탭씩</td></tr>
+                  <tr><td><code>overflow</code> · <code>overflow_tooltip</code></td><td><code>ui_action</code> · <code>std::u8string</code></td><td>넘침 메뉴 단추와 그 이름 (비면 보조 기술이 모른다)</td></tr>
+                  <tr><td><code>scroll</code></td><td><code>std::function&lt;input_action(float)&gt;</code></td><td>스크롤 변화 메시지. 앞·뒤 단추, 칸 휠, 손가락 쓸기가 이것을 쓴다</td></tr>
+                  <tr><td><code>trailing</code> · <code>trailing_width</code></td><td>element factory · <code>float</code> 0</td><td>막대 끝의 꼬리(새 탭 단추)와 폭. 묶음 안에 선다</td></tr>
+                  <tr><td><code>receive</code> · <code>receive_accepts</code> · <code>unclaimed_drop</code></td><td>factory · 거르기 · factory</td><td>다른 막대의 탭 받기 · 받기 전 거르기 · 받는 곳 없는 놓기</td></tr>
+                  <tr><td><code>preview</code></td><td><code>std::optional&lt;tab_bar_preview&gt;</code></td><td>있으면 견본 막대 — 동작이 하나도 서지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="tab_item">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/tab_bar_element.h:14-83" data-path="include/luil/ui/tab_bar_element.h" data-start="14"><script type="text/plain">
+namespace luil {
+    // 탭 이름 뒤에 붙는 작은 표시다.
+    //
+    // 그림은 `badge_element`와 한 벌이다 — 테와 심각도 글리프가 고대비에서도 뜻을 남긴다.
+    //  - 탭 폭은 고정(`tab_bar_config::tab_width`)이라 배지가 자리를 먼저 갖고 이름이 남는 자리에서 잘린다.
+    //    배지까지 잘리면 개수가 틀린 값으로 읽히므로 이름 쪽을 줄인다.
+    struct tab_badge
+    {
+        // 적을 글이다 ("3", "99+" 같은 것).
+        //  - 비어 있으면 글 없는 상태 점이다. 심각도(`warning`·`error`)는 점 대신 글리프만 든 알약이다.
+        std::u8string text {};
+        badge_tone tone { badge_tone::accent };
+        // 보조 기술이 읽을 말이다 ("읽지 않음 3개"). 탭 이름 뒤에 붙어 읽힌다.
+        //  - 비어 있으면 `text`를 읽는다. 그것도 비면(상태 점) 읽을 말이 없다 — 점의 뜻은 앱만 알므로,
+        //    보조 기술에 알리려면 여기에 적는다.
+        std::u8string description {};
+        // 글 앞에 붙일 앱의 글리프다 (codicon, 0이면 없다).
+        //  - neutral·accent에서만 쓴다. warning·error는 심각도 글리프가 정한다 — 경고의 모양을 앱이 바꾸면 같은
+        //    경고가 자리마다 다르게 보인다.
+        char32_t glyph { 0 };
+        // 그 글리프가 진행 중을 뜻해 돈다 (`tab_indicator_kind::busy`와 같은 규칙 — 움직임 줄이기면 멈춘다).
+        bool spinning { false };
+
+        [[nodiscard]] bool operator==(const tab_badge&) const = default;
+    };
+
+    // 탭 상태 표시의 모양이다.
+    enum class tab_indicator_kind
+    {
+        // 채운 점이다 (저장하지 않은 변경 같은 것).
+        dot,
+        // 속 빈 고리다.
+        ring,
+        // 진행 중이다. 도는 호로 그린다 — 움직임 줄이기면 멈춘 호다.
+        busy,
+        // 앱이 고른 글리프다 (`tab_indicator::glyph`).
+        glyph,
+    };
+
+    // 탭 하나에 다는 작은 상태 표시다. 배지와 별개이고 둘을 함께 달 수 있다.
+    //  - 자리(아이콘 모서리·닫기 단추 자리)는 앱 스타일이 정한다 (`tab_bar_style::indicator_placement`).
+    //  - 색만으로 뜻을 말하지 않도록 모양(점·고리·호·글리프)이 먼저이고 tone은 그 위의 색이다.
+    struct tab_indicator
+    {
+        tab_indicator_kind kind { tab_indicator_kind::dot };
+        badge_tone tone { badge_tone::accent };
+        // `kind`가 `glyph`일 때의 글리프다 (codicon).
+        char32_t glyph { 0 };
+        // 보조 기술이 읽을 말이다. 배지의 `description`과 같은 규약으로 탭 이름 뒤에 붙어 읽힌다.
+        //  - 비어 있으면 읽을 말이 없다 — 표시의 뜻은 앱만 안다.
+        std::u8string description {};
+
+        [[nodiscard]] bool operator==(const tab_indicator&) const = default;
+    };
+
+    // 탭 하나의 설정이다.
+    struct tab_item
+    {
+        // 탭을 가리키는 앱 정의 키다 (ui_element_id::owner 규약).
+        std::u8string key {};
+        std::u8string label {};
+        // 0이면 아이콘이 없다.
+        char32_t icon { 0 };
+        // 닫기 버튼은 이 값과 close factory가 모두 있어야 생긴다.
+        bool closable { false };
+        // 이름 뒤의 배지다 (개수·상태 점). 없으면 배지가 없다.
+        std::optional<tab_badge> badge {};
+        // 상태 표시다. 없으면 표시가 없다.
+        std::optional<tab_indicator> indicator {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>형 · 기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>key</code></td><td><code>std::u8string</code></td><td>앱 정의 키. 탭 id의 owner가 된다 — tree 전체에서 고유하게</td></tr>
+                  <tr><td><code>label</code> · <code>icon</code></td><td><code>std::u8string</code> · <code>char32_t</code> 0</td><td>이름(그리기·글자 탐색·접근 이름)과 아이콘</td></tr>
+                  <tr><td><code>closable</code></td><td><code>bool</code> · 거짓</td><td>닫기 단추는 이 값과 <code>close</code> factory가 모두 있어야 생긴다</td></tr>
+                  <tr><td><code>badge</code></td><td><code>std::optional&lt;tab_badge&gt;</code></td><td><code>text</code>("3"), <code>tone</code>, <code>description</code>(읽을 말), <code>glyph</code>, <code>spinning</code></td></tr>
+                  <tr><td><code>indicator</code></td><td><code>std::optional&lt;tab_indicator&gt;</code></td><td><code>kind</code>(<code>dot</code>·<code>ring</code>·<code>busy</code>·<code>glyph</code>), <code>tone</code>, <code>glyph</code>, <code>description</code> — 비면 읽을 말이 없다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="넘침·견본">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/tab_bar_element.h:84-112" data-path="include/luil/ui/tab_bar_element.h" data-start="84"><script type="text/plain">
+
+    // 넘칠 때 탭을 어떻게 넘기는가다.
+    enum class tab_overflow_mode
+    {
+        // 띠를 흘린다 (휠·터치 끌기·초점 되살리기). 처음부터의 동작이다.
+        scroll,
+        // 양 끝에 앞·뒤 단추를 두고 한 탭씩 넘긴다. 흘리는 길(터치 끌기·초점 되살리기)은 그대로 남는다.
+        step,
+    };
+
+    // 견본 막대다 (`tab_bar_config::preview`). 환경 설정에서 스타일과 상태 표시를 고를 때 그림만 보인다.
+    //  - 누름·hover·초점·끌기·접근 tree에서 모두 빠진다. 접근 tree에는 `name` 하나(그림)로만 선다.
+    //  - 상태를 키로 고정해 그린다 — 견본은 포인터가 없어도 "올라간 탭"을 보여야 한다.
+    struct tab_bar_preview
+    {
+        // 보조 기술이 읽을 견본의 이름이다 ("이어진 탭 견본"). 비면 접근 tree에서 빠진다.
+        std::u8string name {};
+        // 포인터가 올라간 것처럼 그릴 탭이다.
+        std::u8string hovered {};
+        // 눌린 것처럼 그릴 탭이다.
+        std::u8string pressed {};
+        // 키보드 초점 테를 두른 것처럼 그릴 탭이다.
+        std::u8string focused {};
+        // 닫기 단추에 포인터가 올라간 것처럼 그릴 탭이다. 상태 표시가 닫기 단추 자리에 있으면 단추로 바뀐다.
+        std::u8string close_hovered {};
+        bool animated { false };
+
+        [[nodiscard]] bool operator==(const tab_bar_preview&) const = default;
+    };
+</script></div>
+          </section>
+          <section data-tab="factory 형">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/tab_bar_element.h:114-130" data-path="include/luil/ui/tab_bar_element.h" data-start="114"><script type="text/plain">
+    // 탭 키 하나를 담은 메시지다 (선택·닫기).
+    using tab_message_factory = std::function<input_action(const std::u8string& key)>;
+    // 끌어 놓은 탭을 대상 탭 자리로 옮기자는 메시지다.
+    using tab_reorder_message_factory = std::function<input_action(const std::u8string& moved, const std::u8string& target)>;
+    // 끌어 놓은 탭을 대상 탭의 앞(`before`)이나 뒤(`after`)로 옮기자는 메시지다.
+    using tab_move_message_factory = std::function<input_action(const std::u8string& moved, const std::u8string& target, drop_side side)>;
+    // 다른 탭 막대(다른 창)에서 끌어 온 탭을 이 막대의 대상 탭 앞이나 뒤에 넣자는 메시지다.
+    //  - `payload`는 출발 탭이 지은 그대로다. `dragged_owner`가 탭 키이고 `container`가 출발 막대다.
+    //  - `target`이 비어 있으면 탭이 하나도 없는 막대다 (넣을 자리는 처음이자 끝이다).
+    using tab_receive_message_factory = std::function<input_action(const drag_payload& payload, const std::u8string& target, drop_side side)>;
+    // 끌던 탭을 받는 대상이 없는 자리에 놓았다는 메시지다 (`drag_source::on_unclaimed_drop`).
+    //  - 탭 키는 `payload.dragged_owner`다. 잡은 지점(`grab_offset_x`·`grab_offset_y`)도 payload에 있어, 새 창을 세울 때 그
+    //    탭이 놓은 점에 그대로 오게 할 수 있다 (`ui_window::screen_anchor`).
+    using tab_release_message_factory = std::function<input_action(const drag_payload& payload, const drag_release& release)>;
+    // 탭에 컨텍스트 메뉴를 열자는 메시지다.
+    //  - 문맥의 좌표(물리 픽셀, 창 좌표)는 메뉴를 띄울 자리이고, 수식 키는 그 순간의 것이다.
+    using tab_context_message_factory = std::function<input_action(const std::u8string& key, const ui_action_context& context)>;
+</script></div>
+            <div class="prose small"><p><code>drop_side</code>는 <code>before</code>·<code>after</code>다. <code>drag_payload</code>에서 쓰는 칸은 <code>source</code>(탭 id), <code>container</code>(출발 막대 id), <code>dragged_owner</code>(키), <code>label</code>, 잡은 지점이다. <code>drag_release</code>는 표면·좌표·<code>outside</code>·<code>screen</code>·수식 키다.</p></div>
+          </section>
+          <section data-tab="함수와 element">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/tab_bar_element.h:216-289" data-path="include/luil/ui/tab_bar_element.h" data-start="216"><script type="text/plain">
+    // 넘침 메뉴 버튼의 폭이다 (논리 픽셀). 앞·뒤 단추도 같은 폭이다.
+    inline constexpr float tab_overflow_width { 28.0f };
+
+    // 한 탭씩 넘기는 스크롤 값이다 (논리 픽셀). 앞·뒤 단추와 칸 휠이 같은 식을 쓴다.
+    //  - 앞으로(`steps` > 0)는 오른쪽 끝에 걸친 탭이 온전히 드러나는 자리, 뒤로는 왼쪽 끝에 걸친 탭이 온전히
+    //    드러나는 자리다. 한 칸마다 탭 경계 하나를 넘는다.
+    //  - `viewport`는 띠의 폭, `maximum`은 흘릴 수 있는 최대치다. 답은 [0, maximum] 안이다.
+    [[nodiscard]] float tab_step_offset(float offset, float tab_width, float viewport, float maximum, int steps) noexcept;
+
+    // 자리에 맞춘 탭 폭이다 (논리 픽셀). 다 들어가면 `tab_width`, 모자라면 같은 폭으로 줄이되 `min_tab_width` 밑으로는
+    // 줄이지 않는다. `available`은 탭이 쓸 수 있는 폭이다 (꼬리를 뗀 막대 폭).
+    [[nodiscard]] float fitted_tab_width(std::size_t count, float tab_width, float min_tab_width, float available) noexcept;
+
+    // 가로로 탭을 늘어놓는 막대다.
+    // 선택·닫기·순서·컨텍스트 메뉴는 앱 상태이고 element는 메시지만 낸다.
+    // 넘치는 탭은 가로 스크롤로 가리고(잘린 탭은 눌리지도 않는다), 내용 영역은 앱 몫이다.
+    //
+    // 조립은 가로 한 줄이다: [앞] 흘리는 띠(`strip_element`) [뒤] [넘침 메뉴] [꼬리].
+    // 띠 안에는 탭을 같은 폭으로 늘어놓는 레인이 있다.
+    //  - 흘리기·잘라내기·다듬기는 띠의 몫이다 (stack-expressiveness-design.md).
+    //  - **넘침 판정은 단추 폭을 떼기 전의 slot 폭으로** 한다. 뗀 뒤에 재면
+    //    "버튼이 있어서 넘친다"가 되어 판정이 자기참조가 된다.
+    //  - 탭 폭은 자리에 달려(`min_tab_width`) 배치에서 정한다. 그래서 레인은 고정 길이 stack이 아니라 막대가 폭을
+    //    정해 주는 레인이다.
+    //
+    // 모양은 앱 스타일(`ui_style::tab_bar`)이나 `tab_bar_config::style`이 정한다 (tab-bar-style-design.md).
+    class tab_bar_element final : public ui_element
+    {
+    public:
+        explicit tab_bar_element(tab_bar_config config);
+
+        // 이 막대에서 흘릴 수 있는 최대치다 (논리 픽셀).
+        // arrange 뒤에 유효하며 앱이 스크롤 값을 다듬을 때 쓴다.
+        [[nodiscard]] float maximum_scroll() const noexcept;
+        // arrange가 범위 안으로 다듬은 스크롤 값이다 (논리 픽셀).
+        [[nodiscard]] float scroll_offset() const noexcept;
+        // 지금 실제 탭 폭이다 (논리 픽셀). arrange 뒤에 유효하다 (`min_tab_width`로 줄었을 수 있다).
+        [[nodiscard]] float tab_width() const noexcept;
+        // 넘치고 있는가다. arrange 뒤에 유효하다.
+        [[nodiscard]] bool overflowing() const noexcept;
+        // 한 탭씩 넘기는 스크롤 변화량이다 (논리 픽셀, `tab_step_offset`). arrange 뒤에 유효하다.
+        [[nodiscard]] float step_delta(int steps) const noexcept;
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] access_info accessibility() const override;
+
+    private:
+        // 마지막 탭의 오른쪽 끝이다 (물리 픽셀). 탭이 없으면 띠의 왼쪽 끝이다.
+        [[nodiscard]] float end_gap_x() const noexcept;
+        // 그 자리가 마지막 탭 뒤의 빈 틈인가 (`tab_bar_config::move`·`receive`).
+        [[nodiscard]] bool end_gap_contains(float x, float y) const noexcept;
+
+        tab_bar_config config_ {};
+        strip_element* strip_ { nullptr };
+        // 탭을 같은 폭으로 늘어놓는 레인이다.
+        ui_element* lane_ { nullptr };
+        // 마지막 탭이다. 탭이 없으면 nullptr다.
+        const ui_element* last_tab_ { nullptr };
+        // 넘침 액션이 없으면 nullptr다.
+        ui_element* overflow_ { nullptr };
+        // 한 탭씩 넘기는 앞·뒤 단추다. 넘기는 방식이 `step`이고 `scroll` factory가 있을 때만 선다.
+        ui_element* step_back_ { nullptr };
+        ui_element* step_forward_ { nullptr };
+        // 꼬리 element다. 없으면 nullptr다.
+        ui_element* trailing_ { nullptr };
+        // 배치가 고른 스타일이다 (`config_.style` 또는 앱 스타일). 끝의 단추들이 이 자리를 가리킨다.
+        tab_bar_style style_ {};
+        float maximum_scroll_ { 0.0f };
+        float tab_width_ { 0.0f };
+        // 띠의 폭이다 (논리 픽셀).
+        float viewport_ { 0.0f };
+        bool overflowing_ { false };
+    };
+</script></div>
+          </section>
+          <section data-tab="tab_bar_style">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/theme/ui_style.h:79-105,129-146,189-211" data-path="include/luil/theme/ui_style.h" data-start="79"><script type="text/plain">
+    // 탭 막대를 어떤 모양으로 그리는가다.
+    enum class tab_bar_variant
+    {
+        // 선택된 탭 바탕 + 아래 강조선이다 (처음부터의 모양).
+        underline,
+        // 선택된 탭을 아래 내용 영역과 한 판으로 잇는다. 위 모서리는 둥글고 아래 끝은 바깥으로 휜다.
+        connected,
+        // 탭을 세로 칸막이로 맞붙인다. 선택된 칸은 위 강조선을 긋고 내용 바탕으로 아래가 열린다.
+        flat,
+    };
+
+    // 탭의 닫기 단추를 언제 보이는가다. 숨어도 자리는 지켜 이름이 들썩이지 않는다.
+    enum class tab_close_visibility
+    {
+        always,
+        // 선택된 탭과 포인터가 올라간 탭에서만 보인다.
+        selected_or_hovered,
+    };
+
+    // 탭 상태 표시(`tab_indicator`)를 어디에 두는가다.
+    enum class tab_indicator_placement
+    {
+        // 아이콘의 오른쪽 아래 모서리다. 진행 중이면 아이콘을 감싸는 호다.
+        icon_corner,
+        // 닫기 단추 자리다. 포인터를 단추에 올리거나 초점이 가면 닫기 단추로 바뀐다.
+        close_slot,
+    };
+⋯@129
+    // 탭 막대의 앱 스타일이다 (`ui_style::tab_bar`).
+    //  - 막대마다 config에 적지 않고 앱이 한 번 정하면 그 앱의 모든 탭 막대가 같은 모양이다. 한 막대만 달라야
+    //    하면 `tab_bar_config::style`이 통째로 덮는다.
+    //  - 값은 enum과 역할뿐이다 — 비교되고 JSON(`assets/style.json`의 `tabBar`)에 적힌다.
+    struct tab_bar_style
+    {
+        tab_bar_variant variant { tab_bar_variant::underline };
+        tab_close_visibility close_visibility { tab_close_visibility::always };
+        tab_indicator_placement indicator_placement { tab_indicator_placement::icon_corner };
+        // 이어지는 두 모양(`connected`·`flat`)의 막대 바탕과 선택된 탭 바탕이다.
+        //  - 선택된 탭 바탕은 막대 아래 내용 영역과 같은 역할이어야 한 판으로 이어 보인다.
+        //  - 두 역할이 같은 색이 되면(고대비는 창 바탕과 표면이 같다) 선택된 탭에 테를 둘러 선택을 남긴다.
+        //  - `underline`은 막대 바탕을 칠하지 않는다 (처음부터의 모양).
+        palette_role bar_background { palette_role::window_background };
+        palette_role selected_background { palette_role::surface_background };
+
+        [[nodiscard]] bool operator==(const tab_bar_style&) const noexcept = default;
+    };
+⋯@189
+    struct ui_style
+    {
+        neutral_color_palette dark {};
+        neutral_color_palette light {};
+        accent_tones tones {};
+        ui_metrics metrics {};
+        // 컴포넌트 스타일이다. 컴포넌트마다 한 칸이고, 그 컴포넌트가 그리기에서 읽는다
+        // (`arrange_context::app_style`). 막대 config의 `style`이 비어 있으면 이 값이다.
+        tab_bar_style tab_bar {};
+        // popup 창의 모양이다. popup은 tree가 아니라 host가 만드는 창이라 배치 문맥이 아니라 frame의 스타일
+        // (`ui_frame::style`)에서 읽는다.
+        popup_style popup {};
+        // 글의 스타일이다. 한 줄 도우미의 줄바꿈 처리(`line_break`)는 popup과 같이 host가 frame의 스타일에서 읽고,
+        // 여러 줄 글의 정책(`wrap_policy`)은 배치 문맥(`arrange_context::style`)과 그리기 문맥(`draw_context::wrap_policy`)으로 닿는다.
+        text_style text {};
+
+        // 테마의 중립 색이다.
+        // 고대비는 중립 색을 쓰지 않으므로 dark를 돌려준다 — 부르는 쪽이 고대비를
+        // 먼저 걸러야 하고(`color_palette_for`가 그렇게 한다), 여기서는 답이 비지 않는다.
+        [[nodiscard]] const neutral_color_palette& neutral_for(color_theme theme) const noexcept;
+
+        [[nodiscard]] bool operator==(const ui_style&) const noexcept = default;
+    };
+</script></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">포인터와 키보드로 실행한 액션은 input thread의 controller가 부른다. 보조 기술의 고르기는 UI thread에서 계획된 뒤 같은 input thread 길로 들어온다. 메시지는 모두 logic thread의 앱으로 간다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사람이 하는 것</th><th>서는 조건</th><th>나가는 메시지</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>탭 클릭, 손가락 탭, 초점 탭에서 Space·Enter, 보조 기술의 고르기</td><td><code>select</code></td><td><code>select(key)</code></td><td><code>selected = key</code>, 필요하면 드러내기</td></tr>
+              <tr><td>닫기 단추 클릭(손가락 포함)</td><td><code>closable</code> + <code>close</code></td><td><code>close(key)</code></td><td>목록에서 빼고, 고른 탭이었으면 이웃을 고른다</td></tr>
+              <tr><td>가운데 클릭 (탭이나 그 닫기 단추)</td><td>위 + <code>middle_click_close</code></td><td><code>close(key)</code> — 선택은 그대로</td><td>위와 같다</td></tr>
+              <tr><td>우클릭, 길게 누르기, Shift+F10</td><td><code>context_menu</code></td><td><code>context_menu(key, context)</code> — 물리 픽셀. Shift+F10이면 탭 가운데</td><td>메뉴 popup (좌표 ÷ 배율)</td></tr>
+              <tr><td>같은 막대 안에서 끌어 놓기</td><td><code>move</code></td><td><code>move(moved, target, side)</code> — 순서가 그대로인 자리면 없다</td><td>앞·뒤로 끼우기</td></tr>
+              <tr><td>마지막 탭 뒤 빈 곳에 놓기</td><td><code>move</code></td><td><code>move(moved, 마지막 탭, after)</code></td><td>같다</td></tr>
+              <tr><td>같은 막대 안에서 끌어 놓기</td><td><code>reorder</code>만</td><td><code>reorder(moved, target)</code> — 자기 자신만 거절</td><td>"대상 자리"의 해석은 앱 몫</td></tr>
+              <tr><td>다른 막대(창)의 탭을 놓기</td><td><code>receive</code> (+ <code>receive_accepts</code>)</td><td><code>receive(payload, target, side)</code></td><td>출발 막대에서 빼고 끼운다</td></tr>
+              <tr><td>받는 곳 없는 데 놓기 (창 밖)</td><td><code>unclaimed_drop</code></td><td><code>unclaimed_drop(payload, release)</code></td><td>새 <code>ui_window</code>로 떼어 낸다</td></tr>
+              <tr><td>끄는 동안 Esc</td><td>끌기 중</td><td>끌기 취소 — <code>unclaimed_drop</code>은 오지 않는다</td><td>없다</td></tr>
+              <tr><td>넘침 메뉴 단추</td><td><code>overflow</code> + 넘침</td><td><code>overflow</code> 액션 그대로</td><td>탭 목록 popup</td></tr>
+              <tr><td>앞·뒤 단추, 칸 휠</td><td><code>step</code>·<code>wheel_steps</code> + <code>scroll</code> + 넘침</td><td><code>scroll(step_delta(n))</code></td><td><code>scroll_offset += delta</code></td></tr>
+              <tr><td>손가락 쓸기</td><td><code>scroll</code> + 넘침</td><td>띠가 <code>scroll(delta)</code></td><td>같다</td></tr>
+              <tr><td>휠 (칸 아님), 키보드 초점이 잘린 탭에</td><td>앱 정책의 <code>on_wheel</code>·<code>on_focus_moved</code></td><td>정책이 내는 스크롤 메시지 (<code>route_wheel</code>·<code>route_reveal</code>)</td><td>같다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>탭의 액션은 막대 config 안의 factory를 불러 메시지를 짓는다. 끌기가 tree보다 오래 사는 <code>unclaimed_drop</code>만 값으로 쥔다 (코드에서 확인한 동작).</p></div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">막대는 Tab 순회의 한 자리다. 들어오면 고른 탭에 서고, 안은 화살표가 돈다. 화살표는 초점만 옮기고 고르지 않는다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>키</th><th>동작</th></tr></thead>
+            <tbody>
+              <tr><td>Tab · Shift+Tab</td><td>막대는 한 자리다. 고른 탭에 선다 — 그 탭이 초점을 받을 수 없으면 첫 구성원</td></tr>
+              <tr><td>← · →</td><td>구성원 사이로 초점을 옮기고 끝에서 돈다. <strong>고르지 않는다</strong></td></tr>
+              <tr><td>Home · End</td><td>첫·끝 구성원. 돌지 않는다</td></tr>
+              <tr><td>↑ · ↓</td><td>축이 가로라 묶음이 갖지 않고 앱으로 흐른다</td></tr>
+              <tr><td>Space · Enter</td><td>초점 탭의 <code>select</code></td></tr>
+              <tr><td>Shift+F10</td><td>초점 탭의 <code>context_menu</code></td></tr>
+              <tr><td>글자</td><td>다음 구성원 중 이름이 그 글로 시작하는 것으로 초점. 대소문자 무시, 1초가 지나면 질의를 비운다</td></tr>
+              <tr><td>Esc (끄는 중)</td><td>끌기 취소</td></tr>
+              <tr><td>Ctrl+Tab · Ctrl+W · Delete …</td><td>라이브러리가 받지 않는다 — <a class="xref" href="#build-keys">키보드 명령</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><strong>묶음의 구성원</strong>은 막대의 자식 중 보이고 초점을 받을 수 있는 것을 그리기 순서로 모은 것이다: 탭(<code>select</code>가 있어야), 넘침 단추(넘칠 때), 꼬리(Tab 자리인 element면). 닫기 단추와 앞·뒤 단추는 들지 않는다 (코드에서 확인한 동작).</li>
+            <li>구성원이 하나뿐이면 화살표·Home·End를 소비하지 않는다.</li>
+            <li>탭을 누르면 초점이 그 탭에 서지만 초점 테는 그리지 않는다. 닫기 단추처럼 초점을 받을 수 없는 자리를 누르면 초점이 거둬진다 (코드에서 확인한 동작).</li>
+            <li>묶음의 키 규칙 전체는 <a class="xref" href="input.html#s7">입력과 초점 — 초점의 규칙</a>에 있다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/tab_bar_element_tests.cpp:303-317" data-path="tests/tab_bar_element_tests.cpp" data-start="303"><script type="text/plain">
+TEST_CASE("A tab bar is one tab stop and its close buttons are not stops", "[ui][tab][focus]")
+{
+    luil::tab_bar_config config { make_config(3) };
+    config.selected = u8"tab-b";
+    config.select = [](const std::u8string& key) { return luil::input_action { luil::app_message { select_intent { key } } }; };
+    config.close = [](const std::u8string& key) { return luil::input_action { luil::app_message { close_intent { key } } }; };
+
+    auto bar { std::make_unique<luil::tab_bar_element>(std::move(config)) };
+    REQUIRE(bar->focus_group() == luil::focus_axis::horizontal);
+    const luil::ui_tree tree { luil::make_arranged_tree(std::move(bar), { 0.0f, 0.0f, 800.0f, 36.0f }, 1.0f) };
+
+    // 막대는 Tab에서 한 자리이고, 들어가는 자리는 선택된 탭이다.
+    // 탭마다 달린 닫기 버튼은 자리가 아니다 — 있으면 ←/→가 탭과 닫기를 번갈아 지난다.
+    REQUIRE(tree.focus_order() == std::vector<luil::ui_element_id> { luil::ui_element_id { luil::ui_element_kind::tab, u8"tab-b" } });
+}
+</script></div>
+        <h3>보조 기술이 읽는 것</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>부품</th><th>역할</th><th>이름</th><th>상태</th></tr></thead>
+            <tbody>
+              <tr><td>막대</td><td><code>tab_list</code> (선택 container)</td><td><code>set_access_name</code> → <code>set_search_label</code> → tooltip</td><td>—</td></tr>
+              <tr><td>탭</td><td><code>tab</code></td><td>이름 + 배지의 말 + 표시의 말</td><td><code>selected</code></td></tr>
+              <tr><td>닫기 단추</td><td>없다 — 접힌다</td><td>주지 않는다</td><td>—</td></tr>
+              <tr><td>넘침 단추</td><td><code>button</code></td><td><code>overflow_tooltip</code> (비면 접힌다)</td><td>넘칠 때만 보인다</td></tr>
+              <tr><td>앞·뒤 단추</td><td><code>button</code></td><td><code>step_back_tooltip</code> · <code>step_forward_tooltip</code> (비면 접힌다)</td><td>끝에 닿은 쪽은 비활성</td></tr>
+              <tr><td>견본 막대</td><td><code>image</code> (이름이 비면 <code>none</code>)</td><td><code>tab_bar_preview::name</code></td><td>탭은 모두 접힌다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>보조 기술의 고르기는 UIA SelectionItem.Select다. 이미 골라진 탭이면 할 일이 없고, 아니면 탭의 <code>left_click</code> → <code>select(key)</code>다. 탭은 상태를 들어 Invoke를 내걸지 않는다.</li>
+            <li>고른 탭이 바뀌면 단일 선택이라 새 탭의 선택 알림 하나다. 배지의 개수가 바뀌면 이름이 바뀌어 property 변화로 들린다.</li>
+            <li>보조 기술로 탭을 닫거나 옮기는 명령은 없다 — <code>access_command</code>에 "옮겨라"가 없고 닫기 단추는 접혀 있다. 컨텍스트 메뉴(Shift+F10)의 항목이 그 길이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">배치·메시지·키보드 규칙은 플랫폼을 모르는 층에 있어 어디서나 같다. 다른 것은 손가락 입력, 보조 창, 보조 기술의 낱말이다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>주제</th><th>차이</th></tr></thead>
+            <tbody>
+              <tr><td>길게 누르기</td><td>우클릭 액션 = 컨텍스트 메뉴 (기본 600ms)</td></tr>
+              <tr><td>숨을 수 있는 닫기 단추</td><td><code>selected_or_hovered</code>이거나 표시가 닫기 자리에 있으면 단추가 hover 때만 선다. 손가락의 탭은 감싼 탭으로 가 <strong>고르기</strong>가 된다. 늘 보이는 단추는 손가락으로도 닫는다</td></tr>
+              <tr><td>가운데 버튼</td><td>손가락에는 없다</td></tr>
+              <tr><td>쓸어 넘기기</td><td><code>scroll</code> factory가 있고 넘칠 때 띠가 가로 흘림의 임자다</td></tr>
+              <tr><td>떼어 내기</td><td>보조 창은 Android·iOS가 무시한다 — 데스크톱만</td></tr>
+              <tr><td>움직임 줄이기</td><td>진행 호·도는 배지가 멈춘 그림이고 frame을 청하지 않는다</td></tr>
+              <tr><td>Windows (UIA)</td><td>막대 Tab, 탭 TabItem(+SelectionItem), 막대가 Selection</td></tr>
+              <tr><td>macOS</td><td>막대 AXTabGroup, 탭 AXRadioButton(하위 역할 AXTabButton), AXValue 0·1, AXPress가 고르기</td></tr>
+              <tr><td>iOS</td><td>막대는 TabBar trait의 묶음, 탭은 Button trait + 골라지면 Selected</td></tr>
+              <tr><td>Android</td><td>접근성 계층이 없다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>역할 번역 전체는 <a class="xref" href="platforms.html#s7">플랫폼과 host — 접근성</a>에 있다.</p></div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
+        </header>
+        <ol class="recap">
+          <li><div><strong>닫기 단추는 키보드·보조 기술에 없다.</strong> 이름이 없어 접근 tree에서 접히고 Tab 자리도 아니다. Ctrl+W 같은 앱 명령과 컨텍스트 메뉴의 "닫기"를 따로 둔다. 설계 문서(<code>docs/tab-bar-style-design.md</code>)는 숨은 단추도 "키보드·보조 기술이 닿는다"고 적지만 코드는 그렇지 않다 (코드에서 확인한 동작).</div></li>
+          <li><div><strong>라이브러리는 Ctrl+Tab·Ctrl+W·Delete를 받지 않는다.</strong> 탭 막대에 키 처리가 없다. 다음 탭·현재 탭 닫기는 앱 명령이다.</div></li>
+          <li><div><strong>탭 id에 막대 owner가 붙지 않는다.</strong> 탭은 <code>{ tab, key }</code>라 한 tree의 두 막대가 같은 키를 쓰면 id가 겹친다. 첫 등록이 이기고 뒤의 탭은 보조 기술에서 사라진다. 초점 진입 자리도 첫 막대의 탭을 찾는다. 키는 tree 전체에서 고유하게 짓는다 (코드에서 확인한 동작).</div></li>
+          <li><div><strong>창이 달라도 owner와 키가 같으면 남의 탭이 "내 탭"이 된다.</strong> 같은 막대인지는 payload의 막대 id와 그 키가 이 막대에 있는지로 본다. 두 창이 같은 owner와 같은 키를 쓰면 다른 창의 탭이 <code>move</code>로 온다 (코드에서 확인한 동작).</div></li>
+          <li><div><strong>모바일 데모의 순서 바꾸기는 오른쪽으로 한 칸 모자란다.</strong> 옛 <code>reorder</code>를 받아 대상의 앞에 끼워서다. 바로 오른쪽 이웃에 놓으면 제자리다. <code>move</code>를 쓴다 (<a class="xref" href="#build-basic">따라 하지 말 것</a>).</div></li>
+          <li><div><strong>옛 <code>reorder</code>는 앞·뒤를 모른다.</strong> 자기 자신만 거절하고 순서가 그대로인 자리도 받는다. "대상 자리"를 어떻게 풀지는 앱 몫이다.</div></li>
+          <li><div><strong><code>select</code>가 없으면 키보드로 갈 수 없다.</strong> 탭에 <code>left_click</code>이 없어 묶음에 구성원이 없고, 막대가 Tab 순서에서 빠진다. 보조 기술의 고르기도 할 수 없는 일이 된다.</div></li>
+          <li><div><strong>닫을 때 다음 선택은 앱이 정한다.</strong> element는 고르지 않는다. 비워 두면 <code>selected</code>가 사라진 키를 가리킨다.</div></li>
+          <li><div><strong><code>receive</code>만으로는 탭을 끌 수 없다.</strong> 끌기 출발은 <code>reorder</code>·<code>move</code>·<code>unclaimed_drop</code> 중 하나가 있어야 선다.</div></li>
+          <li><div><strong>스크롤 값은 앱 상태다.</strong> 넘침 메뉴·새 탭·키 명령으로 고른 탭을 드러내는 것도 앱이다. 배치가 다듬은 값은 <code>scroll_offset()</code>으로 되읽는다.</div></li>
+          <li><div><strong>정책이 있으면 휠과 초점 되살리기는 정책 몫이다.</strong> 기본은 빈 목록이라 넘친 탭으로 화살표를 옮겨도 띠가 흐르지 않는다. 표를 쓰면 띠(<code>tab_strip</code>)를 이름 댄다. 설계 문서는 "되살리기가 띠를 흘린다"고 적지만 정책이 내야 선다.</div></li>
+          <li><div><strong><code>step</code>·<code>wheel_steps</code>는 <code>scroll</code> factory가 있어야 선다.</strong> 넘치지 않으면 앞·뒤 단추가 숨는다.</div></li>
+          <li><div><strong>이름 없는 단추는 보조 기술이 모른다.</strong> <code>overflow_tooltip</code>·<code>step_back_tooltip</code>·<code>step_forward_tooltip</code>이 비면 그 단추가 접힌다.</div></li>
+          <li><div><strong>막대에 이름을 주려고 tooltip을 달면 빈 자리에 글 상자가 뜬다.</strong> <code>set_access_name</code>을 쓴다. 두 데모 모두 막대에 이름을 주지 않는다.</div></li>
+          <li><div><strong>상태 점은 설명이 없으면 읽히지 않는다.</strong> <code>tab_indicator</code>와 글 없는 배지에 <code>description</code>을 적는다.</div></li>
+          <li><div><strong>가운데 버튼 닫기는 기본으로 켜져 있다.</strong> 닫을 수 없는 탭은 가운데 버튼을 무시한다. 끄려면 <code>middle_click_close = false</code>다.</div></li>
+          <li><div><strong>컨텍스트 메뉴 좌표는 물리 픽셀이다.</strong> popup 자리는 배율로 나눈다.</div></li>
+          <li><div><strong>factory는 순수해야 한다.</strong> 보조 기술 길에서는 UI thread가 계획으로 factory를 부르고 결과를 버리기도 한다 (코드에서 확인한 동작).</div></li>
+          <li><div><strong>떠나는 페이지는 같은 크기·배율이어야 그려진다.</strong> 다르면 새 화면만 그린다. 전환이 도는 동안 포인터가 막히므로 끝나면 앱이 놓아야 풀린다.</div></li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>고른 탭은 누가 들고 있나?</summary><div class="faq-a"><p class="faq-short">앱이다.</p><p><code>tab_bar_config::selected</code>에 키를 넣고, <code>select</code> 메시지를 받으면 바꿔 다음 frame에 넘긴다. 넘기지 않으면 눌러도 그대로다.</p></div></details>
+          <details class="faq"><summary><code>closable = true</code>인데 닫기 단추가 없다.</summary><div class="faq-a"><p class="faq-short"><code>close</code> factory도 있어야 한다.</p><p>없는 factory의 동작은 아예 서지 않는다. 가운데 버튼 닫기도 같은 조건이다.</p></div></details>
+          <details class="faq"><summary>키보드로 탭을 닫으려면?</summary><div class="faq-a"><p class="faq-short">닫기 단추는 Tab 자리가 아니다. 앱 명령(Ctrl+W)과 컨텍스트 메뉴의 "닫기"를 둔다.</p><p>데스크톱 데모의 <code class="free">tab_commands</code>·<code class="free">route_key</code>가 그 모양이다 (<a class="xref" href="#build-keys">키보드 명령</a>).</p></div></details>
+          <details class="faq"><summary>Ctrl+Tab으로 다음 탭에 가게 하려면?</summary><div class="faq-a"><p class="faq-short">라이브러리는 받지 않는다. 앱이 단축키를 명령으로 받아 <code>selected</code>를 바꾼다.</p><p>수식 키와 함께인 Tab은 초점 이동이 아니라 정책의 <code>interaction_policy::on_key</code>로 흐른다. <code>match_command</code>로 명령표와 맞춘다.</p></div></details>
+          <details class="faq"><summary>←/→로 옮기면 탭이 골라지나?</summary><div class="faq-a"><p class="faq-short">아니다. 초점만 옮긴다. Space·Enter가 고른다.</p><p>고르기를 따라 페이지를 바꾸는 앱이 화살표로 페이지가 휙휙 바뀌지 않게 하는 규칙이다.</p></div></details>
+          <details class="faq"><summary>끌어서 순서를 바꾸려면 <code>reorder</code>와 <code>move</code> 중 무엇?</summary><div class="faq-a"><p class="faq-short"><code>move</code>다.</p><p>앞·뒤를 싣고 순서가 그대로인 자리를 거른다. 둘 다 주면 <code>move</code>가 선다. 모바일 데모의 <code>reorder</code> 처리는 오른쪽으로 한 칸 모자라다.</p></div></details>
+          <details class="faq"><summary>두 탭 막대에 같은 키를 써도 되나?</summary><div class="faq-a"><p class="faq-short">안 된다. 탭 id에 막대 owner가 붙지 않는다.</p><p>탭은 <code>{ tab, key }</code>다. 키가 겹치면 뒤 막대의 탭이 보조 기술과 초점에서 앞 막대의 탭에 가린다. 키에 막대를 가르는 앞붙이를 넣는다.</p></div></details>
+          <details class="faq"><summary>탭이 너무 많으면?</summary><div class="faq-a"><p class="faq-short">먼저 <code>min_tab_width</code>까지 줄이고, 그래도 넘치면 흘리기(<code>scroll</code>)나 한 탭씩(<code>step</code>)이다.</p><p>넘침 메뉴 단추(<code>overflow</code>)로 목록을 띄우고, 고른 탭은 앱이 드러낸다 (<a class="xref" href="#build-overflow">넘침</a>).</p></div></details>
+          <details class="faq"><summary>넘친 탭으로 화살표를 옮겼는데 띠가 흐르지 않는다.</summary><div class="faq-a"><p class="faq-short">정책의 <code>on_focus_moved</code>가 <code>route_reveal</code>을 돌려줘야 한다.</p><p>기본은 빈 목록이다. 표를 쓰면 바깥 막대가 아니라 띠(<code>tab_strip</code>)를 이름 댄다.</p></div></details>
+          <details class="faq"><summary>가운데 버튼으로 닫히는 것을 끄려면?</summary><div class="faq-a"><p class="faq-short"><code>middle_click_close = false</code>.</p><p>가운데 버튼은 선택을 바꾸지 않고 닫는다. 누른 채 끌기 문턱을 넘으면 거둬진다.</p></div></details>
+          <details class="faq"><summary>탭을 창 밖으로 끌어 새 창으로 떼어 내려면?</summary><div class="faq-a"><p class="faq-short"><code>unclaimed_drop</code>으로 받아 새 <code>ui_window</code>를 세운다. 다시 합치는 쪽은 <code>receive</code>다.</p><p>Android·iOS는 보조 창을 무시한다 (<a class="xref" href="#build-detach">떼어 내기</a>).</p></div></details>
+          <details class="faq"><summary>스크린 리더가 탭을 어떻게 읽나?</summary><div class="faq-a"><p class="faq-short">역할 <code>tab</code>, 이름은 탭 이름 뒤에 배지·표시의 말, 그리고 골라짐 상태다.</p><p>막대는 <code>tab_list</code>이고 이름은 <code>set_access_name</code>으로 준다. 실제로 읽는 문장과 차례는 스크린 리더가 정한다 — 확인할 수 없다.</p></div></details>
+          <details class="faq"><summary>읽지 않은 개수가 바뀌면 보조 기술이 아나?</summary><div class="faq-a"><p class="faq-short">안다. 배지의 말이 이름에 붙어 이름이 바뀐다.</p><p>다음 발행본 대조가 property 변화로 알린다. 점·진행 표시는 <code>description</code>이 있어야 이름에 붙는다.</p></div></details>
+          <details class="faq"><summary>앱의 모든 탭 막대를 이어진 모양으로 하려면?</summary><div class="faq-a"><p class="faq-short"><code>ui_style::tab_bar</code>의 <code>variant</code>를 <code>connected</code>로 한 스타일을 배치와 frame에 준다.</p><p>막대 하나만 다르게 하려면 <code>tab_bar_config::style</code>이다.</p></div></details>
+          <details class="faq"><summary>"새 탭" 단추를 마지막 탭 옆에 두려면?</summary><div class="faq-a"><p class="faq-short"><code>trailing</code>과 <code>trailing_width</code>.</p><p>탭이 적으면 마지막 탭 뒤에 따라붙고, 넘치면 오른쪽 끝에 고정된다. 꼬리는 묶음 안에 선다.</p></div></details>
+          <details class="faq"><summary>터치에서 숨은 닫기 단추 자리를 탭하면 닫히나?</summary><div class="faq-a"><p class="faq-short">아니다. 탭이 골라진다.</p><p>늘 보이는 단추(<code>close_visibility</code>가 <code>always</code>)는 손가락으로도 닫힌다.</p></div></details>
+          <details class="faq"><summary>탭마다 다른 페이지를 보이고 바꿀 때 밀기 전환을 넣으려면?</summary><div class="faq-a"><p class="faq-short">페이지를 <code>page_transition_element</code>로 감싸고, 고를 때 떠나는 페이지를 따로 지은 tree로 넘긴다.</p><p>내용 영역은 막대 밖, 앱 몫이다 (<a class="xref" href="#build-pages">페이지와 전환</a>).</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/tab_bar_element.h" target="_blank" rel="noopener">include/luil/ui/tab_bar_element.h</a><span class="n">최상위 기호 17</span></div>
+            <div class="hdr-syms"><a href="api.html#tab-badge" title="구조체"><span class="kb t">S</span>tab_badge</a><a href="api.html#tab-indicator-kind" title="열거형"><span class="kb e">E</span>tab_indicator_kind</a><a href="api.html#tab-indicator" title="구조체"><span class="kb t">S</span>tab_indicator</a><a href="api.html#tab-item" title="구조체"><span class="kb t">S</span>tab_item</a><a href="api.html#tab-overflow-mode" title="열거형"><span class="kb e">E</span>tab_overflow_mode</a><a href="api.html#tab-bar-preview" title="구조체"><span class="kb t">S</span>tab_bar_preview</a><a href="api.html#tab-message-factory" title="별칭"><span class="kb t">=</span>tab_message_factory</a><a href="api.html#tab-reorder-message-factory" title="별칭"><span class="kb t">=</span>tab_reorder_message_factory</a><a href="api.html#tab-move-message-factory" title="별칭"><span class="kb t">=</span>tab_move_message_factory</a><a href="api.html#tab-receive-message-factory" title="별칭"><span class="kb t">=</span>tab_receive_message_factory</a><a href="api.html#tab-release-message-factory" title="별칭"><span class="kb t">=</span>tab_release_message_factory</a><a href="api.html#tab-context-message-factory" title="별칭"><span class="kb t">=</span>tab_context_message_factory</a><a href="api.html#tab-bar-config" title="구조체"><span class="kb t">S</span>tab_bar_config</a><a href="api.html#tab-overflow-width" title="상수"><span class="kb ">k</span>tab_overflow_width</a><a href="api.html#tab-step-offset" title="함수"><span class="kb f">f</span>tab_step_offset</a><a href="api.html#fitted-tab-width" title="함수"><span class="kb f">f</span>fitted_tab_width</a><a href="api.html#tab-bar-element" title="클래스"><span class="kb t">C</span>tab_bar_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>

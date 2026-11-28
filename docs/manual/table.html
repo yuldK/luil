@@ -1,0 +1,2131 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>표 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — table_element로 열 머리글, 정렬, 열 폭 끌기, 가로 스크롤, 앞 열 고정, 체크 열, 트리 열, F2 셀 편집이 있는 표를 만드는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  .tbl-tree { font-family: var(--font-code); font-size: 12px; line-height: 1.7; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); padding: 10px 14px; overflow-x: auto; white-space: pre; color: var(--fg-2); }
+  .tbl-tree b { color: var(--fg); font-weight: 600; }
+  .tbl-tree i { color: var(--fg-3); font-style: normal; }
+/*LAB-CSS*/
+</style>
+</head>
+<body data-page="table">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>표</h1>
+      <p class="summary"><code>table_element</code>는 가상 목록 위에 열을 얹은 표다. 행 모델·선택·커서·세로 스크롤은 본문 가상 목록의 값 그대로이고, 표가 더하는 것은 열 머리글, 같은 열 경계를 쓰는 칸, 가로 스크롤 값 하나다. 정렬 순서·열 폭·열 순서·숨긴 열·편집 중인 칸은 모두 앱 상태다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>table_element.h</code>·<code>virtual_list_element.h</code>·<code>check_element.h</code>·<code>item_model.h</code>·<code>selection_model.h</code></dd></div>
+<!--LAB-META-->
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="lists.html">목록과 트리 뷰</a> · <a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="input.html">입력과 초점</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>목록과 표 가운데 무엇을 쓸지 고르고, 표가 가상 목록에 무엇을 더하는지 안다.</li>
+            <li>정렬·열 폭·열 순서·숨김·고정을 앱 상태로 다루는 <code>handle</code>을 쓴다.</li>
+            <li>가로 스크롤, 두 막대, 고정 열이 배치마다 어떻게 정해지는지 안다.</li>
+            <li>체크 열·트리 열·앱이 짓는 칸·F2 셀 편집을 단다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 것을 쓰나</h2>
+          <p class="lede">열이 둘 이상이고 머리글로 정렬·폭·순서를 다뤄야 하면 표다. 행이 몇 줄이든 본문은 가상 목록이다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB84;</i><code>list_element</code></h4>
+            <ul>
+              <li>모든 행을 tree에 세운다. 행 하나하나가 초점 자리다.</li>
+              <li>열이 없다. 몇백 줄까지의 단일 선택 목록이다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB86;</i><code>virtual_list_element</code></h4>
+            <ul>
+              <li>창에 걸치는 행과 커서 행만 세운다. 행 내용은 앱의 <code>build_row</code>가 짓는다.</li>
+              <li>열이 하나다. 여러 선택·계층 키·끌어 놓기가 여기 있다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB7F;</i><code>table_element</code></h4>
+            <ul>
+              <li>본문이 가상 목록이다. 그 위에 열 머리글과 열 경계를 얹는다.</li>
+              <li>머리글 누름(정렬 요청), 경계 끌기(폭), 머리글 끌기(순서), 머리글 우클릭(메뉴).</li>
+              <li>가로 스크롤과 가로 막대, 앞 열 고정, 체크 열, 트리 열, F2 셀 편집.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB4C;</i><code>grid_element</code></h4>
+            <ul>
+              <li>표 모양의 <strong>배치</strong>다 (폼의 라벨 열 따위). 데이터 표가 아니다.</li>
+              <li>행 모델·선택·머리글이 없다 (<a class="xref" href="layout.html">레이아웃</a>).</li>
+            </ul>
+          </div>
+        </div>
+        <div class="prose">
+          <p><strong>표의 본문은 <code>virtual_list_element</code> 그대로다.</strong> <code>table_config::rows</code>가 곧 <code>virtual_list_config</code>여서 행 모델, 고르기와 여러 행 선택, 커서, 세로 스크롤, 행 두 번 누름, 행 우클릭, 행 끌어 놓기, 큰 모델 공유가 <a class="xref" href="lists.html">목록과 트리 뷰</a>에서 설명한 규칙 그대로 돈다. 이 문서는 표가 더하는 것 — 열 — 을 다룬다.</p>
+          <p>아직 없는 것도 있다. 열 가상화(행마다 모든 열의 칸을 짓는다), 칸 범위 선택, 보조 기술의 칸 단위 탐색(UIA Grid·Table 패턴), 오른쪽 고정은 헤더 주석이 "아직 없는 것"으로 적었다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>열 몇 개와 행 모델로 첫 표</td><td><code>columns</code> · <code>rows</code> · <code>cell_text</code></td><td><a class="xref" href="#build-minimal">가장 작은 표</a></td></tr>
+              <tr><td>머리글을 눌러 정렬</td><td><code>sort_request</code> + 앱의 <code>sort_filter</code></td><td><a class="xref" href="#build-sort">정렬</a></td></tr>
+              <tr><td>경계를 끌어 열 폭 바꾸기</td><td><code>resize_column</code> · <code>resize_column_end</code></td><td><a class="xref" href="#build-resize">열 폭</a></td></tr>
+              <tr><td>숫자 열 오른쪽 맞춤, 경로 가운데 줄이기</td><td><code>table_column::align</code> · <code>table_column::elide</code></td><td><a class="xref" href="#build-align">맞춤과 말줄임</a></td></tr>
+              <tr><td>열이 창보다 넓을 때 가로로 흘리기</td><td><code>scroll_x</code> · <code>scroll_horizontal</code></td><td><a class="xref" href="#build-hscroll">가로 스크롤</a></td></tr>
+              <tr><td>머리글을 끌어 열 순서 바꾸기</td><td><code>reorder_column</code></td><td><a class="xref" href="#build-reorder">열 순서</a></td></tr>
+              <tr><td>첫 열을 가로 스크롤에서 고정</td><td><code>frozen_columns</code></td><td><a class="xref" href="#build-frozen">앞 열 고정</a></td></tr>
+              <tr><td>행마다 체크 박스</td><td><code>check_column</code> · <code>check_state_of</code> · <code>toggle_check</code></td><td><a class="xref" href="#build-check">체크 열</a></td></tr>
+              <tr><td>칸에 배지·단추 같은 element</td><td><code>build_cell</code></td><td><a class="xref" href="#build-cell">앱이 짓는 칸</a></td></tr>
+              <tr><td>폴더 트리 같은 표</td><td><code>tree_column</code> + <code>rows.set_expanded</code></td><td><a class="xref" href="#build-tree">트리 열</a></td></tr>
+              <tr><td>머리글 우클릭으로 열 숨기기</td><td><code>column_menu</code></td><td><a class="xref" href="#build-menu">열 메뉴</a></td></tr>
+              <tr><td>←→로 칸 사이를 옮기고 F2로 편집</td><td><code>move_column</code> · <code>begin_edit</code> · <code>build_editor</code></td><td><a class="xref" href="#build-edit">셀 편집</a></td></tr>
+              <tr><td>Ctrl·Shift로 여러 행 고르기, 십만 행</td><td><code>rows.multiple_selection</code> · <code>rows.shared_items</code></td><td><a class="xref" href="lists.html#build-select">목록: 선택</a> · <a class="xref" href="lists.html#build-large">목록: 아주 큰 목록</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 열은 앱이, 칸은 표가</h2>
+          <p class="lede">표는 아무것도 기억하지 않는다. 앱이 frame마다 새 <code>table_config</code>로 표를 짓고, 표는 그 값을 그린 뒤 사용자의 몸짓을 앱 메시지로 바꿔 돌려준다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>임자</th><th>표에 싣는 자리</th></tr></thead>
+            <tbody>
+              <tr><td>열 목록·순서·폭·정렬 표시</td><td>앱</td><td><code>columns</code> (<code>table_column::width</code> · <code>table_column::sort</code>)</td></tr>
+              <tr><td>숨긴 열</td><td>앱 — 표에는 숨김 표시가 없다</td><td><code>columns</code>에서 뺀다</td></tr>
+              <tr><td>행 모델·선택·커서·세로 스크롤</td><td>앱</td><td><code>rows</code> (가상 목록 설정 그대로)</td></tr>
+              <tr><td>가로 스크롤</td><td>앱 (표는 그리기 위해 범위 안으로 다듬기만 한다)</td><td><code>scroll_x</code></td></tr>
+              <tr><td>고정할 앞 열의 수</td><td>앱 (창이 좁으면 그 배치에서만 풀린다)</td><td><code>frozen_columns</code></td></tr>
+              <tr><td>셀 커서의 열 · 편집 중인 칸</td><td>앱</td><td><code>cell_column</code> · <code>editing</code></td></tr>
+              <tr><td>체크 상태</td><td>앱</td><td><code>check_state_of</code>가 답한다</td></tr>
+              <tr><td>이번 배치의 고정 열 수·고정 폭·가로 창 폭</td><td>표 (배치 결과)</td><td>— (<code>arrange</code> 뒤의 <code>frozen_columns()</code> · <code>frozen_width()</code> · <code>viewport_width()</code>)</td></tr>
+              <tr><td>키보드 초점, hover, 끌기</td><td>input thread의 <code>interaction_controller</code></td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>머리글 한 번 누름이 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>"크기" 머리글을 누르고 같은 자리에서 뗀다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller가 게시된 tree로 hit test해 머리글 칸의 <code>left_click</code> 액션을 실행한다. 초점은 본문으로 간다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>액션이 앱이 준 <code>sort_request(u8"size")</code>를 불러 <code>input_action</code>을 만든다. 보통 <code>make_app_action(intent)</code>로 싼 앱 메시지다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱의 <code>handle</code>이 정렬 열과 방향을 바꾼다. 행의 순서도 앱이 다시 정한다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>다음 <code>make_frame()</code>이 그 열에 <code>sort</code>를 칠하고 정렬한 행으로 표를 <strong>처음부터 다시 짓는다</strong>.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>새 tree를 그린다. 머리글에 화살표가 서고, 행은 새 순서다.</span></div>
+        </div>
+        <div class="prose">
+          <p>factory(<code>sort_request</code>·<code>resize_column</code>…)는 포인터·키면 input thread에서, 보조 기술의 명령이면 UI thread에서 불린다. 둘 다 메시지만 짓고 앱 상태를 고치지 않는다. 칸 콜백(<code>cell_text</code>·<code>build_cell</code>·<code>check_state_of</code>·<code>build_editor</code>)은 다르다. 표를 만들 때가 아니라 <strong>본문이 배치에서 행을 지을 때</strong> 불린다. 앱이 <code>make_frame</code> 안에서 tree를 배치하므로 보통 logic thread이고 게시 전이다. 그래도 배치는 표를 짓는 함수가 돌아간 뒤에 일어날 수 있으니 앱 데이터는 <strong>값으로</strong> 담는다 — 지역 변수를 참조로 잡으면 매달린다.</p>
+        </div>
+        <h3>표는 가상 목록 위에 선다</h3>
+        <div class="code" data-lang="cpp" data-src="src/ui/table_element.cpp:798-815" data-path="src/ui/table_element.cpp" data-start="798"><script type="text/plain">
+        // 본문은 가상 목록이다. 표가 정하는 것은 owner·행 내용·역할뿐이다.
+        //  - 행 모델은 옮긴다. 표는 열만 읽고 행은 목록이 읽는다 — 두 벌로 두면 큰 모델이 frame마다 두 번 복사된다.
+        virtual_list_config rows { std::move(config_.rows) };
+        config_.rows = {};
+        expand_ = rows.set_expanded;
+        // 본문의 영역은 흘릴 메시지가 없으면 막대를 짓지 않는다 (`scroll_area_element`와 같은 판정).
+        vertical_bar_ = rows.scroll != nullptr ? rows.bar : scrollbar_visibility::never;
+        rows.owner = config_.owner;
+        // 계층은 트리 열 안에 그린다. 행 앞에 따로 자리를 두지 않는다.
+        rows.tree_gutter = false;
+        // 셀 탐색이 켜지면 ←·→는 표가 먼저 해석한다. 셀 커서가 트리 열에 있을 때만 계층 키로 넘긴다 (`move_cell`).
+        rows.tree_keys = config_.move_column == nullptr;
+        rows.role = access_role::table;
+        rows.row_role = access_role::data_item;
+        // 행 내용이 표의 열 자리를 읽는다. 표는 그 행들을 담은 본문을 소유하므로 행보다 먼저 사라지지 않는다.
+        rows.build_row = [this](const virtual_list_item& item, const std::size_t index, const bool selected) -> std::unique_ptr<ui_element> {
+            return std::make_unique<table_row_element>(*this, item, index, selected);
+        };
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>표가 <code>rows</code>의 여섯 칸을 덮는다: <code>owner</code>(표 owner), <code>build_row</code>(표의 행), <code>role</code>(<code>access_role::table</code>), <code>row_role</code>(<code>access_role::data_item</code>), <code>tree_gutter</code>(거짓), <code>tree_keys</code>(<code>move_column</code>이 없을 때만 참). 헤더 주석은 앞의 넷만 적었다.</li>
+            <li>행 모델은 본문으로 <strong>옮긴다</strong>. 그래서 생성 뒤의 <code>config().rows</code>는 비어 있다. 행을 읽으려면 <code>body().model()</code>을 쓴다.</li>
+            <li>세로 막대는 <code>rows.scroll</code>이 있을 때만 선다 (규칙은 <code>rows.bar</code>). 가로 막대는 표의 것이다.</li>
+          </ul>
+        </div>
+        <h3>부품과 자리표</h3>
+        <div class="tbl-tree" role="img" aria-label="표 부품의 tree 모양">
+<b>table</b>                          <i>접근 tree에서 접힌다</i>
+├─ <b>table_header</b>                <i>Header: 머리글 칸(HeaderItem)과 경계 손잡이(Handle)</i>
+│   └─ 고정 열이 있으면: 고정 칸 · <b>table_header_lane</b>(흐르는 칸·손잡이) · 고정 손잡이
+├─ <b>virtual_list</b>                <i>DataGrid: 표 전체의 Tab 자리 하나</i>
+│   └─ <b>scroll_area</b> ─ <b>scroll_area_view</b> ─ 행(DataItem) ─ <b>table_row</b> ─ 칸 부품 · <b>table_row_lane</b>
+│                  └─ <b>scroll_area_bar</b>   <i>세로 막대, Tab 자리 아님</i>
+└─ <b>scroll_area_bar</b> (owner␟scroll-x)   <i>가로 막대, 넘칠 때만 보인다</i></div>
+        <div class="prose">
+          <ul>
+            <li>열 키(<code>table_column::key</code>)는 표 안에서 유일해야 한다. 메시지와 자리표가 전부 이 값이다.</li>
+            <li>부품 자리표의 owner는 <code>표 owner + U+001F + 부품 키</code>다. 머리글 칸과 손잡이는 열 키를, 행 안의 칸 묶음·체크·삼각형·편집기 자리는 행 키를 쓴다. 그래서 앱 키에 U+001F를 쓰지 않는다.</li>
+            <li>표 owner는 같은 화면의 표를 가르고, 본문 목록과 그 영역·세로 막대의 owner이기도 하다. 같은 표면의 다른 <code>scroll_area_element</code>가 같은 owner를 쓰면 세로 막대 자리표가 겹친다.</li>
+            <li>앱이 지은 칸(<code>build_cell</code>)과 편집기(<code>build_editor</code>)의 자리표는 앱이 정하고 표 안에서 유일해야 한다.</li>
+          </ul>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">정렬과 폭은 앱의 몫이다</span>머리글을 누르면 <code>sort_request(열 키)</code>만 온다. 행을 다시 늘어놓고 그 열의 <code>sort</code>를 칠하는 것은 앱이다 — <code>table_column::sort</code>는 화살표를 그릴 뿐이다. 경계를 끌면 폭의 <strong>변화량</strong>이 오고, 폭을 바꿔 저장하는 것도 앱이다.</div></div>
+      </section>
+
+      <section class="sec" id="build-minimal">
+        <header class="sec-head">
+          <h2>만들기: 가장 작은 표</h2>
+          <p class="lede">열 둘, 행 모델, 칸 글, 커서 이동, 가로 스크롤만 단 표다. 앱 상태 구조체, 표를 짓는 함수, <code>handle</code>의 갈래를 함께 보인다.</p>
+        </header>
+<div class="code" data-lang="cpp" data-label="가장 작은 표: 열·행·칸 글·키 (직접 작성)" data-compile="pre-minimal"><script type="text/plain">
+// 앱이 정의한 메시지다. 표는 이것을 만들 factory만 받는다.
+struct file_cursor_intent
+{
+    std::u8string key {};
+};
+struct file_scroll_intent
+{
+    float delta { 0.0f };
+};
+struct file_scroll_x_intent
+{
+    float delta { 0.0f };
+};
+
+struct file_entry
+{
+    std::u8string name {};
+    std::u8string size {};
+};
+
+// logic thread가 소유하는 앱 상태다. 표는 이 값을 frame마다 받아 그린다.
+struct files_state
+{
+    std::vector<file_entry> files {};
+    std::u8string cursor {};
+    float scroll_y { 0.0f };
+    float scroll_x { 0.0f };
+};
+
+// make_frame에서 부른다 (logic thread).
+[[nodiscard]] std::unique_ptr<luil::table_element> build_files_table(const files_state& state)
+{
+    luil::table_config table {};
+    table.owner = u8"files";
+    table.columns = {
+        { .key = u8"name", .header = u8"이름", .width = 220.0f },
+        { .key = u8"size", .header = u8"크기", .width = 90.0f, .align = luil::column_align::end },
+    };
+    for (const file_entry& file : state.files)
+        table.rows.items.push_back({ .key = file.name, .label = file.name });
+    table.rows.cursor = state.cursor;
+    table.rows.scroll_offset = state.scroll_y;
+    // move(또는 move_with·activate)가 있어야 본문이 Tab 자리가 되고 ↑↓·←→가 산다.
+    table.rows.move = [](const std::u8string& key) { return luil::make_app_action(file_cursor_intent { key }); };
+    table.rows.scroll = [](const float delta) { return luil::make_app_action(file_scroll_intent { delta }); };
+    // 칸 글은 tree를 짓는 동안 불린다. 앱 상태는 값으로 담는다 (게시된 tree는 여러 thread가 읽는다).
+    table.cell_text = [files = state.files](const luil::virtual_list_item&, const std::size_t index, const luil::table_column& column) -> std::u8string {
+        if (index >= files.size())
+            return {};
+        return column.key == u8"size" ? files[index].size : files[index].name;
+    };
+    table.scroll_x = state.scroll_x;
+    table.scroll_horizontal = [](const float delta) { return luil::make_app_action(file_scroll_x_intent { delta }); };
+    auto element { std::make_unique<luil::table_element>(std::move(table)) };
+    // 머리글·본문·두 막대가 이 이름을 물려받는다.
+    element->set_access_name(u8"파일");
+    return element;
+}
+
+// logic thread의 handle 갈래다. 다듬기의 아래쪽(0)만 여기서 하고 위쪽 끝은 arrange가 다듬는다.
+bool handle(files_state& state, const luil::app_message& message)
+{
+    if (const auto* const cursor { message.get<file_cursor_intent>() }; cursor != nullptr)
+    {
+        state.cursor = cursor->key;
+        return true;
+    }
+    if (const auto* const scroll { message.get<file_scroll_intent>() }; scroll != nullptr)
+    {
+        state.scroll_y = std::max(0.0f, state.scroll_y + scroll->delta);
+        return true;
+    }
+    if (const auto* const scroll { message.get<file_scroll_x_intent>() }; scroll != nullptr)
+    {
+        state.scroll_x = std::max(0.0f, state.scroll_x + scroll->delta);
+        return true;
+    }
+    return false;
+}
+</script></div>
+<script type="text/plain" id="pre-minimal" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/table_element.h"
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><strong>Tab 자리.</strong> 본문은 <code>rows.move</code>·<code>rows.move_with</code>·<code>rows.activate</code> 중 하나가 있어야 Tab 자리다. 이 예는 <code>rows.move</code>를 준다. 그래서 ↑↓가 <code class="free">file_cursor_intent</code>를 낸다.</li>
+            <li><strong>칸 글.</strong> <code>cell_text</code>가 칸마다 글을 답한다. 둘째 인자는 모델 색인이다. <code>cell_text</code>가 없으면 첫 열에만 행의 <code>label</code>이 보이고 나머지 열은 빈다.</li>
+            <li><strong>가로.</strong> <code>scroll_horizontal</code>이 있으면 가로 휠·←→·가로 막대가 <code class="free">file_scroll_x_intent</code>를 낸다. 없으면 가로로 흐르지 않고 넘친 열은 잘린다.</li>
+            <li><strong>이름.</strong> 표에 단 <code>set_access_name</code>을 머리글·본문·두 막대가 물려받는다. 이름이 없으면 막대가 빈 이름으로 읽힌다.</li>
+          </ul>
+          <p>결과는 머리글 28 논리 픽셀(<code>table_header_height</code>) 아래에 24 논리 픽셀 행이 선 표다. 열 폭 합 310이 창보다 넓으면 표 아래에 가로 막대가 선다.</p>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">빠뜨리면 키보드가 통째로 사라진다</span>본문에 <code>move</code>·<code>move_with</code>·<code>activate</code>가 모두 없으면 표는 Tab 자리가 아니다. 머리글을 눌러도 초점이 서지 않고, ←→ 가로 스크롤·F2·Space 체크·셀 탐색이 모두 닿지 않는다 — 표의 키 처리기는 초점의 조상에서만 불린다. 휠과 포인터는 된다. 오류는 나지 않는다.</div></div>
+      </section>
+
+      <section class="sec" id="build-workbench">
+        <header class="sec-head">
+          <h2>만들기: 실제 앱의 표 한 벌</h2>
+          <p class="lede">데모 작업대의 "변경 파일" 표다. 정렬·폭·순서·고정·체크·여러 행 선택을 모두 단다. 앱 상태부터 본다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.h:391-402" data-path="examples/demo/workbench_page.h" data-start="391"><script type="text/plain">
+        // 변경 표의 앱 상태다.
+        std::vector<change> changes_ {};
+        // 체크·스테이지·버리기·열 폭의 실행 취소 기록이다. 상태는 handle에서만 바뀌고 기록은 그 메시지만 쥔다.
+        luil::undo_stack history_ {};
+        std::vector<luil::table_column> columns_ {};
+        std::u8string sort_column_ { u8"path" };
+        luil::sort_direction sort_direction_ { luil::sort_direction::ascending };
+        luil::item_selection selection_ {};
+        float changes_scroll_ { 0.0f };
+        float changes_scroll_x_ { 0.0f };
+        // 경로 열을 가로 스크롤에서 고정하는가. 보기 상태라 실행 취소 기록에 들지 않는다.
+        bool freeze_path_ { false };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1206-1268" data-path="examples/demo/workbench_page.cpp" data-start="1206"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> workbench_page::make_changes_table()
+    {
+        luil::table_config table {};
+        table.owner = u8"workbench-changes";
+        table.columns = columns_;
+        for (luil::table_column& column : table.columns)
+            column.sort = column.key == sort_column_ ? sort_direction_ : luil::sort_direction::none;
+
+        luil::virtual_list_config& rows { table.rows };
+        rows.items = change_items();
+        rows.row_height = 24.0f;
+        rows.multiple_selection = true;
+        rows.selection = selection_.keys;
+        rows.cursor = selection_.cursor;
+        rows.scroll_offset = changes_scroll_;
+        rows.scroll = [](const float delta) { return luil::make_app_action(workbench_change_scroll_intent { delta }); };
+        rows.pick = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(workbench_change_pick_intent { key, context }); };
+        rows.move_with = [](const std::u8string& key, const luil::virtual_list_move_context& context) { return luil::make_app_action(workbench_change_move_intent { key, context }); };
+        rows.toggle_at_cursor = [](const std::u8string& key) { return luil::make_app_action(workbench_change_toggle_intent { key }); };
+        rows.select_all = []() { return luil::make_app_action(workbench_change_select_all_intent {}); };
+        rows.double_click = [](const std::u8string& key) { return luil::make_app_action(workbench_change_check_intent { key }); };
+        rows.context_menu = [](const std::u8string& key, const luil::ui_action_context& context) { return luil::make_app_action(workbench_menu_intent { key, context.x, context.y }); };
+
+        // 칸 글은 행 키로 변경을 찾아 낸다. 표가 짓는 동안만 불리고 모델을 바꾸지 않는다.
+        const std::vector<change> changes { changes_ };
+        table.cell_text = [changes](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column) -> std::u8string {
+            const auto found { std::find_if(changes.begin(), changes.end(), [&row](const change& item) { return item.path == row.key; }) };
+            if (found == changes.end())
+                return {};
+            if (column.key == u8"status")
+                return found->status;
+            if (column.key == u8"size")
+                return size_text(found->size);
+            if (column.key == u8"folder")
+                return found->path.substr(0, found->path.rfind(u8'/') == std::u8string::npos ? 0u : found->path.rfind(u8'/'));
+            return found->path;
+        };
+        table.check_column = u8"path";
+        table.check_state_of = [changes](const luil::virtual_list_item& row, std::size_t) {
+            const auto found { std::find_if(changes.begin(), changes.end(), [&row](const change& item) { return item.path == row.key; }) };
+            return found != changes.end() && found->staged ? luil::check_state::checked : luil::check_state::unchecked;
+        };
+        table.toggle_check = [](const std::u8string& key) { return luil::make_app_action(workbench_change_check_intent { key }); };
+        table.scroll_x = changes_scroll_x_;
+        table.frozen_columns = freeze_path_ ? 1u : 0u;
+        table.scroll_horizontal = [](const float delta) { return luil::make_app_action(workbench_change_scroll_x_intent { delta }); };
+        table.scroll_horizontal_to = [](const float offset) { return luil::make_app_action(workbench_change_scroll_x_to_intent { offset }); };
+        // 머리글 칸 끌기가 끌기 자동 스크롤을 부른다. 경로 열을 고정하면 왼쪽 띠가 고정 경계에 선다.
+        table.reorder_column = [](const std::u8string& moved, const std::u8string& target) { return luil::make_app_action(workbench_reorder_column_intent { moved, target }); };
+        table.sort_request = [](const std::u8string& column) { return luil::make_app_action(workbench_sort_intent { column }); };
+        table.resize_column = [](const std::u8string& column, const float delta) { return luil::make_app_action(workbench_resize_intent { column, delta }); };
+        table.resize_column_end = [](const std::u8string& column) { return luil::make_app_action(workbench_resize_end_intent { column }); };
+
+        luil::panel_config panel {};
+        panel.corner_radius = 6.0f;
+        panel.border = [](const luil::ui_color_palette& palette) { return palette.control_border; };
+        auto card { std::make_unique<luil::panel_element>(workbench_id(u8"changes-panel"), std::move(panel)) };
+        auto named_table { std::make_unique<luil::table_element>(std::move(table)) };
+        // 머리글과 가로 막대가 표의 이름을 물려받는다. 이름이 없으면 막대가 빈 글로 읽힌다.
+        named_table->set_access_name(u8"변경 파일");
+        card->set_content(std::move(named_table));
+        return card;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1208-1212" data-title="열과 정렬 표시">열은 앱이 든 <code>columns_</code>의 사본이다. 정렬 화살표는 frame마다 앱이 칠한다 — 정렬 열이면 지금 방향, 아니면 <code>sort_direction::none</code>.</li>
+            <li data-lines="1214-1227" data-title="본문은 가상 목록">여러 선택·커서·세로 스크롤·수식 키 누름·키 걸음·Ctrl+Space·Ctrl+A·두 번 누름·행 우클릭이 모두 <code>virtual_list_config</code>의 칸이다. 계산은 <code>selection_model.h</code>가 한다 (<a class="xref" href="lists.html#build-select">목록: 선택</a>).</li>
+            <li data-lines="1229-1242" data-title="칸 글">변경 목록을 <strong>값으로</strong> 담아 행 키로 찾는다. 이 함수가 돌아간 뒤 셸이 배치할 때 불리므로 참조로 잡으면 안 된다.</li>
+            <li data-lines="1243-1248" data-title="체크 열">경로 열 앞에 체크박스가 선다. 상태는 앱이 답하고, 누르면 <code>toggle_check(행 키)</code>가 온다. 다음 상태도 앱이 정한다.</li>
+            <li data-lines="1249-1252" data-title="가로와 고정">가로 위치와 고정 열 수도 앱 상태다. 변화량(<code>scroll_horizontal</code>)과 보조 기술의 절대 자리(<code>scroll_horizontal_to</code>)를 따로 준다.</li>
+            <li data-lines="1253-1257" data-title="머리글 메시지">끌어 순서 바꾸기, 누름 정렬, 경계 끌기와 끝. 표는 이 넷을 메시지로만 알린다.</li>
+            <li data-lines="1259-1267" data-title="이름">표를 판에 담고 이름을 단다. 머리글과 두 막대가 표의 이름을 물려받는다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>메시지 형식은 <code>examples/demo/workbench_page.h</code>의 79–145행에 있다. 아래 조각들이 이 표의 <code>handle</code> 갈래를 하나씩 본다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-sort">
+        <header class="sec-head">
+          <h2>만들기: 정렬</h2>
+          <p class="lede">머리글을 누르면 <code>sort_request(열 키)</code>가 온다. 정렬 열과 방향, 행의 순서는 앱이 정한다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:665-677" data-path="examples/demo/workbench_page.cpp" data-start="665"><script type="text/plain">
+        if (const auto* const sort { message.get<workbench_sort_intent>() }; sort != nullptr)
+        {
+            const std::vector<luil::virtual_list_item> previous { change_items() };
+            if (sort->column == sort_column_)
+                sort_direction_ = sort_direction_ == luil::sort_direction::ascending ? luil::sort_direction::descending : luil::sort_direction::ascending;
+            else
+            {
+                sort_column_ = sort->column;
+                sort_direction_ = luil::sort_direction::ascending;
+            }
+            reconcile(previous);
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>같은 열을 다시 누르면 방향을 뒤집고, 다른 열이면 오름차순으로 시작한다. 이 규칙도 앱의 것이다. 보기 순서는 원본을 두고 <code>sort_filter</code>로 만든다. 같은 값끼리는 원본 순서다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:467-487" data-path="examples/demo/workbench_page.cpp" data-start="467"><script type="text/plain">
+    std::vector<luil::virtual_list_item> workbench_page::change_items() const
+    {
+        // 원본은 그대로 두고 보기의 순서만 정렬한다. 같은 값끼리는 원본 순서다.
+        const bool descending { sort_direction_ == luil::sort_direction::descending };
+        const std::u8string column { sort_column_ };
+        const auto less = [column, descending](const change& left, const change& right) {
+            const change& first { descending ? right : left };
+            const change& second { descending ? left : right };
+            if (column == u8"size")
+                return first.size < second.size;
+            if (column == u8"status")
+                return first.status < second.status;
+            return first.path < second.path;
+        };
+        const luil::view_order order { luil::sort_filter(changes_, less) };
+        std::vector<luil::virtual_list_item> items {};
+        items.reserve(order.source_index.size());
+        for (const std::size_t index : order.source_index)
+            items.push_back({ changes_[index].path, changes_[index].path });
+        return items;
+    }
+</script></div>
+        <div class="prose">
+          <p>정렬하면 행 순서가 바뀐다. 작업대는 바꾸기 전의 보기를 <code class="free">previous</code>로 잡아 두었다가 <code>selection_reconcile</code>로 선택을 새 보기에 맞춘다 (<code class="free">reconcile</code>, 494–497행).</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="src/ui/table_element.cpp:536-543" data-path="src/ui/table_element.cpp" data-start="536"><script type="text/plain">
+                if (const auto& menu { config.column_menu }; menu != nullptr)
+                    set_action(ui_trigger::right_click,
+                        [key = column.key, menu](const ui_action_context& context) -> std::vector<input_action> { return { menu(key, context) }; });
+                if (column.sortable == false || config.sort_request == nullptr)
+                    return;
+                set_cursor(ui_cursor::hand);
+                set_action(ui_trigger::left_click,
+                    [key = column.key, sort_request = config.sort_request](const ui_action_context&) -> std::vector<input_action> { return { sort_request(key) }; });
+</script></div>
+        <div class="prose">
+          <p>머리글 칸의 액션이다. 정렬 요청은 <code>sortable</code>이 참이고 <code>sort_request</code>가 있는 열에만 달린다. 정렬할 수 없는 열의 머리글은 누를 것이 없다 — 손 모양 커서도 hover 채움도 없다. 우클릭 메뉴와 끌어 순서 바꾸기는 <code>sortable</code>과 무관하게 산다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-resize">
+        <header class="sec-head">
+          <h2>만들기: 열 폭 끌기</h2>
+          <p class="lede">경계 손잡이를 끄는 동안 <code>resize_column(열 키, 변화량)</code>이 이어서 오고, 놓으면 <code>resize_column_end(열 키)</code>가 한 번 온다. 폭을 바꾸는 것은 앱이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:678-706" data-path="examples/demo/workbench_page.cpp" data-start="678"><script type="text/plain">
+        if (const auto* const resize { message.get<workbench_resize_intent>() }; resize != nullptr)
+        {
+            for (luil::table_column& column : columns_)
+            {
+                if (column.key != resize->column)
+                    continue;
+                const float width { column.width };
+                const float next { width + luil::table_resize_delta(column, resize->delta) };
+                // 같은 열을 이어서 조절하면 한 걸음이다. 한 번의 끌기가 끝나면 `workbench_resize_end_intent`가 끊는다.
+                if (next != width)
+                {
+                    luil::undo_step step {
+                        .label = u8"열 폭 조절",
+                        .undo = luil::app_message { workbench_set_width_intent { column.key, width } },
+                        .redo = luil::app_message { workbench_set_width_intent { column.key, next } },
+                        .merge_key = u8"resize:" + column.key,
+                        .weight = 2u * (sizeof(workbench_set_width_intent) + column.key.size()),
+                    };
+                    commit_step(std::move(step));
+                }
+                break;
+            }
+            return true;
+        }
+        if (message.get<workbench_resize_end_intent>() != nullptr)
+        {
+            history_.break_merge();
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>변화량은 논리 픽셀이고, 최소 폭 아래로 가는 몫은 이미 잘려 온다. 그런데 그 다듬기는 <strong>마지막으로 게시된 폭</strong>을 기준으로 한다 — 끄는 동안 tree는 옛 폭을 들고 있다. 그래서 앱이 자기 지금 폭으로 <code>table_resize_delta</code>를 한 번 더 부른다 (685행).</li>
+            <li>한 번의 끌기를 실행 취소 한 걸음으로 합친다. 걸음마다 같은 <code>merge_key</code>를 주고, <code>resize_column_end</code>에서 <code>break_merge()</code>로 끊는다 (<a class="xref" href="undo.html">실행 취소</a>).</li>
+            <li>걸음이 재생하는 메시지는 절대 폭이다. 몇 번을 받아도 결과가 같다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:849-855" data-path="examples/demo/workbench_page.cpp" data-start="849"><script type="text/plain">
+        if (const auto* const width { message.get<workbench_set_width_intent>() }; width != nullptr)
+        {
+            for (luil::table_column& column : columns_)
+                if (column.key == width->column)
+                    column.width = width->width;
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="src/ui/table_element.cpp:450-459" data-path="src/ui/table_element.cpp" data-start="450"><script type="text/plain">
+                target.on_move = [this, column, resize](const ui_action_context& previous, const ui_action_context& current) -> std::vector<input_action> {
+                    float delta { table_resize_delta(column, (current.x - previous.x) / scale_) };
+                    if (frozen_table_ != nullptr && frozen_table_->frozen_columns() > 0u)
+                        delta = std::min(delta, std::max(0.0f, frozen_table_->viewport_width() - table_key_scroll_step - frozen_table_->frozen_width()));
+                    if (delta == 0.0f)
+                        return {};
+                    return { resize(column.key, delta) };
+                };
+                if (finish != nullptr)
+                    target.on_release = [key = column.key, finish](const ui_action_context&, drag_velocity) -> std::vector<input_action> { return { finish(key) }; };
+</script></div>
+        <div class="prose">
+          <p>손잡이 쪽 계산이다. 포인터 이동을 배율로 나눠 논리 픽셀로 바꾸고 <code>table_resize_delta</code>로 줄이는 몫을 막는다. 고정 열이 서 있으면 넓히는 몫이 <code>가로 창 − 48 − 고정 폭</code>에서 멈춘다 — 흐르는 창이 한 걸음보다 좁아지지 않게 한다. 한도에서 멈춰도 놓으면 <code>resize_column_end</code>는 한 번 온다.</p>
+          <p><code>resizable = false</code>인 열이나 <code>resize_column</code>이 없는 표에는 손잡이가 없다. 손잡이는 경계에 걸친 8 논리 픽셀(<code>table_grip_width</code>)이고 Tab 자리가 아니다. 눌러도 초점은 본문으로 간다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-align">
+        <header class="sec-head">
+          <h2>만들기: 칸 맞춤과 말줄임</h2>
+          <p class="lede">숫자·날짜 열은 끝에 붙이고(<code>column_align::end</code>), 경로는 가운데를 줄인다(<code>text_elide::middle</code>).</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:273-280" data-path="examples/demo/workbench_page.cpp" data-start="273"><script type="text/plain">
+        // 경로 열은 가운데를 줄인다. 좁혀도 폴더의 시작과 파일 이름이 함께 남는다.
+        // 폴더 열은 가로로 흘릴 거리를 만든다. 경로 열을 고정하면 이 열이 경로 열 밑으로 지나가지 않고 옆으로 흐른다.
+        columns_ = {
+            { .key = u8"path", .header = u8"경로", .width = 340.0f, .min_width = 120.0f, .elide = luil::text_elide::middle },
+            { .key = u8"status", .header = u8"상태", .width = 90.0f },
+            { .key = u8"size", .header = u8"크기", .width = 100.0f, .align = luil::column_align::end },
+            { .key = u8"folder", .header = u8"폴더", .width = 300.0f, .min_width = 80.0f, .elide = luil::text_elide::middle, .sortable = false },
+        };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/table_element.cpp:102-132" data-path="src/ui/table_element.cpp" data-start="102"><script type="text/plain">
+        // 칸 글 한 줄을 그린다. 끝 정렬은 글이 들어갈 때만 오른쪽에 붙고, 넘치면 시작에서 잘라 그린다 —
+        // 넘친 숫자를 오른쪽에 붙이면 앞자리가 잘려 다른 숫자로 읽힌다.
+        //  - 가운데 말줄임은 label과 같은 도우미(`elide_text_middle`)로 줄인 뒤 그린다. 줄인 글은 언제나 들어가므로
+        //    끝 정렬이면 오른쪽에 붙는다.
+        //  - 뒤 말줄임은 지금까지의 `draw_text_within` 길 그대로다. 글리프 자리와 raster가 바뀌지 않는다.
+        void draw_cell_text(SkCanvas& canvas, const std::u8string_view text, const rect_f& cell, const column_align align, const text_elide elide, const float scale,
+            const SkFont& font, const SkPaint& paint)
+        {
+            if (text.empty())
+                return;
+            const float padding { table_cell_padding * scale };
+            const float available { cell.width - padding * 2.0f };
+            if (available <= 0.0f)
+                return;
+            const float baseline { cell.y + centered_text_baseline(font, cell.height) };
+            if (elide == text_elide::middle || elide == text_elide::start)
+            {
+                const std::u8string drawn { elide == text_elide::middle ? elide_text_middle(text, available, font) : elide_text_start(text, available, font) };
+                if (drawn.empty())
+                    return;
+                const float width { measure_text(drawn, font) };
+                const float left { align == column_align::end ? cell.x + cell.width - padding - width : cell.x + padding };
+                draw_text(canvas, drawn, left, baseline, font, paint);
+                return;
+            }
+            float left { cell.x + padding };
+            if (align == column_align::end)
+                if (const float width { measure_text(text, font) }; width <= available)
+                    left = cell.x + cell.width - padding - width;
+            static_cast<void>(draw_text_within(canvas, text, left, baseline, available, font, paint));
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="102-106" data-title="규칙">끝 맞춤은 글이 들어갈 때만 오른쪽에 붙는다. 넘치면 시작에서 잘라 그린다 — 넘친 숫자를 오른쪽에 붙이면 앞자리가 잘려 다른 숫자로 읽힌다.</li>
+            <li data-lines="112-116" data-title="여백">칸 양쪽에 <code>table_cell_padding</code>(8 논리 픽셀)을 비운다. 남는 폭이 없으면 그리지 않는다.</li>
+            <li data-lines="117-126" data-title="가운데·앞 줄임">줄인 글은 언제나 들어가므로 끝 맞춤이면 오른쪽에 붙는다. <code>text_elide::start</code>도 이 길을 탄다 — 앞을 줄여 끝(파일 이름)을 남긴다.</li>
+            <li data-lines="127-131" data-title="뒤 줄임">기본값 <code>text_elide::end</code>는 뒤를 잘라 그린다. 끝 맞춤은 글 폭이 들어갈 때만 오른쪽에 붙는다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><code>elide</code>는 표가 그리는 글(<code>cell_text</code>)에만 쓰인다. 머리글은 이 값과 무관하게 뒤 줄임이고, 앱이 지은 칸(<code>build_cell</code>)은 그 칸이 정한다.</li>
+            <li><code>align</code>은 머리글 글에도 쓰인다. 숫자 열의 머리글도 오른쪽에 붙는다.</li>
+            <li>헤더 주석과 설계 문서는 <code>end</code>·<code>middle</code>만 말하지만, 그리기는 <code>text_elide::start</code>도 처리한다 (위 117–119행).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-hscroll">
+        <header class="sec-head">
+          <h2>만들기: 가로 스크롤</h2>
+          <p class="lede">가로 위치 <code>scroll_x</code>는 앱 상태다. 머리글과 본문이 이 값 하나로 함께 흐른다. 표는 배치마다 범위 안으로 다듬어 그린다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:712-721" data-path="examples/demo/workbench_page.cpp" data-start="712"><script type="text/plain">
+        if (const auto* const scroll { message.get<workbench_change_scroll_x_intent>() }; scroll != nullptr)
+        {
+            changes_scroll_x_ = std::max(0.0f, changes_scroll_x_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll { message.get<workbench_change_scroll_x_to_intent>() }; scroll != nullptr)
+        {
+            changes_scroll_x_ = std::max(0.0f, scroll->offset);
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p><code>scroll_horizontal(변화량)</code> 하나로 가로 휠, ←→, 가로 막대의 끌기·트랙 누름·키, 터치 가로 쓸기, 끌기 중 가장자리 자동 스크롤, 칸 안 컨트롤로 간 초점 들이기가 모두 온다. 양수면 오른쪽 내용이 보인다. 절대 자리 <code>scroll_horizontal_to(offset)</code>는 가로 막대에 보조 기술이 값을 정할 때(UIA <code>SetValue</code>)만 온다. 없으면 막대 값이 읽기 전용이다.</p>
+        </div>
+        <h3>배치 한 번에 정해지는 것</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/table_element.cpp:1014-1073" data-path="src/ui/table_element.cpp" data-start="1014"><script type="text/plain">
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        const float header_height { std::min(table_header_height * scale, context.slot.height) };
+        const float rows_height { context.slot.height - header_height };
+
+        // 두 막대가 서로의 자리를 줄인다. 세로 막대가 서면 가로 창이 좁아져 열이 넘치고, 가로 막대가 서면 본문 창이
+        // 낮아져 행이 넘친다. 그래서 본문을 배치하기 **전에** 둘을 함께 정한다 — 본문은 높이가 있는 첫 배치에서
+        // 행을 지으므로(`virtual_list_element::arrange`) 한 번 배치해 보고 다시 배치할 수 없다.
+        //  - 세로의 판정은 본문 영역이 막대를 세우는 식(`scroll_area_element::bar_takes_space`)과 같다. 어긋나면 구석이
+        //    비었는데 세로 막대가 없거나, 세로 막대 밑으로 가로 막대가 지난다.
+        //  - 막대가 서면 상대의 자리는 줄기만 하므로 넘치던 쪽이 다시 들어가는 일은 없다. 두 번이면 정해진다.
+        const float vertical_width { std::min(scroll_area_bar_width * scale, context.slot.width) };
+        const float horizontal_full { std::min(scroll_area_bar_width * scale, rows_height) };
+        const auto vertical_over = [this, scale](const float height) {
+            return vertical_bar_ == scrollbar_visibility::always || (vertical_bar_ == scrollbar_visibility::automatic && body_->content_height() > height / scale);
+        };
+        const auto horizontal_over = [this, scale](const float width) {
+            return horizontal_bar_ != nullptr && (config_.horizontal_bar == scrollbar_visibility::always || content_width_ > width / scale);
+        };
+        bool vertical { vertical_over(rows_height) };
+        const bool horizontal { horizontal_over(context.slot.width - (vertical ? vertical_width : 0.0f)) };
+        if (horizontal && vertical == false)
+            vertical = vertical_over(rows_height - horizontal_full);
+        const float horizontal_height { horizontal ? horizontal_full : 0.0f };
+        // 가로 창은 본문이 실제로 글을 보이는 폭이다. 세로 막대 밑으로 들어간 열은 보이지 않으므로 창이 아니다.
+        const float view_width { context.slot.width - (vertical ? vertical_width : 0.0f) };
+        viewport_width_ = view_width / scale;
+        scroll_x_ = table_clamp_scroll(config_.scroll_x, content_width_, viewport_width_);
+        scale_ = scale;
+
+        // 고정 열은 흐르는 창이 한 걸음(48) 이상 남을 때만 선다. 거짓이면 그 배치에서 모든 열이 흐른다 (결정 4).
+        //  - 판정은 창 폭만 본다. 가로 막대는 열 폭의 합으로 정해지므로 고정과 맞물려 돌지 않는다.
+        //  - 스크롤 값(`config_.scroll_x`)은 앱 상태 그대로다. 창이 넓어지면 고정이 돌아온다.
+        frozen_columns_ = 0u;
+        frozen_width_ = 0.0f;
+        const float frozen_width { table_frozen_width(config_.columns, configured_frozen_) };
+        if (configured_frozen_ > 0u && table_frozen_fits(frozen_width, viewport_width_))
+        {
+            frozen_columns_ = configured_frozen_;
+            frozen_width_ = frozen_width;
+        }
+
+        // 가로 휠의 임자다. 세로 휠은 안쪽 본문이 가지고, 가로 휠은 축이 다른 본문을 지나 여기로 온다
+        // (`route_wheel`의 이벤트 짝).
+        if (config_.scroll_horizontal != nullptr)
+        {
+            scroll_source source {};
+            source.axis = scroll_axis::horizontal;
+            source.scale = scale;
+            source.at_start = scroll_x_ <= 0.0f;
+            source.at_end = scroll_x_ >= std::max(0.0f, content_width_ - viewport_width_);
+            // 끌기 자동 스크롤의 왼쪽 띠가 고정 경계에 선다. 고정이 서지 않은 배치에서는 0이다.
+            source.leading_inset = frozen_width_;
+            // 오른쪽 띠는 세로 막대 앞, 열이 실제로 보이는 끝에 선다. 막대 폭은 물리 픽셀이라 논리로 옮겨 싣는다.
+            source.trailing_inset = vertical ? vertical_width / scale : 0.0f;
+            source.scroll = [scroll = config_.scroll_horizontal, current = scroll_x_, content = content_width_, viewport = viewport_width_](const float delta) {
+                // 범위 밖으로 가는 몫은 잘라 낸다. 앱이 다듬지 않아도 머리글과 본문이 빈 자리로 흐르지 않는다.
+                return scroll(table_clamp_scroll(current + delta, content, viewport) - current);
+            };
+            set_scroll_source(std::move(source));
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1014-1016" data-title="머리글 높이">머리글은 28 × 배율이고 slot보다 높지 않다. 나머지가 본문과 가로 막대의 높이다.</li>
+            <li data-lines="1018-1036" data-title="두 막대를 함께">세로 막대가 서면 가로 창이 좁아지고, 가로 막대가 서면 본문 창이 낮아진다. 본문은 높이가 있는 첫 배치에서 행을 지으므로 본문을 배치하기 <strong>전에</strong> 둘을 함께 정한다. 두 번이면 정해진다.</li>
+            <li data-lines="1037-1041" data-title="가로 창과 다듬기">가로 창 = 표 폭 − (세로 막대가 서면 16 논리 픽셀). <code>scroll_x</code>를 <code>[0, 열 폭 합 − 가로 창]</code>으로 다듬는다. 앱 값은 그대로다.</li>
+            <li data-lines="1043-1053" data-title="고정 열">고정 열은 흐르는 창이 48 논리 픽셀 이상 남을 때만 선다. 아니면 그 배치에서 모든 열이 흐른다.</li>
+            <li data-lines="1055-1073" data-title="가로 휠의 임자">가로 축의 <code>scroll_source</code>를 세운다. 변화량은 범위 안으로 깎아 낸다. 끌기 자동 스크롤의 왼쪽 띠는 고정 경계에, 오른쪽 띠는 세로 막대 앞에 선다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><strong>가로 막대</strong>는 <code>horizontal_bar</code>가 <code>automatic</code>(기본)이면 열 폭 합이 가로 창보다 넓을 때만 선다. <code>always</code>는 늘, <code>never</code>는 막대를 짓지 않는다 — 휠과 ←→는 그대로 흐른다. 막대가 서면 그 높이만큼 본문이 줄어 마지막 행이 막대 밑에 숨지 않는다. 세로 막대가 서 있으면 그 폭만큼 짧게 서서 구석을 비운다.</li>
+            <li><strong>←→</strong>는 셀 탐색이 꺼져 있으면 ±48 논리 픽셀(<code>table_key_scroll_step</code>)을 <strong>범위 안으로 깎은</strong> 변화량을 낸다. 끝 근처에서는 48보다 작다. 이미 끝이면 메시지 없이 키만 삼킨다 — 끝에서 →를 누를 때마다 앱 단축키가 터지지 않게 한다.</li>
+            <li><strong>가로 휠</strong>도 깎은 변화량을 낸다. 다만 끝에서는 0짜리 <code>scroll_horizontal(0)</code>이 간다.</li>
+            <li><strong>가로 막대의 끌기·트랙 누름은 깎지 않는다.</strong> 막대는 범위를 보지 않는 변화량을 낸다. 앱이 0 아래만 다듬으면 끝 너머로 값이 쌓여, 되돌아오는 휠이 한동안 아무 일도 하지 않는 것처럼 보인다.</li>
+          </ul>
+        </div>
+        <h3>다듬은 값을 앱 상태로 되돌리기</h3>
+<div class="code" data-lang="cpp" data-label="배치 뒤 scroll_x() 되돌리기 (직접 작성)" data-compile="pre-clamp-back"><script type="text/plain">
+struct grid_state
+{
+    float scroll_x { 0.0f };
+};
+
+// make_frame 안에서 표를 배치한 뒤, 표가 다듬은 가로 스크롤을 앱 상태에 되돌린다.
+//  - 막대 끌기·누름은 범위를 보지 않는 변화량을 낸다. 끝을 지나 쌓인 값을 그대로 두면 되돌아오는 휠이
+//    한동안 "아무 일 없음"으로 보인다. arrange가 다듬은 값(scroll_x())을 되돌리면 그 몫이 사라진다.
+[[nodiscard]] luil::ui_tree arrange_grid(grid_state& state, luil::table_config table, const luil::rect_f& slot, const float scale)
+{
+    table.scroll_x = state.scroll_x;
+    auto owned { std::make_unique<luil::table_element>(std::move(table)) };
+    const luil::table_element* const placed { owned.get() };
+    luil::ui_tree tree { luil::make_arranged_tree(std::move(owned), slot, scale) };
+    state.scroll_x = placed->scroll_x();
+    return tree;
+}
+</script></div>
+<script type="text/plain" id="pre-clamp-back" data-prelude>
+#include "luil/ui/table_element.h"
+#include "luil/ui/ui_tree.h"
+#include <memory>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p><code>scroll_x()</code>는 <code>arrange</code>가 다듬은 값이다. 앱이 <code>make_frame</code> 안에서 표를 배치한 뒤 이 값을 상태에 쓰면 끝 너머로 쌓인 몫이 사라진다. 작업대는 이렇게 하지 않고 0 아래만 다듬는다. 같은 생각을 세로 영역에 쓴 데모는 짓기 전에 <code>clamp_scroll</code>로 상태를 되돌린다 (<a class="xref" href="scrolling.html">스크롤과 확대</a>).</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-reorder">
+        <header class="sec-head">
+          <h2>만들기: 머리글을 끌어 열 순서 바꾸기</h2>
+          <p class="lede">머리글 칸을 끌어 다른 머리글 칸에 놓으면 <code>reorder_column(옮긴 열, 대상 열)</code>이 온다. 열 목록을 바꾸는 것은 앱이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:812-825" data-path="examples/demo/workbench_page.cpp" data-start="812"><script type="text/plain">
+        // 고정 구역을 넘는 놓기는 표가 받지 않으므로 경로 열은 고정된 동안 맨 앞에 남는다.
+        if (const auto* const reorder { message.get<workbench_reorder_column_intent>() }; reorder != nullptr)
+        {
+            const auto key_is = [](const std::u8string& key) {
+                return [key](const luil::table_column& column) { return column.key == key; };
+            };
+            const auto moved { std::find_if(columns_.begin(), columns_.end(), key_is(reorder->moved)) };
+            if (reorder->moved == reorder->target || moved == columns_.end())
+                return true;
+            const luil::table_column value { *moved };
+            columns_.erase(moved);
+            columns_.insert(std::find_if(columns_.begin(), columns_.end(), key_is(reorder->target)), value);
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>작업대는 옮긴 열을 빼고 대상 열 <strong>앞에</strong> 끼운다. 앞뒤 어디에 둘지는 앱의 규칙이다.</li>
+            <li>같은 표의 머리글 칸만 받고, 자기 자리에는 놓을 수 없다. 끌기는 누른 채 시작 거리(<code>drag_start_distance</code>, 기본 6 논리 픽셀)를 넘겨야 서므로 정렬 누름과 함께 산다.</li>
+            <li>고정 열이 있으면 같은 구역(고정끼리, 흐르는 것끼리) 안의 놓기만 받는다. 그래서 고정된 경로 열은 맨 앞에 남는다.</li>
+            <li>머리글 칸을 끌어 창 가장자리에 대면 끌기 자동 스크롤이 <code>scroll_horizontal</code>을 낸다. 왼쪽 띠는 고정 경계에 선다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-frozen">
+        <header class="sec-head">
+          <h2>만들기: 앞 열 고정</h2>
+          <p class="lede"><code>frozen_columns = N</code>이면 앞 N열이 가로로 흘러도 제자리에 선다. 흐르는 열은 고정 경계 밑으로 지나가지 않고 옆으로 흐른다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1122-1131" data-path="examples/demo/workbench_page.cpp" data-start="1122"><script type="text/plain">
+        // 경로 열 고정이다. 눌러도 실행 취소 걸음은 쌓이지 않는다 (보기 상태). 서 있는지는 창이 넓어야 하므로 UIA로 되읽는다.
+        luil::check_config freeze_config {};
+        freeze_config.owner = u8"workbench-freeze";
+        freeze_config.style = luil::check_style::toggle_switch;
+        freeze_config.label = u8"경로 열 고정";
+        freeze_config.checked = freeze_path_;
+        freeze_config.toggle = luil::make_message_action(workbench_freeze_intent {});
+        freeze_config.tooltip = u8"가로로 흘려도 경로 열을 제자리에 둔다";
+        row->add_fit(std::make_unique<luil::check_element>(std::move(freeze_config)));
+        row->add_fit(std::make_unique<luil::label_element>(workbench_id(u8"workbench-freeze-state"), luil::label_config { .text = freeze_text(), .color = luil::label_color_role::dim }));
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:807-811" data-path="examples/demo/workbench_page.cpp" data-start="807"><script type="text/plain">
+        if (message.get<workbench_freeze_intent>() != nullptr)
+        {
+            freeze_path_ = !freeze_path_;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>작업대는 스위치 하나로 경로 열(첫 열)을 고정한다 — 표에는 <code>table.frozen_columns = freeze_path_ ? 1u : 0u;</code>로 싣는다 (1250행). 보기 상태라 실행 취소 걸음을 쌓지 않는다.</p>
+          <ul>
+            <li><strong>창이 좁으면 풀린다.</strong> 고정 폭을 뺀 흐르는 창이 48 논리 픽셀보다 좁아지는 배치에서는 모든 열이 흐른다. 앱의 <code>frozen_columns</code>와 <code>scroll_x</code>는 그대로이고, 창이 넓어지면 고정이 돌아온다. 이번 배치에서 섰는지는 <code>arrange</code> 뒤의 <code>frozen_columns()</code>가 말한다 — 앱 상태로는 알 수 없다.</li>
+            <li><strong>열 수보다 크면</strong> 열 수로 본다.</li>
+            <li><strong>앞 열을 숨기거나 옮기면</strong> 앱이 <code>frozen_columns</code>를 함께 맞춘다. 안 맞추면 옆의 흐르던 열이 말없이 고정된다. 표는 끌어서 고정 집합을 바꾸지 않는다.</li>
+            <li><strong>고정 열의 폭을 넓히기</strong>는 흐르는 창이 48을 남기는 데서 멈춘다 (<a class="xref" href="#build-resize">열 폭</a>).</li>
+            <li><strong>들이기.</strong> 셀 커서와 F2는 고정 경계 밑에 가린 칸을 흐르는 창으로 들인다. 칸 안 컨트롤에 Tab으로 간 초점도 앱 정책이 <code>route_reveal</code>을 부르면 들인다 — 그 대상의 왼쪽 끝이 고정 경계 이상일 때만이다.</li>
+            <li><strong>보조 기술</strong>은 고정이 없을 때와 같은 tree를 읽는다. 고정이라는 사실은 알리지 않는다. 고정 경계 밑에 가린 흐르는 칸은 화면 밖으로 읽힌다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-check">
+        <header class="sec-head">
+          <h2>만들기: 체크 열</h2>
+          <p class="lede"><code>check_column</code>에 열 키를 주면 그 열의 칸 앞에 체크박스가 선다. 상태는 <code>check_state_of</code>가 답하고, 누르면 <code>toggle_check(행 키)</code>가 온다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:659-664" data-path="examples/demo/workbench_page.cpp" data-start="659"><script type="text/plain">
+        if (const auto* const check { message.get<workbench_change_check_intent>() }; check != nullptr)
+        {
+            if (const auto found { find_change(check->key) }; found != changes_.end())
+                stage_changes(u8"스테이지 바꿈", { found->path }, found->staged == false);
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/table_element_tests.cpp:596-625" data-path="tests/table_element_tests.cpp" data-start="596"><script type="text/plain">
+    luil::table_config config { make_config() };
+    config.check_column = u8"name";
+    config.check_state_of = [](const luil::virtual_list_item& row, std::size_t) {
+        return row.key == u8"row-a" ? luil::check_state::mixed : row.key == u8"row-b" ? luil::check_state::checked : luil::check_state::unchecked;
+    };
+    config.toggle_check = [](const std::u8string& row) { return luil::make_app_action(resize_end_intent { row }); };
+    const std::shared_ptr<const luil::ui_tree> tree { published(config) };
+    REQUIRE(tree->duplicate_ids().empty());
+
+    const luil::ui_element& mixed { find(*tree, { luil::ui_element_kind::check, part(u8"row-a") }) };
+    REQUIRE(mixed.accessibility().mixed);
+    REQUIRE(mixed.accessibility().name == u8"row-a");
+    REQUIRE(find(*tree, { luil::ui_element_kind::check, part(u8"row-b") }).accessibility().checked == true);
+    REQUIRE(mixed.tab_stop() == false);
+
+    luil::interaction_controller controller {};
+    controller.set_tree(tree);
+    const luil::rect_f box { mixed.bounds() };
+    static_cast<void>(controller.process(luil::pointer_pressed_event { box.x + 10.0f, box.y + box.height / 2.0f, luil::pointer_button::left, at(0) }));
+    const auto clicked { controller.process(luil::pointer_released_event { box.x + 10.0f, box.y + box.height / 2.0f, luil::pointer_button::left, at(5) }) };
+    REQUIRE(message_at<resize_end_intent>(clicked, 0) != nullptr);
+    REQUIRE(message_at<resize_end_intent>(clicked, 0)->column == u8"row-a");
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"files" });
+
+    // 본문이 Space를 실행 키로 쓰지 않으므로 Space는 커서 행의 체크다.
+    config.rows.cursor = u8"row-c";
+    controller.set_tree(published(config));
+    const auto spaced { controller.process(luil::key_pressed_event { luil::key_code::space, false, false, false, false, at(20) }) };
+    REQUIRE(message_at<resize_end_intent>(spaced, 0) != nullptr);
+    REQUIRE(message_at<resize_end_intent>(spaced, 0)->column == u8"row-c");
+</script></div>
+        <div class="prose">
+          <p>세 상태(<code>check_state::mixed</code> 포함)를 계층 위에서 모으는 일, 가지를 누르면 자식 전부를 바꾸는 전파는 목록 문서의 <a class="xref" href="lists.html#build-check">체크 박스</a>에 있다. 여기서는 표만의 규칙을 적는다.</p>
+          <ul>
+            <li><strong>Tab 자리가 아니다.</strong> 눌러도 초점은 본문에 남는다. 체크박스가 초점을 가져가면 그 뒤의 ↓가 표의 것이 아니게 되기 때문이다.</li>
+            <li><strong>Space는 <code>rows.activate</code>가 빌 때만 체크다.</strong> 본문이 Space를 실행 키로 쓰면(<code>activate</code>가 있으면) Space·Enter는 실행이고 표까지 오지 않는다.</li>
+            <li><strong>비활성 행</strong>은 체크박스가 흐리고 눌리지 않는다. 커서가 비활성 행이면 Space는 삼키기만 한다.</li>
+            <li><strong>자리.</strong> 트리 열과 같은 열이면 들여쓰기·삼각형 <strong>뒤에</strong> 선다. 체크박스 폭만큼 칸 글이 밀린다.</li>
+            <li><strong>이름.</strong> 라벨이 칸 밖에 있으므로 보조 기술의 이름은 행의 <code>label</code>이다 (tooltip으로 싣는다).</li>
+            <li><code>check_state_of</code>가 없으면 체크박스가 서지 않는다. <code>toggle_check</code>만 없으면 서지만 눌리지 않는다.</li>
+          </ul>
+          <p>작업대는 두 번 누름도 같은 메시지로 잇는다 (<code>rows.double_click</code>, 1226행).</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-cell">
+        <header class="sec-head">
+          <h2>만들기: 앱이 짓는 칸</h2>
+          <p class="lede"><code>build_cell</code>이 element를 돌려준 칸은 그 element가 칸이다. nullptr을 돌려준 칸은 <code>cell_text</code>의 글 한 줄이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/table_element_tests.cpp:143-147" data-path="tests/table_element_tests.cpp" data-start="143"><script type="text/plain">
+        config.cell_text = [](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column) { return row.key + u8"." + column.key; };
+        if (custom_cells)
+            config.build_cell = [](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column, bool) -> std::unique_ptr<luil::ui_element> {
+                return std::make_unique<cell_probe>(row.key + u8"/" + column.key);
+            };
+</script></div>
+<div class="code" data-lang="cpp" data-label="상태 열만 앱이 짓는 칸 (직접 작성)" data-compile="pre-build-cell"><script type="text/plain">
+// 앱이 정한 칸의 kind다. 라이브러리 kind와 겹치지 않는 앱 대역이다.
+constexpr luil::ui_element_kind kind_status_cell { luil::application_element_kind(10) };
+
+struct job
+{
+    std::u8string id {};
+    std::u8string title {};
+    bool failed { false };
+};
+
+void configure_cells(const std::vector<job>& jobs, luil::table_config& table)
+{
+    // 글로 충분한 열은 cell_text가 한 줄로 그린다 (칸마다 element를 만들지 않는다).
+    table.cell_text = [jobs](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column) -> std::u8string {
+        for (const job& item : jobs)
+            if (item.id == row.key && column.key == u8"title")
+                return item.title;
+        return {};
+    };
+    // 상태 열만 앱이 칸을 짓는다. nullptr을 돌려준 열은 cell_text의 글로 돌아간다.
+    //  - 자리표는 표 안에서 유일해야 한다. 행 키와 열 키를 함께 담는다.
+    //  - tree를 짓는 동안 불린다. 앱 상태를 바꾸지 않는다.
+    table.build_cell = [jobs](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column, const bool selected) -> std::unique_ptr<luil::ui_element> {
+        static_cast<void>(selected);
+        if (column.key != u8"status")
+            return nullptr;
+        for (const job& item : jobs)
+            if (item.id == row.key)
+                return std::make_unique<luil::label_element>(luil::ui_element_id { kind_status_cell, row.key + u8"/" + column.key },
+                    luil::label_config { .text = item.failed ? u8"실패" : u8"완료", .color = item.failed ? luil::label_color_role::error : luil::label_color_role::dim });
+        return nullptr;
+    };
+}
+</script></div>
+<script type="text/plain" id="pre-build-cell" data-prelude>
+#include "luil/ui/label_element.h"
+#include "luil/ui/table_element.h"
+#include <memory>
+#include <string>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><strong>자리표.</strong> 칸 element의 자리표는 앱이 정하고 표 안에서 유일해야 한다. 행 키와 열 키를 함께 담는다 (test도 예도 <code>행 키 + "/" + 열 키</code>). 겹치면 <code>duplicate_ids()</code>에 나타난다.</li>
+            <li><strong>넷째 인자</strong>는 그 행이 고른 행인지다. 고른 행에서 색을 바꾸는 칸이 쓴다.</li>
+            <li><strong>자리.</strong> 앱의 칸은 트리 들여쓰기·체크박스 뒤에 선다. 다른 열은 밀리지 않는다.</li>
+            <li><strong>말줄임</strong>(<code>table_column::elide</code>)은 앱의 칸에 쓰이지 않는다. 그 칸이 정한다.</li>
+            <li>칸 콜백은 본문이 배치에서 행을 지을 때 불린다. 앱 데이터를 값으로 담는다 (예의 <code class="free">jobs</code>).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-tree">
+        <header class="sec-head">
+          <h2>만들기: 트리 열</h2>
+          <p class="lede"><code>tree_column</code>에 열 키를 주면 그 열의 칸 앞에 깊이만큼 들여 쓰고 가지에 삼각형을 세운다. 깊이와 펼침은 앱이 평탄화한 행 모델의 값이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/table_element_tests.cpp:565-592" data-path="tests/table_element_tests.cpp" data-start="565"><script type="text/plain">
+TEST_CASE("The tree column indents its cells and holds the triangles", "[ui][table][tree]")
+{
+    luil::table_config config { make_config(true) };
+    config.tree_column = u8"name";
+    config.rows.items[0].expansion = luil::list_expansion::expanded;
+    config.rows.items[1].depth = 1;
+    config.rows.items[1].expansion = luil::list_expansion::collapsed;
+    config.rows.items[2].depth = 2;
+    config.rows.set_expanded = [](const std::u8string& key, const bool expanded) { return luil::make_app_action(sort_intent { key + (expanded ? u8"+" : u8"-") }); };
+    const std::shared_ptr<const luil::ui_tree> tree { published(std::move(config)) };
+    REQUIRE(tree->duplicate_ids().empty());
+
+    // 삼각형은 트리 열 안, 깊이만큼 들여 선다. 행 앞의 가상 목록 삼각형은 서지 않는다.
+    const luil::ui_element& top { find(*tree, { luil::ui_element_kind::table_expander, part(u8"row-a") }) };
+    const luil::ui_element& child { find(*tree, { luil::ui_element_kind::table_expander, part(u8"row-b") }) };
+    REQUIRE(top.bounds().x == luil::table_cell_padding);
+    REQUIRE(child.bounds().x - top.bounds().x == luil::list_indent_step);
+    REQUIRE(tree->find(luil::virtual_list_expander_id(u8"files", u8"row-a")) == nullptr);
+    REQUIRE(tree->find({ luil::ui_element_kind::table_expander, part(u8"row-c") }) == nullptr);
+
+    // 앱의 칸은 들여쓰기와 삼각형 뒤에 선다. 다른 열은 밀리지 않는다.
+    const float lead { 2.0f * luil::list_indent_step + luil::list_expander_width };
+    REQUIRE(find(*tree, { kind_cell, u8"row-c/name" }).bounds().x == lead);
+    REQUIRE(find(*tree, { kind_cell, u8"row-c/author" }).bounds().x == 160.0f);
+
+    // 펼침 상태는 행(DataItem)이 알린다.
+    REQUIRE(find(*tree, luil::virtual_list_row_id(u8"files", u8"row-b")).accessibility().expanded == false);
+}
+</script></div>
+<div class="code tall" data-lang="cpp" data-label="폴더 표: flatten_tree + 트리 열 + 같은 열의 체크 (직접 작성)" data-compile="pre-tree"><script type="text/plain">
+struct folder_expand_intent
+{
+    std::u8string key {};
+    bool expanded { false };
+};
+struct folder_cursor_intent
+{
+    std::u8string key {};
+};
+struct folder_check_intent
+{
+    std::u8string key {};
+};
+
+struct folders_state
+{
+    // 계층 모델과 펼친 키, 체크한 잎의 키다. 전부 앱 상태다.
+    std::vector<luil::tree_node> roots {};
+    std::unordered_set<std::u8string> expanded {};
+    std::unordered_set<std::u8string> checked {};
+    std::u8string cursor {};
+};
+
+// 잎이면 자기 체크, 가지면 자식들을 모은 체크다 (일부만 골랐으면 mixed).
+[[nodiscard]] luil::check_state check_of(const luil::tree_node& node, const std::unordered_set<std::u8string>& checked)
+{
+    if (node.children.empty())
+        return checked.contains(node.key) ? luil::check_state::checked : luil::check_state::unchecked;
+    std::vector<luil::check_state> children {};
+    for (const luil::tree_node& child : node.children)
+        children.push_back(check_of(child, checked));
+    return luil::aggregate_check(children);
+}
+
+[[nodiscard]] const luil::tree_node* find_node(const std::vector<luil::tree_node>& nodes, const std::u8string& key)
+{
+    for (const luil::tree_node& node : nodes)
+    {
+        if (node.key == key)
+            return &node;
+        if (const luil::tree_node* const found { find_node(node.children, key) }; found != nullptr)
+            return found;
+    }
+    return nullptr;
+}
+
+[[nodiscard]] std::unique_ptr<luil::table_element> build_folders(const folders_state& state)
+{
+    luil::table_config table {};
+    table.owner = u8"folders";
+    table.columns = {
+        { .key = u8"name", .header = u8"이름", .width = 260.0f },
+        { .key = u8"kind", .header = u8"종류", .width = 100.0f },
+    };
+    // 앱이 평탄화한 줄을 싣는다. 깊이와 펼침은 항목의 값이다.
+    table.rows.items = luil::tree_row_items(luil::flatten_tree(state.roots, state.expanded));
+    table.rows.cursor = state.cursor;
+    table.rows.move = [](const std::u8string& key) { return luil::make_app_action(folder_cursor_intent { key }); };
+    // 펼침은 절대 메시지다. 삼각형·←→·보조 기술의 펼치기가 모두 이것이다.
+    table.rows.set_expanded = [](const std::u8string& key, const bool expanded) { return luil::make_app_action(folder_expand_intent { key, expanded }); };
+    table.cell_text = [](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column) -> std::u8string {
+        if (column.key == u8"kind")
+            return row.expansion == luil::list_expansion::none ? u8"파일" : u8"폴더";
+        return row.label;
+    };
+    // 트리 열과 체크 열을 같은 열에 두면 삼각형, 체크박스, 글 순서로 선다.
+    table.tree_column = u8"name";
+    table.check_column = u8"name";
+    table.check_state_of = [roots = state.roots, checked = state.checked](const luil::virtual_list_item& row, std::size_t) {
+        const luil::tree_node* const node { find_node(roots, row.key) };
+        return node != nullptr ? check_of(*node, checked) : luil::check_state::unchecked;
+    };
+    table.toggle_check = [](const std::u8string& key) { return luil::make_app_action(folder_check_intent { key }); };
+    return std::make_unique<luil::table_element>(std::move(table));
+}
+
+bool handle(folders_state& state, const luil::app_message& message)
+{
+    if (const auto* const expand { message.get<folder_expand_intent>() }; expand != nullptr)
+    {
+        if (expand->expanded)
+            state.expanded.insert(expand->key);
+        else
+            state.expanded.erase(expand->key);
+        return true;
+    }
+    if (const auto* const cursor { message.get<folder_cursor_intent>() }; cursor != nullptr)
+    {
+        state.cursor = cursor->key;
+        return true;
+    }
+    if (const auto* const check { message.get<folder_check_intent>() }; check != nullptr)
+    {
+        // 다음 상태는 앱이 정한다. 여기서는 잎만 뒤집는다 (가지의 체크는 자식들로 모인다).
+        const luil::tree_node* const node { find_node(state.roots, check->key) };
+        if (node != nullptr && node->children.empty())
+        {
+            if (state.checked.contains(check->key))
+                state.checked.erase(check->key);
+            else
+                state.checked.insert(check->key);
+        }
+        return true;
+    }
+    return false;
+}
+</script></div>
+<script type="text/plain" id="pre-tree" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/check_element.h"
+#include "luil/ui/item_model.h"
+#include "luil/ui/table_element.h"
+#include <memory>
+#include <string>
+#include <unordered_set>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <p>계층 모델을 줄로 펴는 일(<code>flatten_tree</code>·<code>tree_row_items</code>), 펼친 집합, 지연 로딩은 목록 문서의 <a class="xref" href="lists.html#build-lazy">트리 뷰 (지연 로딩)</a> 그대로다. 표만의 규칙:</p>
+          <ul>
+            <li><strong>들여쓰기.</strong> 삼각형은 트리 열 안에서 <code>table_cell_padding + 깊이 × list_indent_step</code>에 선다. 잎도 삼각형 자리를 비워 글이 줄을 맞춘다. 가상 목록 자신의 행 앞 삼각형은 표가 끈다 (<code>tree_gutter</code> 거짓).</li>
+            <li><strong>삼각형</strong>은 <code>rows.set_expanded</code>가 있고 행이 가지일 때만 선다. 누르면 <code>set_expanded(행 키, !지금)</code>이다.</li>
+            <li><strong>←→</strong>는 본문이 계층 키로 먼저 쓴다 (펼친 가지 접기·부모로 / 접힌 가지 펴기·첫 자식으로). 갈 곳이 없을 때만 표의 가로 스크롤이 된다. 셀 탐색(<code>move_column</code>)을 켜면 셀 커서가 트리 열에 있을 때만 계층 키가 먼저다.</li>
+            <li><strong>같은 열의 체크</strong>는 삼각형 뒤에 선다. 폴더의 "일부"는 앱이 <code>aggregate_check</code>로 계산해 <code>check_state::mixed</code>로 답한다.</li>
+            <li><strong>보조 기술</strong>에서 펼침 상태는 행(DataItem)이 알린다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-menu">
+        <header class="sec-head">
+          <h2>만들기: 머리글 메뉴로 열 숨기기</h2>
+          <p class="lede">머리글을 우클릭하면 <code>column_menu(열 키, 문맥)</code>이 온다. 메뉴를 열고 숨긴 열을 <code>columns</code>에서 빼는 것은 앱이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/table_element_tests.cpp:742-749" data-path="tests/table_element_tests.cpp" data-start="742"><script type="text/plain">
+    // 정렬할 수 없는 열의 머리글도 끌고 메뉴를 열 수 있다.
+    const luil::ui_element& revision { find(*tree, { luil::ui_element_kind::table_header_cell, part(u8"revision") }) };
+    REQUIRE(revision.drag() != nullptr);
+    const luil::ui_action* const menu { revision.action(luil::ui_trigger::right_click) };
+    REQUIRE(menu != nullptr);
+    const auto opened { (*menu)({ revision.id(), 260.0f, 10.0f }) };
+    REQUIRE(message_at<column_intent>(opened, 0) != nullptr);
+    REQUIRE(message_at<column_intent>(opened, 0)->column == u8"revision");
+</script></div>
+<div class="code" data-lang="cpp" data-label="숨긴 열 집합과 고정 수 맞추기 (직접 작성)" data-compile="pre-column-menu"><script type="text/plain">
+// 머리글 우클릭이다. 문맥의 좌표(창의 물리 픽셀)가 메뉴를 띄울 자리다.
+struct column_menu_intent
+{
+    std::u8string column {};
+    float x { 0.0f };
+    float y { 0.0f };
+};
+// 메뉴에서 고른 "이 열 숨기기"다.
+struct hide_column_intent
+{
+    std::u8string column {};
+};
+
+struct sheet_state
+{
+    // 모든 열(순서·폭 포함)과 숨긴 열의 키다. 숨김은 표가 아니라 앱이 한다.
+    std::vector<luil::table_column> all_columns {};
+    std::unordered_set<std::u8string> hidden {};
+    // 앞에서 고정할 열 수다. 앞 열을 숨기면 이 수도 앱이 맞춘다.
+    std::size_t frozen { 1 };
+    bool menu_open { false };
+    std::u8string menu_column {};
+    float menu_x { 0.0f };
+    float menu_y { 0.0f };
+};
+
+void configure_columns(const sheet_state& state, luil::table_config& table)
+{
+    // 표는 받은 열만 그린다. 숨긴 열은 columns에서 뺀다.
+    for (const luil::table_column& column : state.all_columns)
+        if (state.hidden.contains(column.key) == false)
+            table.columns.push_back(column);
+    table.frozen_columns = std::min(state.frozen, table.columns.size());
+    table.column_menu = [](const std::u8string& column, const luil::ui_action_context& context) {
+        return luil::make_app_action(column_menu_intent { column, context.x, context.y });
+    };
+}
+
+bool handle(sheet_state& state, const luil::app_message& message)
+{
+    if (const auto* const menu { message.get<column_menu_intent>() }; menu != nullptr)
+    {
+        // 메뉴 popup은 앱이 frame에 싣는다 (메뉴 문서). 여기서는 연 자리만 기억한다.
+        state.menu_open = true;
+        state.menu_column = menu->column;
+        state.menu_x = menu->x;
+        state.menu_y = menu->y;
+        return true;
+    }
+    if (const auto* const hide { message.get<hide_column_intent>() }; hide != nullptr)
+    {
+        // 숨기는 열이 고정 구역 안이면 고정 수를 하나 줄인다. 맞추지 않으면 옆의 흐르던 열이 말없이 고정된다.
+        std::size_t visible_index { 0 };
+        for (const luil::table_column& column : state.all_columns)
+        {
+            if (state.hidden.contains(column.key))
+                continue;
+            if (column.key == hide->column)
+            {
+                if (visible_index < state.frozen && state.frozen > 0)
+                    --state.frozen;
+                break;
+            }
+            ++visible_index;
+        }
+        state.hidden.insert(hide->column);
+        state.menu_open = false;
+        return true;
+    }
+    return false;
+}
+</script></div>
+<script type="text/plain" id="pre-column-menu" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/table_element.h"
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <unordered_set>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><strong>숨김 표시가 없다.</strong> 표는 받은 열만 그린다. 앱은 모든 열과 숨긴 키 집합을 들고, 짓기 전에 거른다.</li>
+            <li><strong>문맥</strong>의 <code>x</code>·<code>y</code>(물리 픽셀, 창 좌표)가 메뉴 자리다. 메뉴 popup 자체는 메뉴 쪽 API의 일이다.</li>
+            <li><strong>몸짓.</strong> 우클릭 길이라 터치의 길게 누르기와 펜 배럴 버튼도 같은 메시지를 낸다. 정렬할 수 없는 열의 머리글도 메뉴가 열린다.</li>
+            <li><strong>고정 열과 함께.</strong> 고정된 앞 열을 숨기면 <code>frozen_columns</code>도 하나 줄인다 — 예의 <code>handle</code>이 그렇게 한다. 안 줄이면 다음 열이 말없이 고정된다.</li>
+            <li><strong>키보드 길이 없다.</strong> 머리글 칸은 Tab 자리가 아니고, Shift+F10은 초점(본문)의 조상에서 우클릭 액션을 찾으므로 머리글 메뉴에 닿지 않는다 (코드에서 확인한 동작). 같은 일을 앱 메뉴나 단축키로도 열어 둔다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-edit">
+        <header class="sec-head">
+          <h2>만들기: 셀 커서와 F2 편집</h2>
+          <p class="lede"><code>move_column</code>을 주면 ←→가 셀 커서를 옆 열로 옮긴다. F2가 <code>begin_edit</code>를, 편집기 안의 Enter·Esc가 <code>commit_edit</code>·<code>cancel_edit</code>를 낸다. 초점은 표가 옮긴다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/table_element_tests.cpp:216-231" data-path="tests/table_element_tests.cpp" data-start="216"><script type="text/plain">
+    [[nodiscard]] luil::table_config editable_config(const std::u8string& cell_column)
+    {
+        luil::table_config config { make_config() };
+        config.columns[0].editable = true;
+        config.columns[1].editable = true;
+        config.rows.cursor = u8"row-b";
+        config.cell_column = cell_column;
+        config.move_column = [](const std::u8string& column) { return luil::make_app_action(column_intent { column }); };
+        config.begin_edit = [](const luil::table_cell_ref& cell) { return luil::make_app_action(cell_intent { u8"begin", cell }); };
+        config.commit_edit = [](const luil::table_cell_ref& cell) { return luil::make_app_action(cell_intent { u8"commit", cell }); };
+        config.cancel_edit = [](const luil::table_cell_ref& cell) { return luil::make_app_action(cell_intent { u8"cancel", cell }); };
+        config.build_editor = [](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column) -> std::unique_ptr<luil::ui_element> {
+            return std::make_unique<test_editor>(row.key + u8"/" + column.key);
+        };
+        return config;
+    }
+</script></div>
+<div class="code tall" data-lang="cpp" data-label="연락처 표: 셀 커서·F2·두 번 누름·편집기·정책 (직접 작성)" data-compile="pre-edit"><script type="text/plain">
+// 편집기의 kind와 텍스트 입력 대상이다. 정책이 둘을 잇는다 (text_target_of).
+constexpr luil::ui_element_kind kind_cell_editor { luil::application_element_kind(0) };
+constexpr luil::text_input_target target_cell_editor { 1 };
+
+struct contact_cursor_intent
+{
+    std::u8string key {};
+};
+struct contact_column_intent
+{
+    std::u8string column {};
+};
+// 시작·확정·취소를 한 메시지로 나른다. verb가 갈래다.
+struct contact_edit_intent
+{
+    enum class verb
+    {
+        begin,
+        commit,
+        cancel,
+    };
+    verb what { verb::begin };
+    luil::table_cell_ref cell {};
+};
+// 두 번 누름은 행 키만 준다. 열은 앱의 셀 커서로 정한다.
+struct contact_double_click_intent
+{
+    std::u8string key {};
+};
+struct contact_text_intent
+{
+    luil::text_edit_request request {};
+};
+
+struct contact
+{
+    std::u8string id {};
+    std::u8string name {};
+    std::u8string phone {};
+};
+
+struct contacts_state
+{
+    std::vector<contact> contacts {};
+    // 행은 본문 커서(rows.cursor), 열은 셀 커서(table_config::cell_column)다. 둘 다 앱 상태다.
+    std::u8string cursor {};
+    std::u8string cell_column { u8"name" };
+    // 편집 중인 칸과 편집기의 초안이다.
+    std::optional<luil::table_cell_ref> editing {};
+    luil::text::text_edit_state draft {};
+};
+
+[[nodiscard]] std::u8string* field_of(contacts_state& state, const luil::table_cell_ref& cell)
+{
+    for (contact& item : state.contacts)
+        if (item.id == cell.row)
+            return cell.column == u8"phone" ? &item.phone : &item.name;
+    return nullptr;
+}
+
+[[nodiscard]] std::unique_ptr<luil::table_element> build_contacts(const contacts_state& state)
+{
+    luil::table_config table {};
+    table.owner = u8"contacts";
+    table.columns = {
+        { .key = u8"name", .header = u8"이름", .width = 160.0f, .editable = true },
+        { .key = u8"phone", .header = u8"전화", .width = 140.0f, .editable = true },
+    };
+    for (const contact& item : state.contacts)
+        table.rows.items.push_back({ .key = item.id, .label = item.name });
+    table.rows.cursor = state.cursor;
+    table.rows.move = [](const std::u8string& key) { return luil::make_app_action(contact_cursor_intent { key }); };
+    table.rows.double_click = [](const std::u8string& key) { return luil::make_app_action(contact_double_click_intent { key }); };
+    table.cell_text = [contacts = state.contacts](const luil::virtual_list_item& row, std::size_t, const luil::table_column& column) -> std::u8string {
+        for (const contact& item : contacts)
+            if (item.id == row.key)
+                return column.key == u8"phone" ? item.phone : item.name;
+        return {};
+    };
+
+    // move_column이 있으면 ←·→가 셀 커서를 옮긴다 (셀 탐색).
+    table.cell_column = state.cell_column;
+    table.move_column = [](const std::u8string& column) { return luil::make_app_action(contact_column_intent { column }); };
+
+    // F2가 begin_edit를, 편집 중의 Enter·Esc가 commit_edit·cancel_edit를 낸다.
+    table.editing = state.editing;
+    table.begin_edit = [](const luil::table_cell_ref& cell) { return luil::make_app_action(contact_edit_intent { contact_edit_intent::verb::begin, cell }); };
+    table.commit_edit = [](const luil::table_cell_ref& cell) { return luil::make_app_action(contact_edit_intent { contact_edit_intent::verb::commit, cell }); };
+    table.cancel_edit = [](const luil::table_cell_ref& cell) { return luil::make_app_action(contact_edit_intent { contact_edit_intent::verb::cancel, cell }); };
+    // 편집기의 자리표는 표 안에서 유일해야 한다. 행 키와 열 키를 함께 담는다.
+    table.build_editor = [view = luil::make_text_input_view(state.draft, std::nullopt, target_cell_editor)](
+                             const luil::virtual_list_item& row, std::size_t, const luil::table_column& column) -> std::unique_ptr<luil::ui_element> {
+        return std::make_unique<luil::text_input_element>(luil::ui_element_id { kind_cell_editor, row.key + u8"/" + column.key }, view, luil::text_input_config {});
+    };
+    return std::make_unique<luil::table_element>(std::move(table));
+}
+
+bool handle(contacts_state& state, const luil::app_message& message)
+{
+    if (const auto* const cursor { message.get<contact_cursor_intent>() }; cursor != nullptr)
+    {
+        state.cursor = cursor->key;
+        return true;
+    }
+    if (const auto* const column { message.get<contact_column_intent>() }; column != nullptr)
+    {
+        state.cell_column = column->column;
+        return true;
+    }
+    if (const auto* const clicked { message.get<contact_double_click_intent>() }; clicked != nullptr)
+    {
+        // 두 번 누름의 첫 누름이 이미 커서를 그 행으로 옮겼다. 그 행의 셀 커서 칸을 편집한다.
+        state.cursor = clicked->key;
+        if (const std::u8string* const value { field_of(state, { clicked->key, state.cell_column }) }; value != nullptr)
+        {
+            state.editing = luil::table_cell_ref { clicked->key, state.cell_column };
+            state.draft = {};
+            state.draft.text = *value;
+            state.draft.caret = state.draft.anchor = value->size();
+        }
+        return true;
+    }
+    if (const auto* const edit { message.get<contact_edit_intent>() }; edit != nullptr)
+    {
+        switch (edit->what)
+        {
+        case contact_edit_intent::verb::begin:
+            if (const std::u8string* const value { field_of(state, edit->cell) }; value != nullptr)
+            {
+                state.editing = edit->cell;
+                state.draft = {};
+                state.draft.text = *value;
+                state.draft.caret = state.draft.anchor = value->size();
+            }
+            break;
+        case contact_edit_intent::verb::commit:
+            if (std::u8string* const value { field_of(state, edit->cell) }; value != nullptr)
+                *value = state.draft.text;
+            state.editing.reset();
+            break;
+        case contact_edit_intent::verb::cancel:
+            state.editing.reset();
+            break;
+        }
+        return true;
+    }
+    if (const auto* const typed { message.get<contact_text_intent>() }; typed != nullptr)
+    {
+        luil::apply_text_edit(state.draft, typed->request);
+        return true;
+    }
+    return false;
+}
+
+// input thread의 정책이다. 편집기 kind를 텍스트 대상으로 등록해야 초점·caret·IME가 이어진다.
+class contacts_policy final : public luil::interaction_policy
+{
+public:
+    [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+    {
+        return kind == kind_cell_editor ? std::optional<luil::text_input_target> { target_cell_editor } : std::nullopt;
+    }
+
+    [[nodiscard]] luil::input_action make_text_edit_action(const luil::text_edit_request& request) const override
+    {
+        return luil::make_app_action(contact_text_intent { request });
+    }
+
+    [[nodiscard]] std::vector<luil::input_action> on_wheel(const luil::ui_tree& tree, const luil::mouse_wheel_event& event, const float scroll_delta) override
+    {
+        return luil::route_wheel(tree, event, scroll_delta);
+    }
+
+    [[nodiscard]] std::vector<luil::input_action> on_focus_moved(const luil::ui_tree& tree, const luil::ui_element_id& focused) override
+    {
+        return luil::route_reveal(tree, focused);
+    }
+};
+</script></div>
+<script type="text/plain" id="pre-edit" data-prelude>
+#include "luil/text/text_edit.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/dialog_elements.h"
+#include "luil/ui/table_element.h"
+#include "luil/ui/ui_interaction.h"
+#include <algorithm>
+#include <memory>
+#include <optional>
+#include <string>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><strong>셀 커서</strong>는 행 = 본문 커서(<code>rows.cursor</code>), 열 = <code>cell_column</code>이다. 둘 다 앱 상태다. 커서 칸에는 키보드로 온 초점일 때만 테가 선다.</li>
+            <li><strong>←→</strong>는 <code>move_column(옆 열 키)</code>다. 옮긴 칸이 창 밖이면 <code>scroll_horizontal(들이기 변화량)</code>을 함께 낸다. 끝 열에서는 키만 삼킨다. <code>cell_column</code>이 비었으면 →·← 모두 첫 열로 간다.</li>
+            <li><strong>F2</strong>는 커서 칸이 편집할 수 있는 열(<code>table_column::editable</code>)일 때만 표의 키다. <code>cell_column</code>이 비었으면 첫 편집 가능 열이다. 편집할 수 없는 열이면 F2가 앱 정책으로 흐른다. 커서 행이 비활성이어도 흐른다.</li>
+            <li><strong>두 번 누름으로 시작</strong>하려면 앱이 <code>rows.double_click</code>에서 같은 일을 한다. 행 키만 오므로 열은 앱의 셀 커서로 정한다 (예의 <code class="free">contact_double_click_intent</code>).</li>
+            <li><strong>편집기 kind를 텍스트 대상으로 등록한다.</strong> 정책의 <code>text_target_of</code>가 편집기 kind를 알아야 caret·IME·편집 메시지(<code>make_text_edit_action</code>)가 이어진다.</li>
+          </ul>
+        </div>
+        <h3>초점은 가둠이 옮긴다</h3>
+        <div class="code" data-lang="cpp" data-src="tests/table_element_tests.cpp:686-717" data-path="tests/table_element_tests.cpp" data-start="686"><script type="text/plain">
+TEST_CASE("An editor takes focus, commits on Enter, cancels on Escape and hands focus back", "[ui][table][edit]")
+{
+    editor_policy policy {};
+    luil::interaction_controller controller { &policy };
+    controller.set_tree(published(editable_config(u8"name")));
+    focus_body(controller);
+
+    luil::table_config editing { editable_config(u8"name") };
+    editing.editing = luil::table_cell_ref { u8"row-b", u8"name" };
+    const std::shared_ptr<const luil::ui_tree> with_editor { published(editing) };
+    REQUIRE(with_editor->duplicate_ids().empty());
+    controller.set_tree(with_editor);
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id { kind_editor, u8"row-b/name" });
+    REQUIRE(controller.snapshot().focused_input == luil::ui_element_id { kind_editor, u8"row-b/name" });
+    // 편집기는 그 칸 자리에 선다.
+    REQUIRE(find(*with_editor, { kind_editor, u8"row-b/name" }).bounds().x == 0.0f);
+
+    const auto committed { controller.process(press(luil::key_code::enter, 10)) };
+    REQUIRE(message_at<cell_intent>(committed, 0) != nullptr);
+    REQUIRE(message_at<cell_intent>(committed, 0)->verb == u8"commit");
+    REQUIRE(message_at<cell_intent>(committed, 0)->cell == luil::table_cell_ref { u8"row-b", u8"name" });
+
+    const auto cancelled { controller.process(press(luil::key_code::escape, 20)) };
+    REQUIRE(cancelled.size() == 1u);
+    REQUIRE(message_at<cell_intent>(cancelled, 0) != nullptr);
+    REQUIRE(message_at<cell_intent>(cancelled, 0)->verb == u8"cancel");
+
+    // 앱이 편집을 끝내면 편집기가 사라지고 초점이 본문으로 돌아온다.
+    controller.set_tree(published(editable_config(u8"name")));
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id { luil::ui_element_kind::virtual_list, u8"files" });
+    REQUIRE(policy.keys == 0);
+}
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/table_element.cpp:134-163" data-path="src/ui/table_element.cpp" data-start="134"><script type="text/plain">
+        // 편집 중인 칸의 자리다. 앱의 편집기를 담고 초점을 그 안에 가둔다.
+        //
+        // 초점을 옮기는 길은 가둠의 진입·복귀다 (focus-entry-design.md). 편집기가 서면 controller가 본문에 있던
+        // 초점을 거두고 편집기에 세우며, 편집이 끝나 이 자리가 사라지면 본문으로 돌려보낸다 — 앱은 초점을 다루지
+        // 않는다. 같은 길을 dialog가 쓴다.
+        //  - Enter·Esc는 이 자리의 키다. 편집기(텍스트 칸)가 쓰지 않는 Enter가 여기로 올라와 확정이 되고, Esc는 취소다.
+        //    가둠의 Esc(`dismiss_action`)보다 키 처리기가 앞이라 Esc가 두 번 나지 않는다.
+        class table_editor_host_element final : public ui_element
+        {
+        public:
+            table_editor_host_element(ui_element_id id, std::unique_ptr<ui_element> editor, table_cell_ref cell, const table_cell_message_factory& commit,
+                const table_cell_message_factory& cancel, ui_element_id body)
+                : ui_element { std::move(id) }
+            {
+                set_focus_trap(true);
+                set_focus_entry(editor->id());
+                set_focus_return(std::move(body));
+                add_child(std::move(editor));
+                if (cancel != nullptr)
+                    set_dismiss_action([cell, cancel](const ui_action_context&) -> std::vector<input_action> { return { cancel(cell) }; });
+                set_key_handler([cell, commit, cancel](const key_pressed_event& event) -> std::optional<std::vector<input_action>> {
+                    if (event.shortcut_modifier_down() || event.shift)
+                        return std::nullopt;
+                    if (event.key == key_code::enter && commit != nullptr)
+                        return std::vector<input_action> { commit(cell) };
+                    if (event.key == key_code::escape && cancel != nullptr)
+                        return std::vector<input_action> { cancel(cell) };
+                    return std::nullopt;
+                });
+            }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="134-140" data-title="규칙">편집 칸의 자리가 편집기를 담고 초점을 가둔다. 편집기가 서면 controller가 본문의 초점을 편집기로 옮기고, 자리가 사라지면 본문으로 돌려보낸다. 앱은 초점을 다루지 않는다.</li>
+            <li data-lines="148-153" data-title="가둠">진입점은 편집기, 복귀점은 본문이다. 가둠의 닫기 동작이 <code>cancel_edit</code>다.</li>
+            <li data-lines="154-162" data-title="Enter·Esc">텍스트 칸이 쓰지 않은 Enter가 올라와 확정이 되고, Esc는 취소다. 키 처리기가 가둠의 Esc보다 앞이라 Esc는 한 번만 난다. 수식 키·Shift와 함께면 받지 않는다.</li>
+          </ol>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">편집하는 행은 커서 행이어야 한다</span>가상 목록은 창에 걸치는 행과 커서 행(그리고 창 밖의 고른 행 64개까지)만 짓는다. 커서가 아닌 행을 편집 중으로 두고 흘리면 편집기가 tree에서 사라질 수 있다. 편집 중에 다른 행을 누르면 그 행의 고르기 메시지만 온다 — 확정할지 버릴지는 앱이 정한다. 헤더 주석은 IME 조합 중의 Enter·Esc가 조합의 것이라고 적었다 (이 문서에서 따로 확인하지 않은 동작).</div></div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 표는 자주 묻는 필드만 추렸다. 모든 필드는 <a class="xref" href="api.html#table-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="table_column">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/table_element.h:19-67" data-path="include/luil/ui/table_element.h" data-start="19"><script type="text/plain">
+    // 열 머리글이 보이는 정렬 방향이다. 정렬을 **하는** 것은 앱이다 (`table_config::sort_request`).
+    enum class sort_direction
+    {
+        none,
+        ascending,
+        descending,
+    };
+
+    // 칸 안에서 글이 붙는 쪽이다. 숫자·날짜 열은 끝(`end`)에 붙인다.
+    enum class column_align
+    {
+        start,
+        end,
+    };
+
+    // 표의 열 하나다 (table-design.md).
+    // 폭·순서·정렬 표시는 전부 **앱 상태**다. 표는 그것을 그리고, 바꾸자는 메시지만 낸다.
+    struct table_column
+    {
+        // 열을 가리키는 앱 정의 키다. 표 안에서 유일해야 한다 — 메시지와 자리표가 전부 이 값이다.
+        std::u8string key {};
+        // 머리글의 글이자 보조 기술이 읽는 열 이름이다.
+        std::u8string header {};
+        // 폭이다 (논리 픽셀). 끌어서 바꾸는 것은 `resize_column`이 알린다.
+        float width { 120.0f };
+        // 끌어도 이 아래로는 줄지 않는다 (논리 픽셀).
+        float min_width { 40.0f };
+        column_align align { column_align::start };
+        // 칸 글이 넘칠 때 줄이는 자리다. 경로처럼 앞뒤가 다 중요한 열은 `middle`로 가운데를 줄인다.
+        //  - `end`는 지금처럼 뒤를 잘라 그린다. 머리글은 이 값과 무관하게 `end`다.
+        //  - 표가 그리는 글(`cell_text`)에만 쓰인다. 앱이 지은 칸(`build_cell`)은 그 칸이 정한다.
+        text_elide elide { text_elide::end };
+        sort_direction sort { sort_direction::none };
+        // 거짓이면 오른쪽 경계를 끌 수 없다.
+        bool resizable { true };
+        // 거짓이면 머리글을 눌러도 정렬을 청하지 않는다.
+        bool sortable { true };
+        // 참이면 F2로 이 열의 칸을 편집할 수 있다 (`table_config::begin_edit`).
+        bool editable { false };
+    };
+
+    // 칸 하나다. 행 키와 열 키다.
+    struct table_cell_ref
+    {
+        std::u8string row {};
+        std::u8string column {};
+
+        [[nodiscard]] bool operator==(const table_cell_ref&) const = default;
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>뜻 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>key</code></td><td>빈 글</td><td>표 안에서 유일해야 한다. 모든 메시지와 부품 자리표가 이 값이다</td></tr>
+                  <tr><td><code>header</code></td><td>빈 글</td><td>머리글 글이자 보조 기술이 읽는 열 이름(HeaderItem·손잡이의 이름)</td></tr>
+                  <tr><td><code>width</code></td><td>120 (논리 픽셀)</td><td>음수는 0으로 본다. 끄는 동안 <code>resize_column</code>이 변화량을 알린다</td></tr>
+                  <tr><td><code>min_width</code></td><td>40</td><td>끌어도 이 아래로 줄지 않는다. 앱이 이미 더 작은 폭을 줬으면 줄이는 쪽만 막는다</td></tr>
+                  <tr><td><code>align</code></td><td><code>column_align::start</code></td><td>칸 글과 <strong>머리글 글</strong>이 붙는 쪽. <code>end</code>는 글이 들어갈 때만 오른쪽에 붙는다 (뒤 줄임일 때)</td></tr>
+                  <tr><td><code>elide</code></td><td><code>text_elide::end</code></td><td>넘칠 때 줄이는 자리. <code>middle</code>·<code>start</code>도 된다. <code>cell_text</code>에만 쓰인다</td></tr>
+                  <tr><td><code>sort</code></td><td><code>sort_direction::none</code></td><td>머리글의 화살표(오름·내림)와 진한 글색. <strong>표시일 뿐</strong>이다</td></tr>
+                  <tr><td><code>resizable</code></td><td>참</td><td>거짓이면 오른쪽 경계 손잡이를 짓지 않는다</td></tr>
+                  <tr><td><code>sortable</code></td><td>참</td><td>거짓이면 머리글 누름(정렬 요청)·손 모양 커서·hover 채움이 없다. 끌기·우클릭은 그대로</td></tr>
+                  <tr><td><code>editable</code></td><td>거짓</td><td>참이면 F2로 이 열의 칸 편집을 청한다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="table_config">
+            <div class="walk side">
+              <div class="code tall" data-lang="cpp" data-src="include/luil/ui/table_element.h:91-172" data-path="include/luil/ui/table_element.h" data-start="91"><script type="text/plain">
+    struct table_config
+    {
+        // 같은 화면에 표가 여럿일 때 구분하는 키다. 본문 목록의 owner도 이 값이다.
+        std::u8string owner {};
+        // 보이는 열이다. 그리는 순서가 곧 이 순서다.
+        std::vector<table_column> columns {};
+        // 본문이다. 행 모델·선택·커서·세로 스크롤·키보드·행 메시지가 전부 가상 목록의 값 그대로다.
+        //  - `owner`·`build_row`·`role`·`row_role`은 표가 정한다 (넣어도 덮어쓴다).
+        //  - 키보드 범위 선택은 `move_with`로 선다 (keyboard-selection-design.md).
+        virtual_list_config rows {};
+        table_cell_text_factory cell_text {};
+        table_cell_builder build_cell {};
+        // 가로로 흘러간 양이다 (논리 픽셀, 앱 상태). 머리글과 본문이 이 값 하나로 함께 흐른다.
+        //  - 범위 밖 값은 `arrange`가 다듬고 `scroll_x()`가 다듬은 값을 돌려준다.
+        //  - 고정 열(`frozen_columns`)이 서 있으면 흐르는 열만 이만큼 간다. 고정 열은 제자리다.
+        float scroll_x { 0.0f };
+        // 가로로 이만큼 흘리자는 메시지다 (+ = 오른쪽 내용이 보인다). 가로 휠·←·→가 낸다.
+        //  - 없으면 가로로 흐르지 않는다. 넘친 열은 잘린다.
+        //  - 있으면 열이 창보다 넓을 때 표 아래에 가로 막대가 선다 (`horizontal_bar`). 막대의 끌기·클릭·키도 이 메시지다.
+        std::function<input_action(float delta)> scroll_horizontal {};
+        // 가로 스크롤을 **이 자리로** 하라는 절대 메시지다 (논리 픽셀). 가로 막대의 보조 기술 값 설정(UIA `SetValue`)이 낸다.
+        //  - 없으면 막대의 값이 읽기 전용으로 선다. 변화량으로 환산하지 않는 이유는 `scrollbar_config::scroll_to`와 같다.
+        std::function<input_action(float offset)> scroll_horizontal_to {};
+        // 가로 막대를 언제 세울지다. `automatic`이면 열 폭의 합이 창보다 넓을 때만 선다.
+        //  - 막대가 서면 그 높이만큼 본문의 창이 준다. 마지막 행이 막대 밑에 숨지 않는다.
+        //  - 세로 막대가 서 있으면 그 폭만큼 짧게 서서 구석을 비운다.
+        scrollbar_visibility horizontal_bar { scrollbar_visibility::automatic };
+        // 머리글을 눌렀다. 정렬 순서를 정하고 행을 다시 늘어놓는 것은 앱이다 — 표는 `table_column::sort`를 그릴 뿐이다.
+        table_column_message_factory sort_request {};
+        // 열 경계를 끌었다. 끄는 동안 이어서 오고, 끝나면 `resize_column_end`가 한 번 온다.
+        table_resize_message_factory resize_column {};
+        table_column_message_factory resize_column_end {};
+        // 머리글 칸을 끌어 다른 머리글 칸에 놓았다. `moved` 열을 `target` 열 자리로 옮기자는 메시지다 (탭 재배치와 같은
+        // 규약). 끌기는 누른 채 시작 거리를 넘겨야 서므로 머리글 누름(정렬)과 함께 산다.
+        std::function<input_action(const std::u8string& moved, const std::u8string& target)> reorder_column {};
+        // 머리글을 우클릭했다. 열 숨김·보이기 같은 메뉴를 앱이 연다 — 문맥의 좌표가 메뉴 자리다.
+        //  - 숨긴 열은 앱이 `columns`에서 뺀다. 표는 받은 열만 그린다.
+        std::function<input_action(const std::u8string& column, const ui_action_context& context)> column_menu {};
+        // 계층을 그리는 열이다 (열 키). 비어 있으면 표는 평평하다.
+        //  - 깊이와 펼침은 행 모델의 값(`virtual_list_item::depth`·`expansion`)이고, 펼치기는 `rows.set_expanded`다.
+        //  - 그 열의 칸 앞에 깊이만큼 들여쓰고 가지에는 삼각형을 세운다. ←·→는 본문 목록이 계층으로 쓰고
+        //    (접기·부모로·펴기·첫 자식으로), 갈 곳이 없을 때만 표의 가로 스크롤이 된다.
+        std::u8string tree_column {};
+        // 체크 칸을 둘 열이다 (열 키). 비어 있으면 체크 칸이 없다.
+        //  - 칸 앞에 체크박스가 서고, 상태는 `check_state_of`가 답한다. 폴더처럼 일부만 고른 행은 `mixed`다
+        //    (`aggregate_check`). 트리 열과 같은 열이면 삼각형 뒤에 선다.
+        //  - 누르거나, 본문이 Space를 쓰지 않을 때(`rows.activate`가 비었을 때) Space가 `toggle_check(행 키)`를 낸다.
+        //    다음 상태는 앱이 정한다.
+        std::u8string check_column {};
+        std::function<check_state(const virtual_list_item& row, std::size_t index)> check_state_of {};
+        std::function<input_action(const std::u8string& row)> toggle_check {};
+
+        // 셀 커서가 선 열이다 (열 키, 앱 상태). 행은 본문의 커서(`rows.cursor`)다.
+        //  - 커서 칸에 초점 테가 선다 (초점이 키보드로 왔을 때만, 행의 커서 표시와 같은 규칙).
+        //  - 비어 있으면 F2는 첫 편집 가능 열을 편집한다.
+        std::u8string cell_column {};
+        // ←·→가 셀 커서를 옆 열로 옮기자는 메시지다. **있으면 셀 탐색이 켜진다.**
+        //  - ←·→는 가로 스크롤 대신 열 이동이 되고, 옮긴 칸이 창 밖이면 `scroll_horizontal`로 그 칸을 들인다.
+        //  - 셀 커서가 트리 열에 서 있으면 계층 키(접기·부모로·펴기·첫 자식으로)가 먼저다. 갈 곳이 없을 때만 열 이동이다.
+        //  - ↑↓·Page·Home·End는 지금처럼 행의 것이다.
+        table_column_message_factory move_column {};
+        // 편집 중인 칸이다 (앱 상태). 그 칸 자리에 `build_editor`의 편집기가 서고 초점이 그 안에 갇힌다.
+        //  - 편집기가 서면 초점이 편집기로 옮겨 가고, 편집이 끝나 편집기가 사라지면 본문으로 돌아온다
+        //    (가둠의 진입·복귀, focus-entry-design.md). 앱은 초점을 다루지 않는다.
+        //  - 편집 중의 Enter는 `commit_edit`, Esc는 `cancel_edit`다. IME 조합 중의 Enter·Esc는 조합의 것이다.
+        //  - 편집하는 행은 본문의 커서 행이어야 한다 — 커서 행은 창 밖에서도 지어져 흘려도 편집기가 남는다.
+        //  - 편집 중에 다른 행을 누르면 그 행의 고르기 메시지가 온다. 편집을 확정할지 버릴지는 그것을 받은 앱이 정한다.
+        std::optional<table_cell_ref> editing {};
+        // F2가 커서 칸의 편집을 시작하자는 메시지다. 편집할 수 있는 열(`table_column::editable`)에서만 낸다.
+        //  - 두 번 누름으로도 시작하려면 앱이 `rows.double_click`에서 같은 메시지를 낸다.
+        table_cell_message_factory begin_edit {};
+        table_cell_message_factory commit_edit {};
+        table_cell_message_factory cancel_edit {};
+        table_editor_builder build_editor {};
+
+        // 앞(시작 쪽)에서 이 수만큼의 열은 가로로 흘러도 제자리에 선다 (frozen-columns-design.md).
+        //  - 0이면 지금과 같다. 열 수보다 크면 열 수로 본다.
+        //  - 고정 열이 창을 거의 채우면(`table_frozen_fits`가 거짓) 그 배치에서는 고정이 풀려 모든 열이 흐른다.
+        //  - 앞 열을 숨기거나 옮기는 앱이 이 수를 함께 맞춘다. 표는 끌어서 고정 집합을 바꾸지 않는다 —
+        //    머리글 칸을 끌어 놓는 일은 같은 구역 안에서만 받는다.
+        std::size_t frozen_columns { 0 };
+    };
+</script></div>
+              <ol class="walk-steps-src">
+                <li data-lines="93-102" data-title="열과 본문">표 owner, 보이는 열(그리는 순서 = 이 순서), 본문 설정, 칸 글과 앱의 칸. <code>rows</code>의 <code>owner</code>·<code>build_row</code>·<code>role</code>·<code>row_role</code>은 표가 덮는다.</li>
+                <li data-lines="103-117" data-title="가로 스크롤">앱이 든 가로 위치, 변화량 메시지, 보조 기술의 절대 자리, 가로 막대를 세울 때.</li>
+                <li data-lines="118-128" data-title="머리글 메시지">누름 정렬, 경계 끌기와 끝, 끌어 순서 바꾸기, 우클릭 메뉴. 넷 다 메시지만 낸다.</li>
+                <li data-lines="129-141" data-title="트리 열과 체크 열">계층을 그릴 열, 체크 칸을 둘 열과 그 상태·토글. 같은 열이면 체크가 삼각형 뒤다.</li>
+                <li data-lines="143-164" data-title="셀 커서와 편집">셀 커서의 열(앱 상태), 셀 탐색을 켜는 <code>move_column</code>, 편집 중인 칸과 시작·확정·취소, 편집기 짓기.</li>
+                <li data-lines="166-171" data-title="고정 열">앞에서 고정할 열 수. 창이 좁으면 그 배치에서 풀린다. 앞 열을 숨기거나 옮기는 앱이 함께 맞춘다.</li>
+              </ol>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>같은 화면의 표를 가르지 못한다. 본문 목록·영역·세로 막대와 모든 부품 자리표가 이 값을 쓴다</td></tr>
+                  <tr><td><code>cell_text</code></td><td>없음</td><td>첫 열에만 행의 <code>label</code>이 보이고 나머지 열은 빈다</td></tr>
+                  <tr><td><code>scroll_horizontal</code></td><td>없음</td><td>가로로 흐르지 않는다. 넘친 열은 잘리고 가로 막대도 ←→도 없다</td></tr>
+                  <tr><td><code>scroll_horizontal_to</code></td><td>없음</td><td>가로 막대의 값이 보조 기술에 읽기 전용이다</td></tr>
+                  <tr><td><code>horizontal_bar</code></td><td><code>scrollbar_visibility::automatic</code></td><td>— (<code>never</code>는 막대만 없앤다. 휠·←→ 흐름은 남는다)</td></tr>
+                  <tr><td><code>sort_request</code></td><td>없음</td><td>어느 머리글도 누를 것이 없다</td></tr>
+                  <tr><td><code>resize_column</code></td><td>없음</td><td>경계 손잡이를 짓지 않는다</td></tr>
+                  <tr><td><code>reorder_column</code></td><td>없음</td><td>머리글 칸이 끌기 원천도, 놓을 자리도 아니다</td></tr>
+                  <tr><td><code>column_menu</code></td><td>없음</td><td>머리글 우클릭·길게 누르기가 아무 일도 하지 않는다</td></tr>
+                  <tr><td><code>tree_column</code></td><td>빈 글</td><td>평평한 표다. 있어도 <code>rows.set_expanded</code>가 없으면 삼각형이 서지 않는다</td></tr>
+                  <tr><td><code>check_column</code> · <code>check_state_of</code></td><td>빈 글 · 없음</td><td>체크박스가 서지 않는다 (둘 다 있어야 선다)</td></tr>
+                  <tr><td><code>move_column</code></td><td>없음</td><td>셀 탐색이 꺼진다. ←→는 가로 스크롤이다 (트리 열이면 계층 키가 먼저)</td></tr>
+                  <tr><td><code>editing</code> · <code>build_editor</code></td><td>없음</td><td>편집기가 서지 않는다. <code>build_editor</code>가 nullptr을 돌려줘도 칸 글이 그대로다</td></tr>
+                  <tr><td><code>frozen_columns</code></td><td>0</td><td>고정이 없다. 열 수보다 크면 열 수로 본다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="rows (본문)">
+            <div class="prose">
+              <p><code>rows</code>는 <code>virtual_list_config</code> 그대로다. 원문과 전체 표는 목록 문서의 <a class="xref" href="lists.html#config">설정 레퍼런스</a>에 있다. 표에서 뜻이 달라지거나 함께 알아야 할 칸만 적는다.</p>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>칸</th><th>표에서</th></tr></thead>
+                <tbody>
+                  <tr><td><code>items</code> · <code>shared_items</code></td><td>행 모델. 표가 본문으로 옮기므로 생성 뒤 <code>config().rows</code>는 비어 있다. 큰 모델은 <code>shared_items</code></td></tr>
+                  <tr><td><code>cursor</code></td><td>커서 행 = 셀 커서의 행. 편집하는 행도 이 행이어야 한다</td></tr>
+                  <tr><td><code>move</code> · <code>move_with</code> · <code>activate</code></td><td>셋 다 없으면 표 전체가 Tab 자리가 아니다</td></tr>
+                  <tr><td><code>activate</code></td><td>있으면 Space·Enter가 실행이다. Space가 체크 토글로 가지 않는다</td></tr>
+                  <tr><td><code>double_click</code></td><td>행 두 번 누름. F2 편집을 두 번 누름으로도 시작하려면 여기서 같은 일을 한다</td></tr>
+                  <tr><td><code>scroll</code> · <code>bar</code></td><td>세로 스크롤과 세로 막대. <code>scroll</code>이 없으면 세로 막대가 서지 않는다</td></tr>
+                  <tr><td><code>set_expanded</code></td><td>트리 열의 삼각형이 쓴다</td></tr>
+                  <tr><td><code>owner</code> · <code>build_row</code> · <code>role</code> · <code>row_role</code> · <code>tree_gutter</code> · <code>tree_keys</code></td><td>표가 덮는다. 넣어도 쓰이지 않는다</td></tr>
+                  <tr><td><code>columns</code> · <code>minimum_column_width</code></td><td>가상 목록의 격자 모드다. 표의 열 배치와 맞지 않으니 쓰지 않는다 (표 코드는 이 값을 보지 않는다)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="table_element">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/table_element.h:200-248" data-path="include/luil/ui/table_element.h" data-start="200"><script type="text/plain">
+    // 열 머리글이 있고 행을 고를 수 있는 표다 (Qt `QTreeView`+`QHeaderView`, WPF `DataGrid`의 1단계).
+    //
+    // **본문은 가상 목록 그대로다.** 행의 가상화·선택·커서·키보드·컨텍스트 메뉴·끌어 옮기기가 `rows`의 값으로
+    // 그대로 선다. 표가 더하는 것은 열이다.
+    //  - 머리글과 본문의 열 경계가 같은 계산(`table_column_spans`)에서 나와 어느 배율에서나 맞는다.
+    //  - 가로 스크롤은 값 하나(`scroll_x`)라 머리글과 본문이 함께 흐른다. 가로 휠·←·→·가로 막대가 그것을 청한다.
+    //  - 가로 창 폭은 세로 막대를 뺀 본문의 폭이다. 끝까지 흘리면 마지막 열의 끝이 세로 막대 앞에 선다.
+    //  - 열 경계를 끌면 폭 변화량을, 머리글을 누르면 정렬 요청을 낸다. 정렬과 폭 저장은 앱의 몫이다.
+    //  - 보조 기술은 본문을 표(DataGrid)로, 행을 DataItem으로, 머리글 칸을 HeaderItem으로 읽는다.
+    //  - 앞 열 몇 개는 가로 스크롤에서 제자리에 세울 수 있다 (`table_config::frozen_columns`). 흐르는 열은 고정 구역 밖으로 잘린다.
+    //
+    // 아직 없는 것은 table-design.md의 "범위"에 있다 (열 가상화, 셀 범위 선택, Grid·Table 패턴, 오른쪽 고정).
+    class table_element final : public ui_element
+    {
+    public:
+        explicit table_element(table_config config);
+
+        // `arrange`가 범위 안으로 다듬은 가로 스크롤이다.
+        [[nodiscard]] float scroll_x() const noexcept;
+        // 열 폭의 합이다 (논리 픽셀).
+        [[nodiscard]] float content_width() const noexcept;
+        // 본문 목록이다.
+        [[nodiscard]] const virtual_list_element& body() const noexcept;
+        // 가로 막대다. `scroll_horizontal`이 없거나 `horizontal_bar`가 `never`면 nullptr다.
+        //  - 열이 넘치지 않는 배치에서는 숨는다 (`visible()`이 거짓).
+        [[nodiscard]] const scrollbar_element* horizontal_bar() const noexcept;
+        // 이번 배치에 서 있는 고정 열 수와 폭이다 (논리 픽셀). 고정이 없거나 풀렸으면 0이다. `arrange` 뒤에 유효하다.
+        [[nodiscard]] std::size_t frozen_columns() const noexcept;
+        [[nodiscard]] float frozen_width() const noexcept;
+        // 가로 창 폭이다 (논리 픽셀, 세로 막대를 뺀 본문의 폭). `arrange` 뒤에 유효하다.
+        //  - 고정 열의 폭 끌기가 한도(`창 - 48 - 고정 폭`)를 잰다.
+        [[nodiscard]] float viewport_width() const noexcept;
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] access_info accessibility() const override;
+        // 칸 안 컨트롤에 초점이 갈 때 흐르는 창으로 들이는 가로 스크롤 변화량이다 (논리 픽셀).
+        //  - **왼쪽 끝이 고정 경계 이상인 대상에만** 답하고 나머지는 0이다 (0.5 물리 픽셀의 여유를 둔다). 본문·행·머리글은
+        //    왼쪽 끝이 표의 시작이라 늘 0이다 — 경계와 맞춰 답하면 본문에 초점이 갈 때마다 표가 되돌아간다.
+        //  - 한계: 왼쪽 밖이나 고정 구역 아래에 일부 숨은 칸은 이 길로 들이지 못한다. 셀 커서와 F2 길은 들인다.
+        [[nodiscard]] float scroll_delta_to_reveal(const rect_f& target) const override;
+
+        // 행 칸과 머리글이 배치에서 읽는다 (같은 tree 안의 부품이라 표가 먼저 배치된다).
+        [[nodiscard]] const table_config& config() const noexcept;
+        [[nodiscard]] const std::vector<table_column_span>& spans() const noexcept;
+        // 행 모델에서 옮겨 둔 펼침 메시지다 (`rows.set_expanded`). 트리 열의 삼각형이 쓴다.
+        [[nodiscard]] const std::function<input_action(const std::u8string& key, bool expanded)>& expand_message() const noexcept;
+        // 본문 커서 행의 키다 (본문이 다듬은 커서, 배치 뒤에 유효하다). 셀 커서가 이 행에 선다.
+        [[nodiscard]] std::u8string_view cursor_key() const noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>멤버</th><th>뜻</th><th>맞는 때</th></tr></thead>
+                <tbody>
+                  <tr><td><code>scroll_x()</code></td><td>범위 안으로 다듬은 가로 스크롤</td><td><code>arrange</code> 뒤</td></tr>
+                  <tr><td><code>content_width()</code></td><td>열 폭 합</td><td>생성 직후</td></tr>
+                  <tr><td><code>body()</code></td><td>본문 <code>virtual_list_element</code>. 행 모델은 <code>body().model()</code></td><td>늘</td></tr>
+                  <tr><td><code>horizontal_bar()</code></td><td>가로 막대. 넘치지 않는 배치에서는 <code>visible()</code>이 거짓</td><td><code>arrange</code> 뒤 (보임)</td></tr>
+                  <tr><td><code>frozen_columns()</code> · <code>frozen_width()</code></td><td>이번 배치에 선 고정 수·폭. 없거나 풀렸으면 0</td><td><code>arrange</code> 뒤</td></tr>
+                  <tr><td><code>viewport_width()</code></td><td>가로 창 폭 (세로 막대를 뺀 본문 폭)</td><td><code>arrange</code> 뒤</td></tr>
+                  <tr><td><code>scroll_delta_to_reveal</code></td><td>칸 안 컨트롤을 흐르는 창으로 들이는 변화량. 왼쪽 끝이 고정 경계 이상인 대상에만 답한다</td><td><code>route_reveal</code>이 부른다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="형식·상수·순수 함수">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/table_element.h:69-89,174-198" data-path="include/luil/ui/table_element.h" data-start="69"><script type="text/plain">
+    // 칸에 보일 글이다. 칸을 따로 짓지 않은 열(`build_cell`이 nullptr을 돌려준 열)은 표가 이 글을 한 줄로 그린다.
+    using table_cell_text_factory = std::function<std::u8string(const virtual_list_item& row, std::size_t index, const table_column& column)>;
+    // 칸 하나를 앱이 짓는다 (상태 배지·아이콘·체크 같은 것).
+    //  - nullptr이면 그 칸은 `cell_text`의 글 한 줄이다.
+    //  - **자리표는 앱이 정하고 표 안에서 유일해야 한다.** 행 키와 열 키를 함께 담는 것이 보통이다.
+    //  - tree를 짓는 동안 불린다 (`virtual_row_builder`와 같은 규약). 앱 상태를 바꾸지 않는 순수한 함수여야 한다.
+    using table_cell_builder = std::function<std::unique_ptr<ui_element>(const virtual_list_item& row, std::size_t index, const table_column& column, bool selected)>;
+    using table_column_message_factory = std::function<input_action(const std::u8string& column)>;
+    using table_cell_message_factory = std::function<input_action(const table_cell_ref& cell)>;
+    // 편집 중인 칸의 편집기를 앱이 짓는다 (보통 `text_input_element`). 자리표는 앱이 정하고 표 안에서 유일해야 한다.
+    using table_editor_builder = std::function<std::unique_ptr<ui_element>(const virtual_list_item& row, std::size_t index, const table_column& column)>;
+    // 열 폭 변화량이다 (논리 픽셀, + = 넓어진다). 최소 폭 아래로 가는 몫은 표가 미리 잘라 낸다.
+    using table_resize_message_factory = std::function<input_action(const std::u8string& column, float delta)>;
+
+    inline constexpr float table_header_height { 28.0f };
+    // 칸 글의 좌우 여백이다 (논리 픽셀). 머리글과 본문이 같은 값을 써서 글의 끝이 맞는다.
+    inline constexpr float table_cell_padding { 8.0f };
+    // 열 경계를 잡는 띠의 폭이다 (논리 픽셀). 경계에 절반씩 걸친다.
+    inline constexpr float table_grip_width { 8.0f };
+    // ←·→ 한 번이 가로로 흘리는 거리다 (논리 픽셀).
+    inline constexpr float table_key_scroll_step { 48.0f };
+⋯@174
+    // 열 하나가 차지하는 가로 자리다 (논리 픽셀, 가로 스크롤 전).
+    struct table_column_span
+    {
+        float begin { 0.0f };
+        float width { 0.0f };
+
+        [[nodiscard]] bool operator==(const table_column_span&) const = default;
+    };
+
+    // 열들의 가로 자리다. 폭이 음수인 열은 0으로 본다.
+    [[nodiscard]] std::vector<table_column_span> table_column_spans(std::span<const table_column> columns);
+    // 열 폭의 합이다 (가로로 흐를 내용의 폭).
+    [[nodiscard]] float table_content_width(std::span<const table_column> columns) noexcept;
+    // 끈 변화량에서 최소 폭 아래로 가는 몫을 잘라 낸 값이다.
+    [[nodiscard]] float table_resize_delta(const table_column& column, float delta) noexcept;
+    // 가로 스크롤을 범위 안으로 다듬는다. 내용이 창보다 좁으면 0이다.
+    [[nodiscard]] float table_clamp_scroll(float scroll_x, float content_width, float viewport_width) noexcept;
+    // 앞 count개 열의 폭 합이다 (논리 픽셀). count가 열 수보다 크면 열 수로 다듬고, 폭이 음수인 열은 0으로 본다.
+    [[nodiscard]] float table_frozen_width(std::span<const table_column> columns, std::size_t count) noexcept;
+    // 고정 폭을 두고도 흐르는 창이 `table_key_scroll_step`(48) 이상 남는가.
+    [[nodiscard]] bool table_frozen_fits(float frozen_width, float viewport_width) noexcept;
+    // 그 열을 흐르는 창 [frozen_width + scroll_x, scroll_x + viewport_width]로 들이는 가로 스크롤 변화량이다 (이미 보이면 0).
+    //  - 창보다 넓은 열은 시작을 창의 시작에 맞춘다.
+    //  - frozen_width가 0이면 창이 [scroll_x, scroll_x + viewport_width]라 고정 없는 표의 들이기와 같은 값이다.
+    [[nodiscard]] float table_reveal_delta(const table_column_span& span, float scroll_x, float frozen_width, float viewport_width) noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>함수</th><th>값</th></tr></thead>
+                <tbody>
+                  <tr><td><code>table_column_spans</code></td><td>폭의 누적 합 <code>{ begin, width }</code>. 음수 폭은 0</td></tr>
+                  <tr><td><code>table_content_width</code></td><td>폭 합 (음수 폭은 0)</td></tr>
+                  <tr><td><code>table_resize_delta</code></td><td><code>max(Δ, min(0, min_width − width))</code></td></tr>
+                  <tr><td><code>table_clamp_scroll</code></td><td><code>clamp(x, 0, max(0, 내용 − 창))</code></td></tr>
+                  <tr><td><code>table_frozen_width</code></td><td>앞 <code>min(n, 열 수)</code>개 폭 합</td></tr>
+                  <tr><td><code>table_frozen_fits</code></td><td><code>창 − 고정 폭 ≥ 48</code></td></tr>
+                  <tr><td><code>table_reveal_delta</code></td><td>흐르는 창 <code>[F + x, x + 창]</code>. 왼쪽 밖이면 <code>left − (F + x)</code>, 오른쪽 밖이면 <code>min(left − F, right − 창) − x</code> (넓은 열은 시작 맞춤), 아니면 0</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>상수는 논리 픽셀이다: 머리글 높이 28, 칸 글 여백 8(머리글과 본문이 같아 글의 끝이 맞는다), 경계 손잡이 8(경계에 절반씩 걸친다), ←→ 한 번 48.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">표는 콜백을 부르지 않는다. 앱이 준 factory가 메시지를 만들고, 표는 그것을 돌려줄 뿐이다. 메시지는 logic thread의 <code>handle</code>로 간다.</p>
+        </header>
+        <div class="prose small"><p>스레드 칸은 factory가 불리는 자리다. <span class="thread-chip in">input</span>은 controller가 포인터·키·휠·터치를 처리할 때, <span class="thread-chip ui">UI</span>는 보조 기술의 명령을 계획할 때(Win32에서는 창 thread의 UIA provider)다. 누름류 명령(Invoke·Toggle)의 결과는 input thread로 넘어가 정책의 <code>on_click</code> 뒤에 나간다.</p></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>메시지</th><th>스레드</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>머리글 칸 누름 (클릭·탭)</td><td><code>sort_request(열 키)</code> — <code>sortable</code>인 열만</td><td><span class="thread-chip in">input</span></td><td>정렬 열·방향과 행 순서를 바꾸고, 다음 frame에 그 열의 <code>sort</code>를 칠한다</td></tr>
+              <tr><td>보조 기술: 머리글 칸 Invoke</td><td><code>sort_request(열 키)</code> (기본 실행이 왼쪽 누름이다)</td><td><span class="thread-chip ui">UI</span></td><td>위와 같다</td></tr>
+              <tr><td>경계 손잡이 끌기</td><td><code>resize_column(열 키, Δ)</code>가 이어서</td><td><span class="thread-chip in">input</span></td><td>폭에 Δ를 더한다. 자기 지금 폭으로 <code>table_resize_delta</code>를 한 번 더 부른다</td></tr>
+              <tr><td>경계 손잡이 놓기</td><td><code>resize_column_end(열 키)</code> 한 번</td><td><span class="thread-chip in">input</span></td><td>실행 취소 합치기를 끊는다 (<code>break_merge()</code>)</td></tr>
+              <tr><td>머리글 칸을 다른 머리글 칸에 놓기</td><td><code>reorder_column(옮긴 열, 대상 열)</code> — 같은 표·같은 고정 구역만</td><td><span class="thread-chip in">input</span></td><td>열 목록의 순서를 바꾼다. 앞 열이 바뀌면 <code>frozen_columns</code>도 맞춘다</td></tr>
+              <tr><td>머리글 우클릭 · 길게 누르기 · 펜 배럴</td><td><code>column_menu(열 키, 문맥)</code></td><td><span class="thread-chip in">input</span></td><td>문맥의 <code>x</code>·<code>y</code>(물리 픽셀)에 메뉴를 연다</td></tr>
+              <tr><td>체크박스 누름 · Space (<code>rows.activate</code>가 없을 때)</td><td><code>toggle_check(행 키)</code> — 활성 행만</td><td><span class="thread-chip in">input</span></td><td>다음 상태를 정한다</td></tr>
+              <tr><td>트리 열 삼각형 누름</td><td><code>rows.set_expanded(행 키, !지금)</code></td><td><span class="thread-chip in">input</span></td><td>펼친 집합을 고치고 다시 평탄화한다</td></tr>
+              <tr><td>가로 휠 · 터치 가로 쓸기(놓으면 관성)</td><td><code>scroll_horizontal(Δ)</code> — 범위 안으로 깎음, 끝이면 0</td><td><span class="thread-chip in">input</span></td><td><code>scroll_x += Δ</code></td></tr>
+              <tr><td>← · → (셀 탐색 없음)</td><td><code>scroll_horizontal(±48을 깎은 값)</code>. 끝이면 메시지 없이 삼킨다</td><td><span class="thread-chip in">input</span></td><td><code>scroll_x += Δ</code></td></tr>
+              <tr><td>가로 막대 끌기 · 트랙 누름 · 막대 키</td><td><code>scroll_horizontal(Δ)</code> — <strong>깎지 않는다</strong></td><td><span class="thread-chip in">input</span></td><td>더하고 범위로 다듬는다 (<a class="xref" href="#build-hscroll">가로 스크롤</a>)</td></tr>
+              <tr><td>보조 기술: 가로 막대 값 정하기 (UIA <code>SetValue</code>)</td><td><code>scroll_horizontal_to(offset)</code> — 막대가 범위로 다듬고, 같은 값이면 내지 않는다</td><td><span class="thread-chip ui">UI</span></td><td><code>scroll_x = offset</code></td></tr>
+              <tr><td>← · → (셀 탐색)</td><td><code>move_column(옆 열 키)</code>, 창 밖이면 <code>scroll_horizontal(들이기 Δ)</code>를 함께</td><td><span class="thread-chip in">input</span></td><td><code>cell_column</code>을 바꾼다</td></tr>
+              <tr><td>F2</td><td><code>begin_edit({ 커서 행, 열 })</code>, 창 밖이면 들이기 Δ를 함께</td><td><span class="thread-chip in">input</span></td><td><code>editing</code>을 세우고 편집기 초안을 채운다</td></tr>
+              <tr><td>편집기 안의 Enter · Esc</td><td><code>commit_edit(칸)</code> · <code>cancel_edit(칸)</code> — 한 번씩</td><td><span class="thread-chip in">input</span></td><td>값을 반영하고 <code>editing</code>을 비운다 · 그냥 비운다</td></tr>
+              <tr><td>칸 안 컨트롤로 간 키보드 초점</td><td><code>scroll_horizontal(Δ)</code> — 정책의 <code>on_focus_moved</code>가 <code>route_reveal</code>을 돌려줄 때만</td><td><span class="thread-chip in">input</span></td><td><code>scroll_x += Δ</code></td></tr>
+              <tr><td>끌기 중 가장자리 띠 (머리글 칸 끌기·행 끌어 놓기)</td><td><code>scroll_horizontal(Δ)</code>가 시간마다</td><td><span class="thread-chip in">input</span></td><td><code>scroll_x += Δ</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>행 누름·두 번 누름·행 우클릭·↑↓·Page·Ctrl+A·세로 휠·행 끌어 놓기·보조 기술의 펼치기와 선택 더하기는 본문 가상 목록의 메시지다. 표 안에서도 같다 — <a class="xref" href="lists.html#messages">목록: 사건과 메시지</a>.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">표 전체가 Tab 자리 하나(본문)다. 본문이 쓰지 않은 키가 표로 올라온다 — ←→, F2, Space가 표의 키다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="표의 키">
+            <div class="walk side">
+              <div class="code" data-lang="cpp" data-src="src/ui/table_element.cpp:843-873" data-path="src/ui/table_element.cpp" data-start="843"><script type="text/plain">
+    std::optional<std::vector<input_action>> table_element::handle_key(const key_pressed_event& event) const
+    {
+        // 본문 목록이 쓰지 않은 키가 여기로 올라온다 (key-propagation-design.md).
+        //  - ←·→는 셀 탐색이 켜졌으면 열 이동, 아니면 가로 스크롤이다. 계층 목록의 ←·→는 본문이 먼저 쓴다.
+        //  - Space는 커서 행의 체크다. 본문이 Space를 실행 키로 쓰면(`rows.activate`) 여기까지 오지 않는다.
+        //  - F2는 커서 칸의 편집이다.
+        if (event.shortcut_modifier_down() || event.shift)
+            return std::nullopt;
+        if (event.key == key_code::f2)
+            return start_edit();
+        if (event.key == key_code::space && config_.check_column.empty() == false && config_.toggle_check != nullptr)
+        {
+            const std::optional<std::size_t>& cursor { body_->cursor() };
+            if (cursor.has_value() == false || *cursor >= body_->model().size() || body_->model()[*cursor].enabled == false)
+                return std::vector<input_action> {};
+            return std::vector<input_action> { config_.toggle_check(body_->model()[*cursor].key) };
+        }
+        if (event.key != key_code::arrow_left && event.key != key_code::arrow_right)
+            return std::nullopt;
+        const bool forward { event.key == key_code::arrow_right };
+        if (config_.move_column != nullptr)
+            return move_cell(forward);
+        if (config_.scroll_horizontal == nullptr)
+            return std::nullopt;
+        const float step { forward ? table_key_scroll_step : -table_key_scroll_step };
+        const float delta { table_clamp_scroll(scroll_x_ + step, content_width_, viewport_width_) - scroll_x_ };
+        // 끝에 닿았으면 키만 삼킨다 — 끝에서 →를 누를 때마다 앱 단축키가 터지지 않게 한다.
+        if (delta == 0.0f)
+            return std::vector<input_action> {};
+        return std::vector<input_action> { config_.scroll_horizontal(delta) };
+    }
+</script></div>
+              <ol class="walk-steps-src">
+                <li data-lines="845-850" data-title="수식 키">Ctrl·Alt·Meta·Shift와 함께 누른 키는 표가 받지 않는다. 앱 단축키로 흐른다.</li>
+                <li data-lines="851-852" data-title="F2">커서 칸의 편집이다. 편집할 수 없는 열이면 흐른다.</li>
+                <li data-lines="853-859" data-title="Space">체크 열과 <code>toggle_check</code>가 있을 때 커서 행의 체크다. 커서가 없거나 비활성이면 삼키기만 한다.</li>
+                <li data-lines="860-866" data-title="← · →">셀 탐색이 켜졌으면 열 이동, 아니면 가로 스크롤. 둘 다 없으면 흐른다.</li>
+                <li data-lines="867-872" data-title="한 걸음">±48을 범위 안으로 깎은 변화량이다. 이미 끝이면 메시지 없이 키만 삼킨다.</li>
+              </ol>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>동작</th></tr></thead>
+                <tbody>
+                  <tr><td>Tab · Shift+Tab</td><td>표 전체가 한 자리(본문)다. 머리글 칸·경계 손잡이·체크박스·두 막대는 자리가 아니다. <code>rows</code>에 <code>move</code>·<code>move_with</code>·<code>activate</code> 중 하나라도 있어야 자리다</td></tr>
+                  <tr><td>↑↓ · Page · Home · End · 글자 · Ctrl+Space · Ctrl+A</td><td>본문 가상 목록의 키다 (<a class="xref" href="lists.html#keyboard">목록: 키보드</a>)</td></tr>
+                  <tr><td>← · →</td><td>① 트리 열이 있고 셀 탐색이 꺼져 있으면 본문의 계층 키가 먼저다. ② <code>move_column</code>이 있으면 셀 커서 이동 (셀 커서가 트리 열이면 계층 키가 먼저, 끝 열이면 삼킨다). ③ <code>scroll_horizontal</code>이 있으면 가로 스크롤. ④ 아무것도 없으면 앱 정책으로 흐른다</td></tr>
+                  <tr><td>F2</td><td>편집 시작. 편집할 수 있는 열이고 커서 행이 활성일 때만 표의 것이다</td></tr>
+                  <tr><td>Space</td><td><code>rows.activate</code>가 있으면 실행. 없고 체크 열이 있으면 커서 행의 <code>toggle_check</code></td></tr>
+                  <tr><td>Enter</td><td><code>rows.activate</code>가 있으면 실행. 없으면 기본 단추를 거쳐 앱으로 흐른다</td></tr>
+                  <tr><td>수식 키 + ←→ · F2 · Space</td><td>표가 받지 않는다 (앱 단축키)</td></tr>
+                  <tr><td>Shift+F10</td><td>머리글·행의 메뉴에 닿지 않는다. controller는 초점(본문)과 그 조상에서 우클릭 액션을 찾는데, 머리글 칸과 행은 본문의 조상이 아니다 (코드에서 확인한 동작)</td></tr>
+                  <tr><td>편집 중 Enter · Esc</td><td><code>commit_edit</code> · <code>cancel_edit</code>. 수식 키·Shift와 함께면 받지 않는다</td></tr>
+                  <tr><td>편집 중 Tab</td><td>가둠 안의 자리가 편집기 하나라 제자리다</td></tr>
+                  <tr><td>편집 중 F2</td><td>텍스트 칸이 F2를 쓰지 않아 표까지 올라오므로 <code>begin_edit</code>가 다시 날 수 있다 (코드에서 확인한 동작, test 없음)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>행 커서 테와 셀 커서 테는 키보드로 온 초점일 때만 선다. 머리글 칸·손잡이·체크박스·가로 막대를 눌러도 초점은 본문으로 간다 — 그래서 머리글을 누른 뒤에도 ↓가 표의 것이고, 그 초점에는 테가 없다. 정렬·폭·순서·머리글 메뉴는 키보드로 다룰 길이 없다.</p></div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>부품</th><th>역할</th><th>이름 · 상태 · 동작</th></tr></thead>
+                <tbody>
+                  <tr><td>표</td><td>구조 (접힌다)</td><td>—</td></tr>
+                  <tr><td>머리글 줄</td><td><code>header</code></td><td>이름 = 표 이름</td></tr>
+                  <tr><td>머리글 칸</td><td><code>header_item</code></td><td>이름 = <code>header</code>. 기본 실행 = 정렬 요청</td></tr>
+                  <tr><td>경계 손잡이</td><td><code>handle</code></td><td>이름 = 열 <code>header</code>. 값이 없다</td></tr>
+                  <tr><td>본문</td><td><code>table</code> (선택 container)</td><td>이름은 배치 때 표에서 물려받는다. 여러 선택·선택 읽기. 창 밖 행은 모델로 답한다</td></tr>
+                  <tr><td>행</td><td><code>data_item</code></td><td>이름 = 행 <code>label</code>. <code>selected</code>, 가지면 <code>expanded</code>. 펼치기·접기·선택 더하기·빼기</td></tr>
+                  <tr><td>칸 묶음 · 레인</td><td>구조 (접힌다)</td><td>—</td></tr>
+                  <tr><td>체크박스</td><td><code>check_box</code></td><td>이름 = 행 <code>label</code>. <code>checked</code>·<code>mixed</code></td></tr>
+                  <tr><td>가로 막대</td><td><code>scroll_bar</code> (가로)</td><td>이름 = 표 이름. 범위 <code>{ 0, 내용 − 창, scroll_x }</code>. 값 정하기 → <code>scroll_horizontal_to</code></td></tr>
+                  <tr><td>세로 막대</td><td><code>scroll_bar</code> (세로)</td><td>이름 = 표 이름. 값 정하기 → <code>rows.scroll_to</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>역할</th><th>Windows UIA</th><th>macOS</th><th>iOS</th></tr></thead>
+                <tbody>
+                  <tr><td><code>table</code></td><td>DataGrid</td><td>AXTable</td><td>container</td></tr>
+                  <tr><td><code>data_item</code></td><td>DataItem</td><td>AXRow</td><td>접근 요소</td></tr>
+                  <tr><td><code>header</code> · <code>header_item</code></td><td>Header · HeaderItem</td><td>AXGroup · AXButton (누르면 정렬)</td><td>머리글 칸은 접근 요소</td></tr>
+                  <tr><td><code>handle</code></td><td>Thumb</td><td>AXSplitter</td><td>접근 요소</td></tr>
+                  <tr><td><code>scroll_bar</code></td><td>ScrollBar</td><td>AXScrollBar</td><td>접근 요소</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li>UIA의 Grid·Table 패턴(행·열 좌표, 칸 단위 탐색, 열 머리글 연결)은 없다. 칸이 element가 아니라 행이 그리는 글이라서다.</li>
+                <li>고정 열이 있어도 접근 tree의 모양·순서·이름·자동화 id는 같다. 고정 경계 밑에 가린 흐르는 칸은 화면 밖으로 읽힌다.</li>
+                <li>보조 기술의 명령은 UI thread에서 계획된다. 그때 불리는 factory(<code>scroll_horizontal_to</code>·<code>rows.scroll_to</code>·<code>rows.set_expanded</code>·<code>sort_request</code>)도 메시지만 지어야 한다.</li>
+                <li>Android에는 접근성 다리가 없다 — 표도 보조 기술에 보이지 않는다 (<a class="xref" href="accessibility.html#platforms">접근성: 플랫폼</a>).</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">표 코드에는 플랫폼 분기가 없다. 배치·그리기·키·메시지는 모든 OS에서 같고, 차이는 입력 장치와 접근성 다리에서 난다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>항목</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td>가로 휠</td><td><code>WM_MOUSEHWHEEL</code></td><td>스크롤 사건의 가로 축</td><td>트랙패드·휠의 가로 성분 (정밀 스크롤 40점 = 한 눈금)</td><td>트랙패드 두 손가락 팬 → 휠</td></tr>
+              <tr><td>터치 가로 쓸기</td><td>터치 → 표의 가로 흐름</td><td>같다</td><td>터치가 없다</td><td>같다</td></tr>
+              <tr><td>길게 누르기 = 머리글·행 메뉴</td><td>기본값 (600ms)</td><td>시스템 길게 누르기 시간·터치 슬롭</td><td>—</td><td>기본값</td></tr>
+              <tr><td>두 번 누름 시간</td><td><code>GetDoubleClickTime()</code></td><td>시스템 두 번 탭 시간</td><td>시스템 더블 클릭 간격</td><td>350ms 고정</td></tr>
+              <tr><td>보조 기술</td><td>UIA (위 표)</td><td><strong>없다</strong></td><td>AX (위 표)</td><td>VoiceOver (위 표)</td></tr>
+              <tr><td>데모</td><td>작업대의 "변경 파일" 표</td><td>모바일 데모에 표가 없다</td><td>—</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>터치에서 갈리는 것 (표 전용 test 없이 코드에서 확인한 동작):</p>
+          <ul>
+            <li><strong>경계 손잡이는 터치에서도 누르는 즉시 끌기다.</strong> 손잡이는 시작 거리가 0인 끌기 대상이라 스크롤 후보가 되지 않는다. 손잡이 폭이 8 논리 픽셀이라, 머리글 위의 가로 쓸기가 경계 근처에서 시작하면 폭 끌기가 된다.</li>
+            <li><strong>머리글 칸 끌기(순서 바꾸기)</strong>는 일반 끌어 놓기다. 400ms(<code>pan_start_time</code>) 안에 12 논리 픽셀을 넘기면 스크롤이고, 그 뒤의 이동이 끌기다 — 머리글 위의 빠른 쓸기는 가로 스크롤, 눌렀다 천천히 끌면 순서 바꾸기다.</li>
+            <li>행 높이는 플랫폼마다 같다 (기본 24). 터치에 큰 행이 필요하면 앱이 <code>rows.row_height</code>를 정한다. 터치 몸짓의 공통 규칙은 <a class="xref" href="input.html#s8">입력과 초점: 터치</a>에 있다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리다. 설계 문서와 코드가 다른 곳은 코드를 따랐다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>본문이 Tab 자리가 아니면 키보드가 통째로 죽는다.</strong> <code>rows.move</code>·<code>rows.move_with</code>·<code>rows.activate</code>가 모두 없으면 표는 Tab 자리가 아니고, 머리글을 눌러도 초점이 서지 않는다. ←→·F2·Space 체크·셀 탐색이 모두 닿지 않는다. 휠과 포인터는 된다.</li>
+          <li><strong>정책을 둔 앱은 휠과 초점 들이기를 직접 잇는다.</strong> 정책이 있으면 휠은 <code>on_wheel</code>로만 가고, 키보드로 옮긴 초점은 <code>on_focus_moved</code>로만 간다. 둘의 기본 구현은 빈 목록이다. 몸통은 <code>return luil::route_wheel(tree, event, scroll_delta);</code>와 <code>return luil::route_reveal(tree, focused);</code>다.</li>
+          <li><strong>정책이 없으면 휠은 되지만 초점 들이기는 없다.</strong> controller가 휠은 직접 <code>route_wheel</code>로 보내지만, 칸 안 컨트롤로 간 초점을 흐르는 창에 들이는 일은 정책이 있어야만 일어난다. 헤더 주석("정책이 없으면 휠 라우팅이 꺼진다")은 휠에 대해서는 코드와 다르다.</li>
+          <li><strong>가로 막대 끌기는 앱 값을 끝 너머로 쌓는다.</strong> 막대의 끌기·트랙 누름 변화량은 범위를 보지 않는다. 휠·←→·들이기는 깎인 변화량을 낸다. 앱이 0 아래만 다듬으면 되돌아오는 휠이 한동안 아무 일도 하지 않는 것처럼 보인다. 배치 뒤 <code>scroll_x()</code>를 되돌려 쓴다.</li>
+          <li><strong>←→ 한 걸음은 48이 아닐 수 있다.</strong> 코드는 ±48을 범위 안으로 깎은 값을 낸다. 끝 근처에서는 더 작고, 끝이면 메시지가 없다. 설계 문서의 "<code>scroll_horizontal(±48)</code>"과 다르다.</li>
+          <li><strong>세로 휠이 표를 가로로 흘리는 자리가 있다.</strong> 세로 휠은 축을 묻지 않고 좌표를 덮는 가장 안쪽 흘리는 창에 간다. 머리글 위, 또는 행이 적어 본문이 흘릴 것이 없는 표 위의 세로 휠은 표의 가로 흐름이 받는다 (코드에서 확인한 동작).</li>
+          <li><strong>정렬은 표가 하지 않는다.</strong> <code>table_column::sort</code>는 화살표만 그린다. 앱이 행 순서를 바꾸고 frame마다 <code>sort</code>를 칠한다.</li>
+          <li><strong>열 폭 변화량은 게시된 옛 폭 기준이다.</strong> 끄는 동안의 최소 폭 다듬기가 마지막 게시 폭을 기준으로 해서, 포인터가 최소 폭 아래로 갔다 돌아오면 경계가 늦게 따라온다. 앱이 자기 지금 폭으로 <code>table_resize_delta</code>를 한 번 더 부른다.</li>
+          <li><strong>표가 <code>rows</code>의 여섯 칸을 덮는다.</strong> <code>owner</code>·<code>build_row</code>·<code>role</code>·<code>row_role</code>(헤더 주석)에 더해 코드는 <code>tree_gutter</code>·<code>tree_keys</code>도 덮는다. 생성 뒤의 <code>config().rows</code>는 비어 있다 — 행은 <code>body().model()</code>로 읽는다.</li>
+          <li><strong>자리표 중복.</strong> <code>build_cell</code>·<code>build_editor</code>의 element 자리표는 표 안에서 유일해야 한다. 같은 표면의 다른 <code>scroll_area_element</code>가 표와 같은 owner를 쓰면 본문의 세로 막대와 겹친다. 겹치면 <code>duplicate_ids()</code>에 나타나고 hover·초점이 첫 id로 간다.</li>
+          <li><strong>고정 열 수는 표가 맞춰 주지 않는다.</strong> 앞 열을 숨기거나 옮기면 앱이 <code>frozen_columns</code>를 함께 맞춘다. 창이 좁으면 고정이 그 배치에서만 풀리고, 섰는지는 <code>arrange</code> 뒤의 <code>frozen_columns()</code>만 안다.</li>
+          <li><strong>Tab으로 간 초점의 들이기에는 한계가 있다.</strong> <code>scroll_delta_to_reveal</code>은 왼쪽 끝이 고정 경계 이상인 대상에만 답한다. 왼쪽 밖이나 고정 구역 아래에 일부 숨은 칸은 이 길로 들이지 못한다. 셀 커서와 F2는 들인다.</li>
+          <li><strong>편집하는 행은 커서 행이어야 하고, 편집기 kind는 텍스트 대상이어야 한다.</strong> 커서가 아닌 행의 편집기는 흘리면 tree에서 사라질 수 있다. 정책의 <code>text_target_of</code>가 편집기 kind를 모르면 caret·IME·편집 메시지가 이어지지 않는다.</li>
+          <li><strong>F2는 편집할 수 있는 열에서만 표의 것이다.</strong> 아니면 앱으로 흐른다. 편집 중의 F2도 표까지 올라와 <code>begin_edit</code>를 다시 낼 수 있다 (코드에서 확인한 동작). 편집 중에 다른 행을 누르면 그 행의 고르기 메시지만 온다.</li>
+          <li><strong>Space가 체크가 되는 것은 <code>rows.activate</code>가 빌 때뿐이다.</strong> 비활성 행은 체크박스가 눌리지 않고 Space도 삼키기만 한다.</li>
+          <li><strong><code>elide</code>는 <code>cell_text</code>에만 쓰인다.</strong> 머리글은 늘 뒤 줄임, 앱의 칸은 자기 규칙이다. 주석은 <code>end</code>·<code>middle</code>만 말하지만 <code>text_elide::start</code>도 그린다. 끝 맞춤 숫자가 넘치면 왼쪽부터 그린다.</li>
+          <li><strong><code>scroll_horizontal</code>이 없으면 넘친 열은 그냥 잘린다.</strong> 가로 막대도 ←→도 없다. <code>horizontal_bar = never</code>는 막대만 없애고 흐름은 남긴다. <code>cell_text</code>가 없으면 첫 열에만 행 이름이 보인다.</li>
+          <li><strong>factory는 어느 thread에서 불려도 되는 메시지 짓기여야 한다.</strong> 포인터·키의 factory는 input thread, 보조 기술 명령의 factory는 UI thread에서 불린다. 칸 콜백은 배치 때 불리므로 앱 데이터를 값으로 담는다.</li>
+          <li><strong>키보드로 정렬·폭·순서·머리글 메뉴를 다룰 길이 없다.</strong> 머리글 칸과 손잡이는 Tab 자리가 아니고 Shift+F10도 닿지 않는다. 같은 기능을 앱 메뉴에도 둔다.</li>
+          <li><strong>이름 없는 표는 막대도 이름 없이 읽힌다.</strong> 표에 <code>set_access_name</code>을 단다. Android에서는 표가 보조 기술에 아예 보이지 않는다 (접근성 다리가 없다).</li>
+          <li><strong>열은 가상화되지 않는다.</strong> 행마다 모든 열의 칸을 짓는다. <code>rows.items</code>는 frame마다 깊은 복사이니 큰 모델은 <code>shared_items</code>로 넘긴다.</li>
+          <li><strong>앱 키에 U+001F를 넣지 않는다.</strong> 부품 자리표가 <code>owner + U+001F + 키</code>라 다른 부품과 겹칠 수 있다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>표가 정렬까지 해 주나?</summary><div class="faq-a"><p class="faq-short">아니다. 머리글을 누르면 <code>sort_request(열 키)</code>만 온다.</p><p>앱이 정렬 열·방향을 바꾸고 행 순서를 다시 정한 뒤, 다음 frame에 그 열의 <code>sort</code>를 칠한다. 보기 순서는 <code>sort_filter</code>로 만들면 원본이 그대로다 (<a class="xref" href="#build-sort">정렬</a>).</p></div></details>
+          <details class="faq"><summary>열 폭은 어디에 저장되나?</summary><div class="faq-a"><p class="faq-short">앱의 <code>table_column::width</code>다.</p><p>끄는 동안 <code>resize_column(키, Δ)</code>가 이어서 오고, 놓으면 <code>resize_column_end(키)</code>가 한 번 온다. 앱이 폭에 Δ를 더한다. 실행 취소를 쓰면 한 번의 끌기를 한 걸음으로 합친다 (<a class="xref" href="#build-resize">열 폭</a>).</p></div></details>
+          <details class="faq"><summary>화살표 키가 안 먹는다.</summary><div class="faq-a"><p class="faq-short">본문에 <code>rows.move</code>(또는 <code>move_with</code>·<code>activate</code>)를 줬는지 본다.</p><p>셋 다 없으면 표는 Tab 자리가 아니어서 키보드 초점이 서지 않는다. 머리글을 눌러도 마찬가지다.</p></div></details>
+          <details class="faq"><summary>가로 막대가 안 보인다.</summary><div class="faq-a"><p class="faq-short"><code>scroll_horizontal</code>을 줬는지, 열 폭 합이 가로 창보다 넓은지 본다.</p><p>가로 창은 세로 막대를 뺀 본문 폭이다. <code>automatic</code>은 넘칠 때만 세우고, <code>never</code>는 짓지 않는다. <code>scroll_horizontal</code>이 없으면 막대를 만들지 않는다.</p></div></details>
+          <details class="faq"><summary>열을 숨겼다 다시 보이려면?</summary><div class="faq-a"><p class="faq-short">표에는 숨김 표시가 없다. 숨긴 열을 <code>columns</code>에서 뺀다.</p><p>머리글 우클릭의 <code>column_menu</code>로 메뉴를 열고, 앱이 숨긴 키 집합을 든다. 고정된 앞 열을 숨기면 <code>frozen_columns</code>도 줄인다 (<a class="xref" href="#build-menu">열 메뉴</a>).</p></div></details>
+          <details class="faq"><summary>숫자 열을 오른쪽에 붙이고, 긴 경로는 가운데를 줄이려면?</summary><div class="faq-a"><p class="faq-short"><code>align = column_align::end</code>, <code>elide = text_elide::middle</code>이다.</p><p>머리글 글도 같은 쪽에 붙는다. 끝 맞춤 글이 넘치면 왼쪽부터 그린다. 파일 이름처럼 끝을 남기려면 <code>text_elide::start</code>도 된다 (<a class="xref" href="#build-align">맞춤과 말줄임</a>).</p></div></details>
+          <details class="faq"><summary>칸에 배지·아이콘·단추를 넣으려면?</summary><div class="faq-a"><p class="faq-short"><code>build_cell</code>이 그 열의 칸 element를 돌려준다.</p><p>자리표는 행 키와 열 키를 함께 담아 표 안에서 유일하게 한다. 다른 열에는 nullptr을 돌려주면 <code>cell_text</code>의 글이 그대로 선다 (<a class="xref" href="#build-cell">앱이 짓는 칸</a>).</p></div></details>
+          <details class="faq"><summary>첫 열을 가로 스크롤에서 고정하려면?</summary><div class="faq-a"><p class="faq-short"><code>frozen_columns = 1</code>이다.</p><p>창이 좁아 흐르는 창이 48 논리 픽셀보다 좁아지면 그 배치에서만 풀린다. 앱 값은 그대로이고 창이 넓어지면 돌아온다 (<a class="xref" href="#build-frozen">앞 열 고정</a>).</p></div></details>
+          <details class="faq"><summary>칸을 편집하게 하려면?</summary><div class="faq-a"><p class="faq-short">열에 <code>editable = true</code>, 표에 <code>begin_edit</code>·<code>commit_edit</code>·<code>cancel_edit</code>·<code>build_editor</code>, 앱 상태 <code>editing</code>이다.</p><p>F2로 시작하고 Enter로 확정, Esc로 취소한다. 초점은 표가 편집기로 옮기고 끝나면 본문으로 돌려준다. 편집기 kind는 정책의 <code>text_target_of</code>에 등록한다 (<a class="xref" href="#build-edit">셀 편집</a>).</p></div></details>
+          <details class="faq"><summary>두 번 클릭으로 편집을 시작하려면?</summary><div class="faq-a"><p class="faq-short"><code>rows.double_click</code>에서 앱이 같은 편집 시작을 한다.</p><p>두 번 누름은 행 키만 준다. 열은 앱의 셀 커서(<code>cell_column</code>)로 정한다.</p></div></details>
+          <details class="faq"><summary>←→로 칸 사이를 옮기려면?</summary><div class="faq-a"><p class="faq-short"><code>move_column</code>과 앱 상태 <code>cell_column</code>이다.</p><p><code>move_column</code>이 있으면 ←→가 가로 스크롤 대신 열 이동이 되고, 옮긴 칸이 창 밖이면 <code>scroll_horizontal</code>로 함께 들인다. ↑↓·Page·Home·End는 행의 키 그대로다.</p></div></details>
+          <details class="faq"><summary>폴더 트리 같은 표는?</summary><div class="faq-a"><p class="faq-short"><code>tree_column</code> + <code>rows.set_expanded</code> + 앱이 평탄화한 <code>depth</code>·<code>expansion</code>이다.</p><p>평탄화는 <code>flatten_tree</code>가 돕는다. ←→는 본문의 계층 키가 먼저다 (<a class="xref" href="#build-tree">트리 열</a>, <a class="xref" href="lists.html#build-lazy">목록: 지연 로딩</a>).</p></div></details>
+          <details class="faq"><summary>체크박스 열과 폴더의 "일부 선택"은?</summary><div class="faq-a"><p class="faq-short"><code>check_column</code>·<code>check_state_of</code>·<code>toggle_check</code>이고, 가지는 <code>aggregate_check</code>로 <code>check_state::mixed</code>다.</p><p>다음 상태와 자식으로의 전파는 앱이 정한다. Space는 <code>rows.activate</code>가 없을 때만 체크다 (<a class="xref" href="#build-check">체크 열</a>).</p></div></details>
+          <details class="faq"><summary>여러 행을 Ctrl·Shift로 고르려면?</summary><div class="faq-a"><p class="faq-short">가상 목록과 같다. <code>rows.multiple_selection</code> + <code>pick</code> + <code>move_with</code>, 계산은 <code>selection_pick</code>·<code>selection_move</code>다.</p><p>표가 더하는 규칙은 없다 (<a class="xref" href="lists.html#build-select">목록: 선택</a>).</p></div></details>
+          <details class="faq"><summary>머리글을 누른 뒤에도 ↓가 먹나?</summary><div class="faq-a"><p class="faq-short">먹는다. 머리글·손잡이·체크박스·가로 막대를 눌러도 초점은 본문에 선다.</p><p>포인터로 잡은 초점이라 커서 테는 그리지 않는다. 키를 누르면 키보드 초점이 되어 테가 선다.</p></div></details>
+          <details class="faq"><summary>10만 행도 되나?</summary><div class="faq-a"><p class="faq-short">행은 가상화된다. 모델은 <code>shared_items</code>로 공유한다.</p><p>창에 걸치는 행과 위아래 여분, 커서 행만 짓는다. 열은 가상화되지 않으니 열이 아주 많은 표는 행마다 모든 칸을 짓는다 (<a class="xref" href="lists.html#build-large">목록: 아주 큰 목록</a>).</p></div></details>
+          <details class="faq"><summary>스크린 리더는 표를 어떻게 읽나?</summary><div class="faq-a"><p class="faq-short">본문은 DataGrid, 행은 DataItem, 머리글은 Header·HeaderItem이다 (Windows).</p><p>칸 단위 Grid·Table 패턴은 없다. 머리글 칸의 Invoke가 정렬 요청이다. Android에는 접근성 다리가 없다.</p></div></details>
+          <details class="faq"><summary>가로 스크롤 값이 범위를 넘으면?</summary><div class="faq-a"><p class="faq-short">그림은 <code>arrange</code>가 다듬지만 앱 값은 그대로다.</p><p>막대 끌기는 깎지 않은 변화량을 내므로 끝 너머로 쌓일 수 있다. 배치 뒤 <code>scroll_x()</code>를 상태에 되돌린다 (<a class="xref" href="#build-hscroll">가로 스크롤</a>).</p></div></details>
+        </div>
+      </section>
+
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/table_element.h" target="_blank" rel="noopener">include/luil/ui/table_element.h</a><span class="n">최상위 기호 24</span></div>
+            <div class="hdr-syms"><a href="api.html#sort-direction" title="열거형"><span class="kb e">E</span>sort_direction</a><a href="api.html#column-align" title="열거형"><span class="kb e">E</span>column_align</a><a href="api.html#table-column" title="구조체"><span class="kb t">S</span>table_column</a><a href="api.html#table-cell-ref" title="구조체"><span class="kb t">S</span>table_cell_ref</a><a href="api.html#table-cell-text-factory" title="별칭"><span class="kb t">=</span>table_cell_text_factory</a><a href="api.html#table-cell-builder" title="별칭"><span class="kb t">=</span>table_cell_builder</a><a href="api.html#table-column-message-factory" title="별칭"><span class="kb t">=</span>table_column_message_factory</a><a href="api.html#table-cell-message-factory" title="별칭"><span class="kb t">=</span>table_cell_message_factory</a><a href="api.html#table-editor-builder" title="별칭"><span class="kb t">=</span>table_editor_builder</a><a href="api.html#table-resize-message-factory" title="별칭"><span class="kb t">=</span>table_resize_message_factory</a><a href="api.html#table-header-height" title="상수"><span class="kb ">k</span>table_header_height</a><a href="api.html#table-cell-padding" title="상수"><span class="kb ">k</span>table_cell_padding</a><a href="api.html#table-grip-width" title="상수"><span class="kb ">k</span>table_grip_width</a><a href="api.html#table-key-scroll-step" title="상수"><span class="kb ">k</span>table_key_scroll_step</a><a href="api.html#table-config" title="구조체"><span class="kb t">S</span>table_config</a><a href="api.html#table-column-span" title="구조체"><span class="kb t">S</span>table_column_span</a><a href="api.html#table-column-spans" title="함수"><span class="kb f">f</span>table_column_spans</a><a href="api.html#table-content-width" title="함수"><span class="kb f">f</span>table_content_width</a><a href="api.html#table-resize-delta" title="함수"><span class="kb f">f</span>table_resize_delta</a><a href="api.html#table-clamp-scroll" title="함수"><span class="kb f">f</span>table_clamp_scroll</a><a href="api.html#table-frozen-width" title="함수"><span class="kb f">f</span>table_frozen_width</a><a href="api.html#table-frozen-fits" title="함수"><span class="kb f">f</span>table_frozen_fits</a><a href="api.html#table-reveal-delta" title="함수"><span class="kb f">f</span>table_reveal_delta</a><a href="api.html#table-element" title="클래스"><span class="kb t">C</span>table_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<!--LAB-SCRIPTS-->
+</body>
+</html>
