@@ -1,0 +1,1607 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>다국어 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — 빌드 때 짓는 문자열 표, 언어 선호 목록과 고르는 규칙, 자리 값과 복수형, 라이브러리 기본 문구의 언어, OS 표시 언어와 주 첫 요일, 없는 것(숫자·날짜 서식, RTL).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  /* 고르는 기준 판과 흐름 (lists.html과 같은 꼴) */
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  /* 표 안의 식별자는 <wbr> 자리('_'·'::'·'.' 뒤)에서만 줄을 바꾼다. 칸이 모자라면 표가 가로로 밀린다(.table-wrap). */
+  .doc-body table.t code, .walk-step code { word-break: normal; overflow-wrap: break-word; }
+  table.libkeys td:nth-child(4), table.libkeys td:nth-child(5) { min-width: 7em; }
+  table.libkeys tr.sum td { font-weight: 600; background: var(--sunk); }
+  /* 실습: 문자열 표 놀이터 */
+  .il-block { display: grid; gap: 10px; padding: 2px 0 18px; min-width: 0; }
+  .il-block + .il-block { border-top: 1px solid var(--line); padding-top: 16px; }
+  .il-block h4 { margin: 0; font-size: var(--fs-sm); color: var(--fg); }
+  .il-block h4 .muted { font-family: var(--font-code); font-weight: 400; font-size: 11.5px; }
+  .il-tables { font-size: var(--fs-xs); color: var(--fg-3); font-family: var(--font-code); overflow-wrap: anywhere; }
+  .il-label { display: grid; gap: 4px; font-size: var(--fs-xs); color: var(--fg-2); }
+  .il-label.inline { display: inline-flex; align-items: center; gap: 8px; }
+  .il-prefs { width: 100%; max-width: 520px; font-family: var(--font-code); }
+  .il-count { width: 16em; max-width: 100%; font-family: var(--font-code); }
+  .il-chips { gap: 6px; }
+  table.il-steps td .il-n { display: inline-block; min-width: 1.5em; color: var(--fg-3); font-family: var(--font-code); font-size: 11px; }
+  .il-hit { color: var(--accent-ink); }
+  .il-result { display: grid; gap: 4px; font-size: var(--fs-sm); }
+  .il-result p { margin: 0; overflow-wrap: anywhere; }
+  .il-forms { display: grid; gap: 4px; font-size: var(--fs-sm); }
+  .il-forms .il-k { display: inline-block; min-width: 5em; color: var(--fg-3); font-size: var(--fs-xs); }
+  .il-args-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; font-size: var(--fs-xs); color: var(--fg-3); }
+  .il-args { display: grid; gap: 6px; }
+  .il-arg-row { display: grid; grid-template-columns: minmax(0, 9em) auto minmax(0, 1fr) auto; gap: 6px; align-items: center; }
+  .il-arg-row input { min-width: 0; width: 100%; font-family: var(--font-code); }
+  @media (max-width: 560px) { .il-arg-row { grid-template-columns: minmax(0, 1fr) auto; } }
+  .il-out { font-family: var(--font-code); font-size: 13px; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r-control); background: var(--sunk); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .il-a { background: var(--accent-wash); color: var(--fg); border-radius: 3px; padding: 0 2px; }
+  .il-m { color: var(--error); outline: 1px dashed var(--error); outline-offset: -1px; border-radius: 3px; padding: 0 2px; }
+  .il-why { color: var(--fg-2); }
+  .il-legend { font-size: var(--fs-xs); }
+</style>
+</head>
+<body data-page="i18n">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>다국어</h1>
+      <p class="summary">luil의 다국어는 빌드 때 짓는 정적 문자열 표와 프로세스 하나의 언어 선호 목록이다. 언어는 앱이 고른다. 라이브러리 기본 문구는 <code>set_<wbr>text_<wbr>languages</code>를 따르고, 앱 표는 앱이 같은 목록으로 <code>select_<wbr>strings</code>를 불러 쥔다. 글은 element를 지을 때 정해지고 다음 frame에 화면이 바뀐다. 정한 적이 없으면 한국어다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>string_<wbr>table.<wbr>h</code>·<code>platform_<wbr>services.<wbr>h</code>·<code>assets/<wbr>strings/<wbr>ko.<wbr>json</code>·<code>assets/<wbr>strings/<wbr>en.<wbr>json</code>·<code>cmake/<wbr>string_<wbr>table.<wbr>cmake</code>·<code>cmake/<wbr>generate_<wbr>strings.<wbr>cmake</code></dd></div>
+          <div><dt>실습</dt><dd>문자열 표 놀이터 — 시험 표 다섯 언어에서 언어 고르기, 자리 값 채우기, <code>count</code>의 복수 범주</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="messaging.html">스레드 경계 메시징</a> · <a class="xref" href="theming.html">테마와 스타일</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>앱의 문자열 표를 짓고 자리 값과 복수형을 채운다.</li>
+            <li>설정 화면의 언어 바꿈을 라이브러리 기본 문구와 앱 표에 함께 건다.</li>
+            <li>OS 표시 언어와 주 첫 요일을 앱이 읽어 넣는다.</li>
+            <li>없는 것(숫자·날짜 서식, 오른쪽에서 왼쪽 쓰기)을 알고 피해 간다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>무엇을 어디서 바꾸나</h2>
+          <p class="lede">화면 글은 두 표에서 온다. 라이브러리가 스스로 놓는 글과 앱이 놓는 글이다. 둘 다 빌드 때 C++ 헤더가 되고, 언어는 앱이 정한다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB17;</i>라이브러리 기본 문구</h4>
+            <ul>
+              <li>element가 스스로 놓는 글이다 — 닫기, 심각도 낱말, 테마 카드, 달력, 편집 메뉴.</li>
+              <li><code>assets/<wbr>strings</code>의 표(키 123개)다. 기본 언어는 <code>ko</code>다.</li>
+              <li>언어는 <code>set_<wbr>text_<wbr>languages</code>가 정한다. config 칸에 글을 주면 그 글이다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA7B;</i>앱 문자열 표</h4>
+            <ul>
+              <li>앱의 글이다. 언어마다 <code class="free">&lt;태그&gt;.<wbr>json</code> 파일 하나다.</li>
+              <li><code>luil_<wbr>add_<wbr>string_<wbr>table</code>이 target에 생성 헤더를 짓는다.</li>
+              <li>언어는 앱이 <code>select_<wbr>strings</code>로 고른 <code>string_<wbr>lookup</code> 값이다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB7F;</i>OS 지역 값</h4>
+            <ul>
+              <li><code>user_<wbr>ui_<wbr>languages()</code> — 사용자가 고른 표시 언어 목록.</li>
+              <li><code>user_<wbr>first_<wbr>weekday()</code> — 지역 설정의 주 첫 요일.</li>
+              <li>라이브러리는 둘 다 스스로 쓰지 않는다. 앱이 읽어 넣는다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>앱 글을 언어마다 둔다</td><td>언어 파일 + <code>luil_<wbr>add_<wbr>string_<wbr>table</code></td><td><a class="xref" href="#build-table">앱의 문자열 표</a></td></tr>
+              <tr><td>"파일 1개" / "1 file"처럼 수에 따라 문장을 바꾼다</td><td>범주 객체 + 정수 인자 <code>count</code></td><td><a class="xref" href="#build-plural">복수형</a></td></tr>
+              <tr><td>설정 화면에서 언어를 바꾼다</td><td><code>set_<wbr>text_<wbr>languages</code> + <code>select_<wbr>strings</code></td><td><a class="xref" href="#build-switch">언어 바꾸기</a></td></tr>
+              <tr><td>OS 언어로 시작한다</td><td><code>user_<wbr>ui_<wbr>languages()</code></td><td><a class="xref" href="#build-os">OS 언어로 시작</a></td></tr>
+              <tr><td>달력을 월요일부터, 날짜를 <code class="free">2026-11-03</code>으로</td><td><code>calendar_<wbr>config::<wbr>first_<wbr>day</code> · <code>date_<wbr>field_<wbr>config::<wbr>format</code></td><td><a class="xref" href="#build-dates">첫 요일과 날짜 꼴</a></td></tr>
+              <tr><td>라이브러리 글 하나만 바꾼다 / 언어를 더한다</td><td>config 칸의 글 · <code>LUIL_<wbr>STRINGS</code></td><td><a class="xref" href="#build-library">라이브러리 기본 문구</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">없는 것</span>숫자·날짜·목록 서식, 통화, 상대 시간이 없다 — 수는 십진 숫자 글자로만 짓는다. 실행 중에 번역 파일을 읽거나 다시 읽지 않는다. 오른쪽에서 왼쪽으로 쓰는 언어의 거울 배치가 없다. 조사(이/가)·성·격에 따른 꼴 고르기와 one·other 밖의 복수 규칙도 없다.</div></div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 언어는 앱이 고르고, 글은 지을 때 정해진다</h2>
+          <p class="lede">라이브러리는 OS 언어를 스스로 읽지 않는다. 앱이 정한 목록이 프로세스에 하나 있고, element는 지어질 때 그 목록으로 글을 고른다.</p>
+        </header>
+        <h3>언어를 바꾸는 한 바퀴</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">앱 (설정 칸)</span><span>사용자가 언어를 고른다. 칸이 앱 메시지를 낸다. "시스템"이면 앱이 읽어 둔 <code>user_<wbr>ui_<wbr>languages()</code> 목록이다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span><code>handle</code>에서 <code>set_<wbr>text_<wbr>languages(목록)</code>을 부른다. 라이브러리 표의 언어 차례가 원자 값 하나로 바뀐다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>같은 목록으로 <code>select_<wbr>strings(앱 표, 목록)</code>을 불러 앱 상태의 <code>string_<wbr>lookup</code>을 바꾼다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>다음 <code>make_<wbr>frame</code>이 tree를 새로 짓는다. 앱 글은 새 조회에서, 빈 config 칸은 element 생성자가 기본 문구로 채운다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>새 tree를 그린다. 이미 지어 둔 element나 캐시한 tree의 글은 그대로다 — 다시 지어야 바뀐다.</span></div>
+        </div>
+        <div class="code" data-lang="cpp" data-src="src/text/string_table.cpp:192-210" data-path="src/text/string_table.cpp" data-start="192"><script type="text/plain">
+    void set_text_languages(const std::span<const std::u8string> preferences)
+    {
+        std::vector<std::u8string> copy(preferences.begin(), preferences.end());
+        const std::size_t language { select_language(library_text::table, copy) };
+        const std::lock_guard lock { languages_mutex };
+        chosen_languages = std::move(copy);
+        library_language.store(language);
+    }
+
+    std::optional<std::vector<std::u8string>> text_languages()
+    {
+        const std::lock_guard lock { languages_mutex };
+        return chosen_languages;
+    }
+
+    string_lookup library_strings() noexcept
+    {
+        return string_lookup { library_text::table, library_language.load() };
+    }
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th>라이브러리 표</th><th>앱 표</th></tr></thead>
+            <tbody>
+              <tr><td>원본</td><td><code>assets/<wbr>strings/<wbr>ko.<wbr>json</code>·<code>en.<wbr>json</code> (<code>LUIL_<wbr>STRINGS</code>로 폴더를 통째 바꾼다)</td><td>앱의 폴더, <code class="free">&lt;태그&gt;.<wbr>json</code>마다 하나</td></tr>
+              <tr><td>생성</td><td>라이브러리 빌드가 비공개 헤더로 짓는다. 설치하지 않는다</td><td><code>luil_<wbr>add_<wbr>string_<wbr>table(&lt;target&gt; NAME … DIRECTORY … BASE …)</code></td></tr>
+              <tr><td>기본 언어</td><td><code>ko</code> 고정</td><td><code>BASE</code></td></tr>
+              <tr><td>언어를 고르는 것</td><td><code>set_<wbr>text_<wbr>languages</code> — 프로세스에 하나</td><td>앱이 쥔 <code>string_<wbr>lookup</code> 값 — 앱이 다시 고른다</td></tr>
+              <tr><td>키</td><td>기본 문구 함수의 이름 (123개, 함수 56개)</td><td>앱이 정한다. 라이브러리 키와 겹쳐도 된다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><strong>기본은 한국어다.</strong> 정한 적이 없는 상태, 빈 목록, 라이브러리 표에 없는 언어만 든 목록이 모두 한국어다.</li>
+            <li><strong>공개 함수로는 "정한 적 없음"으로 돌아갈 수 없다.</strong> <code>text_<wbr>languages()</code>가 빈 값인 것은 처음뿐이다.</li>
+            <li><strong>두 표를 같은 언어로 맞추는 일은 앱의 몫이다.</strong> 언어 메시지 하나에서 둘을 함께 부른다.</li>
+            <li>표는 정적 저장소다. <code>text</code>가 돌려준 view는 언어를 바꿔도 산다.</li>
+          </ul>
+        </div>
+
+        <h3>언어를 고르는 규칙</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/text/string_table.cpp:21-50" data-path="src/text/string_table.cpp" data-start="21"><script type="text/plain">
+        [[nodiscard]] char8_t folded_tag_unit(const char8_t unit) noexcept
+        {
+            if (unit == u8'_')
+                return u8'-';
+            return unit >= u8'A' && unit <= u8'Z' ? static_cast<char8_t>(unit - u8'A' + u8'a') : unit;
+        }
+
+        // 태그와 끝 부분을 하나씩 뗀 태그를 차례로 찾는다 (`zh-Hant-TW`, `zh-Hant`, `zh`).
+        [[nodiscard]] std::optional<std::size_t> find_language(const string_table& table, std::u8string_view tag) noexcept
+        {
+            for (; tag.empty() == false; tag = parent_language_tag(tag))
+            {
+                for (std::size_t index { 0 }; index < table.languages.size(); ++index)
+                {
+                    if (same_language_tag(table.languages[index].tag, tag))
+                        return index;
+                }
+            }
+            return std::nullopt;
+        }
+
+        [[nodiscard]] std::size_t select_language(const string_table& table, const std::span<const std::u8string> preferences) noexcept
+        {
+            for (const std::u8string& preference : preferences)
+            {
+                if (const std::optional<std::size_t> found { find_language(table, preference) }; found.has_value())
+                    return *found;
+            }
+            return 0;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="21-26" data-title="태그 접기">글자 단위로 견준다. <code>_</code>는 <code>-</code>로, A~Z는 소문자로 접는다. 그 밖의 글자는 그대로다.</li>
+            <li data-lines="28-40" data-title="선호 태그를 떼며 찾기">선호 태그를 표의 언어와 그대로 견주고, 없으면 끝 부분을 하나 뗀다(<code class="free">zh-Hant-TW</code> → <code class="free">zh-Hant</code> → <code>zh</code>). <strong>떼는 것은 선호 쪽뿐이다.</strong></li>
+            <li data-lines="42-49" data-title="선호 차례대로">한 태그를 다 떼고도 없으면 다음 태그로 간다. 그래서 앞 태그의 뗀 값이 뒤 태그의 정확한 값보다 앞선다.</li>
+            <li data-lines="49-49" data-title="없으면 첫 언어">아무것도 맞지 않으면 표의 첫 언어(기본 언어)다. 빈 목록·빈 태그도 그렇다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="src/text/string_table.cpp:219-235" data-path="src/text/string_table.cpp" data-start="219"><script type="text/plain">
+    bool same_language_tag(const std::u8string_view left, const std::u8string_view right) noexcept
+    {
+        if (left.size() != right.size())
+            return false;
+        for (std::size_t index { 0 }; index < left.size(); ++index)
+        {
+            if (folded_tag_unit(left[index]) != folded_tag_unit(right[index]))
+                return false;
+        }
+        return true;
+    }
+
+    std::u8string_view parent_language_tag(const std::u8string_view tag) noexcept
+    {
+        const std::size_t cut { tag.find_last_of(u8"-_") };
+        return cut == std::u8string_view::npos ? std::u8string_view {} : tag.substr(0, cut);
+    }
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>선호 목록</th><th>시험 표(<code>en</code>·<code>fr</code>·<code>ko</code>·<code>zh</code>·<code class="free">zh-Hant</code>)에서 고른 언어</th><th>까닭</th></tr></thead>
+            <tbody>
+              <tr><td><code class="free">en-US</code></td><td><code>en</code></td><td>끝을 떼어 맞춘다</td></tr>
+              <tr><td><code class="free">zh-Hant-TW</code> · <code class="free">zh_<wbr>hant_<wbr>tw</code></td><td><code class="free">zh-Hant</code></td><td>한 번 떼어 맞춘다. <code>_</code>와 대소문자를 가리지 않는다</td></tr>
+              <tr><td><code class="free">zh-Hans-CN</code></td><td><code>zh</code></td><td>두 번 뗀다</td></tr>
+              <tr><td><code class="free">EN-us</code> · <code class="free">KO</code></td><td><code>en</code> · <code>ko</code></td><td>대소문자를 가리지 않는다</td></tr>
+              <tr><td><code>de</code>, <code>ko</code></td><td><code>ko</code></td><td>앞 태그가 없으면 다음 태그</td></tr>
+              <tr><td><code class="free">fr-CA</code>, <code>ko</code></td><td><code>fr</code></td><td>앞 태그의 뗀 값이 뒤 태그보다 앞선다</td></tr>
+              <tr><td>빈 목록 · <code>de</code>, <code class="free">xx-YY</code> · 빈 태그</td><td><code>en</code></td><td>없으면 첫 언어(이 표의 <code>BASE</code>)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose"><p>위 표는 <code>tests/<wbr>string_<wbr>table_<wbr>tests.<wbr>cpp</code>가 잠근 기대값이다. 표에 <code class="free">zh-Hant</code>만 있고 선호가 <code>zh</code>면 고르지 않는다 — 표 쪽 태그는 떼지 않기 때문이다. 실습에서 직접 넣어 본다.</p></div>
+
+        <h3>문장 채우기</h3>
+        <div class="code" data-lang="cpp" data-src="src/text/string_table.cpp:153-172" data-path="src/text/string_table.cpp" data-start="153"><script type="text/plain">
+    std::u8string string_lookup::format(const std::size_t key, const std::span<const string_argument> arguments) const
+    {
+        if (table_ == nullptr || language_ >= table_->languages.size())
+            return {};
+
+        const string_table_language& language { table_->languages[language_] };
+        if (key >= language.messages.size())
+            return {};
+
+        const string_message& message { language.messages[key] };
+        std::size_t form_index { other_form };
+        if (const string_argument* count { find_argument(arguments, u8"count") }; count != nullptr)
+        {
+            if (const auto* number { std::get_if<std::int64_t>(&count->value) }; number != nullptr)
+                form_index = static_cast<std::size_t>(plural_category_for(language.plural, *number));
+        }
+
+        const std::u8string_view form { message.forms[form_index] };
+        return fill_arguments(form.empty() ? message.forms[other_form] : form, arguments);
+    }
+</script></div>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/text/string_table.cpp:79-115" data-path="src/text/string_table.cpp" data-start="79"><script type="text/plain">
+        // 원본은 생성기가 검사했으므로 틀린 괄호는 손으로 지은 표에서만 온다. 지우지 않고 글자 그대로 둔다.
+        [[nodiscard]] std::u8string fill_arguments(const std::u8string_view form, const std::span<const string_argument> arguments)
+        {
+            std::u8string text {};
+            text.reserve(form.size());
+            std::size_t index { 0 };
+            while (index < form.size())
+            {
+                const char8_t unit { form[index] };
+                const bool doubled { index + 1u < form.size() && form[index + 1u] == unit };
+                if ((unit == u8'{' || unit == u8'}') && doubled)
+                {
+                    text += unit;
+                    index += 2u;
+                    continue;
+                }
+
+                if (unit == u8'{')
+                {
+                    const std::size_t close { form.find_first_of(u8"{}", index + 1u) };
+                    if (close != std::u8string_view::npos && form[close] == u8'}')
+                    {
+                        const std::u8string_view placeholder { form.substr(index, close + 1u - index) };
+                        if (const string_argument* argument { find_argument(arguments, placeholder.substr(1u, placeholder.size() - 2u)) }; argument != nullptr)
+                            append_argument(text, *argument);
+                        else
+                            text += placeholder;
+                        index = close + 1u;
+                        continue;
+                    }
+                }
+
+                text += unit;
+                ++index;
+            }
+            return text;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="87-94" data-title="겹친 괄호가 먼저">왼쪽부터 읽는다. <code>{{</code>·<code>}}</code>는 글자 <code>{</code>·<code>}</code> 하나다.</li>
+            <li data-lines="96-109" data-title="자리 값">다음에 오는 <code>{</code>·<code>}</code> 가운데 <code>}</code>가 먼저면 그 사이가 이름이다. 인자에 있으면 값을, 없으면 <code class="free">{이름}</code>을 그대로 둔다.</li>
+            <li data-lines="111-112" data-title="나머지는 그대로">짝 없는 괄호도 지우지 않는다. 생성기를 거친 표에는 오지 않는 글이다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="src/text/string_table.cpp:62-69" data-path="src/text/string_table.cpp" data-start="62"><script type="text/plain">
+        void append_number(std::u8string& text, const std::int64_t number)
+        {
+            // 부호 포함 19자리면 INT64_MIN까지 든다. `to_chars`는 로케일을 읽지 않아 자릿점이 끼지 않는다.
+            char digits[24] {};
+            const std::to_chars_result written { std::to_chars(std::begin(digits), std::end(digits), number) };
+            for (const char* digit { digits }; digit != written.ptr; ++digit)
+                text += static_cast<char8_t>(*digit);
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>자리 값은 <code class="free">{이름}</code>이다. 인자에 없는 이름은 화면에 그대로 남아 개발자가 본다.</li>
+            <li>인자는 이름과 값(<code>std::<wbr>u8string_<wbr>view</code> 글이나 <code>std::<wbr>int64_<wbr>t</code> 정수)이다. 같은 이름을 두 번 주면 앞의 것이 쓰인다. 문장이 쓰지 않는 인자는 무시한다.</li>
+            <li>정수는 <code>std::<wbr>to_<wbr>chars</code>로 십진 숫자 글자를 짓는다. 로케일을 읽지 않아 자릿점이 끼지 않고, 음수는 <code>-</code>다. <code>INT64_<wbr>MIN</code>까지 든다.</li>
+            <li><code>text(key)</code>는 자리 값을 채우지 않은 문장이다. 복수형 키면 other 꼴이다.</li>
+          </ul>
+        </div>
+
+        <h3>복수형</h3>
+        <div class="code" data-lang="cpp" data-src="src/text/string_table.cpp:118-129" data-path="src/text/string_table.cpp" data-start="118"><script type="text/plain">
+    plural_category plural_category_for(const plural_rule rule, const std::int64_t count) noexcept
+    {
+        switch (rule)
+        {
+        case plural_rule::one:
+            // 절댓값을 짓지 않는다. INT64_MIN의 부호를 바꾸면 넘친다.
+            return count == 1 || count == -1 ? plural_category::one : plural_category::other;
+        case plural_rule::other:
+            break;
+        }
+        return plural_category::other;
+    }
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>JSON <code>"plural"</code></th><th>규칙</th><th>언어 예</th><th>적는 범주</th></tr></thead>
+            <tbody>
+              <tr><td><code>"other"</code> (빠지면 이것)</td><td>늘 other</td><td>ko·ja·zh</td><td><code>other</code> 하나</td></tr>
+              <tr><td><code>"one"</code></td><td>1과 -1이 one, 나머지는 other</td><td>en</td><td><code>one</code>·<code>other</code> 둘</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>꼴을 고르는 것은 이름이 <code>count</code>인 <strong>정수</strong> 인자 하나다. <code>count</code>가 없거나 글이면 other 꼴이다.</li>
+            <li>고른 범주의 꼴이 비었으면 other 꼴이다.</li>
+            <li><code>plural_<wbr>category</code>는 CLDR 범주 여섯을 칸 차례로 갖지만 지금 규칙이 내는 것은 <code>one</code>과 <code>other</code>뿐이다. 생성기도 두 칸만 채운다.</li>
+            <li>fr·pt(0과 1이 one), ru·pl·ar(꼴이 셋 이상)는 맞는 규칙이 없다. 한 문장에 수 둘의 복수형을 섞을 수도 없다.</li>
+          </ul>
+        </div>
+
+        <h3>누가 언제</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>일</th><th>누가·언제</th></tr></thead>
+            <tbody>
+              <tr><td>언어 선호 목록을 정한다</td><td>앱, 어느 thread에서나. 프로세스에 하나</td></tr>
+              <tr><td>정한 목록을 되읽는다 (<code>text_<wbr>languages()</code>)</td><td>앱. 잠금 아래에서 사본을 지으므로 문구마다 부르지 않는다</td></tr>
+              <tr><td>라이브러리 표의 언어 차례를 읽는다</td><td>element, 어느 thread에서든 잠금 없이 (원자 값)</td></tr>
+              <tr><td>앱 표의 언어</td><td>앱이 쥔 <code>string_<wbr>lookup</code>. 언어가 바뀌면 다시 고른다</td></tr>
+              <tr><td>기본 문구가 글이 되는 때</td><td>element를 지을 때 (예: 테마 고르기는 생성자가 빈 칸을 채운다)</td></tr>
+              <tr><td>화면이 바뀌는 때</td><td>다음 frame. tree는 frame마다 다시 선다</td></tr>
+              <tr><td>OS 표시 언어·첫 요일</td><td>앱이 시작할 때와 앞으로 올 때 읽어 넣는다. 부를 때마다 OS에 묻는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 문자열 표 놀이터">
+        <header class="sec-head">
+          <h2>실습: 문자열 표 놀이터</h2>
+          <p class="lede">시험 표(<code>tests/<wbr>strings</code>의 다섯 언어)로 선호 목록에서 언어를 고르고, 고른 언어의 문장에 인자를 넣어 채우고, 수 하나의 복수 범주를 본다.</p>
+        </header>
+        <div class="lw" data-title="문자열 표 놀이터" data-surface="select_strings · string_lookup::format · plural_category_for" data-reset id="i18n-lab">
+          <div class="lw-body"></div>
+          <div class="lw-foot">옮긴 것: 태그 견주기와 끝 떼기(<code>same_<wbr>language_<wbr>tag</code>·<code>parent_<wbr>language_<wbr>tag</code>), 언어 고르기(<code>select_<wbr>strings</code>), <code>plural_<wbr>category_<wbr>for</code>, <code>string_<wbr>lookup::<wbr>text</code>·<code>string_<wbr>lookup::<wbr>format</code>과 그 안의 인자 찾기·숫자 짓기·채우기(<code>assets/<wbr>i18nmodel.<wbr>js</code>, 원본 <code>src/<wbr>text/<wbr>string_<wbr>table.<wbr>cpp</code>). 표 자료는 <code>tests/<wbr>strings</code>를 저장소의 생성기로 지은 <code>test_<wbr>strings.<wbr>h</code>를 컴파일한 프로그램이 낸 값이다. 라이브러리 표는 언어 태그(ko·en)만 싣는다. 대조: 이 커밋의 <code>src/<wbr>text/<wbr>string_<wbr>table.<wbr>cpp</code>와 생성 헤더를 링크한 프로그램의 출력과 선호 목록 4,013개(두 표 모두), 복수 범주 1,230건(int64 끝값 포함), <code>text</code> 45건, <code>format</code> 12,015건(언어 5 × 키 9 × 인자 묶음 267), 생성기를 거치지 않은 깨진 괄호 문장 6,000건이 모두 같다. test가 잠근 기대값 26개도 같다. 걸음 표의 "견준 태그"는 이식이 견준 차례를 적은 것이다 — 원본은 걸음을 내지 않으므로 대조한 것은 최종 답이다. 이 문서의 것: 선호 목록을 쉼표로 가르는 것과 칸의 글을 int64로 읽는 것(int64가 아니면 그 인자를 넘기지 않는다). 옮기지 않은 것: 생성기의 검사(빌드 때 일), <code>set_<wbr>text_<wbr>languages</code>의 프로세스 상태, element가 기본 문구로 그리는 그림.</div>
+        </div>
+      </section>
+
+      <section class="sec" id="build-table">
+        <header class="sec-head">
+          <h2>만들기: 앱의 문자열 표</h2>
+          <p class="lede">언어 파일을 두고, target을 정의한 CMakeLists에서 함수를 부르고, 생성 헤더를 include한다.</p>
+        </header>
+        <div class="prose">
+          <ol>
+            <li>언어마다 <code class="free">&lt;태그&gt;.<wbr>json</code>을 둔다. 파일 이름이 언어 태그이고 머리의 <code>language</code>가 같아야 한다.</li>
+            <li>target을 <strong>정의한</strong> CMakeLists에서 <code>luil_<wbr>add_<wbr>string_<wbr>table</code>을 부른다.</li>
+            <li>생성 헤더 <code class="free">&lt;NAME&gt;.<wbr>h</code>를 include해 <code class="free">NAME::<wbr>key</code>·<code class="free">NAME::<wbr>table</code>·<code class="free">NAME::<wbr>text</code>·<code class="free">NAME::<wbr>format</code>을 쓴다.</li>
+          </ol>
+        </div>
+        <div class="prose"><p><strong>1. 언어 파일.</strong> 사진 앱의 두 키다. 기본 언어는 <code>ko</code>다.</p></div>
+        <div class="code" data-lang="json" data-label="strings/ko.json (직접 작성)"><script type="text/plain">
+{
+    "language": "ko",
+    "plural": "other",
+    "strings": {
+        "photos_selected": { "other": "사진 {count}장 선택됨" },
+        "save": "저장"
+    }
+}
+</script></div>
+        <div class="code" data-lang="json" data-label="strings/en.json (직접 작성)"><script type="text/plain">
+{
+    "language": "en",
+    "plural": "one",
+    "strings": {
+        "photos_selected": { "one": "{count} photo selected", "other": "{count} photos selected" },
+        "save": "Save"
+    }
+}
+</script></div>
+        <div class="prose"><p><strong>2. CMake.</strong> 함수의 주석이 그 꼴이다. 동영상 예제가 실제로 부르는 자리다.</p></div>
+        <div class="code" data-lang="cmake" data-src="cmake/string_table.cmake:36-39" data-path="cmake/string_table.cmake" data-start="36"><script type="text/plain">
+# 언어 파일 폴더를 target의 생성 헤더로 잇는다.
+#   luil_add_string_table(my_app NAME app_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/strings" BASE en)
+#  - 생성 헤더는 `<target 빌드 폴더>/generated/<NAME>.h`이고 이름 공간은 NAME이다. target의 PRIVATE include에 더한다.
+#  - target을 정의한 CMakeLists에서 부른다. 다른 디렉터리에서 부르면 custom command가 그 target에 걸리지 않는다.
+</script></div>
+        <div class="code" data-lang="cmake" data-src="examples/CMakeLists.txt:164-173" data-path="examples/CMakeLists.txt" data-start="164"><script type="text/plain">
+# Windows Media Engine의 프레임을 luil 트리에서 자막·버튼과 함께 그리는 예제다.
+add_executable(luil_video WIN32
+    ${luil_example_resource}
+    video/main.cpp
+    video/scene.cpp
+    video/scene.h)
+target_include_directories(luil_video PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+luil_add_string_table(luil_video NAME video_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/video/strings" BASE ko)
+target_link_libraries(luil_video PRIVATE luil::luil luil_options)
+luil_set_ide_folder("Examples" luil_video)
+</script></div>
+        <div class="prose"><p><strong>3. 생성 헤더.</strong> 위 두 파일을 저장소의 <code>cmake/<wbr>generate_<wbr>strings.<wbr>cmake</code>에 <code>BASE ko</code>, <code>NAMESPACE app_<wbr>strings</code>로 넣어 돌린 출력 그대로다. 키는 이름 차례, 언어는 기본 언어 다음 태그 차례다.</p></div>
+        <div class="code" data-lang="cpp" data-label="생성기 출력 app_strings.h" data-compile="tu"><script type="text/plain">
+#pragma once
+
+#include "luil/text/string_table.h"
+
+#include <array>
+#include <cstddef>
+#include <span>
+#include <string>
+#include <string_view>
+
+// 문자열 표 원본에서 생성된 파일이다. 직접 고치지 않는다.
+namespace app_strings {
+    enum class key : std::size_t
+    {
+        photos_selected,
+        save,
+    };
+
+    namespace table_data {
+        inline constexpr std::array<std::u8string_view, 2> keys { {
+            u8"photos_selected",
+            u8"save",
+        } };
+        inline constexpr std::array<::luil::string_message, 2> messages_0 { {
+            { { { {}, {}, {}, {}, {}, u8"사진 {count}장 선택됨" } } },
+            { { { {}, {}, {}, {}, {}, u8"저장" } } },
+        } };
+        inline constexpr std::array<::luil::string_message, 2> messages_1 { {
+            { { { {}, u8"{count} photo selected", {}, {}, {}, u8"{count} photos selected" } } },
+            { { { {}, {}, {}, {}, {}, u8"Save" } } },
+        } };
+        inline constexpr std::array<::luil::string_table_language, 2> languages { {
+            { u8"ko", ::luil::plural_rule::other, messages_0 },
+            { u8"en", ::luil::plural_rule::one, messages_1 },
+        } };
+    }
+
+    // 표다. 첫 언어(ko)가 기본 언어다.
+    inline constexpr ::luil::string_table table { table_data::keys, table_data::languages };
+
+    [[nodiscard]] inline std::u8string_view text(const ::luil::string_lookup& strings, const key value) noexcept
+    {
+        return strings.text(static_cast<std::size_t>(value));
+    }
+
+    [[nodiscard]] inline std::u8string format(const ::luil::string_lookup& strings, const key value, const std::span<const ::luil::string_argument> arguments)
+    {
+        return strings.format(static_cast<std::size_t>(value), arguments);
+    }
+}
+</script></div>
+        <div class="prose"><p><strong>4. 쓰기.</strong> 앱은 고른 <code>string_<wbr>lookup</code>을 상태로 쥐고 글을 꺼낸다. 동영상 예제의 화면 값이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/video/scene.h:21-40" data-path="examples/video/scene.h" data-start="21"><script type="text/plain">
+    struct player_view
+    {
+        luil::string_lookup strings { video_strings::table, 0 };
+        luil::ui_image image {};
+        std::u8string title {};
+        std::u8string detail {};
+        std::u8string format {};
+        std::u8string status {};
+        std::u8string subtitle {};
+        std::u8string subtitle_file {};
+        std::u8string clock {};
+        luil::win32::media_state state { luil::win32::media_state::empty };
+        bool translucent_overlays { true };
+        luil::theme_preference theme { luil::theme_preference::system };
+
+        [[nodiscard]] std::u8string text(const video_strings::key key) const
+        {
+            return std::u8string { video_strings::text(strings, key) };
+        }
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/video/main.cpp:180-196" data-path="examples/video/main.cpp" data-start="180"><script type="text/plain">
+                player_view view { .strings = strings_ };
+                view.image = last_image_.valid() || format_.empty() ? last_image_ : poster_;
+                view.title = format_.empty() ? video_.filename().u8string() : view.text(key::ridge_title);
+                view.detail = format_.empty() ? video_.parent_path().u8string() : video_.filename().u8string()
+                    + (format_ == u8".avi" ? u8"   ·   MJPEG / PCM   ·   640 × 360" : u8"   ·   H.264 / AAC   ·   960 × 540")
+                ;
+                view.format = format_;
+                view.state = player_ ? player_->state() : luil::win32::media_state::empty;
+                view.status = last_status_;
+                view.subtitle = std::move(text);
+                if (cues_.empty())
+                    view.subtitle_file = view.text(key::no_subtitles);
+                else
+                {
+                    const auto file { subtitle_.filename().u8string() };
+                    view.subtitle_file = video_strings::format(strings_, key::subtitle_file, std::array { luil::string_argument { u8"file", file } });
+                }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>자리 값은 <code>luil::<wbr>string_<wbr>argument { u8"file", file }</code>처럼 이름과 값이다.</li>
+            <li>설치본에서도 같은 함수다. 설치되는 CMake 파일이 생성기를 함께 싣는다.</li>
+            <li>생성 헤더는 그 target의 PRIVATE include다. 다른 target이 include하면 보이지 않는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-plural">
+        <header class="sec-head">
+          <h2>만들기: 수에 따라 달라지는 문장</h2>
+          <p class="lede">언어 파일 머리에 규칙을 두고, 수가 끼는 문장을 범주 객체로 적고, <code>count</code>라는 정수 인자로 <code>format</code>을 부른다.</p>
+        </header>
+        <div class="prose"><p>시험 표가 가장 짧은 예다. 기본 언어는 <code>en</code>이다.</p></div>
+        <div class="code" data-lang="json" data-src="tests/strings/en.json:1-18" data-path="tests/strings/en.json" data-start="1"><script type="text/plain">
+{
+    "language": "en",
+    "plural": "one",
+    "arguments": {
+        "date_line": [ "year", "month", "day", "month_name" ]
+    },
+    "strings": {
+        "save": "Save",
+        "files_selected": { "one": "{count} file selected", "other": "{count} files selected" },
+        "files_found": { "one": "", "other": "{count} files found" },
+        "file_summary": { "one": "a file", "other": "{count} files" },
+        "greeting": "Hello, {name} of {place}",
+        "echo": "{word} and {word}",
+        "braces": "{{{value}}} and {{value}}",
+        "number": "n={number}",
+        "date_line": "{month_name} {day}, {year}"
+    }
+}
+</script></div>
+        <div class="code" data-lang="json" data-src="tests/strings/ko.json:1-15" data-path="tests/strings/ko.json" data-start="1"><script type="text/plain">
+{
+    "language": "ko",
+    "plural": "other",
+    "strings": {
+        "save": "저장",
+        "files_selected": { "other": "파일 {count}개 선택됨" },
+        "files_found": { "other": "파일 {count}개 찾음" },
+        "file_summary": { "other": "파일 {count}개" },
+        "greeting": "{place}의 {name}님 안녕하세요",
+        "echo": "{word} 그리고 {word}",
+        "braces": "{{{value}}} 그리고 {{value}}",
+        "number": "수={number}",
+        "date_line": "{year}년 {month}월 {day}일"
+    }
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>"plural": "one"</code> 언어는 <code>one</code>·<code>other</code> 둘 다, <code>"other"</code> 언어는 <code>other</code> 하나만 적는다. 생성기가 빠지거나 남는 범주를 막는다.</li>
+            <li>꼴 하나는 자리 값의 일부만 써도 된다(영어 one 꼴 <code class="free">"a file"</code>). 범주 객체는 모든 언어에서 <code class="free">{count}</code>를 받아야 한다.</li>
+            <li>한 키는 모든 언어에서 꼴이 같다 — 글이거나 범주 객체다.</li>
+            <li>기본 언어 파일의 <code>arguments</code>는 기본 언어 문장이 쓰지 않는 이름을 밝힌다. 다른 언어 문장은 그 이름도 쓸 수 있다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/string_table_tests.cpp:40-44" data-path="tests/string_table_tests.cpp" data-start="40"><script type="text/plain">
+    [[nodiscard]] std::u8string files_selected(const luil::string_lookup& strings, const std::int64_t count)
+    {
+        const std::array<luil::string_argument, 1> arguments { { { u8"count", count } } };
+        return test_strings::format(strings, key::files_selected, arguments);
+    }
+</script></div>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="tests/string_table_tests.cpp:253-299" data-path="tests/string_table_tests.cpp" data-start="253"><script type="text/plain">
+TEST_CASE("The count argument chooses the plural form", "[text][string-table]")
+{
+    const luil::string_lookup english { language(u8"en") };
+    const luil::string_lookup korean { language(u8"ko") };
+
+    SECTION("The other rule is always other")
+    {
+        for (const std::int64_t count : { std::int64_t { 0 }, std::int64_t { 1 }, std::int64_t { -1 }, std::int64_t { 2 }, std::numeric_limits<std::int64_t>::min() })
+            CHECK(luil::plural_category_for(luil::plural_rule::other, count) == luil::plural_category::other);
+        CHECK(files_selected(korean, 1) == u8"파일 1개 선택됨");
+        CHECK(files_selected(korean, 2) == u8"파일 2개 선택됨");
+    }
+
+    SECTION("The one rule picks one for an absolute value of 1")
+    {
+        CHECK(luil::plural_category_for(luil::plural_rule::one, 1) == luil::plural_category::one);
+        CHECK(luil::plural_category_for(luil::plural_rule::one, -1) == luil::plural_category::one);
+        for (const std::int64_t count : { std::int64_t { 0 }, std::int64_t { 2 }, std::int64_t { -2 }, std::int64_t { 1000000 }, std::numeric_limits<std::int64_t>::min(), std::numeric_limits<std::int64_t>::max() })
+            CHECK(luil::plural_category_for(luil::plural_rule::one, count) == luil::plural_category::other);
+        CHECK(files_selected(english, 1) == u8"1 file selected");
+        CHECK(files_selected(english, -1) == u8"-1 file selected");
+        CHECK(files_selected(english, 0) == u8"0 files selected");
+        CHECK(files_selected(english, 2) == u8"2 files selected");
+        CHECK(files_selected(english, 1000000) == u8"1000000 files selected");
+    }
+
+    SECTION("A form may leave the count out")
+    {
+        const std::array<luil::string_argument, 1> one { { { u8"count", std::int64_t { 1 } } } };
+        const std::array<luil::string_argument, 1> two { { { u8"count", std::int64_t { 2 } } } };
+        CHECK(test_strings::format(english, key::file_summary, one) == u8"a file");
+        CHECK(test_strings::format(english, key::file_summary, two) == u8"2 files");
+    }
+
+    SECTION("An empty form falls back to other")
+    {
+        const std::array<luil::string_argument, 1> arguments { { { u8"count", std::int64_t { 1 } } } };
+        CHECK(test_strings::format(english, key::files_found, arguments) == u8"1 files found");
+    }
+
+    SECTION("A missing or text count is other")
+    {
+        const std::array<luil::string_argument, 1> text_count { { { u8"count", std::u8string_view { u8"1" } } } };
+        CHECK(test_strings::format(english, key::files_selected, text_count) == u8"1 files selected");
+        CHECK(test_strings::format(english, key::files_selected, {}) == u8"{count} files selected");
+    }
+}
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="258-264" data-title="other 규칙">ko는 늘 other다. 1도 "파일 1개 선택됨"이다.</li>
+            <li data-lines="266-277" data-title="one 규칙">1과 -1이 one, 0·2·백만·INT64 끝값은 other다.</li>
+            <li data-lines="279-285" data-title="수를 빼는 꼴">one 꼴 "a file"은 <code class="free">{count}</code>를 쓰지 않는다.</li>
+            <li data-lines="287-291" data-title="빈 꼴은 other">one 꼴을 비워 두면 "1 files found"다.</li>
+            <li data-lines="293-298" data-title="글 count·count 없음">글 <code class="free">"1"</code>은 other를 고르고, 인자가 없으면 <code class="free">{count}</code>가 남는다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="sec" id="build-switch">
+        <header class="sec-head">
+          <h2>만들기: 언어 바꾸기 (설정 화면의 "언어" 칸)</h2>
+          <p class="lede">언어 메시지 하나에서 두 표를 같은 목록으로 고른다. "시스템"은 앱이 읽어 둔 OS 목록이다.</p>
+        </header>
+        <div class="prose"><p>앱 표까지 함께 바꾸는 예는 저장소에 없다. 위에서 지은 <code>app_<wbr>strings</code>로 쓰면 이렇다.</p></div>
+        <script type="text/plain" id="pre-app" data-prelude>
+#pragma once
+
+#include "luil/text/string_table.h"
+
+#include <array>
+#include <cstddef>
+#include <span>
+#include <string>
+#include <string_view>
+
+// 문자열 표 원본에서 생성된 파일이다. 직접 고치지 않는다.
+namespace app_strings {
+    enum class key : std::size_t
+    {
+        photos_selected,
+        save,
+    };
+
+    namespace table_data {
+        inline constexpr std::array<std::u8string_view, 2> keys { {
+            u8"photos_selected",
+            u8"save",
+        } };
+        inline constexpr std::array<::luil::string_message, 2> messages_0 { {
+            { { { {}, {}, {}, {}, {}, u8"사진 {count}장 선택됨" } } },
+            { { { {}, {}, {}, {}, {}, u8"저장" } } },
+        } };
+        inline constexpr std::array<::luil::string_message, 2> messages_1 { {
+            { { { {}, u8"{count} photo selected", {}, {}, {}, u8"{count} photos selected" } } },
+            { { { {}, {}, {}, {}, {}, u8"Save" } } },
+        } };
+        inline constexpr std::array<::luil::string_table_language, 2> languages { {
+            { u8"ko", ::luil::plural_rule::other, messages_0 },
+            { u8"en", ::luil::plural_rule::one, messages_1 },
+        } };
+    }
+
+    // 표다. 첫 언어(ko)가 기본 언어다.
+    inline constexpr ::luil::string_table table { table_data::keys, table_data::languages };
+
+    [[nodiscard]] inline std::u8string_view text(const ::luil::string_lookup& strings, const key value) noexcept
+    {
+        return strings.text(static_cast<std::size_t>(value));
+    }
+
+    [[nodiscard]] inline std::u8string format(const ::luil::string_lookup& strings, const key value, const std::span<const ::luil::string_argument> arguments)
+    {
+        return strings.format(static_cast<std::size_t>(value), arguments);
+    }
+}
+
+#include <cstdint>
+#include <vector>
+
+namespace sample { /*SAMPLE*/ }
+</script>
+        <div class="code" data-lang="cpp" data-label="두 표를 함께 바꾸기 (직접 작성)" data-compile="pre-app"><script type="text/plain">
+// 설정 화면이 낸 언어 바꿈이다. "시스템"이면 앱이 읽어 둔 OS 목록(`user_ui_languages`)을 넣는다.
+struct language_intent
+{
+    std::vector<std::u8string> preferences {};
+};
+
+class app_state
+{
+public:
+    // logic thread의 `handle`에서 부른다. 두 표(라이브러리 기본 문구와 앱 표)가 같은 목록으로 고른다.
+    void on_language(const language_intent& intent)
+    {
+        luil::set_text_languages(intent.preferences);
+        strings_ = luil::select_strings(app_strings::table, intent.preferences);
+    }
+
+    // frame을 지을 때 부른다. 언어를 바꾼 다음 frame부터 새 글이다.
+    [[nodiscard]] std::u8string selection_text(const std::int64_t count) const
+    {
+        const std::array<luil::string_argument, 1> arguments { { { u8"count", count } } };
+        return app_strings::format(strings_, app_strings::key::photos_selected, arguments);
+    }
+
+    [[nodiscard]] std::u8string_view save_label() const noexcept
+    {
+        return app_strings::text(strings_, app_strings::key::save);
+    }
+
+private:
+    // 처음은 표의 첫 언어(BASE, 여기서는 ko)다.
+    luil::string_lookup strings_ { app_strings::table, 0 };
+};
+</script></div>
+        <div class="prose">
+          <p>이 코드를 생성 헤더와 함께 <code>src/<wbr>text/<wbr>string_<wbr>table.<wbr>cpp</code>에 링크해 돌린 출력이다 (<code class="free">selection_<wbr>text</code> 0·1·2와 <code class="free">save_<wbr>label</code>).</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>선호 목록</th><th>고른 언어</th><th>0 · 1 · 2</th><th>저장</th></tr></thead>
+            <tbody>
+              <tr><td>(바꾸기 전)</td><td><code>ko</code></td><td>사진 0장 선택됨 · 사진 1장 선택됨 · 사진 2장 선택됨</td><td>저장</td></tr>
+              <tr><td><code class="free">en-GB</code></td><td><code>en</code></td><td>0 photos selected · 1 photo selected · 2 photos selected</td><td>Save</td></tr>
+              <tr><td><code>fr</code></td><td><code>ko</code> (표에 없어 첫 언어)</td><td>사진 0장 선택됨 · …</td><td>저장</td></tr>
+              <tr><td><code class="free">fr-CA</code>, <code>en</code></td><td><code>en</code></td><td>0 photos selected · 1 photo selected · …</td><td>Save</td></tr>
+              <tr><td><code class="free">KO-kr</code></td><td><code>ko</code></td><td>사진 0장 선택됨 · …</td><td>저장</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose"><p><strong>데스크톱 데모.</strong> 갤러리의 언어 묶음(시스템·한국어·English)을 셸이 라이브러리 언어에 잇는다. OS 값은 페이지가 아니라 셸이 읽는다 — 페이지는 core test에 함께 컴파일되어 플랫폼 함수를 부르면 링크가 깨진다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1072-1082" data-path="examples/demo_main.cpp" data-start="1072"><script type="text/plain">
+            // 갤러리의 언어 칸을 라이브러리 언어로 잇는다. 시스템은 OS가 준 표시 언어다.
+            void apply_text_language(const std::u8string_view choice)
+            {
+                if (choice == u8"system")
+                {
+                    luil::set_text_languages(system_languages_);
+                    return;
+                }
+                const std::vector<std::u8string> languages { std::u8string { choice } };
+                luil::set_text_languages(languages);
+            }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:739-752" data-path="examples/demo_main.cpp" data-start="739"><script type="text/plain">
+                // OS 값은 페이지가 직접 읽지 않는다. 페이지는 core test에 함께 컴파일되어 플랫폼 함수를 부르면 링크가 깨진다.
+                if (const auto* const locale { message.get<os_locale_intent>() }; locale != nullptr)
+                {
+                    system_languages_ = locale->languages;
+                    static_cast<void>(popups_.handle(luil::app_message { date_os_first_day_intent { locale->first_weekday } }));
+                    return;
+                }
+
+                // 갤러리의 언어 고르기를 라이브러리 언어에 잇는다. 페이지와 그 test는 전역 언어를 건드리지 않는다.
+                //  - 시작할 때는 부르지 않는다. 기본 문구는 앱이 정할 때까지 한국어다.
+                if (const auto* const choice { message.get<gallery_choice_intent>() }; choice != nullptr && choice->group == u8"language")
+                    apply_text_language(choice->value);
+                if (message.get<gallery_reset_intent>() != nullptr)
+                    apply_text_language(u8"system");
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1478-1487" data-path="examples/demo_main.cpp" data-start="1478"><script type="text/plain">
+            // 창과 host가 준비된 직후다 (메시지 루프 전).
+            // HTTP client의 배출구가 답을 넣을 곳이 이 host다.
+            void on_started(luil::win32::app_host& host) override
+            {
+                driver_.bind_host(host);
+                // 앱 식별은 창보다 먼저 섰다. 토스트 페이지의 상태 줄이 처음부터 이 값을 보인다.
+                host.post_app_message(luil::app_message { os_notification_status_intent { luil::notification_status() } });
+                // 지역 값은 시작할 때 한 번 읽는다. 데스크톱 데모에는 앞으로 올 때의 lifecycle 메시지가 없어 다시 읽지 않는다.
+                host.post_app_message(luil::app_message { os_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } });
+            }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>시작할 때는 <code>set_<wbr>text_<wbr>languages</code>를 부르지 않는다. 처음 화면은 "시스템"을 가리켜도 라이브러리는 정하지 않은 상태(한국어)다.</li>
+            <li>데스크톱 데모에는 앞으로 올 때의 lifecycle 메시지가 없어 지역 값을 다시 읽지 않는다.</li>
+          </ul>
+        </div>
+        <div class="prose"><p><strong>모바일 데모.</strong> Activity마다 driver가 새로 서므로, 설 때 <code>text_<wbr>languages()</code>에서 칸을 되찾고 OS 목록이 바뀌면 "시스템" 칸에서 따라간다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:23-28" data-path="examples/mobile_demo/app.cpp" data-start="23"><script type="text/plain">
+    mobile_driver::mobile_driver()
+    {
+        // 라이브러리 언어는 프로세스에 남고 이 driver는 Activity마다 새로 선다. 시스템 칸이면 `on_started`가 다시 읽은 OS 목록을 따른다.
+        if (luil::text_languages().has_value())
+            text_language_ = device_.language();
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:106-132" data-path="examples/mobile_demo/app.cpp" data-start="106"><script type="text/plain">
+        // OS 값과 언어 고르기는 페이지에도 간다. 언어를 라이브러리에 잇는 일만 셸이 한다. 페이지와 그 test는 전역 언어를 건드리지 않는다.
+        if (const auto* const locale { message.get<device_locale_intent>() }; locale != nullptr)
+        {
+            system_languages_ = locale->languages;
+            // "시스템"을 고른 뒤 OS 언어가 바뀌면 새 목록을 따른다. Android는 Activity가 다시 서서 새 driver가 여기로 온다.
+            if (text_language_ == u8"system")
+                apply_text_language(text_language_);
+        }
+        if (const auto* const language { message.get<device_language_intent>() }; language != nullptr)
+            apply_text_language(language->value);
+        if (lists_.handle(message) || tabs_.handle(message) || groups_.handle(message) || toasts_.handle(message) || popups_.handle(message) || zoom_.handle(message) || ink_.handle(message)
+            || inspector_.handle(message) || theme_.handle(message) || device_.handle(message) || sheets_.handle(message) || smb_.handle(message)
+            || files_.handle(message))
+            return;
+    }
+
+    void mobile_driver::apply_text_language(const std::u8string& choice)
+    {
+        text_language_ = choice;
+        if (choice == u8"system")
+        {
+            luil::set_text_languages(system_languages_);
+            return;
+        }
+        const std::vector<std::u8string> languages { choice };
+        luil::set_text_languages(languages);
+    }
+</script></div>
+      </section>
+
+      <section class="sec" id="build-os">
+        <header class="sec-head">
+          <h2>만들기: OS 언어로 시작하기</h2>
+          <p class="lede">시작할 때 OS 목록을 읽어 두 표에 함께 건다. 동영상 예제의 Windows 진입점이다(macOS 진입점도 같은 세 줄이다).</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/video/main.cpp:393-400" data-path="examples/video/main.cpp" data-start="393"><script type="text/plain">
+    const auto languages { luil::user_ui_languages() };
+    luil::set_text_languages(languages);
+    const auto strings { luil::select_strings(video_strings::table, languages) };
+    video_demo::driver driver { strings, samples, options->source, options->subtitle, options->log_path };
+    video_demo::delegate delegate {};
+    luil::win32::window_config config {};
+    config.class_name = L"Luil.VideoDemo";
+    config.caption.title = video_strings::text(strings, video_strings::key::window_title);
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>Windows는 표시 언어를 바꾸면 다시 로그인해야 한다. 시작할 때 한 번이면 된다.</li>
+            <li>Android는 시스템 언어를 바꾸면 프로세스를 남긴 채 Activity만 다시 세운다. host가 OS 언어를 다시 읽고 앱의 <code>on_<wbr>started</code>를 다시 부른다. 정한 목록은 프로세스에 남는다.</li>
+            <li>Android의 OS 목록은 태그 <strong>하나</strong>다(<code class="free">ko-KR</code> 꼴). 그 태그가 표에 없으면(<code class="free">fr-FR</code>) 라이브러리 기본 문구는 한국어다. 영어로 물러서게 하려면 앱이 목록 끝에 <code class="free">u8"en"</code>을 더한다.</li>
+            <li>지역 질의는 부를 때마다 OS에 묻는다. 모바일 데모는 delegate가 시작할 때와 앞으로 올 때 읽어 메시지로 넣는다.</li>
+          </ul>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/android_main.cpp:84-93,125-130" data-path="examples/mobile_demo/android_main.cpp" data-start="84"><script type="text/plain">
+        // 앱이 뒤로 가면 SMB의 쉬는 연결을 닫는다. 돌아와서 망이 바뀌었어도 끊긴 연결을 다시 쓰지 않는다.
+        //  - 앞으로 오면 지역 값을 다시 읽는다. 지역 설정에서 첫 요일을 바꾸고 돌아온 자리다.
+        [[nodiscard]] luil::app_message make_lifecycle_message(const luil::app_lifecycle lifecycle) override
+        {
+            if (lifecycle == luil::app_lifecycle::foreground)
+                return read_locale();
+            if (lifecycle != luil::app_lifecycle::background)
+                return {};
+            return luil::app_message { mobile_demo::smb_close_idle_intent {} };
+        }
+⋯@125
+    private:
+        // 지역 질의는 부를 때마다 OS에 묻는다. 페이지 대신 delegate가 읽어 메시지로 넣는다.
+        [[nodiscard]] static luil::app_message read_locale()
+        {
+            return luil::app_message { mobile_demo::device_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } };
+        }
+</script></div>
+      </section>
+
+      <section class="sec" id="build-dates">
+        <header class="sec-head">
+          <h2>만들기: 주 첫 요일과 날짜 꼴</h2>
+          <p class="lede">달력의 첫 요일은 기본이 일요일이고 앱이 넣는다. 날짜 칸의 표시 글은 라이브러리 표의 문장이고 앱이 함수로 덮는다.</p>
+        </header>
+        <div class="prose"><p>데스크톱 데모의 팝업 페이지다. 셸이 읽은 첫 요일을 메시지로 받아 두고, "OS 첫 요일" 체크를 켜면 달력에 넣는다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.h:145-156" data-path="examples/demo/popups_page.h" data-start="145"><script type="text/plain">
+    // 셸이 읽어 넣는 OS의 주 첫 요일이다 (`luil::user_first_weekday`). 이 페이지는 core test에 함께 컴파일되어 플랫폼 함수를 부르면
+    // 링크가 깨진다. 읽지 못했으면 빈 값이다.
+    struct date_os_first_day_intent
+    {
+        std::optional<std::chrono::weekday> value {};
+    };
+
+    // "OS 첫 요일" 체크다. 기본은 꺼져 일요일이다.
+    struct date_use_os_first_day_intent
+    {
+        bool use { false };
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:129-132,324-333" data-path="examples/demo/popups_page.cpp" data-start="129"><script type="text/plain">
+    std::chrono::weekday popups_page::first_day() const noexcept
+    {
+        return use_os_first_day_ ? os_first_day_.value_or(std::chrono::Sunday) : std::chrono::Sunday;
+    }
+⋯@324
+        if (const auto* const os_first_day { message.get<date_os_first_day_intent>() }; os_first_day != nullptr)
+        {
+            os_first_day_ = os_first_day->value;
+            return true;
+        }
+        if (const auto* const use_os_first_day { message.get<date_use_os_first_day_intent>() }; use_os_first_day != nullptr)
+        {
+            use_os_first_day_ = use_os_first_day->use;
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:619-627" data-path="examples/demo/popups_page.cpp" data-start="619"><script type="text/plain">
+        luil::calendar_config calendar { calendar_messages(inline_calendar_owner) };
+        calendar.value = calendar_value_;
+        calendar.cursor = calendar_cursor_;
+        calendar.today = today_;
+        calendar.bounds = calendar_bounds_;
+        calendar.available = weekday_only;
+        calendar.first_day = first_day();
+        const luil::size_f calendar_size { luil::calendar_element::size_for(calendar) };
+        page.add(std::make_unique<luil::calendar_element>(std::move(calendar)), luil::stack_item { .length = calendar_size.height, .cross_length = calendar_size.width });
+</script></div>
+        <div class="prose"><p>날짜 칸의 표시 글은 비면 라이브러리 표의 문장이다 — ko <code class="free">"{year}년 {month}월 {day}일"</code>, en <code class="free">"{month_<wbr>name} {day}, {year}"</code>. 다른 꼴이 필요하면 <code>date_<wbr>field_<wbr>config::<wbr>format</code>에 함수를 준다. 숫자는 앱이 직접 짓는다.</p></div>
+        <div class="code" data-lang="cpp" data-label="ISO 날짜와 OS 첫 요일 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/ui/calendar_element.h"
+
+#include <chrono>
+#include <optional>
+#include <string>
+
+namespace sample {
+    // 날짜 칸의 표시 글을 ISO 꼴(2026-11-03)로 바꾼다. 라이브러리에는 날짜 서식 기능이 없어 앱이 숫자를 직접 짓는다.
+    [[nodiscard]] std::u8string iso_text(const std::chrono::year_month_day day)
+    {
+        const auto two = [](const unsigned value) {
+            const std::string digits { std::to_string(value) };
+            return digits.size() < 2u ? "0" + digits : digits;
+        };
+        const std::string text { std::to_string(static_cast<int>(day.year())) + "-" + two(static_cast<unsigned>(day.month())) + "-" + two(static_cast<unsigned>(day.day())) };
+        return { text.begin(), text.end() };
+    }
+
+    [[nodiscard]] luil::date_field_config due_date_field(const std::optional<std::chrono::year_month_day> value)
+    {
+        luil::date_field_config field {};
+        field.owner = u8"due";
+        field.value = value;
+        field.format = iso_text;
+        return field;
+    }
+
+    // 달력의 첫 요일은 앱이 넣는다. OS가 답하지 않으면 일요일이다.
+    [[nodiscard]] luil::calendar_config month_view(const std::chrono::year_month_day cursor, const std::optional<std::chrono::weekday> os_first_day)
+    {
+        luil::calendar_config calendar {};
+        calendar.owner = u8"month";
+        calendar.cursor = cursor;
+        calendar.first_day = os_first_day.value_or(std::chrono::Sunday);
+        return calendar;
+    }
+}
+</script></div>
+        <div class="prose"><p>달력이 스스로 놓는 글(이름·이전 달·다음 달·오늘·고를 수 없음·요일 일곱·머리 제목·날 이름)은 <code>calendar_<wbr>text</code>의 칸마다 비면 기본 문구다.</p></div>
+      </section>
+
+      <section class="sec" id="build-library">
+        <header class="sec-head">
+          <h2>만들기: 라이브러리 기본 문구를 덮거나 언어를 더하기</h2>
+          <p class="lede">글 하나는 config 칸에 준다. 언어 하나를 통째로 더하려면 라이브러리 표의 폴더를 바꾼다.</p>
+        </header>
+        <div class="prose"><p><strong>글 하나만 덮기.</strong> 빈 글(<code>empty()</code>)일 때만 기본 문구다. 칸마다 따로 판정하고, 공백만 있는 글은 앱의 글이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/theme_picker_tests.cpp:259-281" data-path="tests/theme_picker_tests.cpp" data-start="259"><script type="text/plain">
+TEST_CASE("The picker fields the app fills are used as given and the others stay default", "[ui][theme-picker][default-text]")
+{
+    auto config { themes() };
+    config.name = u8"Theme";
+    // 칸마다 따로 판정한다. 가운데 하나만 덮어도 나머지는 기본 낱말이다.
+    config.labels[1] = u8"Auto";
+    const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::theme_picker_element>(config), { 0.0f, 0.0f, 700.0f, 200.0f }, 1.0f) };
+    REQUIRE(tree.root()->accessibility().name == u8"Theme");
+    REQUIRE(tree.find({ luil::ui_element_kind::choice, u8"appearance/light" })->accessibility().name == u8"밝게");
+    REQUIRE(tree.find({ luil::ui_element_kind::choice, u8"appearance/system" })->accessibility().name == u8"Auto");
+    REQUIRE(tree.find({ luil::ui_element_kind::choice, u8"appearance/dark" })->accessibility().name == u8"어둡게");
+
+    // 공백만 있는 글은 앱이 준 글이다. 기본 낱말로 바꾸지 않는다.
+    config.labels[0] = u8" ";
+    const luil::ui_tree spaced { luil::make_arranged_tree(std::make_unique<luil::theme_picker_element>(config), { 0.0f, 0.0f, 700.0f, 200.0f }, 1.0f) };
+    REQUIRE(spaced.find({ luil::ui_element_kind::choice, u8"appearance/light" })->accessibility().name == u8" ");
+
+    luil::accent_picker_config accents {};
+    accents.owner = u8"accent";
+    accents.name = u8"Accent color";
+    const luil::ui_tree accent_tree { luil::make_arranged_tree(std::make_unique<luil::accent_picker_element>(accents), { 0.0f, 0.0f, 400.0f, 200.0f }, 1.0f) };
+    REQUIRE(accent_tree.root()->accessibility().name == u8"Accent color");
+}
+</script></div>
+        <div class="prose"><p><strong>언어 하나를 더하기.</strong> <code>LUIL_<wbr>STRINGS</code>로 라이브러리 표의 폴더를 바꾸고 그 폴더에 <code>ko.<wbr>json</code>(저장소 것과 키 집합이 같은 것)과 <code class="free">ja.<wbr>json</code> 같은 언어 파일을 둔다. 기본 언어는 <code>ko</code>이고 생성기가 키 집합을 저장소의 <code>ko.<wbr>json</code>과 견준다.</p></div>
+        <div class="code" data-lang="cmake" data-src="docs/concepts/asset-pipeline.md:74-75" data-path="docs/concepts/asset-pipeline.md" data-start="74"><script type="text/plain">
+set(LUIL_STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/strings" CACHE PATH "Strings")
+add_subdirectory(luil)
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>언어 파일 사이의 키가 하나라도 어긋나면 빠진 것과 남는 것을 모두 모아 빌드를 세운다.</li>
+            <li>키 컬러 이름에도 그 언어를 보이려면 카탈로그(<code>LUIL_<wbr>ACCENT_<wbr>CATALOG</code>)의 <code>label</code> 맵에 같은 태그를 둔다. <code>accent_<wbr>label</code>은 라이브러리 표에서 고른 언어로만 찾는다 (<a class="xref" href="theming.html#build-style-json">테마와 스타일</a>).</li>
+            <li>이 조리법은 저장소에서 빌드해 보지 않았다. 소비자 폴더로 바꾼 빌드 test가 없다. 생성기가 받고 막는 경우는 test가 친다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문과 칸 표다. 모든 기호는 <a class="xref" href="api.html#string-lookup">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="string_table.h">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/text/string_table.h:13-101" data-path="include/luil/text/string_table.h" data-start="13"><script type="text/plain">
+namespace luil {
+    // 화면 글을 언어마다 다른 문장으로 고르는 표다 (docs/i18n-design.md).
+    //  - 언어마다 JSON 파일 하나를 두고 빌드 때 생성기(`luil_add_string_table`)가 이 형으로 된 정적 표 헤더를 짓는다.
+    //  - 실행 중에는 그 표에서 고른 언어의 문장을 찾고 자리 값(`{이름}`)과 복수형을 채운다. 표를 실행 중에 읽거나 다시 읽지 않는다.
+    //  - 숫자·날짜·목록 서식은 없다. 수는 십진 숫자 글자로만 짓는다.
+
+    // CLDR 복수 범주다. 1단계 규칙이 내는 것은 one과 other뿐이다.
+    //  - 값은 `string_message::forms`의 칸 차례다.
+    enum class plural_category : std::uint8_t
+    {
+        zero,
+        one,
+        two,
+        few,
+        many,
+        other,
+    };
+    // 언어의 복수 규칙이다. JSON 머리의 "plural" 값과 같은 이름이다.
+    enum class plural_rule : std::uint8_t
+    {
+        other,  // 늘 other다 (ko·ja·zh 같은 언어)
+        one,  // 절댓값이 1이면 one, 아니면 other다 (en 같은 언어)
+    };
+    // 규칙이 수에 고르는 범주다. 음수는 절댓값으로 본다 (CLDR의 n).
+    [[nodiscard]] plural_category plural_category_for(plural_rule rule, std::int64_t count) noexcept;
+
+    // 문장 하나다. 범주 차례로 둔다. 복수형이 아니면 other 칸만 찬다.
+    struct string_message
+    {
+        std::array<std::u8string_view, 6> forms {};
+    };
+    struct string_table_language
+    {
+        std::u8string_view tag {};  // BCP 47 (ko, en, pt-BR)
+        plural_rule plural { plural_rule::other };
+        std::span<const string_message> messages {};  // 키 차례
+    };
+    // 생성 헤더가 정적 저장소에 짓는 표다. 첫 언어가 기본 언어다. 모든 언어의 키 차례가 같다.
+    //  - 생성기는 키를 이름 차례로 둔다. 손으로 지은 표도 받는다 (`find`는 차례를 가정하지 않는다).
+    struct string_table
+    {
+        std::span<const std::u8string_view> keys {};
+        std::span<const string_table_language> languages {};
+    };
+
+    // 자리 값 하나다. 수는 십진 숫자 글자로 짓는다 (자릿점 없음, 음수는 '-').
+    //  - `count`라는 이름의 수가 복수형의 꼴을 고른다.
+    struct string_argument
+    {
+        std::u8string_view name {};
+        std::variant<std::u8string_view, std::int64_t> value {};
+    };
+
+    // 표 하나와 고른 언어다. 값이라 앱이 상태로 쥐고 언어가 바뀌면 다시 고른다.
+    //  - 표를 가리키기만 한다. 표는 정적 저장소라(생성 헤더) 수명 걱정이 없다. 손으로 지은 표는 조회보다 오래 살아야 한다.
+    //  - 기본값은 빈 조회다. 모든 글이 빈 글이다.
+    class string_lookup
+    {
+    public:
+        string_lookup() noexcept = default;
+        // 범위 밖 언어 차례는 기본 언어(0)다.
+        string_lookup(const string_table& table, std::size_t language) noexcept;
+        // 고른 언어의 태그다. 빈 조회는 빈 글이다.
+        [[nodiscard]] std::u8string_view tag() const noexcept;
+        // 자리 값을 채우지 않은 문장이다. 복수형이면 other 꼴이다. 범위 밖 키는 빈 글이다. view는 정적 저장소다.
+        [[nodiscard]] std::u8string_view text(std::size_t key) const noexcept;
+        // 자리 값을 채운 문장이다. 복수형이면 `count` 인자(정수)로 꼴을 고른다.
+        //  - 인자에 없는 이름은 `{이름}`을 그대로 남겨 개발자가 화면에서 보게 한다. `{{`·`}}`는 글자 `{`·`}`다.
+        //  - `count`가 없거나 글이면 other 꼴이다. 고른 범주의 꼴이 비면 other 꼴이다.
+        [[nodiscard]] std::u8string format(std::size_t key, std::span<const string_argument> arguments) const;
+        // 이름으로 키를 찾는다. 실행 중에 이름만 아는 쪽(마크업 따위)이 쓴다.
+        [[nodiscard]] std::optional<std::size_t> find(std::u8string_view name) const noexcept;
+
+    private:
+        const string_table* table_ { nullptr };
+        std::size_t language_ { 0 };
+    };
+
+    // 선호 목록의 차례로 표의 언어를 고른다. 없으면 기본 언어다.
+    //  - 대소문자와 `_`·`-`를 가리지 않는다. 태그마다 그대로 찾고, 끝 부분을 하나씩 떼어(`zh-Hant-TW`, `zh-Hant`, `zh`) 찾은 뒤
+    //    다음 태그로 간다.
+    [[nodiscard]] string_lookup select_strings(const string_table& table, std::span<const std::u8string> preferences) noexcept;
+
+    // 라이브러리 기본 문구가 따를 언어의 선호 목록이다. 어느 thread에서나 부른다. 그 뒤에 짓는 요소부터 바뀐다.
+    //  - 정한 적이 없거나 빈 목록이면 한국어다. 라이브러리 표에 없는 언어만 든 목록도 한국어다.
+    //  - 프로세스에 하나다. 앱의 표는 앱이 같은 목록으로 `select_strings`를 불러 고른다.
+    void set_text_languages(std::span<const std::u8string> preferences);
+    // 앱이 정한 목록이다. 정한 적이 없으면 빈 값이다. 잠금 아래에서 사본을 지으므로 문구 함수마다 부르지 않는다.
+    [[nodiscard]] std::optional<std::vector<std::u8string>> text_languages();
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>형식·칸·함수</th><th>형</th><th>기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>plural_<wbr>category</code></td><td><code>enum class : std::<wbr>uint8_<wbr>t</code></td><td>—</td><td><code>zero</code>·<code>one</code>·<code>two</code>·<code>few</code>·<code>many</code>·<code>other</code>. 값이 <code>string_<wbr>message::<wbr>forms</code>의 칸 차례다</td></tr>
+                  <tr><td><code>plural_<wbr>rule</code></td><td><code>enum class : std::<wbr>uint8_<wbr>t</code></td><td>—</td><td><code>other</code>(늘 other)·<code>one</code>(1과 -1이 one). JSON <code>"plural"</code>과 같은 이름</td></tr>
+                  <tr><td><code>plural_<wbr>category_<wbr>for(rule, count)</code></td><td><code>plural_<wbr>category</code></td><td>—</td><td>규칙이 수에 고르는 범주</td></tr>
+                  <tr><td><code>string_<wbr>message::<wbr>forms</code></td><td><code>std::<wbr>array&lt;std::<wbr>u8string_<wbr>view, 6&gt;</code></td><td>모두 빈 view</td><td>범주 차례의 꼴. 복수형이 아니면 other 칸만 찬다</td></tr>
+                  <tr><td><code>string_<wbr>table_<wbr>language::<wbr>tag</code> · <code>plural</code> · <code>messages</code></td><td>view · <code>plural_<wbr>rule</code> · span</td><td>빈 값 · <code>other</code> · 빈 span</td><td>BCP 47 태그, 복수 규칙, 키 차례의 문장</td></tr>
+                  <tr><td><code>string_<wbr>table::<wbr>keys</code> · <code>languages</code></td><td>span 둘</td><td>빈 span</td><td>키 이름과 언어들. 첫 언어가 기본 언어, 모든 언어의 키 차례가 같다</td></tr>
+                  <tr><td><code>string_<wbr>argument::<wbr>name</code> · <code>value</code></td><td>view · <code>std::<wbr>variant&lt;std::<wbr>u8string_<wbr>view, std::<wbr>int64_<wbr>t&gt;</code></td><td>빈 값</td><td>자리 값 이름과 값. <code>count</code>는 복수형을 고른다</td></tr>
+                  <tr><td><code>string_<wbr>lookup()</code></td><td>생성자</td><td>빈 조회</td><td>모든 글이 빈 글</td></tr>
+                  <tr><td><code>string_<wbr>lookup(table, language)</code></td><td>생성자</td><td>—</td><td>범위 밖 언어 차례는 기본 언어(0)</td></tr>
+                  <tr><td><code>string_<wbr>lookup::<wbr>tag()</code></td><td>view</td><td>—</td><td>고른 언어의 태그. 빈 조회는 빈 글</td></tr>
+                  <tr><td><code>string_<wbr>lookup::<wbr>text(key)</code></td><td>view</td><td>—</td><td>채우지 않은 문장. 복수형이면 other 꼴, 범위 밖 키는 빈 글</td></tr>
+                  <tr><td><code>string_<wbr>lookup::<wbr>format(key, arguments)</code></td><td><code>std::<wbr>u8string</code></td><td>—</td><td>자리 값을 채운 문장</td></tr>
+                  <tr><td><code>string_<wbr>lookup::<wbr>find(name)</code></td><td><code>std::<wbr>optional&lt;std::<wbr>size_<wbr>t&gt;</code></td><td>—</td><td>이름으로 키를 찾는다. 이름만 아는 쪽(마크업 따위)이 쓴다</td></tr>
+                  <tr><td><code>select_<wbr>strings(table, preferences)</code></td><td><code>string_<wbr>lookup</code></td><td>—</td><td>선호 목록으로 언어를 고른다</td></tr>
+                  <tr><td><code>set_<wbr>text_<wbr>languages(preferences)</code></td><td><code>void</code></td><td>—</td><td>라이브러리 기본 문구의 언어 선호. 어느 thread에서나. 그 뒤에 짓는 element부터</td></tr>
+                  <tr><td><code>text_<wbr>languages()</code></td><td><code>std::<wbr>optional&lt;std::<wbr>vector&lt;std::<wbr>u8string&gt;&gt;</code></td><td>빈 값 (정한 적 없음)</td><td>앱이 정한 목록의 사본</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="언어 파일">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>규칙</th><th>틀리면</th></tr></thead>
+                <tbody>
+                  <tr><td>파일 이름이 태그다: 소문자 두세 글자, 그 뒤에 <code>-</code>와 영숫자 조각</td><td>빌드가 선다</td></tr>
+                  <tr><td>대소문자만 다른 두 언어 파일</td><td>선다 (실행 중 고르기가 대소문자를 가리지 않아 뒤의 것이 뽑히지 못한다)</td></tr>
+                  <tr><td>기본 언어(<code>BASE</code>) 파일이 있다</td><td>없으면 선다</td></tr>
+                  <tr><td>머리는 <code>language</code>·<code>plural</code>·<code>strings</code>·<code>arguments</code>뿐</td><td>낯선 이름은 선다</td></tr>
+                  <tr><td><code>language</code> = 파일 이름</td><td>다르면 선다</td></tr>
+                  <tr><td><code>plural</code>은 <code>other</code>·<code>one</code> (빠지면 <code>other</code>)</td><td>다른 값은 선다</td></tr>
+                  <tr><td><code>strings</code>는 비지 않은 객체</td><td>선다</td></tr>
+                  <tr><td>키는 소문자로 시작하는 <code>[a-z0-9_]</code>, C++ 예약어 금지 (생성 enum 이름이 된다)</td><td>선다</td></tr>
+                  <tr><td>값은 글이거나 범주 객체. 범주 객체는 그 규칙의 범주를 모두 갖고 다른 범주는 갖지 않는다</td><td>선다</td></tr>
+                  <tr><td>자리 값은 <code class="free">{이름}</code>(이름은 영문자·숫자·<code>_</code>). <code>{{</code>·<code>}}</code>는 글자. 짝 없는 괄호는 막는다</td><td>선다</td></tr>
+                  <tr><td><code>arguments</code>는 기본 언어 파일에만, 있는 키에만, 이름 배열로</td><td>선다</td></tr>
+                  <tr><td>모든 언어의 키 집합이 기본 언어와 같다</td><td>선다. 빠진 키·남는 키를 언어·이름으로 한 번에 모두 알린다</td></tr>
+                  <tr><td>한 키는 모든 언어에서 꼴이 같다</td><td>선다</td></tr>
+                  <tr><td>언어마다 쓴 자리 값 이름은 기본 언어가 쓴 이름(또는 <code>arguments</code>로 밝힌 이름) 안에 든다</td><td>선다</td></tr>
+                  <tr><td>범주 객체는 <code class="free">{count}</code>를 받는다</td><td>선다</td></tr>
+                  <tr><td>같은 파일에 같은 키를 두 번 적었다</td><td><strong>잡지 못한다</strong> (CMake의 JSON 읽기가 받는다)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose"><p>글자는 UTF-8 그대로이고 따옴표·역슬래시·줄 바꿈·탭은 생성기가 C++ 글로 이스케이프한다. 같은 원본이면 같은 헤더다.</p></div>
+          </section>
+          <section data-tab="CMake">
+            <div class="code" data-lang="cmake" data-src="cmake/string_table.cmake:36-72" data-path="cmake/string_table.cmake" data-start="36"><script type="text/plain">
+# 언어 파일 폴더를 target의 생성 헤더로 잇는다.
+#   luil_add_string_table(my_app NAME app_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/strings" BASE en)
+#  - 생성 헤더는 `<target 빌드 폴더>/generated/<NAME>.h`이고 이름 공간은 NAME이다. target의 PRIVATE include에 더한다.
+#  - target을 정의한 CMakeLists에서 부른다. 다른 디렉터리에서 부르면 custom command가 그 target에 걸리지 않는다.
+function(luil_add_string_table target)
+    cmake_parse_arguments(PARSE_ARGV 1 arg "" "NAME;DIRECTORY;BASE" "")
+    if(arg_UNPARSED_ARGUMENTS)
+        message(FATAL_ERROR "luil_add_string_table: unknown arguments: ${arg_UNPARSED_ARGUMENTS}")
+    endif()
+    foreach(required_argument IN ITEMS NAME DIRECTORY BASE)
+        if(NOT DEFINED arg_${required_argument})
+            message(FATAL_ERROR "luil_add_string_table: ${required_argument} is required.")
+        endif()
+    endforeach()
+    if(NOT arg_NAME MATCHES "^[A-Za-z_][A-Za-z0-9_]*$")
+        message(FATAL_ERROR "luil_add_string_table: NAME is not a C++ identifier: ${arg_NAME}")
+    endif()
+    if(NOT TARGET "${target}")
+        message(FATAL_ERROR "luil_add_string_table: no such target: ${target}")
+    endif()
+    get_target_property(target_binary_directory "${target}" BINARY_DIR)
+    if(NOT target_binary_directory STREQUAL CMAKE_CURRENT_BINARY_DIR)
+        message(FATAL_ERROR "luil_add_string_table: call it from the CMakeLists that defines ${target}.")
+    endif()
+
+    get_filename_component(language_directory "${arg_DIRECTORY}" ABSOLUTE BASE_DIR "${CMAKE_CURRENT_SOURCE_DIR}")
+    set(generated_directory "${CMAKE_CURRENT_BINARY_DIR}/generated")
+    set(generated_header "${generated_directory}/${arg_NAME}.h")
+    luil_add_string_table_command(
+        OUTPUT "${generated_header}"
+        NAMESPACE "${arg_NAME}"
+        DIRECTORY "${language_directory}"
+        BASE "${arg_BASE}")
+    # 헤더를 소스로 올려 두면 빌드 순서가 저절로 맞는다 (코디콘 매핑과 같다).
+    target_sources("${target}" PRIVATE "${generated_header}")
+    target_include_directories("${target}" PRIVATE "${generated_directory}")
+endfunction()
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>이름</th><th>인자·기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>luil_<wbr>add_<wbr>string_<wbr>table(&lt;target&gt; NAME … DIRECTORY … BASE …)</code></td><td><code>NAME</code>(C++ 식별자), <code>DIRECTORY</code>(상대면 현재 소스 폴더 기준), <code>BASE</code>(기본 언어 태그). 셋 다 필수</td><td>생성 헤더 <code class="free">&lt;target 빌드 폴더&gt;/<wbr>generated/&lt;NAME&gt;.<wbr>h</code>를 target의 소스와 PRIVATE include에 더한다</td></tr>
+                  <tr><td><code>luil_<wbr>add_<wbr>string_<wbr>table_<wbr>command(OUTPUT … NAMESPACE … DIRECTORY … BASE … [REFERENCE_<wbr>FILE …])</code></td><td>라이브러리 표와 앱 표가 함께 쓴다</td><td>언어 파일을 구성할 때 모은다. 파일을 더하면 다시 구성된다</td></tr>
+                  <tr><td><code>LUIL_<wbr>STRINGS</code></td><td><code>assets/<wbr>strings</code></td><td>라이브러리 표 폴더를 통째로 바꾼다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="생성 헤더">
+            <div class="code tall" data-lang="cmake" data-src="cmake/generate_strings.cmake:305-354" data-path="cmake/generate_strings.cmake" data-start="305"><script type="text/plain">
+# 헤더를 짓는다. 값 표는 공개 형(string_table.h)의 정적 저장소다.
+list(LENGTH base_keys key_count)
+list(LENGTH tags language_count)
+set(output_text "#pragma once\n\n")
+string(APPEND output_text "#include \"luil/text/string_table.h\"\n\n")
+string(APPEND output_text "#include <array>\n#include <cstddef>\n#include <span>\n#include <string>\n#include <string_view>\n\n")
+string(APPEND output_text "// 문자열 표 원본에서 생성된 파일이다. 직접 고치지 않는다.\n")
+string(APPEND output_text "namespace ${NAMESPACE} {\n")
+string(APPEND output_text "    enum class key : std::size_t\n    {\n")
+foreach(key IN LISTS base_keys)
+    string(APPEND output_text "        ${key},\n")
+endforeach()
+string(APPEND output_text "    };\n\n")
+string(APPEND output_text "    namespace table_data {\n")
+string(APPEND output_text "        inline constexpr std::array<std::u8string_view, ${key_count}> keys { {\n")
+foreach(key IN LISTS base_keys)
+    string(APPEND output_text "            u8\"${key}\",\n")
+endforeach()
+string(APPEND output_text "        } };\n")
+
+set(language_index 0)
+set(language_rows "")
+foreach(tag IN LISTS tags)
+    string(APPEND output_text "        inline constexpr std::array<::luil::string_message, ${key_count}> messages_${language_index} { {\n")
+    foreach(key IN LISTS base_keys)
+        # 칸 차례는 plural_category다: zero, one, two, few, many, other.
+        set(one_text "")
+        if(DEFINED form.${tag}.${key}.one)
+            set(one_text "${form.${tag}.${key}.one}")
+        endif()
+        luil_strings_cell(one_cell "${one_text}")
+        luil_strings_cell(other_cell "${form.${tag}.${key}.other}")
+        string(APPEND output_text "            { { { {}, ${one_cell}, {}, {}, {}, ${other_cell} } } },\n")
+    endforeach()
+    string(APPEND output_text "        } };\n")
+    string(APPEND language_rows "            { u8\"${tag}\", ::luil::plural_rule::${plural.${tag}}, messages_${language_index} },\n")
+    math(EXPR language_index "${language_index} + 1")
+endforeach()
+
+string(APPEND output_text "        inline constexpr std::array<::luil::string_table_language, ${language_count}> languages { {\n")
+string(APPEND output_text "${language_rows}")
+string(APPEND output_text "        } };\n")
+string(APPEND output_text "    }\n\n")
+string(APPEND output_text "    // 표다. 첫 언어(${BASE})가 기본 언어다.\n")
+string(APPEND output_text "    inline constexpr ::luil::string_table table { table_data::keys, table_data::languages };\n\n")
+string(APPEND output_text "    [[nodiscard]] inline std::u8string_view text(const ::luil::string_lookup& strings, const key value) noexcept\n")
+string(APPEND output_text "    {\n        return strings.text(static_cast<std::size_t>(value));\n    }\n\n")
+string(APPEND output_text "    [[nodiscard]] inline std::u8string format(const ::luil::string_lookup& strings, const key value, const std::span<const ::luil::string_argument> arguments)\n")
+string(APPEND output_text "    {\n        return strings.format(static_cast<std::size_t>(value), arguments);\n    }\n")
+string(APPEND output_text "}\n")
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>이름</th><th>형</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code class="free">NAME::<wbr>key</code></td><td><code>enum class key : std::<wbr>size_<wbr>t</code></td><td>기본 언어의 키, 이름 차례</td></tr>
+                  <tr><td><code class="free">NAME::<wbr>table_<wbr>data::<wbr>keys</code> · <code class="free">messages_<wbr>0</code>… · <code class="free">languages</code></td><td><code>std::<wbr>array</code> 상수</td><td>표의 정적 저장소</td></tr>
+                  <tr><td><code class="free">NAME::<wbr>table</code></td><td><code>inline constexpr ::<wbr>luil::<wbr>string_<wbr>table</code></td><td>첫 언어가 기본 언어</td></tr>
+                  <tr><td><code class="free">NAME::<wbr>text(strings, key)</code></td><td><code>std::<wbr>u8string_<wbr>view</code></td><td><code class="free">strings.<wbr>text(key)</code></td></tr>
+                  <tr><td><code class="free">NAME::<wbr>format(strings, key, arguments)</code></td><td><code>std::<wbr>u8string</code></td><td><code class="free">strings.<wbr>format(key, arguments)</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="OS 지역">
+            <div class="code" data-lang="cpp" data-src="include/luil/app/platform_services.h:173-182" data-path="include/luil/app/platform_services.h" data-start="173"><script type="text/plain">
+    // 사용자 지역 설정의 주 첫 요일이다. OS가 답하지 않으면 빈 값이다. 어느 thread에서나 부른다.
+    //  - 라이브러리는 이 값을 스스로 쓰지 않는다. `calendar_config::first_day`의 기본은 일요일 그대로이고 앱이 넣는다.
+    //  - 부를 때마다 OS에 묻는다. frame마다 부르지 말고 시작할 때와 앞으로 올 때(`app_lifecycle::foreground`) 읽어 둔다.
+    //  - Windows: `GetLocaleInfoEx`(`LOCALE_IFIRSTDAYOFWEEK`). Android: `java.util.Calendar.getFirstDayOfWeek()`.
+    [[nodiscard]] std::optional<std::chrono::weekday> user_first_weekday();
+
+    // 사용자가 고른 표시 언어의 BCP 47 태그다. 앞이 먼저다. 읽지 못하면 빈 목록이다. 어느 thread에서나 부른다.
+    //  - 라이브러리 기본 문구는 이 값을 읽지 않는다. OS 언어를 따르려는 앱이 `set_text_languages(user_ui_languages())`로 넣는다.
+    //  - Windows: `GetUserPreferredUILanguages`의 목록. Android: 호스트가 `AConfiguration`에서 읽어 둔 태그 하나(Activity가 다시 설 때 새로 읽는다).
+    [[nodiscard]] std::vector<std::u8string> user_ui_languages();
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>함수</th><th>답</th><th>thread</th></tr></thead>
+                <tbody>
+                  <tr><td><code>user_<wbr>first_<wbr>weekday()</code></td><td><code>std::<wbr>optional&lt;std::<wbr>chrono::<wbr>weekday&gt;</code>. OS가 답하지 않으면 빈 값</td><td>어느 thread에서나</td></tr>
+                  <tr><td><code>user_<wbr>ui_<wbr>languages()</code></td><td><code>std::<wbr>vector&lt;std::<wbr>u8string&gt;</code> (BCP 47, 앞이 먼저). 읽지 못하면 빈 목록</td><td>어느 thread에서나</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose"><p>두 함수는 플랫폼을 조립한 <code>luil</code> target에 있다. <code>luil_<wbr>core</code>만 링크하는 test 실행 파일에서는 부를 수 없다. 주석은 Windows와 Android만 적지만 macOS·iOS 구현도 있다 (<a class="xref" href="#platforms">플랫폼 차이</a>).</p></div>
+          </section>
+          <section data-tab="라이브러리 표 123">
+            <div class="prose"><p>라이브러리 기본 문구의 표다. 키는 기본 문구 함수의 이름이고(enum 값을 받는 함수는 <code class="free">&lt;함수&gt;_&lt;값 이름&gt;</code>), 그 함수는 비공개 <code>src/<wbr>ui/<wbr>default_<wbr>text.<wbr>h</code>에 56개 있다. 설계 문서가 적은 83개·46개는 그 뒤로 늘기 전의 수다. 아래 표는 두 JSON 파일에서 스크립트로 뽑았다.</p></div>
+<div class="table-wrap"><table class="t gen libkeys">
+<thead><tr><th>묶음</th><th class="num">키</th><th>첫 키</th><th>ko</th><th>en</th><th>자리 값</th></tr></thead>
+<tbody>
+<tr><td><code>video_<wbr>error_<wbr>*</code></td><td class="num">30</td><td><code>video_<wbr>error_<wbr>timestamp</code></td><td>“영상 시각 실패 · {code}”</td><td>“Could not read the video timestamp ({code}).”</td><td><code>{code}</code></td></tr>
+<tr><td><code>time_<wbr>*</code></td><td class="num">8</td><td><code>time_<wbr>hour</code></td><td>“시”</td><td>“Hour”</td><td>—</td></tr>
+<tr><td><code>dock_<wbr>*</code></td><td class="num">2</td><td><code>dock_<wbr>group</code></td><td>“패널 묶음”</td><td>“Panel group”</td><td>—</td></tr>
+<tr><td><code>info_<wbr>bar_<wbr>close</code></td><td class="num">1</td><td><code>info_<wbr>bar_<wbr>close</code></td><td>“닫기”</td><td>“Close”</td><td>—</td></tr>
+<tr><td><code>severity_<wbr>name_<wbr>*</code></td><td class="num">4</td><td><code>severity_<wbr>name_<wbr>info</code></td><td>“정보”</td><td>“Info”</td><td>—</td></tr>
+<tr><td><code>split_<wbr>button_<wbr>arrow_<wbr>name</code></td><td class="num">1</td><td><code>split_<wbr>button_<wbr>arrow_<wbr>name</code></td><td>“{label} 옵션”</td><td>“{label} options”</td><td><code>{label}</code></td></tr>
+<tr><td><code>zoom_<wbr>*</code></td><td class="num">3</td><td><code>zoom_<wbr>decrease</code></td><td>“축소”</td><td>“Zoom out”</td><td>—</td></tr>
+<tr><td><code>theme_<wbr>picker_<wbr>*</code></td><td class="num">4</td><td><code>theme_<wbr>picker_<wbr>name</code></td><td>“테마”</td><td>“Theme”</td><td>—</td></tr>
+<tr><td><code>accent_<wbr>picker_<wbr>name</code></td><td class="num">1</td><td><code>accent_<wbr>picker_<wbr>name</code></td><td>“강조색”</td><td>“Accent color”</td><td>—</td></tr>
+<tr><td><code>combo_<wbr>box_<wbr>loading</code></td><td class="num">1</td><td><code>combo_<wbr>box_<wbr>loading</code></td><td>“추천 항목을 불러오는 중”</td><td>“Loading suggestions”</td><td>—</td></tr>
+<tr><td><code>message_<wbr>box_<wbr>*</code></td><td class="num">4</td><td><code>message_<wbr>box_<wbr>ok_<wbr>label</code></td><td>“확인”</td><td>“OK”</td><td>—</td></tr>
+<tr><td><code>rating_<wbr>*</code></td><td class="num">2</td><td><code>rating_<wbr>name</code></td><td>“별점”</td><td>“Rating”</td><td><code>{maximum}</code> <code>{value}</code></td></tr>
+<tr><td><code>undo_<wbr>command_<wbr>*</code></td><td class="num">2</td><td><code>undo_<wbr>command_<wbr>undo</code></td><td>“실행 취소”</td><td>“Undo”</td><td>—</td></tr>
+<tr><td><code>ink_<wbr>canvas_<wbr>*</code></td><td class="num">2</td><td><code>ink_<wbr>canvas_<wbr>name</code></td><td>“잉크 캔버스”</td><td>“Ink canvas”</td><td><code>{count}</code> (범주 객체)</td></tr>
+<tr><td><code>color_<wbr>picker_<wbr>*</code></td><td class="num">6</td><td><code>color_<wbr>picker_<wbr>name</code></td><td>“색”</td><td>“Color”</td><td><code>{saturation}</code> <code>{value}</code></td></tr>
+<tr><td><code>rich_<wbr>text_<wbr>*</code></td><td class="num">6</td><td><code>rich_<wbr>text_<wbr>bold</code></td><td>“굵게”</td><td>“Bold”</td><td>—</td></tr>
+<tr><td><code>menu_<wbr>bar_<wbr>name</code></td><td class="num">1</td><td><code>menu_<wbr>bar_<wbr>name</code></td><td>“메뉴 막대”</td><td>“Menu bar”</td><td>—</td></tr>
+<tr><td><code>date_<wbr>field_<wbr>*</code></td><td class="num">3</td><td><code>date_<wbr>field_<wbr>name</code></td><td>“날짜”</td><td>“Date”</td><td><code>{day}</code> <code>{month}</code> <code>{month_<wbr>name}</code> <code>{year}</code></td></tr>
+<tr><td><code>calendar_<wbr>*</code></td><td class="num">7</td><td><code>calendar_<wbr>name</code></td><td>“달력”</td><td>“Calendar”</td><td><code>{day}</code> <code>{month}</code> <code>{month_<wbr>name}</code> <code>{weekday}</code> <code>{year}</code></td></tr>
+<tr><td><code>calendar_<wbr>weekday_<wbr>short_<wbr>*</code></td><td class="num">7</td><td><code>calendar_<wbr>weekday_<wbr>short_<wbr>sunday</code></td><td>“일”</td><td>“Su”</td><td>—</td></tr>
+<tr><td><code>calendar_<wbr>weekday_<wbr>long_<wbr>*</code></td><td class="num">7</td><td><code>calendar_<wbr>weekday_<wbr>long_<wbr>sunday</code></td><td>“일요일”</td><td>“Sunday”</td><td>—</td></tr>
+<tr><td><code>calendar_<wbr>month_<wbr>name_<wbr>*</code></td><td class="num">12</td><td><code>calendar_<wbr>month_<wbr>name_<wbr>january</code></td><td>“1월”</td><td>“January”</td><td>—</td></tr>
+<tr><td><code>teaching_<wbr>tip_<wbr>*</code></td><td class="num">2</td><td><code>teaching_<wbr>tip_<wbr>name</code></td><td>“안내”</td><td>“Tip”</td><td>—</td></tr>
+<tr><td><code>text_<wbr>edit_<wbr>menu_<wbr>*</code></td><td class="num">6</td><td><code>text_<wbr>edit_<wbr>menu_<wbr>copy</code></td><td>“복사”</td><td>“Copy”</td><td>—</td></tr>
+<tr><td><code>system_<wbr>accent_<wbr>label</code></td><td class="num">1</td><td><code>system_<wbr>accent_<wbr>label</code></td><td>“시스템”</td><td>“System”</td><td>—</td></tr>
+<tr class="sum"><td>모두</td><td class="num">123</td><td colspan="4">ko·en 두 파일의 키 집합이 같다 (생성기가 어긋남을 막는다)</td></tr>
+</tbody></table></div>
+            <div class="code" data-lang="cpp" data-src="src/ui/default_text.h:22-29" data-path="src/ui/default_text.h" data-start="22"><script type="text/plain">
+    // 라이브러리 요소가 스스로 화면이나 접근 tree에 놓는 글의 기본값이다 (docs/default-text-design.md).
+    //
+    // 기본은 한국어이고 앱이 `set_text_languages`로 언어를 정하면 그 언어다. 앱이 config로 글을 주면 그 글이고, 비어 있으면 이 함수들이
+    // 돌려준다. OS 언어는 읽지 않는다.
+    // 몸통은 라이브러리 표(assets/strings, docs/i18n-adoption-design.md)의 조회다. 낱말마다 함수 하나라 호출부는 언어를 모른다.
+    // 공개하지 않는다. 앱은 config 칸으로 글을 준다.
+    //
+    // 돌려주는 view는 정적 저장소를 가리킨다. 언어를 바꿔도 살아 있다. 수명 걱정 없이 `std::u8string`으로 옮겨 담아 쓴다.
+</script></div>
+          </section>
+          <section data-tab="기본 문구 칸">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>element</th><th>비면 기본 문구인 칸</th><th>ko 기본 문구</th></tr></thead>
+                <tbody>
+                  <tr><td>정보 막대</td><td>닫기 단추 이름, 심각도 낱말</td><td>"닫기", "정보"·"성공"·"경고"·"오류"</td></tr>
+                  <tr><td>분할 버튼</td><td>화살표 이름</td><td>"{label} 옵션"</td></tr>
+                  <tr><td>줌 단추</td><td>축소·확대·맞춤 글</td><td>"축소"·"확대"·"맞춤"</td></tr>
+                  <tr><td>테마·키 컬러 고르기</td><td>묶음 이름, 카드 낱말</td><td>"테마", "밝게"·"시스템"·"어둡게", "강조색"</td></tr>
+                  <tr><td>콤보 상자</td><td>받는 중 표시의 접근 이름</td><td>"추천 항목을 불러오는 중"</td></tr>
+                  <tr><td>확인 대화 상자</td><td>심각도 낱말, 표준 단추 넷</td><td>"확인"·"취소"·"예"·"아니요"</td></tr>
+                  <tr><td>별점</td><td>접근 이름·값 글</td><td>"별점", "{value} / {maximum}"</td></tr>
+                  <tr><td>실행 취소 명령표</td><td>명령 이름</td><td>"실행 취소"·"다시 실행"</td></tr>
+                  <tr><td>잉크 캔버스</td><td>접근 이름·요약</td><td>"잉크 캔버스", "획 {count}개"</td></tr>
+                  <tr><td>색 고르기</td><td>접근 이름들</td><td>"색"·"채도와 명도"·"색상"·"불투명도"·"16진 색" 등</td></tr>
+                  <tr><td>메뉴 막대</td><td>접근 이름</td><td>"메뉴 막대"</td></tr>
+                  <tr><td>날짜 칸</td><td>이름·placeholder·표시 글</td><td>"날짜"·"날짜 선택"·"{year}년 {month}월 {day}일"</td></tr>
+                  <tr><td>달력</td><td><code>calendar_<wbr>text</code>의 칸 전부</td><td>"달력"·"이전 달"·"다음 달"·"{year}년 {month}월", 요일 "일"…"토", "오늘"·"고를 수 없음"</td></tr>
+                  <tr><td>안내 풍선</td><td>이름·닫기</td><td>"안내"·"닫기"</td></tr>
+                  <tr><td>도킹</td><td>탭 묶음·분할 손잡이 이름</td><td>"패널 묶음"·"패널 크기 조절"</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose"><p>판정은 <code>std::<wbr>u8string::<wbr>empty()</code>뿐이다. 캡션·대화 상자 닫기·사이드바·탭 막대·이동 경로·숫자 칸 툴팁처럼 "앱이 주고 비면 없다"인 칸에는 기본 문구가 없다.</p></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/calendar_element.h:21-38" data-path="include/luil/ui/calendar_element.h" data-start="21"><script type="text/plain">
+    // 달력이 스스로 놓는 글이다. 칸마다 비면 기본 문구다 (docs/calendar-date-design.md).
+    struct calendar_text
+    {
+        // root의 접근 이름이다 (달력).
+        std::u8string name {};
+        // 이전 달·다음 달 단추의 접근 이름이자 툴팁이다.
+        std::u8string previous_month {};
+        std::u8string next_month {};
+        // 날 이름 뒤 꼬리의 낱말이다 (", 오늘"·", 고를 수 없음"). 잇는 차례와 쉼표는 요소가 정한다.
+        std::u8string today {};
+        std::u8string unavailable {};
+        // 요일 줄의 이름이다. 일요일부터다 (`weekday::c_encoding` 순). 칸마다 비면 기본 문구(일·월·…·토)다.
+        std::array<std::u8string, 7> weekdays {};
+        // 머리 줄 제목이자 격자의 접근 이름이다 ("2026년 11월").
+        std::function<std::u8string(std::chrono::year_month)> month_title {};
+        // 날 칸의 접근 이름이다 ("2026년 11월 3일 화요일").
+        std::function<std::u8string(std::chrono::year_month_day)> day_name {};
+    };
+</script></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">라이브러리는 언어 바뀜을 알리는 메시지를 내지 않는다. 언어는 앱이 정하는 값이고, 바꾼 뒤 짓는 element부터 새 언어다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>무엇이 오나</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>사용자가 설정 칸에서 언어를 고름</td><td>앱이 정한 메시지 (데모: <code>gallery_<wbr>choice_<wbr>intent</code>, <code>device_<wbr>language_<wbr>intent</code>)</td><td><code>handle</code>에서 <code>set_<wbr>text_<wbr>languages</code>와 <code>select_<wbr>strings</code>. 다음 <code>make_<wbr>frame</code>이 새 언어로 짓는다</td></tr>
+              <tr><td>앱이 시작함</td><td><code>on_<wbr>started</code> (데모가 <code>os_<wbr>locale_<wbr>intent</code>를 넣는다)</td><td><code>user_<wbr>ui_<wbr>languages()</code>·<code>user_<wbr>first_<wbr>weekday()</code>를 읽어 둔다</td></tr>
+              <tr><td>앱이 앞으로 옴 (모바일)</td><td><code>make_<wbr>lifecycle_<wbr>message(app_<wbr>lifecycle::<wbr>foreground)</code></td><td>지역 값을 다시 읽는다. 지역 설정에서 첫 요일을 바꾸고 돌아온 자리다</td></tr>
+              <tr><td>OS 표시 언어가 바뀜</td><td>Windows: 없음(다시 로그인). Android: Activity가 다시 서고 <code>on_<wbr>started</code>가 다시 불린다. macOS·iOS: 시작할 때 다시 읽는다</td><td>"시스템"을 고른 상태면 새 목록으로 다시 건다</td></tr>
+              <tr><td>라이브러리 언어가 바뀜</td><td>메시지 없음</td><td>캐시한 tree가 있으면 다시 짓는다. 키 컬러 이름(<code>accent_<wbr>label</code>)은 다음 frame에 새 언어다</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>접근성</h2>
+          <p class="lede">기본 문구의 대부분은 화면 읽기가 듣는 접근 이름이다. 언어를 정하면 그 글도 함께 바뀐다.</p>
+        </header>
+        <div class="prose">
+          <ul>
+            <li><strong>접근 이름이 고른 언어를 따른다.</strong> 닫기 단추 이름, 심각도 낱말, 묶음 이름, 달력 날 이름이 모두 기본 문구다. 언어를 정하지 않은 앱은 영어 사용자에게도 한국어 이름을 읽힌다.</li>
+            <li>Win32는 <code class="free">accessibility().<wbr>name</code>을 UIA Name으로 낸다. Android의 luil에는 접근성 계층이 없어 폰에서 바뀌는 것은 화면 글(줌 단추·테마 카드·날짜 칸·편집 메뉴)뿐이다.</li>
+            <li>접근 이름 조각(심각도 낱말 + 제목 + 본문)은 공백으로 잇는다. 언어마다 쉼표·쌍점으로 잇는 관례는 따르지 않는다.</li>
+            <li>번역 글이 한국어보다 길면 각 element의 지금 규칙(말줄임·줄 바꿈)을 따른다. 폭을 글에 맞춰 늘리지 않는다 — 줌 단추는 56 논리 픽셀이 기준이라 데모는 영어 줌 단추 글을 <code class="free">Out</code>·<code class="free">In</code>·<code class="free">Fit</code>으로 줄였다.</li>
+            <li>색만으로 뜻을 싣지 않는 규칙은 언어와 무관하다 — 심각도는 낱말과 글리프가 함께 말한다 (<a class="xref" href="accessibility.html">접근성</a>).</li>
+            <li>배율·테마·고대비·움직임 줄이기와 입력·초점에는 닿지 않는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">아래는 소스에서 확인한 것이고, 각 OS에서 돌려 보지 않았다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>항목</th><th>Windows</th><th>macOS</th><th>iOS</th><th>Android</th></tr></thead>
+            <tbody>
+              <tr><td><code>user_<wbr>ui_<wbr>languages()</code></td><td><code>GetUserPreferredUILanguages</code>(<code>MUI_<wbr>LANGUAGE_<wbr>NAME</code>)의 목록. 부를 때마다 묻는다</td><td><code>[NSLocale preferredLanguages]</code> 전체</td><td>macOS와 같은 파일이다</td><td>host가 <code>AConfiguration</code>의 언어·나라로 읽어 둔 태그 <strong>하나</strong></td></tr>
+              <tr><td><code>user_<wbr>first_<wbr>weekday()</code></td><td><code>GetLocaleInfoEx</code>(<code>LOCALE_<wbr>IFIRSTDAYOFWEEK</code>), 0=월요일</td><td><code>[NSCalendar currentCalendar].<wbr>firstWeekday</code>, 1=일요일</td><td>macOS와 같다</td><td><code>java.<wbr>util.<wbr>Calendar.<wbr>getInstance().<wbr>getFirstDayOfWeek()</code> (JNI)</td></tr>
+              <tr><td>라이브러리가 그리는 편집 메뉴</td><td>없다</td><td>찾지 못했다</td><td>복사·잘라내기·붙여넣기·전체 선택은 시스템 편집 메뉴다. 링크 열기·주소 복사 두 줄만 라이브러리 표에서 고른다</td><td>메뉴 전체를 라이브러리가 그린다</td></tr>
+              <tr><td>편집 메뉴의 언어</td><td>—</td><td>—</td><td colspan="2">앱이 <code>set_<wbr>text_<wbr>languages</code>로 정했으면 그 목록, 아니면 <strong>OS 태그와 그 뒤의 <code>en</code></strong></td></tr>
+              <tr><td>대체 글꼴(한자 자형)·글자 모양 짓기의 언어</td><td><code>GetUserDefaultLocaleName</code> — 지역 서식 이름이라 표시 언어와 다를 수 있다</td><td>선호 언어</td><td>macOS와 같다</td><td>host가 읽어 둔 언어</td></tr>
+              <tr><td>OS 언어가 바뀌면</td><td>다시 로그인</td><td>시작할 때 다시 읽는다</td><td>시작할 때 다시 읽는다</td><td>Activity가 다시 설 때</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="code" data-lang="cpp" data-src="src/host/text_edit_menu.cpp:22-32" data-path="src/host/text_edit_menu.cpp" data-start="22"><script type="text/plain">
+    std::vector<std::u8string> text_edit_menu_languages(const std::optional<std::vector<std::u8string>>& chosen, const std::u8string_view os_tag)
+    {
+        if (chosen.has_value())
+            return *chosen;
+
+        std::vector<std::u8string> languages {};
+        if (os_tag.empty() == false)
+            languages.emplace_back(os_tag);
+        languages.emplace_back(u8"en");
+        return languages;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><strong>편집 메뉴는 "기본 문구는 OS를 읽지 않는다"의 하나뿐인 예외다.</strong> 언어를 정하지 않은 앱의 영어 폰에서는 편집 메뉴만 영어이고 나머지 기본 문구는 한국어다. 앱이 정하면(빈 목록도) 한 언어가 된다. iOS는 링크 두 줄만 이 규칙을 따른다.</li>
+            <li>대체 글꼴은 OS 언어로 고르므로 앱 언어가 OS와 다르면 한자 자형이 OS 언어를 따른다.</li>
+            <li>OS 쪽 동작은 코드에서 확인한 것이고 그 OS에서 돌려 보지 않았다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong><code>set_<wbr>text_<wbr>languages</code>만 부른다.</strong> 라이브러리 기본 문구만 바뀌고 앱 표는 옛 언어다. 같은 목록으로 <code>select_<wbr>strings</code>를 다시 부른다.</li>
+          <li><strong>언어를 바꿨는데 일부 글이 그대로다.</strong> 이미 지은 element와 캐시한 tree(한 번 지어 둔 popup tree 따위)의 글은 바뀌지 않는다. 다시 짓는다.</li>
+          <li><strong>OS를 따를 줄 알았다.</strong> 라이브러리 기본 문구는 OS를 읽지 않는다. 기본은 한국어다. 앱이 <code>user_<wbr>ui_<wbr>languages()</code>를 읽어 넣는다.</li>
+          <li><strong>빈 목록은 "정하지 않음"이 아니다.</strong> 빈 목록도 정한 것이고 한국어다. 편집 메뉴도 OS로 물러서지 않는다.</li>
+          <li><strong>표에 <code class="free">zh-Hant</code>만 두고 선호가 <code>zh</code>다.</strong> 고르지 않는다. 떼는 것은 선호 쪽 태그뿐이라 기본 언어가 나온다. 표에 <code>zh</code>도 둔다.</li>
+          <li><strong>Android에서 OS 목록을 그대로 넘긴다.</strong> 태그가 하나뿐이라 표에 없는 언어(<code class="free">fr-FR</code>)면 한국어다. 물러설 언어를 목록 끝에 더한다.</li>
+          <li><strong><code>count</code>를 글로 준다.</strong> 복수형이 other로 고정된다. 정수(<code>std::<wbr>int64_<wbr>t</code>)로 준다.</li>
+          <li><strong>인자 이름을 틀린다.</strong> 생성기는 표의 이름만 본다. 실행 중에는 <code class="free">{이름}</code>이 화면에 그대로 남는다.</li>
+          <li><strong>자리 값 뒤에 조사를 붙인다</strong>(<code class="free">"{name}이"</code>). 조사 고르기가 없다. 자리 값 뒤에 조사가 오지 않게 문장을 쓴다.</li>
+          <li><strong>수를 <code class="free">1,234</code>나 소수로 보이려 한다.</strong> 서식이 없다. 앱이 지은 글을 글 인자로 준다(별점의 <code class="free">"3.<wbr>5"</code>가 그 꼴).</li>
+          <li><strong>fr·ru의 복수형.</strong> 규칙이 둘뿐이라 맞지 않는다. <code>one</code>으로 어림하거나 수를 문장 밖에 둔다.</li>
+          <li><strong>키 컬러 이름에 <code>accent_<wbr>definition::<wbr>label</code>을 쓴다.</strong> 늘 한국어다. 두 데모의 테마 페이지 제목이 그렇다. <code>accent_<wbr>label</code>을 쓴다.</li>
+          <li><strong>카탈로그 이름에 언어를 더했는데 안 나온다.</strong> 라이브러리 표에 그 언어가 없으면 고르지 않는다.</li>
+          <li><strong>다른 CMakeLists에서 <code>luil_<wbr>add_<wbr>string_<wbr>table</code>을 부른다.</strong> 구성이 선다. target을 정의한 곳에서 부른다.</li>
+          <li><strong>키가 <code>delete</code>·<code>default</code> 같은 C++ 예약어다.</strong> 빌드가 선다.</li>
+          <li><strong>한 파일에 같은 키를 두 번 적었다.</strong> 생성기가 잡지 못한다.</li>
+          <li><strong>손으로 지은 표가 먼저 사라진다.</strong> <code>string_<wbr>lookup</code>은 포인터만 든다. 생성 헤더의 표는 정적 저장소라 걱정이 없다.</li>
+          <li><strong>페이지 코드에서 <code>user_<wbr>ui_<wbr>languages()</code>를 부른다.</strong> <code>luil_<wbr>core</code>만 링크하는 test 실행 파일의 링크가 깨진다. 셸이 읽어 메시지로 넣는다.</li>
+          <li><strong>오른쪽에서 왼쪽 쓰기.</strong> 글자 모양 짓기는 bidi run을 나누지만 문단의 기본 방향은 LTR이고 거울 배치가 없다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>앱 문구를 영어로 바꾸려면?</summary><div class="faq-a"><p class="faq-short">앱 표를 짓고, 언어 메시지에서 두 표를 함께 고른다.</p><p><code>set_<wbr>text_<wbr>languages</code>와 <code>select_<wbr>strings</code>에 같은 목록을 준다 (<a class="xref" href="#build-switch">언어 바꾸기</a>).</p></div></details>
+          <details class="faq"><summary>OS 언어를 따르려면?</summary><div class="faq-a"><p class="faq-short">시작할 때 <code>user_<wbr>ui_<wbr>languages()</code>를 읽어 두 표에 함께 건다.</p><p>라이브러리는 스스로 OS를 읽지 않는다 (<a class="xref" href="#build-os">OS 언어로 시작</a>).</p></div></details>
+          <details class="faq"><summary>확인·취소·닫기 같은 라이브러리 글이 한국어로 나온다.</summary><div class="faq-a"><p class="faq-short">기본이 한국어다.</p><p><code>set_<wbr>text_<wbr>languages</code>로 언어를 정하거나 그 config 칸에 글을 준다 (<a class="xref" href="#config">기본 문구 칸</a>).</p></div></details>
+          <details class="faq"><summary>일본어를 더하려면?</summary><div class="faq-a"><p class="faq-short">앱 표에는 <code class="free">ja.<wbr>json</code>을 더한다. 키 집합이 같아야 한다.</p><p>라이브러리 기본 문구는 <code>LUIL_<wbr>STRINGS</code> 폴더에 <code class="free">ja.<wbr>json</code>을, 키 컬러 이름은 카탈로그 <code>label</code> 맵에 <code class="free">ja</code>를 둔다 (<a class="xref" href="#build-library">라이브러리 기본 문구</a>).</p></div></details>
+          <details class="faq"><summary>"파일 1개" / "1 file"처럼 수에 따라 문장이 달라야 한다.</summary><div class="faq-a"><p class="faq-short">범주 객체와 정수 인자 <code>count</code>다.</p><p>한국어는 <code>other</code> 하나로 둔다 (<a class="xref" href="#build-plural">복수형</a>).</p></div></details>
+          <details class="faq"><summary>숫자에 자릿점(1,234)이나 소수를 넣으려면?</summary><div class="faq-a"><p class="faq-short">서식 기능이 없다.</p><p>앱이 글을 지어 글 인자로 준다. 정수 인자는 늘 자릿점 없는 십진 숫자다.</p></div></details>
+          <details class="faq"><summary>날짜를 2026-11-03으로, 주를 월요일부터 보이려면?</summary><div class="faq-a"><p class="faq-short"><code>date_<wbr>field_<wbr>config::<wbr>format</code>과 <code>calendar_<wbr>config::<wbr>first_<wbr>day</code>다.</p><p>OS의 첫 요일은 <code>user_<wbr>first_<wbr>weekday()</code>가 답한다 (<a class="xref" href="#build-dates">첫 요일과 날짜 꼴</a>).</p></div></details>
+          <details class="faq"><summary>언어를 바꿨는데 일부 글만 그대로다.</summary><div class="faq-a"><p class="faq-short">이미 지은 element·캐시한 tree, <code>accent_<wbr>definition::<wbr>label</code>, 다시 고르지 않은 앱 표 가운데 하나다.</p><p><a class="xref" href="#pitfalls">함정</a>을 본다.</p></div></details>
+          <details class="faq"><summary>번역 파일을 실행 중에 읽거나 바꿀 수 있나?</summary><div class="faq-a"><p class="faq-short">없다.</p><p>빌드 때 C++ 헤더가 된다. 다시 읽기도 없다.</p></div></details>
+          <details class="faq"><summary>아랍어·히브리어(RTL)를 지원하나?</summary><div class="faq-a"><p class="faq-short">배치 거울이 없다.</p><p>글자 모양 짓기는 bidi run을 나누지만 문단의 기본 방향은 LTR이다. 화면 전환의 쪽은 앱이 밀기의 앞·뒤를 바꿔 넣는다.</p></div></details>
+          <details class="faq"><summary><code class="free">en-US</code>·<code class="free">EN-us</code>·<code class="free">zh_<wbr>hant_<wbr>tw</code>는 어떻게 맞추나?</summary><div class="faq-a"><p class="faq-short">대소문자와 <code>_</code>/<code>-</code>를 가리지 않고, 선호 태그의 끝을 하나씩 떼어 찾는다.</p><p>시험 표에서 셋은 <code>en</code>·<code>en</code>·<code class="free">zh-Hant</code>를 고른다 (<a class="xref" href="#concepts">언어를 고르는 규칙</a>).</p></div></details>
+          <details class="faq"><summary>한 언어 파일에서 키 하나를 빠뜨리면?</summary><div class="faq-a"><p class="faq-short">빌드가 선다.</p><p>빠진 키와 남는 키를 언어·이름으로 한 번에 알린다.</p></div></details>
+          <details class="faq"><summary>자리 값을 빠뜨리고 <code>format</code>을 부르면?</summary><div class="faq-a"><p class="faq-short">그 자리는 <code class="free">{이름}</code> 그대로다.</p><p>화면에서 보이게 일부러 남긴다.</p></div></details>
+          <details class="faq"><summary>조사(이/가)를 이름에 맞추려면?</summary><div class="faq-a"><p class="faq-short">지원하지 않는다.</p><p>문장을 자리 값 뒤에 조사가 오지 않게 쓴다.</p></div></details>
+          <details class="faq"><summary>영어 폰에서 편집 메뉴만 영어다.</summary><div class="faq-a"><p class="faq-short">앱이 언어를 정하지 않았을 때 모바일 편집 메뉴만 OS 언어(끝에 <code>en</code>)를 따른다.</p><p>앱이 정하면 나머지 글과 같은 언어가 된다. iOS는 링크 두 줄만 이 규칙이고 나머지 항목은 시스템 메뉴다 (<a class="xref" href="#platforms">플랫폼 차이</a>).</p></div></details>
+          <details class="faq"><summary>라이브러리 기본 문구는 몇 개인가?</summary><div class="faq-a"><p class="faq-short">라이브러리 표의 키가 123개, 기본 문구 함수가 56개다.</p><p>설계 문서의 83개·46개는 그 뒤로 늘기 전의 수다 (<a class="xref" href="#config">라이브러리 표</a>).</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/string_table.h" target="_blank" rel="noopener">include/luil/text/string_table.h</a><span class="n">최상위 기호 11</span></div>
+            <div class="hdr-syms"><a href="api.html#plural-category" title="열거형"><span class="kb e">E</span>plural_category</a><a href="api.html#plural-rule" title="열거형"><span class="kb e">E</span>plural_rule</a><a href="api.html#plural-category-for" title="함수"><span class="kb f">f</span>plural_category_for</a><a href="api.html#string-message" title="구조체"><span class="kb t">S</span>string_message</a><a href="api.html#string-table-language" title="구조체"><span class="kb t">S</span>string_table_language</a><a href="api.html#string-table" title="구조체"><span class="kb t">S</span>string_table</a><a href="api.html#string-argument" title="구조체"><span class="kb t">S</span>string_argument</a><a href="api.html#string-lookup" title="클래스"><span class="kb t">C</span>string_lookup</a><a href="api.html#select-strings" title="함수"><span class="kb f">f</span>select_strings</a><a href="api.html#set-text-languages" title="함수"><span class="kb f">f</span>set_text_languages</a><a href="api.html#text-languages" title="함수"><span class="kb f">f</span>text_languages</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<script src="assets/i18nmodel.js"></script>
+<script src="assets/i18n-lab.js"></script>
+<script>
+  LuilI18nLab.setup(document.getElementById("i18n-lab"));
+</script>
+</body>
+</html>

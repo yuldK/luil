@@ -22,7 +22,37 @@
   .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
   .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
   @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
-/*LAB-CSS*/
+  .zl-grid { display: grid; gap: 10px; min-width: 0; }
+  .zl-tools { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .zl-tools select { font-size: var(--fs-xs); min-height: 26px; }
+  .zl-group { display: inline-flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .zl-pct { font-family: var(--font-code); min-width: 4.5ch; text-align: center; color: var(--fg); }
+  .zl-view { position: relative; min-width: 0; overflow: hidden; outline: none; border-radius: var(--r-row); touch-action: none; cursor: grab; }
+  .zl-view:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .zl-view svg { display: block; max-width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+  .zl-bg { fill: var(--sunk); stroke: var(--line-2); }
+  .zl-page { fill: var(--panel); stroke: var(--fg-3); vector-effect: non-scaling-stroke; }
+  .zl-grid line, line.zl-grid { stroke: var(--line); vector-effect: non-scaling-stroke; }
+  .zl-node { fill: var(--accent-wash); stroke: var(--accent); vector-effect: non-scaling-stroke; }
+  .zl-ntext { fill: var(--fg); font-size: 18px; font-weight: 600; }
+  .zl-bounds { fill: none; stroke: var(--accent); stroke-dasharray: 4 3; }
+  .zl-center { stroke: var(--fg-3); fill: none; }
+  .zl-keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--fg-3); }
+  .zl-keys kbd { font-family: var(--font-code); font-size: 10.5px; border: 1px solid var(--line-2); border-radius: 3px; padding: 0 4px; color: var(--fg-2); background: var(--panel); }
+  .zl-panel { display: grid; gap: 10px; min-width: 0; }
+  @media (min-width: 900px) { .zl-panel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .zl-state { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .zl-state dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .zl-state dd { margin: 0; overflow-wrap: anywhere; }
+  .zl-state code { font-size: 11.5px; background: none; padding: 0; }
+  .zl-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 220px; overflow: auto; padding: 4px 0; font-size: 12px; }
+  .zl-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .zl-entry:first-child { background: var(--accent-wash); }
+  .zl-entry .in { font-weight: 600; color: var(--fg); }
+  .zl-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .zl-entry .msg::before { content: "→ "; color: var(--fg-3); }
+  .zl-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
+
 </style>
 </head>
 <body data-page="scrolling">
@@ -38,7 +68,7 @@
       <div class="head-cols">
         <dl class="meta">
           <div><dt>관련 소스</dt><dd><code>scroll_area_element.h</code>·<code>scroll_view_element.h</code>·<code>scrollbar_element.h</code>·<code>zoom_view_element.h</code>·<code>layout_metrics.h</code></dd></div>
-<!--LAB-META-->
+          <div><dt>실습</dt><dd>도면 확대 보기 — 휠·끌기·키·맞춤·회전, <code>overlap</code>·<code>contain</code> 경계</dd></div>
           <div><dt>먼저 읽기</dt><dd><a class="xref" href="layout.html">배치</a> · <a class="xref" href="input.html">입력과 초점</a> · <a class="xref" href="ui-tree.html">불변 UI tree</a></dd></div>
         </dl>
         <div class="goals">
@@ -70,9 +100,9 @@
             </ul>
           </div>
           <div class="panel">
-            <h4><i class="ci" aria-hidden="true">&#xEB4C;</i><code>scroll_view_element</code> + <code>scrollbar_element</code></h4>
+            <h4><i class="ci" aria-hidden="true">&#xEB4C;</i><code>scroll_view_element</code></h4>
             <ul>
-              <li>자르고 흘리기만 하는 원시 창과, 위치를 바꾸자는 메시지를 내는 막대.</li>
+              <li>자르고 흘리기만 하는 원시 창. 막대(<code>scrollbar_element</code>)는 따로 둔다.</li>
               <li>막대를 왼쪽에 두거나, 창 여럿이 막대 하나를 나눠 쓰거나, 휠의 임자를 표로 가를 때.</li>
               <li>창 높이와 임자(<code>scroll_source</code>)를 앱이 맞춰야 한다.</li>
             </ul>
@@ -188,6 +218,25 @@
         </div>
       </section>
 
+      <section class="sec" id="lab" data-toc="실습: 확대 보기">
+        <header class="sec-head">
+          <h2>실습: 확대 보기</h2>
+          <p class="lede">데모의 도면 페이지를 브라우저로 재현했다. 휠·끌기·키·단추가 낼 메시지와, 앱이 도우미 함수로 바꾼 상태가 쌓인다. 경계 방식을 바꿔 가며 가장자리까지 끌어 본다.</p>
+        </header>
+        <div class="lw" data-title="도면 확대 보기" data-surface="zoom_view_element · zoom_about · pan_by · zoom_to_fit" data-reset id="zl-lab">
+          <div class="lw-body zl-grid">
+            <div class="zl-tools" data-zl="tools"></div>
+            <div class="zl-view" data-zl="view" tabindex="0" aria-label="확대 보기 재현 — 휠로 확대, 끌어 이동, +·−·0·화살표·Page·Shift+←→/Home 키" data-keys></div>
+            <div class="zl-keys"><span><kbd>휠</kbd> 확대(포인터 기준)</span><span><kbd>Ctrl</kbd>+<kbd>휠</kbd></span><span><kbd>Shift</kbd>+<kbd>휠</kbd></span><span>가로 휠</span><span>끌기 이동</span><span><kbd>+</kbd><kbd>−</kbd><kbd>0</kbd></span><span><kbd>←</kbd><kbd>→</kbd><kbd>↑</kbd><kbd>↓</kbd> 32</span><span><kbd>Page</kbd> 0.9배</span><span><kbd>Shift</kbd>+<kbd>←</kbd><kbd>→</kbd> 15° · <kbd>Shift</kbd>+<kbd>Home</kbd> 0°</span></div>
+            <div class="zl-panel">
+              <dl class="zl-state" data-zl="state" aria-label="앱 상태"></dl>
+              <div class="zl-log" data-zl="log" aria-live="polite" aria-label="메시지 기록"></div>
+            </div>
+          </div>
+          <div class="lw-foot">판정은 원본을 옮긴 함수다 — <code>zoom_about</code>·<code>pan_by</code>·<code>rotate_about</code>·<code>zoom_to_fit</code>·<code>zoom_fit_actions</code>·<code>pan_blocked</code>·<code>rotated_bounds</code>와 경계 다듬기(<code>overlap</code>·<code>contain</code>), 보기의 키, 휠의 확대·이동 갈래(<code>zoom_view_element.cpp</code>·<code>ui_interaction.cpp</code>). 원본 줄을 그대로 넣어 컴파일한 대조기의 무작위 입력 20,000건(배율 범위 끝, 창 = 여백 두 배, 내용 = 창 같은 경계 값을 섞었다, 비교 801,979개)에서 float 값까지 같았다. 다른 것은 세 건이다 — 휠의 배율 <code>std::pow(1.2f, 눈금)</code>가 절댓값 45를 넘는 분수 눈금(약 −45.7, 51.8, 63.5)에서 float 한 칸 달랐다. 이 실습은 휠 한 번을 한 눈금(±120)으로 보낸다. 앱 쪽은 데모처럼 메시지마다 지금 상태에 도우미를 적용하고, 짓기 전에 <code>zoom_about(…, 1, {})</code>로 다듬는다. 처음 상태만 모바일 데모처럼 맞춤이다. 옮기지 않은 것: 핀치·두 손가락 회전·두 번 탭·경계 쓸기(터치 몸짓의 시간 판정은 controller의 몫이다), 관성. 휠은 보기 위에서 늘 보기의 것이라 쪽이 흐르지 않는다 (luil의 확대 보기도 경계에서 휠을 넘기지 않는다). 그림은 재현이지 luil의 실제 렌더링이 아니다.</div>
+        </div>
+      </section>
+
       <section class="sec" id="build-area">
         <header class="sec-head">
           <h2>만들기: 흘리는 영역</h2>
@@ -255,7 +304,7 @@
         }
 </script></div>
         <div class="prose">
-          <p><code>handle</code>은 0 아래만 막는다. 위쪽 끝(최대치)은 창 높이를 아는 짓기에서 다듬는다. <code>scroll</code> 하나가 넷을 함께 켠다 — 휠의 임자, 막대의 끌기·누름·키, 키보드 초점 되살리기, 끌기 중 가장자리 자동 스크롤. <code>scroll</code>이 없으면 흘리지 않는 창이다 (막대도 휠도 되살리기도 없고 치수만 답한다).</p>
+          <p><code>handle</code>은 위쪽 끝(0)만 막는다. 아래쪽 끝(최대치)은 창 높이를 아는 짓기에서 다듬는다. 헤더 주석대로 <code>scroll</code> 하나가 넷을 함께 켠다 — 휠, 막대의 끌기와 키, 초점 되살리기. 끌기 중 가장자리 자동 스크롤도 같은 원천을 쓴다. <code>scroll</code>이 없으면 흘리지 않는 창이다 (막대도 휠도 되살리기도 없고 치수만 답한다).</p>
         </div>
         <h3>여러 페이지가 쓰는 영역</h3>
         <div class="code" data-lang="cpp" data-src="examples/demo/common.cpp:194-215" data-path="examples/demo/common.cpp" data-start="194"><script type="text/plain">
@@ -2016,6 +2065,10 @@ namespace sample {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="assets/manual.js"></script>
-<!--LAB-SCRIPTS-->
+<script src="assets/zoommodel.js"></script>
+<script src="assets/scrolling-lab.js"></script>
+<script>
+  LuilScrollingLab.setup(document.getElementById("zl-lab"));
+</script>
 </body>
 </html>

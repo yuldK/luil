@@ -25,7 +25,40 @@
   .tbl-tree { font-family: var(--font-code); font-size: 12px; line-height: 1.7; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); padding: 10px 14px; overflow-x: auto; white-space: pre; color: var(--fg-2); }
   .tbl-tree b { color: var(--fg); font-weight: 600; }
   .tbl-tree i { color: var(--fg-3); font-style: normal; }
-/*LAB-CSS*/
+  .tl-grid { display: grid; gap: 10px; min-width: 0; }
+  .tl-tools, .tl-buttons { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .tl-tools label { display: inline-flex; gap: 6px; align-items: center; white-space: nowrap; cursor: pointer; }
+  .tl-tools select { font-size: var(--fs-xs); min-height: 26px; }
+  .tl-range input { width: 120px; }
+  .tl-range output { font-family: var(--font-code); min-width: 3ch; }
+  .tl-view { position: relative; min-width: 0; overflow: hidden; outline: none; border-radius: var(--r-row); touch-action: pan-y; }
+  .tl-view:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .tl-view svg { display: block; max-width: 100%; height: auto; user-select: none; -webkit-user-select: none; }
+  .tl-bg { fill: var(--panel); stroke: var(--line-2); }
+  .tl-head { fill: var(--sunk); }
+  .tl-htext { fill: var(--fg); font-size: 12px; font-weight: 600; }
+  .tl-ctext { fill: var(--fg-2); font-size: 12px; font-family: var(--font-code); }
+  .tl-rule { stroke: var(--line-2); }
+  .tl-row-rule { stroke: var(--line); }
+  .tl-edge { stroke: var(--accent); stroke-width: 1; }
+  .tl-grip { fill: transparent; cursor: col-resize; }
+  .tl-grip:hover { fill: var(--accent-wash); }
+  .tl-track { fill: var(--sunk); }
+  .tl-hbar { cursor: pointer; }
+  .tl-thumb { fill: var(--fg-3); cursor: grab; }
+  .tl-panel { display: grid; gap: 10px; min-width: 0; }
+  @media (min-width: 900px) { .tl-panel { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .tl-state { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .tl-state dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .tl-state dd { margin: 0; overflow-wrap: anywhere; }
+  .tl-state code { font-size: 11.5px; background: none; padding: 0; }
+  .tl-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 220px; overflow: auto; padding: 4px 0; font-size: 12px; }
+  .tl-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .tl-entry:first-child { background: var(--accent-wash); }
+  .tl-entry .in { font-weight: 600; color: var(--fg); }
+  .tl-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .tl-entry .msg::before { content: "→ "; color: var(--fg-3); }
+  .tl-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
 </style>
 </head>
 <body data-page="table">
@@ -41,7 +74,7 @@
       <div class="head-cols">
         <dl class="meta">
           <div><dt>관련 소스</dt><dd><code>table_element.h</code>·<code>virtual_list_element.h</code>·<code>check_element.h</code>·<code>item_model.h</code>·<code>selection_model.h</code></dd></div>
-<!--LAB-META-->
+          <div><dt>실습</dt><dd>열과 가로 창 — 두 막대, 고정 열, 폭 끌기, 끝 너머로 쌓이는 스크롤</dd></div>
           <div><dt>먼저 읽기</dt><dd><a class="xref" href="lists.html">목록과 트리 뷰</a> · <a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="input.html">입력과 초점</a></dd></div>
         </dl>
         <div class="goals">
@@ -90,7 +123,7 @@
             <h4><i class="ci" aria-hidden="true">&#xEB4C;</i><code>grid_element</code></h4>
             <ul>
               <li>표 모양의 <strong>배치</strong>다 (폼의 라벨 열 따위). 데이터 표가 아니다.</li>
-              <li>행 모델·선택·머리글이 없다 (<a class="xref" href="layout.html">레이아웃</a>).</li>
+              <li>행 모델·선택·머리글이 없다 (<a class="xref" href="containers.html">배치 요소</a>).</li>
             </ul>
           </div>
         </div>
@@ -200,6 +233,25 @@
         <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">정렬과 폭은 앱의 몫이다</span>머리글을 누르면 <code>sort_request(열 키)</code>만 온다. 행을 다시 늘어놓고 그 열의 <code>sort</code>를 칠하는 것은 앱이다 — <code>table_column::sort</code>는 화살표를 그릴 뿐이다. 경계를 끌면 폭의 <strong>변화량</strong>이 오고, 폭을 바꿔 저장하는 것도 앱이다.</div></div>
       </section>
 
+      <section class="sec" id="lab" data-toc="실습: 열과 가로 창">
+        <header class="sec-head">
+          <h2>실습: 열과 가로 창</h2>
+          <p class="lede">작업대의 "변경 파일" 표를 브라우저로 재현했다. 표 폭·행 수·고정 열을 바꾸면 두 막대·가로 창·고정 판정이 배치마다 다시 정해진다. 경계를 끌거나 가로로 흘리면 표가 낼 메시지와 앱이 바꾼 상태가 쌓인다.</p>
+        </header>
+        <div class="lw" data-title="열과 가로 창" data-surface="table_element · scroll_x · frozen_columns · horizontal_bar" data-reset id="tl-lab">
+          <div class="lw-body tl-grid">
+            <div class="tl-tools" data-tl="tools"></div>
+            <div class="tl-view" data-tl="view" tabindex="0" aria-label="표 재현 — ←·→로 가로 스크롤, 머리글 경계를 끌어 폭 조절" data-keys></div>
+            <div class="tl-buttons" data-tl="buttons"></div>
+            <div class="tl-panel">
+              <dl class="tl-state" data-tl="state" aria-label="앱 상태와 배치 결과"></dl>
+              <div class="tl-log" data-tl="log" aria-live="polite" aria-label="메시지 기록"></div>
+            </div>
+          </div>
+          <div class="lw-foot">판정은 원본을 옮긴 함수다 — <code>table_column_spans</code>·<code>table_clamp_scroll</code>·<code>table_frozen_fits</code>·<code>table_reveal_delta</code>·<code>table_resize_delta</code>, 배치의 두 막대·가로 창·고정 판정, ←→ 한 걸음, 가로 휠 원천, 경계 손잡이의 고정 한도(<code>table_element.cpp</code>), 막대 thumb·누름·끌기(<code>scrollbar_element.cpp</code>). 원본 줄을 그대로 넣어 컴파일한 대조기에서 손으로 고른 경계 사례 14건(열 없음, 창 − 고정 폭 = 48과 47.5, 끝에 닿는 한 걸음, 끝 너머의 앱 값, 최소 thumb, 24보다 짧은 track, 가로 막대가 부르는 세로 막대 따위)과 무작위 입력 20,000건, 비교 580,655개가 float 값까지 같았다. 앱 쪽은 작업대처럼 0 아래만 다듬는다 — 막대를 끝 너머로 끌면 앱 값이 쌓이는 것을 볼 수 있고, "배치 뒤 <code>scroll_x()</code> 되돌리기"를 켜면 그 몫이 사라진다. 옮기지 않은 것: 세로 스크롤(행은 늘 맨 위다), 말줄임(넘친 글은 자르기만 한다), 머리글 끌어 순서 바꾸기, 셀 탐색. 배율은 1이다. 그림은 같은 치수로 그린 재현이지 luil의 실제 렌더링이 아니다.</div>
+        </div>
+      </section>
+
       <section class="sec" id="build-minimal">
         <header class="sec-head">
           <h2>만들기: 가장 작은 표</h2>
@@ -265,7 +317,7 @@ struct files_state
     return element;
 }
 
-// logic thread의 handle 갈래다. 다듬기의 아래쪽(0)만 여기서 하고 위쪽 끝은 arrange가 다듬는다.
+// logic thread의 handle 갈래다. 0 아래만 여기서 막는다. 최대치 쪽은 arrange가 그림을 위해 다듬는다 (앱 값은 그대로다).
 bool handle(files_state& state, const luil::app_message& message)
 {
     if (const auto* const cursor { message.get<file_cursor_intent>() }; cursor != nullptr)
@@ -1960,7 +2012,7 @@ TEST_CASE("An editor takes focus, commits on Enter, cancels on Escape and hands 
                 <tbody>
                   <tr><td>Tab · Shift+Tab</td><td>표 전체가 한 자리(본문)다. 머리글 칸·경계 손잡이·체크박스·두 막대는 자리가 아니다. <code>rows</code>에 <code>move</code>·<code>move_with</code>·<code>activate</code> 중 하나라도 있어야 자리다</td></tr>
                   <tr><td>↑↓ · Page · Home · End · 글자 · Ctrl+Space · Ctrl+A</td><td>본문 가상 목록의 키다 (<a class="xref" href="lists.html#keyboard">목록: 키보드</a>)</td></tr>
-                  <tr><td>← · →</td><td>① 트리 열이 있고 셀 탐색이 꺼져 있으면 본문의 계층 키가 먼저다. ② <code>move_column</code>이 있으면 셀 커서 이동 (셀 커서가 트리 열이면 계층 키가 먼저, 끝 열이면 삼킨다). ③ <code>scroll_horizontal</code>이 있으면 가로 스크롤. ④ 아무것도 없으면 앱 정책으로 흐른다</td></tr>
+                  <tr><td>← · →</td><td>① 셀 탐색이 꺼져 있고 본문이 계층 목록(<code>rows.set_expanded</code>)이면 본문의 계층 키가 먼저다. ② <code>move_column</code>이 있으면 셀 커서 이동 (셀 커서가 트리 열이면 계층 키가 먼저, 끝 열이면 삼킨다). ③ <code>scroll_horizontal</code>이 있으면 가로 스크롤. ④ 아무것도 없으면 앱 정책으로 흐른다</td></tr>
                   <tr><td>F2</td><td>편집 시작. 편집할 수 있는 열이고 커서 행이 활성일 때만 표의 것이다</td></tr>
                   <tr><td>Space</td><td><code>rows.activate</code>가 있으면 실행. 없고 체크 열이 있으면 커서 행의 <code>toggle_check</code></td></tr>
                   <tr><td>Enter</td><td><code>rows.activate</code>가 있으면 실행. 없으면 기본 단추를 거쳐 앱으로 흐른다</td></tr>
@@ -2125,6 +2177,10 @@ TEST_CASE("An editor takes focus, commits on Enter, cancels on Escape and hands 
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="assets/manual.js"></script>
-<!--LAB-SCRIPTS-->
+<script src="assets/tablemodel.js"></script>
+<script src="assets/table-lab.js"></script>
+<script>
+  LuilTableLab.setup(document.getElementById("tl-lab"));
+</script>
 </body>
 </html>

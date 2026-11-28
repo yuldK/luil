@@ -103,7 +103,8 @@
   // 긴 식별자가 좁은 폭에서 낱자 단위로 끊기지 않게 '_'·'.'·'('·',' 뒤에만 줄을 바꿀 자리를 둔다.
   function breakable(tag, text, attrs) {
     const node = el(tag, attrs || null);
-    text.split(/(?<=[_.(,])/).forEach((part, i) => {
+    // 뒤돌아보기 정규식은 오래된 Safari가 읽지 못해 쓰지 않는다.
+    text.replace(/([_.(,])/g, "$1\u0000").split("\u0000").filter((part) => part !== "").forEach((part, i) => {
       if (i) node.append(document.createElement("wbr"));
       node.append(document.createTextNode(part));
     });

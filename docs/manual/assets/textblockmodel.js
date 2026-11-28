@@ -7,13 +7,16 @@
  *   src/ui/text_block.cpp       wrap_lines, single_line, elided, draw_lines, measure_text_block, draw_text_block,
  *                               text_block_line_height
  *   src/ui/draw_primitives.cpp  character_boundaries, single_line_text(space), elide_text·_middle·_start
- *   src/ui/label_element.cpp    block_style, measure_wrap, arrange, draw(글 부분), height_for
+ *   src/ui/label_element.cpp    block_style, measure_wrap, arrange, draw(글 부분), height_for, preferred_size
+ *   src/ui/text_measurer.cpp    measure_context::text_width (보통 굵기)
  *   src/ui/font_scale.cpp       scaled_font_size·text_line_height (시스템 글자 표가 없을 때)
  *
  * 글꼴만은 옮길 수 없어 단순 측정기로 대신한다: 글자소마다 ASCII 한 byte면 0.6em, 그 밖은 1em
  * (text.html 실습과 같은 측정기). 글자소는 브라우저의 Intl.Segmenter다. baseline은 글꼴 metrics라 정하지
  * 않는다 — 그린 줄은 줄 상자의 가운데(y)로 돌려준다.
  * 모든 구간은 luil처럼 UTF-8 byte offset이다. 원본 C++을 그대로 컴파일한 대조기와 무작위 입력으로 견주어 맞췄다.
+ * 대조한 길은 label이다 (simulateLabel·preferredSize — 배율 1, 시스템 글자 표 없음, 보통 굵기). 배치한 줄 없이
+ * 그리기에서 접는 drawTextBlock, vertical "bottom", line_height > 0은 원본을 옮겼지만 대조기를 지나지 않았다.
  */
 (function () {
   "use strict";
@@ -271,6 +274,17 @@
     return { wrapped, measured: measureWrap(config, ctx, slot.width), textBox, drawn: draw.drawn, rect: draw.rect, heightFor: heightFor(config), lineHeight: heightFor(config) };
   }
 
+  // label_element::preferred_size: wrap이면 받은 폭에서 바꾼 줄, 아니면 글 한 줄의 폭(올림) + 양옆 padding
+  function preferredSize(config, ctx, availableWidth) {
+    if (config.wrap) {
+      const measured = measureWrap(config, ctx, availableWidth);
+      const broke = measured.lines.length > 1 || measured.truncated;
+      return { width: broke ? availableWidth : Math.ceil(measured.width) + config.padding * 2, height: Math.max(measured.height, heightFor(config)) };
+    }
+    // measure_context::text_width: 측정기(scaled_font_size 크기) ÷ 배율
+    return { width: Math.ceil(config.text.length ? measureText(config.text, config.font_size) : 0) + config.padding * 2, height: heightFor(config) };
+  }
+
   window.LuilTextBlock = {
     ELLIPSIS,
     singleLineText,
@@ -286,6 +300,7 @@
     blockStyle,
     measureWrap,
     heightFor,
+    preferredSize,
     simulateLabel,
   };
 })();

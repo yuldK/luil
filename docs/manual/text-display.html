@@ -24,6 +24,27 @@
   @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
   .yes { color: var(--accent-ink); font-weight: 600; }
   .no { color: var(--error); font-weight: 600; }
+  .tb-grid { display: grid; gap: 12px; }
+  .tb-grid .field.wide { display: flex; width: 100%; }
+  .tb-grid .field.wide textarea { flex: 1 1 auto; min-width: 0; resize: vertical; }
+  .tb-opt { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+  .tb-opt > code { font-size: var(--fs-xs); color: var(--fg-2); white-space: nowrap; }
+  .seg.off { opacity: .45; }
+  .tb-stage { position: relative; overflow-x: auto; overflow-y: hidden; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--sunk); }
+  .tb-canvas { position: relative; line-height: 1; }
+  .tb-slot { position: absolute; border: 1px solid var(--line-3); background: var(--panel); border-radius: 2px; box-sizing: border-box; }
+  .tb-tbox { position: absolute; border-left: 1px dashed var(--accent); border-right: 1px dashed var(--accent); box-sizing: border-box; }
+  .tb-line { position: absolute; display: flex; align-items: center; white-space: pre; outline: 1px dotted var(--line-2); }
+  .tb-line.out { outline: 1px solid var(--warn); background: var(--warn-wash); }
+  .tb-c { display: inline-flex; justify-content: center; flex: none; }
+  .tb-c.a { font-family: var(--font-code); }
+  .tb-c.sp { color: var(--fg-3); }
+  .tb-c.el { color: var(--accent-ink); font-weight: 600; }
+  .tb-read b { color: var(--fg); font-weight: 600; }
+  .tb-lines { margin: 4px 0 0; padding-left: 2.2em; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .tb-notes { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; font-size: var(--fs-sm); color: var(--fg-2); }
+  .tb-notes li { display: flex; gap: 8px; align-items: baseline; }
+  .tb-notes .ci { color: var(--warn); flex: none; }
 </style>
 </head>
 <body data-page="text-display">
@@ -232,6 +253,24 @@
           </table>
         </div>
         <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">크기는 논리 픽셀, <code>text_layout</code>만 물리 픽셀</span>label·badge·markdown·<code>text_font</code>의 크기는 논리 픽셀로 적는다. <code>text_layout_request</code>의 <code>font_size</code>·<code>width</code>·<code>line_height</code>만 물리 픽셀이다 — 배율과 시스템 글자 크기는 부르는 쪽이 곱해 넘긴다. 시스템 글자 크기가 바뀌면 플랫폼이 창 metrics를 다시 보내고(<code>window_metrics::text_scale</code>은 12 논리 픽셀 글자의 배율), 앱은 그 메시지에서 다시 배치한다.</div></div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 글 상자">
+        <header class="sec-head">
+          <h2>실습: 글 상자</h2>
+          <p class="lede">label 하나를 칸에 놓고 폭·줄 수·말줄임·정렬을 바꿔 본다. 글꼴 폭만 단순 측정기로 대신했고, 줄을 바꾸고 줄이고 맞추는 판정은 luil 원본을 옮긴 것이다.</p>
+        </header>
+        <div class="lw" data-title="글 상자" data-surface="label_element · measure_text_block · draw_text_block" data-reset id="tb-lab">
+          <div class="lw-body tb-grid"></div>
+          <div class="lw-foot">옮긴 것: <code>text_block.cpp</code>의 <code>wrap_lines</code>·<code>single_line</code>·<code>draw_lines</code>·<code>measure_text_block</code>, <code>draw_primitives.cpp</code>의 말줄임 셋과 <code>single_line_text</code>, <code>label_element.cpp</code>의 <code>block_style</code>·<code>measure_wrap</code>·<code>preferred_size</code>·그리기, <code>text_layout.cpp</code>의 문단 고리. 접기 자체는 <a class="xref" href="text.html#s6">텍스트 처리의 실험</a>과 같은 이식이다. 원본 C++을 그대로 컴파일한 대조기(Skia 경계만 대역)에 무작위 label 설정 4만 건을 넣어 줄 구간·truncated·폭·높이·<code>preferred_size</code>·그린 글·x·줄 자리가 모두 같음을 확인했다 (배율 1, 시스템 글자 표 없음, 보통 굵기). 원본과 다른 것은 셋이다. 글꼴 폭은 단순 측정기다 — 글자 크기 10에서 ASCII 글자소는 6, 그 밖은 10이다. 글자소는 브라우저의 <code>Intl.Segmenter</code>로 나눈다. baseline은 글꼴 metrics라 그리지 않고 줄 상자만 그린다.</div>
+        </div>
+        <div class="callout think">
+          <i class="ci" aria-hidden="true">&#xEA61;</i>
+          <div>
+            <p class="ttl">해 볼 것</p>
+            <p>"끝 정렬"에서 칸 폭을 움직여 보라. 공백에서 접힌 줄은 오른쪽 끝에 붙지 않고 매단 공백만큼 안쪽에 선다 — 이 견본에서는 마지막 줄만 끝에 붙는다. "두 줄까지"에서 <code>max_lines</code>를 0으로 바꾸고 "높이 맞추기"를 누르면 <code>preferred_size</code>가 답할 높이가 된다. "경로"에서 <code>elide</code>를 셋 다 골라 보고, <code>wrap</code>을 켜면 <code>elide</code>가 더는 듣지 않는 것도 보라.</p>
+          </div>
+        </div>
       </section>
 
       <section class="sec" id="build-label">
@@ -1393,7 +1432,6 @@ TEST_CASE("System font sizes preserve nonlinear scaling and reject corrupt setti
 
     // bounds 중앙에 폰트 글리프 하나를 그린다. 크기는 논리 픽셀이고 bounds로 잘린다.
     // 지정한 폰트에 없는 글리프는 그리지 않는다 (시스템 폰트로 대체하지 않는다).
-    class glyph_element final : public ui_element
 </script></div>
             <div class="code tall" data-lang="cpp" data-src="include/luil/ui/badge_element.h:8-55" data-path="include/luil/ui/badge_element.h" data-start="8"><script type="text/plain">
     // 배지가 말하는 뜻이다. 구체 색은 theme이 그리기 시점에 정한다.
@@ -1900,7 +1938,7 @@ namespace luil {
               <tr><td>tooltip이 뜨고 닫힘</td><td>없다. hover와 시계는 input thread가, 그림은 tree가 맡는다</td><td>열림 상태를 들지 않는다</td></tr>
               <tr><td>label · glyph · badge</td><td>없다. <code>set_tooltip</code>을 달면 hit 대상이 될 뿐이다</td><td>—</td></tr>
               <tr><td>시스템 글자 크기가 바뀜</td><td><code>make_metrics_message</code>가 새 <code>window_metrics</code>로 다시 불린다 (<code>text_scale</code>)</td><td>다시 배치한다. 고정 행 높이를 다시 잰다</td></tr>
-              <tr><td>Windows에서 글꼴을 설치·삭제</td><td>없다. host가 글꼴 cache와 관리자를 놓는다</td><td>이미 잰 폭은 다음 배치에서 고쳐진다</td></tr>
+              <tr><td>Windows에서 글꼴을 설치·삭제</td><td>없다. host가 글꼴 cache와 관리자를 놓고 창을 다시 그리게 한다</td><td>이미 배치한 줄은 그대로다. 새 글꼴로 다시 재려면 frame을 다시 짓는다</td></tr>
             </tbody>
           </table>
         </div>
@@ -1917,16 +1955,16 @@ namespace luil {
           <table class="t">
             <thead><tr><th>닫는 것</th><th>커스텀·markdown tooltip</th><th>문자열 tooltip</th></tr></thead>
             <tbody>
-              <tr><td>hover가 다른 element로 옮김 · 표면을 떠남</td><td class="yes">닫는다</td><td class="yes">닫는다</td></tr>
-              <tr><td>끌기 시작 · 파일 끌기 진입</td><td class="yes">닫는다</td><td class="yes">닫는다</td></tr>
-              <tr><td>상자 밖 누름 · 상자 밖 휠</td><td class="yes">닫는다</td><td class="no">길을 찾지 못했다</td></tr>
+              <tr><td>hover가 다른 element로 옮김 · 포인터가 표면을 떠남</td><td class="yes">닫는다</td><td class="yes">닫는다</td></tr>
+              <tr><td>파일 끌기 진입 · 유실된 입력의 몸짓 취소 (<code>cancel_dropped_gestures</code>)</td><td class="yes">닫는다</td><td class="yes">닫는다</td></tr>
+              <tr><td>끌기 중</td><td class="yes">서지 않는다</td><td class="yes">서지 않는다</td></tr>
+              <tr><td>누름 · 휠 (커스텀은 상자 밖에서)</td><td class="yes">닫는다</td><td class="no">닫지 않는다</td></tr>
               <tr><td>아무 키 (Esc는 그것으로 쓰인다)</td><td class="yes">닫는다</td><td class="no">닫지 않는다</td></tr>
               <tr><td>창이 활성을 잃음</td><td class="yes">닫는다</td><td class="no">닫지 않는다</td></tr>
-              <tr><td>유실된 입력의 몸짓 취소 (<code>cancel_dropped_gestures</code>)</td><td class="yes">닫는다</td><td class="yes">닫는다</td></tr>
             </tbody>
           </table>
         </div>
-        <div class="prose small"><p>문자열 tooltip 열의 "닫지 않는다"·"길을 찾지 못했다"는 코드를 따라가 본 결과다 — 키·활성 상실의 닫기 조건이 커스텀 내용만 본다. 실기에서 확인하지 않았다. 설계 문서의 "Esc·다른 키 입력이 오면 닫는다"는 커스텀 내용 이야기로 읽는다.</p></div>
+        <div class="prose small"><p>문자열 tooltip 열은 코드를 훑은 결과다. hover 시계를 거두는 자리는 셋뿐이다 — 포인터가 표면을 떠날 때, hover 판정이 다른 element로 바뀔 때, <code>dismiss_tooltip</code>. 이 마지막은 파일 끌기 진입과 몸짓 취소에서는 늘 불리지만, 누름·휠·키·활성 상실에서는 커스텀 내용이 있을 때만 불린다. 누름이나 휠 뒤 tree가 바뀌어 포인터 밑 element가 달라지면 그때는 hover 변화로 닫힌다. 실기에서 확인하지 않았다. 설계 문서의 "Esc·다른 키 입력이 오면 닫는다"는 커스텀 내용의 이야기로 읽는다.</p></div>
       </section>
 
       <section class="sec" id="keyboard">
@@ -2034,6 +2072,7 @@ namespace luil {
           <li><strong><code>padding</code>은 바탕이 없어도 글을 들인다.</strong> 주석은 "바탕이 있을 때"지만 코드는 늘 좌우를 줄인다. 위아래는 들이지 않는다.</li>
           <li><strong>글이 빈 label은 바탕도 그리지 않는다.</strong> <code>notice</code>·<code>raised</code> 띠를 빈 글로 자리만 잡아 둘 수 없다.</li>
           <li><strong>접는 label은 상자를 자르지 않고, 한 줄이어도 위에 붙는다.</strong> 칸이 줄 수보다 낮으면 아래 줄이 이웃을 덮는다. 높이는 <code>measure_wrap</code>·<code>preferred_size</code>로 받거나 <code>max_lines</code>로 막는다. 한 줄 label은 세로 가운데인데 <code>wrap</code>이면 위에서부터 쌓는다.</li>
+          <li><strong>끝·가운데 정렬은 줄 끝 공백까지 잰 폭으로 맞춘다.</strong> 공백에서 접힌 줄은 그 공백이 줄 끝에 매달린다. 매단 공백은 줄 폭(<code>measure_wrap</code>의 <code>width</code>)에서는 빠지지만 정렬에는 들어간다. 그래서 그 줄의 글은 공백만큼(가운데 정렬은 절반) 안쪽에 서고, 공백까지 칸보다 넓으면 상자 왼쪽으로 나간다. 공백으로 끝나지 않는 줄(하이픈·슬래시 뒤, 한자 사이, 비상 분할, 문단의 끝)은 끝에 붙는다. 원본을 컴파일한 대조기로 확인했다 — 실기에서 보지는 않았다 (<a class="xref" href="#lab">실습</a>의 "끝 정렬").</li>
           <li><strong>손으로 지은 측정 문맥은 앱 스타일을 모른다.</strong> <code>measure_context { .scale, .measurer }</code>만 적으면 정책 칸이 빈 글을 내장 스타일(<code>hangul_words</code>)로 잰다. 앱이 <code>unicode</code>를 골랐다면 화면과 줄 수가 갈린다. <code>.style</code>을 싣거나 칸에 정책을 적는다. 빈 칸을 <code>== hangul_words</code>로 견주면 거짓이니, 견줄 때는 <code>line_break_for</code>로 푼 값을 쓴다.</li>
           <li><strong>접지 않는 글의 줄바꿈은 공백이다.</strong> 앱 스타일의 기본 <code>single_line_break::space</code> 때문에 한 줄 label·tooltip·배지의 <code>\n</code>이 사라진다. 여러 줄은 <code>wrap</code>을 켠다.</li>
           <li><strong>markdown은 시스템 글자 크기를 따르지 않는다.</strong> 블록 크기는 <code>font_size</code> × 화면 배율이다. label과 나란히 두면 사용자가 글자를 키울 때 markdown만 작다.</li>
@@ -2045,9 +2084,9 @@ namespace luil {
           <li><strong>markdown 생성자는 예외를 던질 수 있다.</strong> 파싱이 생성자 안이다. 너무 큰 입력은 <code>std::length_error</code>, 파서 실패는 <code>std::runtime_error</code>다.</li>
           <li><strong><code>make_markdown_tooltip</code>은 부를 때마다 파싱하고 잰다.</strong> 결과는 불변이니 한 번 지어 들고 있는다. 그 순간의 글꼴과 내장 스타일로 재므로 글꼴을 바꾸면 다시 짓는다.</li>
           <li><strong>tooltip은 마우스·펜 hover로만 뜬다.</strong> 터치와 키보드 초점으로는 뜨지 않는다. 헤더의 "포인터 자리가 없으면(키보드 초점·…·터치)"은 놓는 자리의 규칙일 뿐이다. 모바일에서 꼭 필요한 정보를 tooltip에만 두지 않는다.</li>
-          <li><strong>닫힘 규칙은 커스텀 내용에만 있다.</strong> 키·바깥 누름·활성 상실로 닫히는 것은 커스텀·markdown tooltip이다. 문자열 tooltip은 hover가 바뀌거나 포인터가 떠나거나 끌기가 시작돼야 사라진다 (코드 기준, 실기 미확인).</li>
+          <li><strong>닫힘 규칙은 커스텀 내용에만 있다.</strong> 키·바깥 누름·활성 상실로 닫히는 것은 커스텀·markdown tooltip이다. 문자열 tooltip은 hover가 다른 element로 바뀌거나, 포인터가 표면을 떠나거나, 파일 끌기 진입·몸짓 취소가 와야 사라진다. 끌기 중에는 서지 않는다 (코드 기준, 실기 미확인).</li>
           <li><strong>문자열 tooltip은 한 줄, 높이 22 고정이다.</strong> 글자는 시스템 글자 크기로 커지지만 상자는 그대로라, 큰 글자에서 위아래가 잘린다. 긴 글은 창 폭에서 잘린다. 여러 줄 도움말은 markdown tooltip을 쓴다.</li>
-          <li><strong>배지 높이는 label 한 줄과 같지 않다.</strong> 헤더 주석은 "같은 식"이라 하지만 배지는 <code>font_size + 7</code>, label은 <code>scaled_font_size(font_size) + 7</code>이다. 시스템 글자 표가 서면 갈린다 — 표가 <code>{0, 2}</code>면 12px label은 31, 배지는 19다. 경로 막대는 24로 고정이다. 글은 커지는데 알약·막대는 그대로라 큰 글자에서 글이 넘칠 수 있다 (실기 미확인).</li>
+          <li><strong>배지 높이는 label 한 줄과 같지 않다.</strong> 헤더 주석은 "같은 식"이라 하지만 배지는 <code>font_size + 7</code>, label은 <code>scaled_font_size(font_size) + 7</code>이다. 시스템 글자 표가 서면 갈린다 — 표가 <code>{0, 2}</code>면 같은 12px에서 label은 31, 배지는 19다. 경로 막대는 24로 고정이다. 글은 커지는데 알약·막대는 그대로라 큰 글자에서 글이 넘칠 수 있다 (실기 미확인).</li>
           <li><strong>배지 폭은 잴 수 있다.</strong> 예제·test 주석의 "배치 시점에는 잴 수 없다"는 낡았다. <code>preferred_size</code>가 알약 폭을 답한다. 맞춤 칸(<code>add_fit</code>)에 담으면 글이 잘리지 않는다.</li>
           <li><strong>배지의 심각도는 접근성 이름에 없다.</strong> 경고 배지 "3"은 그냥 "3"으로 읽힌다. 뜻을 귀로도 전하려면 글에 담거나 감싸는 요소의 이름에 적는다.</li>
           <li><strong>"…" 단추는 <code>open_collapsed</code>가 없어도 선다.</strong> 누를 것이 없는 Tab 자리이고 접근 tree에도 없다. <code>collapsed_label</code>이 비어도 접근 tree에서 빠진다.</li>
@@ -2154,5 +2193,12 @@ namespace luil {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="assets/manual.js"></script>
+<script src="assets/linebreak-data.js"></script>
+<script src="assets/linebreak.js"></script>
+<script src="assets/textblockmodel.js"></script>
+<script src="assets/text-display-lab.js"></script>
+<script>
+  LuilTextDisplayLab.setup(document.getElementById("tb-lab"));
+</script>
 </body>
 </html>

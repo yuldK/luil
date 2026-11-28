@@ -22,7 +22,57 @@
   .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
   .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
   @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
-<!--LABCSS-->
+  /* 실습: 42칸 달력과 색 변환 */
+  .pk-grid { display: grid; gap: 14px; }
+  @media (min-width: 1180px) { .pk-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .pk-side, .pk-panel, .pk-color { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .pk-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .pk-tools label, .pk-hexrow label { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; cursor: pointer; font-size: var(--fs-xs); color: var(--fg-2); }
+  .pk-tools select { font-size: var(--fs-xs); min-height: 26px; max-width: 100%; }
+  .pk-btn { font-size: var(--fs-xs); min-height: 26px; padding: 0 10px; border: 1px solid var(--line-2); border-radius: var(--r-control); background: var(--panel); color: var(--fg); cursor: pointer; }
+  .pk-btn:hover { background: var(--sunk); }
+  .pk-cal { width: max-content; max-width: 100%; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); padding: 8px; }
+  .pk-head { display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; align-items: center; }
+  .pk-title { text-align: center; font-weight: 600; font-size: var(--fs-sm); color: var(--fg); }
+  .pk-nav { width: 36px; height: 36px; border: 0; border-radius: var(--r-control); background: transparent; color: var(--fg-2); cursor: pointer; display: grid; place-items: center; }
+  .pk-nav:hover:not(:disabled) { background: var(--sunk); color: var(--fg); }
+  .pk-nav:disabled { color: var(--fg-3); opacity: .45; cursor: default; }
+  .pk-nav:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .pk-week, .pk-row { display: grid; grid-template-columns: repeat(7, 36px); }
+  .pk-week span { height: 26px; display: grid; place-items: center; font-size: 11px; color: var(--fg-3); }
+  .pk-day { width: 36px; height: 36px; border: 0; padding: 0; border-radius: 50%; background: transparent; color: var(--fg); font: inherit; font-size: 13px; font-variant-numeric: tabular-nums; cursor: pointer; outline: none; }
+  .pk-day.out { color: var(--fg-2); }
+  .pk-day.off { color: var(--fg-3); opacity: .5; cursor: default; }
+  .pk-day:not(.off):not(.sel):hover { background: var(--sunk); }
+  .pk-day.today { box-shadow: inset 0 0 0 1.5px var(--accent); }
+  .pk-day.sel { background: var(--accent); color: var(--on-accent); opacity: 1; }
+  .pk-day.sel.today { box-shadow: inset 0 0 0 1.5px var(--accent), inset 0 0 0 3px var(--on-accent); }
+  .pk-day.kbd:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .pk-hsv { display: flex; flex-wrap: wrap; gap: 6px 12px; }
+  .pk-hsv label { display: inline-flex; gap: 6px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .pk-hsv input { width: 72px; font-family: var(--font-code); font-size: 12px; min-height: 26px; padding: 0 6px; border: 1px solid var(--line-2); border-radius: var(--r-control); background: var(--panel); color: var(--fg); }
+  .pk-out { display: flex; align-items: center; gap: 10px; }
+  .pk-out code { font-size: 13px; }
+  .pk-swatch { width: 44px; height: 28px; border-radius: var(--r-control); border: 1px solid var(--line-2); background-color: var(--panel); background-image: linear-gradient(var(--pk-swatch), var(--pk-swatch)), repeating-conic-gradient(var(--line) 0% 25%, var(--panel) 0% 50%); background-size: 100% 100%, 12px 12px; }
+  .pk-hexrow { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .pk-hex { display: inline-flex; width: 150px; height: 30px; border: 1px solid var(--line-2); border-radius: var(--r-control); background: var(--panel); }
+  .pk-hex:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .pk-hex.bad { border-color: var(--error); }
+  .pk-hex input { width: 100%; min-width: 0; border: 0; background: transparent; color: var(--fg); font-family: var(--font-code); font-size: 13px; padding: 0 8px; outline: none; }
+  .pk-error { min-height: 1.4em; font-size: var(--fs-xs); color: var(--error); }
+  .pk-keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--fg-3); }
+  .pk-keys kbd { font-family: var(--font-code); font-size: 10.5px; border: 1px solid var(--line-2); border-radius: 3px; padding: 0 4px; color: var(--fg-2); background: var(--panel); }
+  .pk-state { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .pk-state dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .pk-state dd { margin: 0; overflow-wrap: anywhere; }
+  .pk-state code { font-size: 11.5px; background: none; padding: 0; }
+  .pk-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 320px; overflow: auto; padding: 4px 0; font-size: 12px; }
+  .pk-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .pk-entry:first-child { background: var(--accent-wash); }
+  .pk-entry .in { font-weight: 600; color: var(--fg); overflow-wrap: anywhere; }
+  .pk-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .pk-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
+  @media (max-width: 420px) { .pk-head { grid-template-columns: 34px minmax(0, 1fr) 34px; } .pk-week, .pk-row { grid-template-columns: repeat(7, 34px); } .pk-day { width: 34px; height: 34px; } .pk-nav { width: 34px; height: 34px; } }
 </style>
 </head>
 <body data-page="pickers">
@@ -192,6 +242,55 @@
           </ul>
         </div>
         <div class="callout think"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">보조 기술의 명령도 같은 메시지를 탄다</span>Windows UIA의 Select·Invoke·Toggle은 마우스 클릭과 같은 차례를 지키려고 input thread로 보내 정책의 <code>on_click</code> 훅 뒤에 낸다. 날의 Select는 날 칸의 클릭과 같다 — 커서가 아닌 날이면 <code>move_to</code> 다음 <code>select</code>다. 값 정하기·펼치기·접기(SetValue·Expand·Collapse)는 창 메시지로 미뤄 낸다.</div></div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 42칸 달력과 색 변환">
+        <header class="sec-head">
+          <h2>실습: 42칸 달력과 색 변환</h2>
+          <p class="lede">인라인 달력 하나와 HSV·16진 변환기를 luil의 함수 그대로 재현했다. 날을 누르거나 키를 누를 때마다 달력이 낼 메시지와 앱이 바꾸는 상태가 오른쪽에 쌓인다. "다음 해 1월 31일로"를 누른 뒤 PageDown을 두 번 눌러 보라.</p>
+        </header>
+        <div class="lw" data-title="42칸 달력과 색 변환" data-surface="calendar_element · calendar_date.h · color_space.h" data-reset id="pk-lab">
+          <div class="lw-body pk-grid">
+            <div class="pk-side">
+              <div class="pk-tools">
+                <select data-pk="first" aria-label="주 첫 요일 (first_day)">
+                  <option value="0">일요일 시작</option>
+                  <option value="1">월요일 시작</option>
+                </select>
+                <select data-pk="bounds" aria-label="고를 수 있는 범위 (bounds)">
+                  <option value="none">범위 없음</option>
+                  <option value="window">오늘 앞 30일 ~ 뒤 60일</option>
+                  <option value="test">2026-11-05 ~ 2026-11-20</option>
+                  <option value="flipped">2026-11-20 ~ 2026-11-05 (뒤집힘)</option>
+                </select>
+                <label title="calendar_config::available"><input type="checkbox" data-pk="weekend"> 주말 막기</label>
+                <button type="button" class="pk-btn" data-pk="jan31">다음 해 1월 31일로</button>
+              </div>
+              <div class="pk-cal" data-pk="cal"></div>
+              <div class="pk-keys"><span><kbd>←</kbd><kbd>→</kbd> 하루</span><span><kbd>↑</kbd><kbd>↓</kbd> 한 주</span><span><kbd>PageUp</kbd><kbd>PageDown</kbd> 한 달</span><span><kbd>Shift</kbd>+Page 한 해</span><span><kbd>Home</kbd><kbd>End</kbd> 그 달 1일·말일</span><span><kbd>Enter</kbd> 고르기</span></div>
+              <div class="pk-color">
+                <div class="pk-hsv">
+                  <label>색상 <input type="number" data-pk="hue" min="0" max="360" step="1" inputmode="decimal"></label>
+                  <label>채도 <input type="number" data-pk="saturation" min="0" max="1" step="0.01" inputmode="decimal"></label>
+                  <label>명도 <input type="number" data-pk="value" min="0" max="1" step="0.01" inputmode="decimal"></label>
+                  <label>알파 <input type="number" data-pk="alpha" min="0" max="1" step="0.01" inputmode="decimal"></label>
+                </div>
+                <div class="pk-out"><span class="pk-swatch" data-pk="swatch" aria-hidden="true"></span><code data-pk="hexout"></code></div>
+                <div class="pk-hexrow">
+                  <span class="pk-hex"><input type="text" data-pk="hexin" autocomplete="off" spellcheck="false" aria-label="16진 칸 (luil 재현) — Enter나 칸을 떠날 때 확정"></span>
+                  <label title="color_picker_config::alpha"><input type="checkbox" data-pk="alpha8" checked> 알파 (8자리)</label>
+                </div>
+                <div class="pk-error" data-pk="hexerror" aria-live="polite"></div>
+                <div class="pk-keys"><span>16진 칸에 "#abc", "#36f8", "##123", "#", "#808080"을 넣고 <kbd>Enter</kbd></span></div>
+              </div>
+            </div>
+            <div class="pk-panel">
+              <dl class="pk-state" data-pk="state" aria-label="앱 상태"></dl>
+              <div class="pk-log" data-pk="log" aria-live="polite" aria-label="메시지 기록"></div>
+            </div>
+          </div>
+          <div class="lw-foot">판정은 전부 원본을 옮긴 함수다 — 날짜는 <code>calendar_month_grid</code>·<code>add_months_clamped</code>·<code>clamp_date</code>·<code>calendar_contains</code>·<code>calendar_start_cursor</code>·<code>calendar_moved</code>·<code>format_iso_date</code>·<code>parse_iso_date</code>(<code>calendar_date.cpp</code>)와 이전·다음 단추의 목표와 비활성 조건, 격자의 키 처리기(<code>calendar_element.cpp</code>), 색은 <code>clamp_hsv</code>·<code>color_from_hsv</code>·<code>hsv_from_color</code>·<code>check_hex_color</code>·<code>format_hex_color</code>·<code>hex_color_filter</code>(<code>color_space.cpp</code>)다. 원본 소스를 그대로 링크한 대조기(단추 조건은 원본 줄을 잘라 넣었다)에 무작위 입력과 끝 값 4만 7천여 건 — 말일, 윤년, 1년·9999년, 뒤집힌 범위, 0.5 경계의 채널 — 을 넣어 결과가 같음을 확인했다. JS <code>Date</code>는 날짜 셈에 쓰지 않는다. 오늘만 앱이 브라우저 시계에서 읽는다. 키 처리기는 원본을 읽어 옮겼고 대조기에는 넣지 않았다. 그림은 luil의 실제 렌더링이 아니다.</div>
+        </div>
       </section>
 
       <section class="sec" id="build-calendar">
@@ -1381,7 +1480,7 @@ namespace sample {
                   <tr><td><code>select</code></td><td>없음</td><td>날을 고를 수 없다</td></tr>
                   <tr><td><code>move_to</code></td><td>없음</td><td>커서 키가 흐른다. 같은 목표면 빈 목록이다</td></tr>
                   <tr><td><code>turn_month</code></td><td>없음</td><td>이전·다음 단추가 <code>move_to</code>를 쓴다. 앱은 여기에 초점 요청을 싣지 않는다</td></tr>
-                  <tr><td><code>cell_size</code></td><td>0 (= 32)</td><td>날 칸과 머리 단추의 한 변(논리 px). 0이거나 유한하지 않으면 32다. 터치 앱은 44 안팎</td></tr>
+                  <tr><td><code>cell_size</code></td><td>0 (= 32)</td><td>날 칸과 머리 단추의 한 변(논리 px). 0 이하이거나 유한하지 않으면 32다. 터치 앱은 44 안팎</td></tr>
                   <tr><td><code>text</code></td><td>모두 빈 글</td><td>칸마다 비면 기본 문구다. "달력", "이전 달"·"다음 달", "{year}년 {month}월", "{year}년 {month}월 {day}일 {weekday}", 요일 머리 "일"~"토"</td></tr>
                 </tbody>
               </table>
@@ -2255,6 +2354,10 @@ namespace sample {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="assets/manual.js"></script>
-<!--LABSCRIPTS-->
+<script src="assets/pickermodel.js"></script>
+<script src="assets/pickers-lab.js"></script>
+<script>
+  LuilPickersLab.setup(document.getElementById("pk-lab"));
+</script>
 </body>
 </html>

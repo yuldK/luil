@@ -339,7 +339,7 @@
   }
 
   window.LuilValues = {
-    makeSlider, sliderMagnets, clampValue, travel, knobCenter, knobOffsetFor, sliderPress, sliderMove, sliderStep, stepForKey,
+    makeSlider, sliderMagnets, clampValue, travel, knobCenter, magnetOffset, knobOffsetFor, sliderPress, sliderMove, sliderStep, stepForKey,
     checkNumberInput, steppedNumberInput, numberInputFilter, rangeOf,
     constants: { STICK, RELEASE, KNOB, ROW: 20, TRACK: 4, MARK_W: 2, MARK_H: 10, RING: 22 },
   };

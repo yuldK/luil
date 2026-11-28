@@ -22,7 +22,44 @@
   .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
   .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
   @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
-<!--LABCSS-->
+  /* 실습: 자석 막대와 숫자 칸 — luil 치수(손잡이 12, 트랙 4, 표식 2×10, 고리 22, 줄 20 논리 px)를 배율 2로 */
+  .vl-grid { display: grid; gap: 14px; }
+  @media (min-width: 1180px) { .vl-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .vl-side, .vl-panel, .vl-field { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .vl-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .vl-tools label { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; cursor: pointer; }
+  .vl-tools select { font-size: var(--fs-xs); min-height: 26px; max-width: 100%; }
+  .vl-slider { position: relative; height: 40px; touch-action: none; cursor: ew-resize; outline: none; user-select: none; -webkit-user-select: none; border-radius: var(--r-row); }
+  .vl-slider:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .vl-track, .vl-fill { position: absolute; left: 0; top: 16px; height: 8px; border-radius: 4px; }
+  .vl-track { right: 0; background: var(--line-2); }
+  .vl-fill { background: var(--accent); }
+  .vl-mark { position: absolute; top: 10px; width: 4px; height: 20px; margin-left: -2px; border-radius: 2px; background: var(--line-3); }
+  .vl-mark.on { background: var(--panel); }
+  .vl-ring { position: absolute; top: -2px; width: 44px; height: 44px; margin-left: -22px; border-radius: 50%; background: var(--accent-wash-2); }
+  .vl-knob { position: absolute; top: 8px; width: 24px; height: 24px; margin-left: -12px; border-radius: 50%; background: var(--accent); }
+  .vl-slider:hover .vl-fill, .vl-slider:hover .vl-knob { background: var(--accent-hover); }
+  .vl-input { display: flex; align-items: stretch; max-width: 240px; height: 30px; border: 1px solid var(--line-2); border-radius: var(--r-control); background: var(--panel); }
+  .vl-input:focus-within { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .vl-input.bad { border-color: var(--error); }
+  .vl-input input { flex: 1 1 auto; min-width: 0; border: 0; background: transparent; color: var(--fg); font-family: var(--font-code); font-size: 13px; padding: 0 8px; outline: none; }
+  .vl-spin { display: grid; grid-template-rows: 1fr 1fr; border-left: 1px solid var(--line); }
+  .vl-spin button { width: 26px; border: 0; background: transparent; color: var(--fg-2); cursor: pointer; padding: 0; display: grid; place-items: center; }
+  .vl-spin button:hover { color: var(--fg); background: var(--sunk); }
+  .vl-spin .ci { font-size: 13px; }
+  .vl-error { min-height: 1.4em; font-size: var(--fs-xs); color: var(--error); }
+  .vl-keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--fg-3); }
+  .vl-keys kbd { font-family: var(--font-code); font-size: 10.5px; border: 1px solid var(--line-2); border-radius: 3px; padding: 0 4px; color: var(--fg-2); background: var(--panel); }
+  .vl-state { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .vl-state dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .vl-state dd { margin: 0; overflow-wrap: anywhere; }
+  .vl-state code { font-size: 11.5px; background: none; padding: 0; }
+  .vl-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 300px; overflow: auto; padding: 4px 0; font-size: 12px; }
+  .vl-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .vl-entry:first-child { background: var(--accent-wash); }
+  .vl-entry .in { font-weight: 600; color: var(--fg); overflow-wrap: anywhere; }
+  .vl-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .vl-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
 </style>
 </head>
 <body data-page="values">
@@ -204,6 +241,47 @@
           <p>값을 모르는 진행은 막대가 흉내 내지 않는다. 같은 것을 말하는 법이 둘이 되기 때문이다. 그때는 <code>spinner_element</code>다. <code>codicons::icon_loading</code>을 1초에 한 바퀴(<code>spinner_period</code>) 돌리고, 움직임 줄이기면 멈춘 글리프를 그리고 다음 frame을 청하지 않는다. 보조 기술에는 범위 없는 <code>progress</code>로 선다.</p>
         </div>
         <div class="callout think"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">factory는 값을 잡는다</span>factory는 불변 tree 안에 저장되고, input thread(포인터·키)나 UI thread(보조 기술)에서 불린다. logic thread가 고치는 앱 상태를 참조로 잡지 말고 값으로 잡는다. 데모의 자석 막대는 어느 막대인지를 가리키는 <code class="free">key</code>를 값으로 잡는다. 이 규칙을 강제하는 코드는 없다.</div></div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 자석 막대와 숫자 칸">
+        <header class="sec-head">
+          <h2>실습: 자석 막대와 숫자 칸</h2>
+          <p class="lede">데모의 자석 막대 셋과 숫자 칸을 브라우저로 재현했다. 끌거나 키를 누를 때마다 요소가 낼 메시지와 앱이 바꾸는 상태가 오른쪽에 쌓인다. 막대가 끝에 있을 때 →나 PageDown을 눌러 보고, "앱이 자른다"를 끈 채 다시 눌러 보라.</p>
+        </header>
+        <div class="lw" data-title="자석 막대와 숫자 칸" data-surface="slider_element · text_input_number" data-reset id="vl-lab">
+          <div class="lw-body vl-grid">
+            <div class="vl-side">
+              <div class="vl-tools">
+                <select data-vl="preset" aria-label="막대 고르기">
+                  <option value="volume">볼륨 0..150 · 지점 100</option>
+                  <option value="balance">좌우 균형 −100..100 · 지점 0</option>
+                  <option value="position">재생 위치 0..1440 · 장 경계 넷</option>
+                </select>
+                <label title="앱의 handle이 std::clamp로 자른다"><input type="checkbox" data-vl="clamp" checked> 앱이 자른다</label>
+                <label title="slider_config::change_to"><input type="checkbox" data-vl="changeto" checked> change_to 달기</label>
+              </div>
+              <div class="vl-slider" data-vl="slider" tabindex="0" role="slider" aria-orientation="horizontal"></div>
+              <div class="vl-keys"><span><kbd>←</kbd><kbd>→</kbd> 범위의 1%</span><span><kbd>PageUp</kbd> 줄이기 · <kbd>PageDown</kbd> 늘리기 10%</span><span><kbd>Home</kbd><kbd>End</kbd></span><span><kbd>Ctrl</kbd>을 누른 채 끌면 자석 없이</span></div>
+              <div class="vl-field">
+                <div class="vl-tools">
+                  <select data-vl="range" aria-label="숫자 칸의 범위 고르기">
+                    <option value="seconds">0–3600 · 걸음 5</option>
+                    <option value="temp">−40.0–60.0 · 걸음 0.5 · 소수 1</option>
+                    <option value="fine">−1..1 · 걸음 0.1 · 소수 2</option>
+                  </select>
+                </div>
+                <div class="vl-input"><input type="text" data-vl="number" inputmode="decimal" autocomplete="off" spellcheck="false" aria-label="숫자 칸 (luil 재현)"><span class="vl-spin"><button type="button" data-vl="up" tabindex="-1"><i class="ci" aria-hidden="true">&#xEAB7;</i></button><button type="button" data-vl="down" tabindex="-1"><i class="ci" aria-hidden="true">&#xEAB4;</i></button></span></div>
+                <div class="vl-error" data-vl="error" aria-live="polite"></div>
+                <div class="vl-keys"><span><kbd>↑</kbd><kbd>↓</kbd> 걸음</span><span><kbd>PageUp</kbd> 늘리기 · <kbd>PageDown</kbd> 줄이기</span><span><kbd>Home</kbd><kbd>End</kbd> caret</span><span>"12"에서 ↑, PageUp</span></div>
+              </div>
+            </div>
+            <div class="vl-panel">
+              <dl class="vl-state" data-vl="state" aria-label="앱 상태"></dl>
+              <div class="vl-log" data-vl="log" aria-live="polite" aria-label="메시지 기록"></div>
+            </div>
+          </div>
+          <div class="lw-foot">판정은 전부 원본을 옮긴 함수다 — slider의 <code>knob_offset_for</code>·<code>move_knob</code>·<code>travel</code>·<code>knob_center</code>·키 걸음(<code>slider_element.cpp</code>)과 키 → 걸음 표(<code>process_step_key</code>), 숫자 칸의 <code>check_number_input</code>·<code>stepped_number_input</code>·<code>number_input_filter</code>(<code>number_input.cpp</code>). slider는 원본 줄을 잘라 그대로 컴파일한 대조기에, 숫자 칸은 <code>number_input.cpp</code>를 그대로 링크한 대조기에 무작위 입력과 끝 값 3만여 건을 넣어 결과가 같음을 확인했다 (float는 비트까지). 그림은 같은 치수를 배율 2로 그린 재현이지 luil의 실제 렌더링이 아니다. IME 조합 중인 글은 거르지 않는다 — 브라우저 입력 칸의 한계다.</div>
+        </div>
       </section>
 
       <section class="sec" id="build-slider">
@@ -1083,7 +1161,7 @@ namespace sample {
                 <tbody>
                   <tr><td><code>number_input_range::minimum</code> · <code>maximum</code></td><td><code>lowest()</code> · <code>max()</code></td><td>그보다 안쪽일 때만 "정해진 끝"이다. 최솟값이 정해지지 않으면 눈금은 0에서 센다</td></tr>
                   <tr><td><code>step</code></td><td>1</td><td>↑↓·스핀 단추의 걸음. 눈금은 최솟값에서 센다. 소수 자리 단위로 반올림하고, 한 단위보다 작으면 한 단위다</td></tr>
-                  <tr><td><code>page_step</code></td><td>0</td><td>PageUp·PageDown의 걸음. 0이면 <code>step</code>의 10배다. 지금 값이 눈금 사이면 Page도 바로 이웃 눈금까지만 간다</td></tr>
+                  <tr><td><code>page_step</code></td><td>0</td><td>PageUp·PageDown의 걸음. 0이면 <code>step</code>의 10배다. 지금 값이 눈금 사이면 Page도 바로 이웃 눈금까지만 간다 (코드에서 확인한 동작)</td></tr>
                   <tr><td><code>decimals</code></td><td>0</td><td>증감한 글을 이 자리로 쓴다. 이보다 자세한 글은 <code>too_precise</code>다. 0..9로 자른다</td></tr>
                   <tr><td><code>text_input_number::change_to</code></td><td>없음</td><td>증감도 스핀 단추도 없다. 받은 글로 앱이 초안 전체를 바꾼다</td></tr>
                   <tr><td><code>spin_buttons</code></td><td>거짓</td><td>칸 오른쪽 안쪽의 위·아래 단추. Tab 자리가 아니다. 글 폭에서 단추 폭(<code>text_input_spin_width</code>, 14)과 틈을 뺀다</td></tr>
@@ -1226,7 +1304,7 @@ namespace sample {
                 </tbody>
               </table>
             </div>
-            <div class="prose small"><p>회전 주기 <code>spinner_period</code>는 1000ms다. 각도는 시계 시각의 함수라, 두 스피너는 언제나 같은 각도로 돈다.</p></div>
+            <div class="prose small"><p>회전 주기 <code>spinner_period</code>는 1000ms다. 각도는 시계 시각만의 함수다. 시작 시각을 들지 않고, 같은 frame의 스피너는 함께 돈다.</p></div>
           </section>
           <section data-tab="함께 쓰는 형식">
             <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_element.h:421-473" data-path="include/luil/ui/ui_element.h" data-start="421"><script type="text/plain">
@@ -1633,7 +1711,7 @@ namespace sample {
           <details class="faq"><summary><code>change</code>만 주면 안 되나?</summary><div class="faq-a"><p class="faq-short">조작은 된다. 다만 보조 기술에 읽기 전용이 되고, 자석에 붙는 순간도 델타로 와서 지점에서 비켜 설 수 있다.</p><p>Windows UIA의 <code>SetValue</code>가 <code>change_to</code>를 탄다. 그래서 데모의 막대는 모두 둘을 함께 단다.</p></div></details>
           <details class="faq"><summary>slider를 정수 눈금으로 움직이게 하려면?</summary><div class="faq-a"><p class="faq-short">element는 반올림하지 않는다. 상태는 그대로 쌓고, 보이거나 저장할 때 반올림한다.</p><p>반올림해 되돌려 쓰면 끄는 손잡이가 포인터에서 어긋난다. 꼭 붙어야 하는 값은 자석 지점으로 둔다 (<a class="xref" href="#build-integer">정수 표시</a>).</p></div></details>
           <details class="faq"><summary>키 한 번에 얼마나 움직이나? 바꿀 수 있나?</summary><div class="faq-a"><p class="faq-short">화살표는 범위의 1%, Page는 10%, Home·End는 끝이다. 상수라 바꿀 수 없다.</p><p>다른 걸음이 필요하면 <code>key_step_target</code>을 든 앱 element를 직접 지어야 한다. <code>slider_element</code>는 <code>final</code>이다.</p></div></details>
-          <details class="faq"><summary>놓을 때(끌기 끝) 알림을 받을 수 있나?</summary><div class="faq-a"><p class="faq-short">slider에서는 받을 수 없다. <code>on_release</code>를 채우지 않는다.</p><p>"놓은 뒤 저장"이 필요하면 앱이 시간 간격을 두고 저장하거나 따로 "적용" 단추를 둔다.</p></div></details>
+          <details class="faq"><summary>놓을 때(끌기 끝) 알림을 받을 수 있나?</summary><div class="faq-a"><p class="faq-short">slider에서는 받을 수 없다. <code>on_release</code>를 채우지 않는다.</p><p>끄는 동안의 메시지는 모두 같은 <code>change</code>라 앱이 "끝"을 가를 수 없다. 놓은 뒤에 한 번만 할 일은 앱이 다른 계기(단추 따위)에 단다.</p></div></details>
           <details class="faq"><summary>자석을 잠시 끄려면?</summary><div class="faq-a"><p class="faq-short">Ctrl(macOS는 Command도)을 누른 채 끈다. 끄는 도중에 눌러도 된다.</p><p>자석 판정은 이동마다의 문맥으로 하므로 앞뒤의 합이 맞는다. 키와 보조 기술은 처음부터 자석을 보지 않는다.</p></div></details>
           <details class="faq"><summary>휠로 slider를 움직일 수 있나?</summary><div class="faq-a"><p class="faq-short">없다. 휠은 포인터 아래 흘리는 창의 것이다.</p><p>스크롤하는 페이지 안의 막대가 휠을 가로채지 않는다는 뜻이기도 하다.</p></div></details>
           <details class="faq"><summary>숫자 칸에 숫자 아닌 글자가 아예 못 들어가게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>apply_text_edit</code>에 <code>number_input_filter(범위)</code>를 준다.</p><p>거르기는 넣는 조각만 본다. 이어 붙여 틀린 글("1..2")은 <code>check_number_input</code>이 잡는다.</p></div></details>
@@ -1689,6 +1767,10 @@ namespace sample {
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="assets/manual.js"></script>
-<!--LABSCRIPTS-->
+<script src="assets/valuemodel.js"></script>
+<script src="assets/values-lab.js"></script>
+<script>
+  LuilValuesLab.setup(document.getElementById("vl-lab"));
+</script>
 </body>
 </html>
