@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>접근성 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — 보조 기술이 읽는 역할·이름·상태를 정하고, 직접 그린 요소의 정보와 명령을 잇고, live region으로 상태 글을 알리고, 검사기와 접근 발행본으로 확인하는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+</style>
+</head>
+<body data-page="accessibility">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>접근성</h1>
+      <p class="summary">luil의 element는 <code>accessibility()</code>로 역할·이름·상태·범위를 답하고, 보조 기술의 명령을 앱 메시지로 옮긴다. 플랫폼 다리는 게시된 tree를 접은 접근 tree를 내주고, 그릴 때마다 발행본을 직전 것과 견줘 바뀐 것을 알린다. 앱이 할 일은 이름을 빠뜨리지 않고, 직접 그린 요소의 정보와 절대 명령을 잇고, 글이 바뀌는 자리를 live region으로 두는 것이다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>accessibility.h</code>·<code>ui_element.h</code>·<code>ui_inspect.h</code>·<code>uia_provider.cpp</code>·<code>accessibility_mapping.cpp</code>·<code>accessibility_ios.mm</code></dd></div>
+          <div><dt>실습</dt><dd>접근 tree 보기 — 접기, 이름의 원천, 공통 값, 발행본 대조</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="input.html">입력과 초점</a> · <a class="xref" href="platforms.html#s7">플랫폼과 host — 접근성</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>아이콘 단추·컨테이너·직접 그린 요소가 보조 기술에 무엇으로 읽히는지 정한다.</li>
+            <li>보조 기술의 누르기·고르기·펼치기·값 정하기를 앱 메시지로 받는다.</li>
+            <li>상태 글을 live region으로 알린다. 글을 바로 읽히는 API가 없다는 것과 대신 쓰는 길을 안다.</li>
+            <li>검사기와 접근 발행본으로 접근 tree를 확인하고 test로 잠근다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>무엇을 하면 되나</h2>
+          <p class="lede">라이브러리 요소는 이미 자기 역할과 상태를 답한다. 앱이 할 일은 이름을 빠뜨리지 않는 것, 그리고 직접 그린 요소와 절대 명령을 잇는 것이다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA79;</i>이름</h4>
+            <ul>
+              <li>글리프만 있는 단추는 <code>set_tooltip</code>이 이름(이자 도움말)이다.</li>
+              <li>목록·탭 막대처럼 글을 세우지 않는 컨테이너는 화면에 뜨지 않는 <code>set_access_name</code>이다.</li>
+              <li>이름이 비면 누를 수 있어도 접근 tree에서 사라진다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB06;</i>직접 그린 요소</h4>
+            <ul>
+              <li><code>accessibility()</code>를 재정의해 역할·이름·상태·범위를 답한다.</li>
+              <li>값 정하기·펼치기 같은 절대 명령은 <code>set_access_handler</code>나 <code>access_actions</code> 재정의로 메시지를 낸다.</li>
+              <li>누르기는 <code>left_click</code> 액션이 그대로 받는다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA6B;</i>상태 글</h4>
+            <ul>
+              <li>글이 바뀌면 읽히게 하려면 <code>set_live_region</code>이다.</li>
+              <li><code>access_role::alert</code>(토스트·정보 막대)는 정하지 않아도 끊고 읽힌다.</li>
+              <li>입력 칸의 <code>error</code>는 새로 생기면 알림으로 읽힌다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>글리프 단추가 "단추"로도 읽히지 않는다</td><td><code>set_tooltip</code> 또는 <code>set_access_name</code></td><td><a class="xref" href="#build-name">이름 붙이기</a></td></tr>
+              <tr><td>목록·탭 막대·스크롤 영역의 이름</td><td><code>set_access_name</code></td><td><a class="xref" href="#build-name">이름 붙이기</a></td></tr>
+              <tr><td>캔버스에 그린 다이얼을 슬라이더로 읽히게</td><td><code>accessibility()</code> 재정의 + <code>access_range</code></td><td><a class="xref" href="#build-custom">직접 그린 요소</a></td></tr>
+              <tr><td>보조 기술의 값 정하기·펼치기·고른 것에 더하기</td><td><code>set_access_handler</code> · <code>access_actions</code> 재정의</td><td><a class="xref" href="#build-actions">명령 받기</a></td></tr>
+              <tr><td>"저장 중…" 같은 상태 글을 읽히게</td><td><code>set_live_region</code> · <code>access_role::alert</code></td><td><a class="xref" href="#build-live">live region</a></td></tr>
+              <tr><td>비활성 단추가 왜 눌리지 않는지</td><td><code>set_tooltip</code> (도움말)</td><td><a class="xref" href="#build-live">live region</a></td></tr>
+              <tr><td>실행 중에 역할·이름 보기, test로 잠그기</td><td><code>ui_frame::inspector</code> · <code>make_access_snapshot</code> · <code>dump_tree</code></td><td><a class="xref" href="#build-test">확인하기</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">Android에는 접근성 계층이 없다</span>보조 기술 다리는 Windows(UI Automation), macOS(NSAccessibility), iOS(UIAccessibility) 셋이다. Android host에는 번역 코드가 없어 TalkBack이 luil 화면을 읽지 못한다. 까닭과 플랫폼별 번역 표는 <a class="xref" href="platforms.html#s7">플랫폼과 host</a>에 있다.</div></div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 접근 tree와 발행본</h2>
+          <p class="lede">보조 기술이 보는 것은 게시된 ui tree를 접은 접근 tree다. tree는 frame마다 새로 지어지므로, 무엇이 바뀌었는지는 이전 발행본과 견줘야만 안다.</p>
+        </header>
+        <h3>접기 규칙</h3>
+        <div class="prose">
+          <ul>
+            <li><strong>보이지 않는 가지는 통째로 빠진다.</strong> 자기나 조상이 <code>set_visible(false)</code>면 읽을 자리도 누를 자리도 아니다. 스크롤로 잘려 화면 밖에 있는 것은 그대로 남는다 — 키보드로 닿으면 화면 안으로 들어오기 때문이다.</li>
+            <li><strong>역할이 <code>none</code>인 요소는 접힌다.</strong> stack·panel 같은 배치 요소가 그렇다. 그 자식이 이 자리로 올라와 부모의 형제 줄에 선다.</li>
+            <li><strong>같은 id가 둘이면 첫 등록만 형제 줄에 선다.</strong> 뒤의 것은 구조처럼 접혀 자식만 올라온다. 중복은 <code>ui_tree::duplicate_ids()</code>에 남는 앱 결함이다.</li>
+            <li><strong>접근 부모는 가장 가까운 접근 조상이다.</strong> 없으면 창(fragment root)이다. 이 색인은 tree가 생길 때 한 번 짓는다 — 긴 목록도 형제 걸음이 한 번이다.</li>
+          </ul>
+        </div>
+        <h3>역할과 이름의 기본</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>규칙</th><th>뜻</th></tr></thead>
+            <tbody>
+              <tr><td>기본 <code>accessibility()</code></td><td><code>left_click</code> 액션이 있고 이름이 있으면 <code>button</code>, 아니면 <code>none</code>이다. 이름 없는 단추는 소음이라 승격하지 않는다</td></tr>
+              <tr><td>이름의 원천 <code>access_name()</code></td><td><code>set_access_name</code> → <code>set_search_label</code> → tooltip 순서다. 자기 글을 그리는 요소(글자 단추·라벨·목록 행·탭)는 그 글이 이름이다</td></tr>
+              <tr><td>공통 값 <code>access_info_of</code></td><td>요소의 답 위에 <code>enabled</code>(<code>enabled()</code>), <code>help</code>(비면 tooltip 글), <code>live</code>(<code>set_live_region</code>, 정하지 않은 <code>alert</code>는 <code>assertive</code>)를 채운다. 발행본과 플랫폼 질의가 모두 이 함수로 읽는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>보조 기술의 명령이 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">보조 기술 → UI</span><span>Narrator·VoiceOver가 요소에 명령을 보낸다. UIA 호출은 창의 STA(UI thread)로 모이고, macOS·iOS 다리는 메인 thread에서 돈다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>다리가 쥔 id로 지금 tree에서 요소를 다시 찾는다. <code>enabled()</code>와 <code>access_reachable</code>을 보고, 비활성·가둠 뒤·숨은 것이면 거절한다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span><code>plan_access_request</code>가 상태를 보고 요소의 <code>access_actions</code>를 부른다. 앱이 준 factory가 <strong>이때</strong> 불려 메시지를 만든다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>누르기·켬끔·고르기는 <code>access_click_event</code>로 input thread에 가서 마우스 클릭처럼 <code>interaction_policy::on_click</code> 뒤에 나간다. 그 밖의 명령은 창의 다음 차례에 배분한다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱이 메시지를 받아 상태를 바꾸고 새 frame을 게시한다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>다음 그리기에서 발행본을 직전 것과 견줘 바뀐 것(property·selected·structure·live region)을 알린다. 앱이 처리하기 전에 상태가 바뀌었다고 말하지 않는 순서다.</span></div>
+        </div>
+        <h3>id가 정체성이다</h3>
+        <div class="prose">
+          <ul>
+            <li>다리는 element 포인터가 아니라 (표면, <code>ui_element_id</code>)를 쥐고 물을 때마다 지금 tree에서 다시 찾는다. 그래서 id가 frame을 넘어 같아야 보조 기술의 자리가 이어진다.</li>
+            <li>자동화 id는 세 플랫폼에서 <code class="free">&lt;kind의 수&gt;:&lt;owner&gt;</code>다 — UIA AutomationId, macOS·iOS의 <code>accessibilityIdentifier</code>. kind 이름이 아니라 열거 값의 수라 키 <code class="free">doc-1</code>인 탭은 <code class="free">17:doc-1</code>이다. popup 안의 요소는 macOS·iOS에서 앞에 popup 표식이 붙는다.</li>
+            <li>id가 사라진 요소에 명령이 오면 UIA는 <code>UIA_E_ELEMENTNOTAVAILABLE</code>로 답한다.</li>
+          </ul>
+        </div>
+        <h3>키보드 초점과 보조 기술의 커서</h3>
+        <div class="prose">
+          <ul>
+            <li><strong>논리 초점은 하나이고 controller가 든다.</strong> UIA의 <code>HasKeyboardFocus</code>는 Win32 초점이 아니라 그 표면의 논리 초점이다. 초점이 옮겨 가면 그리는 길에서 알린다 (UIA <code>UIA_AutomationFocusChangedEventId</code>, macOS FocusedUIElementChanged, iOS LayoutChanged).</li>
+            <li><strong>보조 기술의 커서는 논리 초점을 옮기지 않는다.</strong> Narrator·VoiceOver가 요소를 훑어도 키보드 초점은 그대로다. 논리 초점이 옮겨 가면 커서가 따라간다.</li>
+            <li><strong>보조 기술이 초점을 청하면</strong> UIA <code>SetFocus</code>는 <code>focusable()</code>이고 손이 닿는 요소만 받아 <code>access_focus_event</code>를 input thread에 보낸다. controller가 다시 확인하고 키보드 초점으로 세운다 — 초점 테가 보인다.</li>
+          </ul>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">알림은 상태의 대조로 난다</span>"이 글을 읽어라"는 API가 없다 (공개 헤더에 <code class="free">speak</code>·<code class="free">announce</code> 같은 이름이 없다). 읽히는 것은 다음 발행본 대조가 찾은 변화다: 이름·값·상태의 property, 새로 골라진 항목, 자식 구성, live region의 글. 상태가 바뀌지 않는 사건인 Invoke만 배분한 순간에 알린다.</div></div>
+      </section>
+
+      <section class="sec" id="build-name">
+        <header class="sec-head">
+          <h2>만들기: 아이콘 단추와 컨테이너에 이름 붙이기</h2>
+          <p class="lede">글이 없는 요소는 이름이 없으면 접근 tree에서 사라진다. 글리프 단추는 tooltip, 컨테이너는 화면에 뜨지 않는 <code>set_access_name</code>이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/controls_section.cpp:58-66"><script type="text/plain">
+</script></div>
+        <div class="prose">
+          <p><code>button_element</code>는 <code>accessibility()</code>를 재정의하지 않는다(코드에서 확인한 동작). 그래서 기본 규칙을 탄다 — <code>left_click</code>이 있고 tooltip이 이름이 되어 <code>button</code> "하나 더한다"로 읽힌다. 같은 tooltip이 도움말(UIA HelpText, macOS AXHelp)도 된다. 이름과 설명을 가르려면 <code>set_access_name(u8"더하기")</code>로 이름을, <code>set_tooltip</code>으로 긴 설명을 준다 — 이름은 access name이 먼저다.</p>
+        </div>
+        <p class="small muted">기본 규칙 자체를 잠근 test다. 누를 수 있어도 이름이 없으면 <code>none</code>이고, 글자 탐색의 글이 tooltip보다 먼저다.</p>
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:759-775"><script type="text/plain">
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1442-1473"><script type="text/plain">
+</script></div>
+        <div class="prose">
+          <p>목록·탭 막대·스크롤 막대처럼 자기 글을 세우지 않는 컨테이너에 tooltip을 달면 빈 자리에 글 상자가 뜬다. 그래서 <code>set_access_name</code>을 쓴다 — 그리기에도 글자 탐색에도 쓰이지 않는다. 컨테이너가 안에 세우는 부품(목록의 스크롤 막대)은 앱이 손댈 수 없어 컨테이너의 이름을 물려받는다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>요소</th><th>이름은 어디서 오나</th></tr></thead>
+            <tbody>
+              <tr><td>자기 글을 그리는 요소 — <code>text_button_element</code>, <code>label_element</code>, 목록 행, 탭</td><td>그 글</td></tr>
+              <tr><td>글을 세우지 않는 요소 — <code>list_element</code>, <code>grouped_list_element</code>, <code>menu_element</code>, <code>tab_bar_element</code>, <code>scrollbar_element</code>, <code>slider_element</code>, <code>progress_element</code>, <code>split_handle_element</code>, 라벨 없는 체크</td><td><code>access_name()</code> — <code>set_access_name</code> → <code>set_search_label</code> → tooltip</td></tr>
+              <tr><td>컨테이너가 세우는 부품 — 목록·스크롤 영역·표의 막대, 표의 머리글·본문</td><td>컨테이너의 이름을 물려받는다</td></tr>
+              <tr><td>modal 대화 상자, 선택 묶음</td><td><code>modal_host_config::name</code>, <code>choice_group_config::name</code> — 비면 이름 없이 선다</td></tr>
+              <tr><td>사이드바의 폭 손잡이</td><td><code>sidebar_config::handle_access_name</code> — 기본 문구가 없다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">이름 없는 단추는 소음이라 사라진다</span>누를 수 있는 요소라도 이름이 비면 역할이 <code>none</code>이라 접근 tree에서 빠진다. 오류도 경고도 없다. 탭 막대의 닫기 단추가 바로 그 경우라 보조 기술에 없다 — <a class="xref" href="tabs.html">탭</a> 문서가 대신 길을 적는다.</div></div>
+      </section>
+
+      <section class="sec" id="build-custom">
+        <header class="sec-head">
+          <h2>만들기: 직접 그린 요소의 역할·값·범위</h2>
+          <p class="lede">직접 그린 요소는 <code>accessibility()</code>를 재정의해 역할·이름·상태·범위를 답한다. 값을 정하게 하려면 목표 값을 나르는 메시지를 단다.</p>
+        </header>
+        <div class="prose"><p>범위만 내주는 가장 작은 요소다 (UIA 변환 test의 것). 범위가 있으니 RangeValue 패턴이 서지만 값을 정할 길이 없어 읽기 전용이다 — <code>IsReadOnly</code>가 참이고 <code>SetValue</code>는 <code>E_ACCESSDENIED</code>다.</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/uia_provider_tests.cpp:1505-1533"><script type="text/plain">
+</script></div>
+        <div class="prose"><p>라이브러리의 별점이 범위·값 글·값 정하기를 모두 잇는 본보기다. 값 글이 비지 않아 UIA Value 패턴도 함께 서고, 값 정하기는 앱의 절대 메시지(<code>change_to</code>)만 탄다.</p></div>
+        <div class="code" data-lang="cpp" data-src="src/ui/rating_element.cpp:326-355"><script type="text/plain">
+</script></div>
+        <div class="prose"><p>앱이 그린 요소가 값 정하기를 받는 예는 저장소에 없어 손으로 썼다. 재정의 대신 <code>set_access_handler</code>로 <code>set_value</code>만 앱 메시지로 옮긴다.</p></div>
+        <div class="code" data-lang="cpp" data-label="값을 정할 수 있는 다이얼 (직접 작성)" data-compile="pre-dial"><script type="text/plain">
+// 앱 kind다 (라이브러리 대역 밖, ui_element_id.h의 application_element_kind).
+constexpr luil::ui_element_kind kind_dial { luil::application_element_kind(0) };
+
+// 볼륨을 **이 값으로** 하라는 앱 메시지다 (절대 값 — 델타가 아니다).
+struct volume_set_intent
+{
+    float value { 0.0f };
+};
+
+// 손으로 그리는 볼륨 다이얼이다. 보조 기술에는 막대(slider)로 선다.
+class volume_dial final : public luil::ui_element
+{
+public:
+    volume_dial(std::u8string owner, const float value)
+        : ui_element { luil::ui_element_id { kind_dial, std::move(owner) } }
+        , value_ { value }
+    {
+        // 화면에 글을 세우지 않으므로 이름은 화면에 뜨지 않는 자리에 둔다.
+        set_access_name(u8"볼륨");
+        // set_value만 앱 메시지로 옮긴다. 그 밖의 명령은 nullopt로 기본 구현(클릭)에 맡긴다.
+        set_access_handler([](const luil::access_request& request) -> std::optional<std::vector<luil::input_action>> {
+            if (request.command != luil::access_command::set_value)
+                return std::nullopt;
+            return std::vector<luil::input_action> { luil::make_app_action(volume_set_intent { request.value }) };
+        });
+    }
+
+    void arrange(const luil::arrange_context& context) override
+    {
+        set_bounds(context.slot);
+    }
+
+    void draw(luil::draw_context&, const luil::interaction_snapshot&) const override
+    {
+    }
+
+    [[nodiscard]] luil::access_info accessibility() const override
+    {
+        luil::access_info info { .role = luil::access_role::slider, .name = access_name() };
+        info.range = luil::access_range { .minimum = 0.0f, .maximum = 100.0f, .value = value_, .step = 5.0f, .page = 20.0f };
+        // 읽을 글이다 (별점 rating_element와 같은 짝). UIA는 이 글로 Value 패턴도 내건다 — 글로 쓰는 Value.SetValue는
+        // 편집 칸이 아니라 거절되고, 값을 바꾸는 길은 RangeValue다. iOS는 accessibilityValue로 읽고, macOS의 AXValue는 수다.
+        const std::string digits { std::to_string(static_cast<int>(std::lround(value_))) };
+        info.value = std::u8string { digits.begin(), digits.end() } + u8"%";
+        return info;
+    }
+
+private:
+    float value_ { 0.0f };
+};
+
+// 계획을 직접 물어 본다 (test에서 하는 일과 같다).
+[[nodiscard]] bool dial_accepts_value()
+{
+    const volume_dial dial { u8"master", 40.0f };
+    // 범위가 있으니 set_value가 서고, 처리기가 메시지 하나를 낸다.
+    const std::optional<std::vector<luil::input_action>> planned { luil::plan_access_request(dial, luil::access_request { luil::access_command::set_value, 60.0f }) };
+    // 상태가 없는 명령(toggle)은 할 수 없는 일이다 (nullopt).
+    const bool toggle_refused { luil::plan_access_request(dial, luil::access_request { luil::access_command::toggle }).has_value() == false };
+    return planned.has_value() && planned->size() == 1u && toggle_refused;
+}
+</script></div>
+        <script type="text/plain" id="pre-dial" data-prelude>
+#include "luil/ui/accessibility.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/ui_element.h"
+#include "luil/ui/ui_events.h"
+#include <cmath>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><strong>계획은 범위가 있는지만 먼저 본다.</strong> <code>set_value</code>는 <code>range</code>가 없으면 할 수 없음이고, 있으면 요소의 <code>access_actions</code>에 묻는다. 기본 <code>access_actions</code>는 <code>set_access_handler</code>로 준 처리기를 먼저 부른다. 처리기가 없으면 <code>set_value</code>는 기본 실행이 없다.</li>
+            <li><strong>값 글을 함께 주면 UIA Value 패턴도 선다.</strong> 다만 글로 쓰는 <code>Value.SetValue</code>는 편집 파이프라인에 이어진 <code>edit</code>·<code>combo_box</code>가 아니면 <code>E_ACCESSDENIED</code>다. <code>IsReadOnly</code>는 RangeValue와 Value가 한 함수로 답해서, 값을 받는 이 다이얼은 Value 쪽에서도 "읽기 전용 아님"이라 답한다 — 값을 바꾸는 길은 <code>RangeValue.SetValue</code>다 (코드에서 확인한 동작).</li>
+            <li><strong><code>step</code>·<code>page</code></strong>는 UIA의 SmallChange·LargeChange로 알려진다. 0이면 알리지 않고, macOS의 오르내림(AXIncrement)은 범위의 1/20을 쓴다. iOS는 걸음이 0보다 크고 값 정하기 계획이 설 때만 Adjustable이다.</li>
+            <li>UIA는 범위 밖 값을 자르지 않고 <code>E_INVALIDARG</code>로 거절한다. macOS는 범위로 자른다.</li>
+            <li>보조 기술 명령과 키보드는 따로다. 화살표로 값을 바꾸려면 <code>set_key_step_target</code>을 단다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-actions">
+        <header class="sec-head">
+          <h2>만들기: 보조 기술의 명령 받기</h2>
+          <p class="lede">명령은 "이 요소에서 무슨 메시지인가"로 바뀐다. 계획의 답은 셋이다: 할 수 없음(<code>nullopt</code>), 내 것이지만 할 일 없음(빈 목록), 낼 메시지들.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/accessibility.cpp:65-116"><script type="text/plain">
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="70-72" data-title="누르기">누름에는 "이미"가 없다. 할 수 있는지는 요소가 답한다. 빈 계획이 오면 UIA는 거절한다.</li>
+            <li data-lines="73-77" data-title="켬끔">뒤집기라 방향이 없다. <code>checked</code>가 없으면 할 수 없다.</li>
+            <li data-lines="78-86" data-title="고르기">이미 골라졌으면 할 일이 없다 — 실행은 클릭 하나라 그대로 흘리면 도리어 풀리는 자리가 있다. 다중 선택이면 "이것 하나만"이라 그래도 요소에 간다.</li>
+            <li data-lines="87-94" data-title="더하기·빼기">목표 상태를 나르는 명령이다. 이미 그 상태면 할 일이 없다.</li>
+            <li data-lines="95-103" data-title="펼치기·접기">방향을 본다. UIA Expand는 "펼친 상태로 만들라"이지 "뒤집으라"가 아니다.</li>
+            <li data-lines="104-113" data-title="값·흘림 자리">범위·흘림 자리가 없으면 할 수 없다. 흘림 백분율은 같은 자리여도 요소에 간다 (늘어나는 목록의 100은 "끝에 붙어 있으라"다).</li>
+            <li data-lines="115-115" data-title="요소에 묻기">상태가 맞으면 요소의 <code>access_actions</code>가 답한다. 비활성은 여기서 보지 않는다 — 다리가 따로 거절한다.</li>
+          </ol>
+        </div>
+        <div class="prose"><p>요소의 기본 <code>access_actions</code>는 처리기 → 절대 명령이면 할 수 없음 → <code>left_click</code>을 요소 한가운데 좌표로 부르기 순서다. 마우스로 누를 수 없는 것은 보조 기술로도 누를 수 없다.</p></div>
+        <div class="code" data-lang="cpp" data-src="src/ui/ui_element.cpp:719-742"><script type="text/plain">
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th><code>access_command</code></th><th>있어야 하는 상태</th><th>이미 그 상태면</th><th>기본 실행</th></tr></thead>
+            <tbody>
+              <tr><td><code>invoke</code></td><td>—</td><td>—</td><td><code>left_click</code></td></tr>
+              <tr><td><code>toggle</code></td><td><code>checked</code></td><td>— (뒤집기)</td><td><code>left_click</code></td></tr>
+              <tr><td><code>select</code></td><td><code>selected</code></td><td>할 일 없음 (다중 선택이면 요소에 간다)</td><td><code>left_click</code></td></tr>
+              <tr><td><code>expand</code> · <code>collapse</code></td><td><code>expanded</code></td><td>할 일 없음</td><td>없다 — 목표 상태 메시지가 필요하다</td></tr>
+              <tr><td><code>set_value</code></td><td><code>range</code></td><td>요소가 정한다</td><td>없다</td></tr>
+              <tr><td><code>add_to_selection</code> · <code>remove_from_selection</code></td><td><code>selected</code></td><td>할 일 없음</td><td>없다</td></tr>
+              <tr><td><code>set_scroll_percent</code></td><td><code>scroll</code></td><td>그래도 요소에 간다</td><td>없다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose"><p>앱이 받겠다고 한 명령만 처리기가 답하고, 나머지는 기본(클릭)으로 물러서는 모양이다 (원문 test):</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/access_multiple_selection_tests.cpp:176-222"><script type="text/plain">
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>처리기의 답 규약은 계획과 같다: <code>nullopt</code>면 기본으로 물러서고, 빈 목록이면 "내 것이지만 할 일 없음"이다.</li>
+            <li>상태를 답하는 요소와 바꾸는 요소가 다르면(그룹의 펼침은 머리행이 쥔다) <code>access_actions</code>를 재정의한다. 라이브러리의 가상 목록 행이 <code>set_access_handler</code>로 더하기·빼기를 옮긴다.</li>
+            <li>설계 문서는 "여섯 동작"이라 적지만 <code>access_command</code>는 아홉 값이다 — 더하기·빼기·흘림 백분율이 뒤에 더해졌다. 헤더가 맞다.</li>
+          </ul>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">factory는 순수해야 한다</span>보조 기술 길에서는 factory가 UI thread의 <strong>계획 단계</strong>에서 불리고 결과가 버려질 수도 있다. UIA가 Invoke 패턴이 있는지 물을 때 invoke 계획을 세워 보고, <code>IsReadOnly</code>도 <code>set_value</code> 계획을 세운다. macOS의 누름 허용 판정과 iOS의 Adjustable 판정도 같다. 그래서 액션·factory는 상태를 바꾸지 말고 메시지만 만들어 돌려준다. 앱 상태를 참조로 잡지 말고 값으로 캡처한다 (코드에서 확인한 동작).</div></div>
+      </section>
+
+      <section class="sec" id="build-live">
+        <header class="sec-head">
+          <h2>만들기: live region으로 상태 글 알리기</h2>
+          <p class="lede">글을 바로 읽히는 API는 없다. 글이 바뀌는 자리를 live region으로 두면 다음 발행본 대조가 그 자리를 읽게 알린다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1864-1880"><script type="text/plain">
+</script></div>
+        <div class="prose"><p>비활성 단추에 tooltip으로 까닭을 적으면 그것이 도움말이다. 비활성 단추도 이름과 까닭을 지닌 채 tree에 남고, 활성이나 까닭이 바뀌면 property 변화로 들린다. 판 안의 줄이 바뀌면 판(live region)이 알린다:</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1882-1936"><script type="text/plain">
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><strong>역할이 있는 요소만 live region이 된다.</strong> test의 판은 이름과 누름 액션을 줘 역할(<code>button</code>)을 세웠다. 역할이 <code>none</code>인 배치 요소에 걸면 접혀서 아무것도 알리지 않는다.</li>
+            <li>그 요소나 안쪽 요소의 글(이름·값·도움말·오류)이 바뀌거나, 글을 가진 요소가 들고 나면 <strong>가장 안쪽 live region이 frame마다 한 번</strong> 알린다. 사라진 줄도 글이 바뀐 것이다.</li>
+            <li>알림의 차례는 property·selected → 다중 선택 → structure → <strong>마지막에</strong> live region이다. 클라이언트가 바뀐 구조를 다시 읽은 뒤 그 글을 읽는다.</li>
+            <li><code>set_live_region</code>을 부르는 라이브러리 요소·예제는 없다 (test에만 있다). 토스트·정보 막대는 <code>alert</code> 역할이라 정하지 않아도 <code>assertive</code>다.</li>
+          </ul>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>읽히게 하는 길</th><th>언제</th><th>Windows</th><th>macOS · iOS</th></tr></thead>
+            <tbody>
+              <tr><td><code>set_live_region(access_live::polite)</code></td><td>상태 글 (저장함, 대기 중 2건)</td><td><code>UIA_LiveRegionChangedEventId</code> — 클라이언트가 그 요소를 다시 읽는다</td><td>그 안의 글을 모아 Announcement, 중간 우선</td></tr>
+              <tr><td><code>set_live_region(access_live::assertive)</code> · <code>access_role::alert</code></td><td>끊고 읽어야 하는 경고</td><td>같은 사건, LiveSetting Assertive</td><td>높은 우선 (하던 말을 끊는다)</td></tr>
+              <tr><td>입력 칸의 <code>error</code></td><td>새로 생기거나 바뀐 오류 글</td><td>UIA notification (<code class="free">luil.input-error</code>), HelpText가 오류 글이 먼저</td><td>높은 우선 Announcement</td></tr>
+              <tr><td><code>focus_request</code>로 머리글에 초점</td><td>새 화면의 제목을 읽히기</td><td>초점 사건</td><td>초점 사건</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="build-test">
+        <header class="sec-head">
+          <h2>만들기: 검사기와 test로 확인하기</h2>
+          <p class="lede">실행 중에는 검사기 overlay로 요소의 역할과 이름을 보고, test에서는 접근 발행본으로 접힌 tree와 변화를 잠근다.</p>
+        </header>
+        <h3>실행 중: 검사기 overlay</h3>
+        <div class="prose"><p>검사기는 frame에 싣는 설정 하나다. 켜는 단축키는 앱이 정한다 — 라이브러리는 키를 예약하지 않는다. 데스크톱 데모의 연결이다 (원문):</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/inspector_page.h:12-13"><script type="text/plain">
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1459-1461"><script type="text/plain">
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:931-932"><script type="text/plain">
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/inspector_state.h:101-113"><script type="text/plain">
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>정보 상자는 다섯 줄이다. 넷째 줄 <code class="free">handles … access &lt;역할&gt; "&lt;이름&gt;"</code>이 그 요소의 <code>accessibility()</code>다. 값(<code>access_info::value</code>)은 보이지 않는다 — 암호 칸과 긴 글이 새지 않게 한다.</li>
+            <li>overlay는 그리기만 한다. hit test·입력·초점·접근 tree에 닿지 않는다. 정보 상자의 글을 보조 기술로 읽히려면 앱이 <code>dump_tree</code>의 글을 label로 올린다.</li>
+            <li>모바일 데모는 손가락뿐이라 기본 집기가 <code>inspector_pick::focused</code>다.</li>
+          </ul>
+        </div>
+        <h3>test: tree를 글로 잠그기</h3>
+        <div class="prose"><p><code>dump_tree</code>는 ui tree의 <strong>모든</strong> 요소를 한 줄씩 쓰고, 역할이 있는 요소에만 <code class="free">access …</code>를 붙인다. 접기 전의 tree라 배치 요소도 줄이 있다.</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/ui_inspect_tests.cpp:538-555"><script type="text/plain">
+</script></div>
+        <h3>test: 접힌 접근 tree와 변화를 잠그기</h3>
+        <div class="prose"><p>보조 기술이 보는 접힌 tree는 <code>make_access_snapshot</code>이고, 두 발행본의 차이는 <code>diff_access_snapshots</code>다. 플랫폼 다리가 쓰는 그 함수들이다.</p></div>
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1266-1291"><script type="text/plain">
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/accessibility_tests.cpp:1334-1353"><script type="text/plain">
+</script></div>
+        <div class="prose"><p>앱 test에서 "보조 기술이 훑는 차례"를 한 번에 보는 도우미는 저장소에 없어 손으로 썼다. <code>dump_tree</code>와 달리 접힌 발행본을 공통 값(<code>enabled</code>·<code>help</code>·<code>live</code>)까지 쓴다.</p></div>
+        <div class="code" data-lang="cpp" data-label="접근 발행본을 한 요소 한 줄로 (직접 작성)" data-compile="pre-dump"><script type="text/plain">
+// 접근 발행본을 한 요소 한 줄로 푼다. 차례는 발행 순서(pre-order)라 보조 기술이 훑는 차례와 같다.
+//  - make_access_snapshot은 platform이 알림을 견줄 때 쓰는 그 발행본이다 (공통 값은 access_info_of가 채운 것).
+//  - 들여쓰기는 감싸는 접근 요소의 깊이다. 구조(none)는 이미 접혀 있어 줄이 없다.
+[[nodiscard]] std::u8string dump_access(const luil::ui_tree& tree)
+{
+    const luil::access_snapshot snapshot { luil::make_access_snapshot(tree) };
+    std::u8string text {};
+    std::vector<luil::ui_element_id> path {};
+    for (const luil::access_snapshot_entry& entry : snapshot.entries)
+    {
+        // 부모가 나올 때까지 되돌아간다. 빈 부모(표면 root 바로 아래)면 처음으로 간다.
+        while (path.empty() == false && path.back() != entry.parent)
+            path.pop_back();
+        text.append(path.size() * 2u, u8' ');
+        text += luil::access_role_name(entry.info.role);
+        text += u8" \"";
+        text += entry.info.name;
+        text += u8"\"";
+        if (entry.info.selected.has_value())
+            text += *entry.info.selected ? u8" selected" : u8" unselected";
+        if (entry.info.checked.has_value())
+            text += entry.info.mixed ? u8" mixed" : (*entry.info.checked ? u8" checked" : u8" unchecked");
+        if (entry.info.expanded.has_value())
+            text += *entry.info.expanded ? u8" expanded" : u8" collapsed";
+        if (entry.info.enabled == false)
+            text += u8" disabled";
+        if (entry.info.live != luil::access_live::off)
+            text += entry.info.live == luil::access_live::assertive ? u8" live=assertive" : u8" live=polite";
+        if (entry.info.help.empty() == false)
+            text += u8" help=\"" + entry.info.help + u8"\"";
+        text += u8"\n";
+        path.push_back(entry.id);
+    }
+    return text;
+}
+</script></div>
+        <script type="text/plain" id="pre-dump" data-prelude>
+#include "luil/ui/accessibility.h"
+#include "luil/ui/ui_inspect.h"
+#include "luil/ui/ui_tree.h"
+#include <string>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">스크린 리더가 실제로 하는 말은 시험할 수 없다</span>luil은 역할·속성·사건만 낸다. Narrator·VoiceOver가 그것을 어떤 문장과 차례로 읽는지는 스크린 리더가 정한다. 저장소의 플랫폼 test는 가짜 표면과 사건 창구로 UIA 변환을 되풀이하고(<code>tests/uia_provider_tests.cpp</code>), macOS 번역은 AppKit 없이 core test로 돈다(<code>tests/macos_accessibility_tests.cpp</code>). 설계 문서가 말하는 격리 데스크톱 UIA 도구(<code class="free">luil-uia</code>)는 저장소에 없다.</div></div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 기호는 <a class="xref" href="api.html#access-info">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="access_info">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/accessibility.h:80-181"><script type="text/plain">
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>형 · 기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>role</code></td><td><code>access_role</code> · <code>none</code></td><td><code>none</code>이면 접힌다</td></tr>
+                  <tr><td><code>name</code></td><td><code>std::u8string</code> · 빈 글</td><td>보통 <code>access_name()</code>을 넣는다</td></tr>
+                  <tr><td><code>checked</code> · <code>mixed</code></td><td><code>std::optional&lt;bool&gt;</code> · <code>bool</code></td><td>있으면 Toggle. <code>mixed</code>가 참이면 <code>checked</code>와 무관하게 일부 상태다</td></tr>
+                  <tr><td><code>selected</code></td><td><code>std::optional&lt;bool&gt;</code></td><td>있으면 SelectionItem. 감싼 선택 container가 Selection을 낸다</td></tr>
+                  <tr><td><code>expanded</code></td><td><code>std::optional&lt;bool&gt;</code></td><td>있으면 ExpandCollapse. 펼치기·접기 메시지가 따로 있어야 실행된다</td></tr>
+                  <tr><td><code>range</code></td><td><code>std::optional&lt;access_range&gt;</code></td><td>최소·최대·값·걸음. 값을 정하는 메시지가 없으면 읽기 전용</td></tr>
+                  <tr><td><code>value</code></td><td><code>std::u8string</code></td><td>글 칸의 글, 드롭다운의 지금 선택. 범위 요소는 읽을 글</td></tr>
+                  <tr><td><code>secret</code></td><td><code>bool</code> · 거짓</td><td>암호 칸. 값은 가린 점이다</td></tr>
+                  <tr><td><code>multiple_selection</code> · <code>selection_container</code></td><td><code>bool</code></td><td>container가 여럿을 고른다 / 역할을 바꾸지 않고 선택 container다 (메뉴의 라디오)</td></tr>
+                  <tr><td><code>invalid</code> · <code>error</code></td><td><code>bool</code> · <code>std::u8string</code></td><td>받아들여지지 않는 입력과 그 까닭. 새 오류 글은 알림으로 읽힌다</td></tr>
+                  <tr><td><code>access_key</code></td><td><code>std::u8string</code></td><td>"Alt+F" 같은 고르는 키 (UIA AccessKey)</td></tr>
+                  <tr><td><code>scroll</code></td><td><code>std::optional&lt;access_scroll_state&gt;</code></td><td>흘리는 창의 백분율 자리. 있으면 <code>set_scroll_percent</code>를 받는다</td></tr>
+                  <tr><td><code>enabled</code> · <code>help</code> · <code>live</code></td><td><code>bool</code> 참 · 빈 글 · <code>access_live::off</code></td><td>요소가 채우지 않는다 — <code>access_info_of</code>가 채운다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="access_role">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/accessibility.h:17-78"><script type="text/plain">
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>역할</th><th>라이브러리에서 이 역할로 답하는 요소</th></tr></thead>
+                <tbody>
+                  <tr><td><code>none</code></td><td>액션이나 이름이 없는 요소, 배치 요소, 견본 탭, 화면 전환 요소와 그 덮개</td></tr>
+                  <tr><td><code>button</code></td><td>이름 있는 누를 것(기본 규칙), <code>text_button_element</code>, 토글 모양 체크, split button, 색 견본, 달력의 이전·다음, 누를 수 있는 그룹 머리행</td></tr>
+                  <tr><td><code>link</code></td><td>글 안 링크, 경로 조각, 링크 모양 글자 단추, 마크다운 링크</td></tr>
+                  <tr><td><code>check_box</code> · <code>radio_button</code> · <code>toggle_switch</code></td><td><code>check_element</code>의 모양별. 선택 묶음·테마 고르기의 항목은 <code>radio_button</code></td></tr>
+                  <tr><td><code>slider</code></td><td><code>slider_element</code>, 색 막대, 별점</td></tr>
+                  <tr><td><code>scroll_bar</code> · <code>progress</code> · <code>handle</code></td><td>스크롤 막대 · 진행 막대와 도는 표시 · 분할 손잡이와 표 열 폭 손잡이</td></tr>
+                  <tr><td><code>image</code></td><td>설명이 있는 그림·글리프, 잉크 캔버스, 이름 있는 견본 탭 막대</td></tr>
+                  <tr><td><code>edit</code> · <code>combo_box</code></td><td>한 줄·여러 줄 칸 · 드롭다운, 콤보, 색 고르기 칸, 날짜 칸</td></tr>
+                  <tr><td><code>list</code> · <code>list_item</code> · <code>header</code></td><td>목록·묶음 목록·달력 날짜판과 그 행 · 묶음 목록 머리행, 표 머리글 줄</td></tr>
+                  <tr><td><code>tab_list</code> · <code>tab</code></td><td><code>tab_bar_element</code>와 그 탭</td></tr>
+                  <tr><td><code>radio_group</code></td><td>선택 묶음, 테마 고르기</td></tr>
+                  <tr><td><code>menu</code> · <code>menu_item</code> · <code>menu_bar</code></td><td>메뉴, 메뉴 항목, 메뉴 막대</td></tr>
+                  <tr><td><code>group</code></td><td>접이 그룹, 웹뷰 자리, 색 고르기, 달력</td></tr>
+                  <tr><td><code>title_bar</code> · <code>dialog</code> · <code>alert</code></td><td>창·앱 막대·대화 상자 caption · modal host와 modal인 teaching tip·시트 · 토스트, 정보 막대</td></tr>
+                  <tr><td><code>static_text</code></td><td>라벨, 배지, 마크다운 본문, 누를 수 없는 그룹 머리행</td></tr>
+                  <tr><td><code>pane</code></td><td><code>scroll_to_percent</code>가 있는 스크롤 영역, pager, 영상, 확대 보기, modal이 아닌 teaching tip·시트</td></tr>
+                  <tr><td><code>table</code> · <code>data_item</code> · <code>header_item</code></td><td>표 본문과 행, 열 머리글 칸</td></tr>
+                  <tr><td><code>navigation</code></td><td>경로 조각 막대</td></tr>
+                  <tr><td><code>tree</code> · <code>tree_item</code></td><td>라이브러리가 스스로 쓰지 않는다. 가상 목록의 <code>role</code>·<code>row_role</code>로 앱이 고른다</td></tr>
+                  <tr><td><code>tool_bar</code> · <code>separator</code> · <code>status_bar</code></td><td>라이브러리 요소에서 찾지 못했다 — 앱 요소가 쓰는 어휘다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>플랫폼 낱말(UIA ControlType, AX 역할, iOS trait)로의 번역은 <a class="xref" href="platforms.html#s7">플랫폼과 host의 역할 번역기</a>에 있다. 선택 container는 <code>list</code>·<code>tab_list</code>·<code>radio_group</code>·<code>tree</code>·<code>table</code>, 그리고 <code>selection_container</code>가 참인 정보다.</p></div>
+          </section>
+          <section data-tab="access_command">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/accessibility.h:183-239"><script type="text/plain">
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th><code>access_request</code> 필드</th><th>형 · 기본값</th><th>뜻</th></tr></thead>
+                <tbody>
+                  <tr><td><code>command</code></td><td><code>access_command</code> · <code>invoke</code></td><td>아홉 명령 가운데 하나</td></tr>
+                  <tr><td><code>value</code></td><td><code>float</code> · 0</td><td><code>set_value</code>의 목표 값</td></tr>
+                  <tr><td><code>multiple_selection</code></td><td><code>bool</code> · 거짓</td><td>항목을 감싼 container가 다중 선택이다. 다리가 container에 물어 싣는다</td></tr>
+                  <tr><td><code>horizontal_percent</code> · <code>vertical_percent</code></td><td><code>float</code> · <code>access_no_scroll</code></td><td><code>set_scroll_percent</code>의 목표 (0~100, 100이 끝). -1이면 그 축 그대로</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="발행본과 변화">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/accessibility.h:374-453"><script type="text/plain">
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>변화</th><th>언제</th></tr></thead>
+                <tbody>
+                  <tr><td><code>property</code></td><td>같은 요소의 정보(이름·값·켬끔·펼침·범위·활성·도움말…)가 하나라도 바뀌었다. 짝(<code>previous</code>·<code>current</code>)에서 받는 쪽이 낱말을 편다</td></tr>
+                  <tr><td><code>selected</code></td><td>단일 선택에서 새로 골라진 항목 (풀린 쪽은 따로 알리지 않는다). 다중 선택에서 하나만 골라진 상태가 됐을 때</td></tr>
+                  <tr><td><code>structure</code></td><td>부모의 접근 자식 구성(순서 포함)이 바뀌었다. 새로 나타나거나 사라진 요소, 역할이 바뀐 요소도 이것이다</td></tr>
+                  <tr><td><code>added_to_selection</code> · <code>removed_from_selection</code></td><td>다중 선택 container의 항목</td></tr>
+                  <tr><td><code>selection_invalidated</code></td><td>한 container에서 20개(<code>access_selection_burst</code>)를 넘게 바뀌었다</td></tr>
+                  <tr><td><code>live_region</code></td><td>live region의 글이 바뀌었다 — 목록의 맨 끝에 선다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="ui_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_element.h:206-208,1113-1122,1270-1284,1308-1312,1457-1488"><script type="text/plain">
+</script></div>
+          </section>
+          <section data-tab="검사기">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_inspect.h:15-57,101-124"><script type="text/plain">
+</script></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">보조 기술의 요청은 앱이 준 factory를 거쳐 앱 메시지가 되고, 앱 메시지는 언제나 logic thread로 간다. 앱이 할 일은 마우스로 눌렀을 때와 같다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>요청 (UIA · macOS · iOS)</th><th>명령</th><th>배분</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>Invoke · AXPress(상태 없는 단추) · 두 번 탭</td><td><code>invoke</code></td><td><code>access_click_event</code> → input thread의 <code>on_click</code> 뒤. UIA는 배분 순간 Invoked 사건</td><td>클릭과 같은 메시지 처리</td></tr>
+              <tr><td>Toggle · AXPress(체크)</td><td><code>toggle</code></td><td>같다</td><td>켬 상태를 바꾼다. 다음 발행본이 ToggleState를 알린다</td></tr>
+              <tr><td>SelectionItem.Select · AXPress(항목) · AXSelected 쓰기</td><td><code>select</code></td><td>같다</td><td>고른 것을 바꾼다. 다음 발행본이 ElementSelected를 알린다</td></tr>
+              <tr><td>AddToSelection · RemoveFromSelection · AXSelected 쓰기(다중)</td><td><code>add_to_selection</code> · <code>remove_from_selection</code></td><td>창의 다음 차례에 배분</td><td>다중 선택 상태. 처리기가 없으면 할 수 없음</td></tr>
+              <tr><td>Expand · Collapse · AXShowMenu · AXCancel</td><td><code>expand</code> · <code>collapse</code></td><td>창의 다음 차례</td><td>목표 상태로 펼침을 넣고 뺀다</td></tr>
+              <tr><td>RangeValue.SetValue · AXIncrement · 위아래 쓸기</td><td><code>set_value</code></td><td>창의 다음 차례</td><td>목표 값을 그대로 저장</td></tr>
+              <tr><td>Scroll · SetScrollPercent · 세 손가락 쓸기</td><td><code>set_scroll_percent</code></td><td>창의 다음 차례</td><td>백분율로 흘린다 (<code>scroll_area_config::scroll_to_percent</code>)</td></tr>
+              <tr><td>ScrollItem.ScrollIntoView</td><td>(명령 없음)</td><td><code>route_reveal</code>로 흘림 메시지를 지어 배분. 이미 보이면 아무것도 없다</td><td>스크롤 메시지 처리</td></tr>
+              <tr><td>Value.SetValue (글) · AXValue 쓰기</td><td>(명령 없음)</td><td>편집 칸이면 TSF와 같은 <code>replace_all</code> 편집 요청</td><td>편집 메시지 처리</td></tr>
+              <tr><td>SetFocus</td><td>(명령 없음)</td><td><code>access_focus_event</code> → input thread</td><td>없다 (초점은 controller의 것)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>UIA가 돌려주는 값</th><th>언제</th></tr></thead>
+            <tbody>
+              <tr><td><code>UIA_E_ELEMENTNOTAVAILABLE</code></td><td>요소·표면·tree가 없다 (id가 사라졌다)</td></tr>
+              <tr><td><code>UIA_E_ELEMENTNOTENABLED</code></td><td>비활성이거나 손이 닿지 않는다 (가둠 뒤·숨은 가지)</td></tr>
+              <tr><td><code>UIA_E_INVALIDOPERATION</code></td><td>할 수 없는 명령(계획이 <code>nullopt</code>), 빈 invoke 계획, 초점을 받을 수 없는 요소의 SetFocus</td></tr>
+              <tr><td><code>S_OK</code> (아무것도 하지 않음)</td><td>빈 계획 — 이미 그 상태다 (invoke 밖의 명령)</td></tr>
+              <tr><td><code>E_ACCESSDENIED</code> · <code>E_INVALIDARG</code></td><td>읽기 전용 값 · 범위 밖이거나 쓸 수 없는 인자</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>macOS·iOS도 같은 거절을 한다 (비활성·가둠 뒤·숨은 것·이미 그 상태인 누름). iOS는 할 명령이 없거나 거절이면 <code>accessibilityActivate</code>가 NO를 돌려주고, UIKit이 그 자리를 탭한 것처럼 보낸다.</p></div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">키보드와 보조 기술은 같은 액션을 쓴다. 마우스로 누를 수 없는 것은 어느 길로도 누를 수 없다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>키·요청</th><th>실행하는 것</th></tr></thead>
+            <tbody>
+              <tr><td>Space · Enter</td><td>초점 요소의 <code>left_click</code>. 글 칸에 초점이 있으면 Space는 글자, Enter는 기본 단추로 흐른다</td></tr>
+              <tr><td>Shift+F10</td><td>초점에서 가장 가까운 <code>right_click</code> 임자 = 컨텍스트 메뉴 (그 요소 가운데 좌표)</td></tr>
+              <tr><td>Tab · Shift+Tab</td><td>그리기 순서. 묶음(탭 막대·목록·선택 묶음)은 한 자리이고 안은 화살표가 돈다 (<a class="xref" href="input.html#s7">입력과 초점</a>)</td></tr>
+              <tr><td>보조 기술의 SetFocus</td><td>키보드로 옮긴 것과 같은 부류라 초점 테가 보인다. <code>focusable()</code>이 아니면 거절한다</td></tr>
+              <tr><td>보조 기술의 Invoke·Toggle·Select</td><td>Tab의 자리가 아닌 요소도 부른다 — 초점이 서지 않아 앱이 초점으로 알 수는 없다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><code>IsKeyboardFocusable</code>은 <code>focusable()</code>이다. <code>set_tab_stop(false)</code>인 보조 부품(탭의 닫기 단추, 앞·뒤 단추)은 거짓이다.</li>
+            <li>보조 기술이 시킨 초점 이동도 정책의 <code>interaction_policy::on_focus_moved</code>를 부른다 — 키보드처럼 초점 테가 켜져서다. 흘리는 창 밖이면 앱이 들인다.</li>
+            <li>메뉴 막대가 키보드로 선 동안은 그 항목이 알릴 초점이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">어휘·접근 tree·도달 판정·실행 계획·발행본 대조는 세 다리가 같은 함수를 쓴다. 다른 것은 플랫폼 낱말로의 번역과 알림의 모양이다.</p>
+        </header>
+        <div class="prose"><p>역할마다의 번역(UIA ControlType, AX 역할·하위 역할, iOS trait)은 <a class="xref" href="platforms.html#s7">플랫폼과 host — 접근성</a>의 표와 역할 번역기에 있다. 여기는 앱이 알아야 할 차이만 적는다.</p></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th>Windows (UIA)</th><th>macOS (NSAccessibility)</th><th>iOS (UIAccessibility)</th><th>Android</th></tr></thead>
+            <tbody>
+              <tr><td>번역 자리</td><td><code>control_type_for</code></td><td><code>ax_role_of</code> (AppKit 없이 test로 돈다)</td><td><code>traits_of</code>·<code>container_type_of</code></td><td>없음</td></tr>
+              <tr><td>live region</td><td><code>UIA_LiveRegionChangedEventId</code>만 — 글은 클라이언트가 다시 읽는다</td><td>안의 글을 모아 AnnouncementRequested (assertive 높음, polite 중간)</td><td>Announcement. 높은 우선만 끊고, 같은 차례에 화면 알림을 쐈으면 0.25초 뒤</td><td>—</td></tr>
+              <tr><td>새 오류 글</td><td>notification</td><td>높은 우선 announcement</td><td>announcement</td><td>—</td></tr>
+              <tr><td>범위 밖 값 쓰기</td><td>거절 (<code>E_INVALIDARG</code>)</td><td>범위로 자른다</td><td>걸음 오르내림만</td><td>—</td></tr>
+              <tr><td>누르기 대상</td><td>상태 없는 <code>button</code>·<code>link</code>·<code>menu_item</code></td><td>+ 열 머리글(<code>header_item</code>)</td><td>macOS와 같은 갈래</td><td>—</td></tr>
+              <tr><td>켬·고름의 값</td><td>Toggle·SelectionItem 패턴</td><td>AXValue 0·1·2, 탭·라디오 0·1</td><td>값이 아니라 Selected trait</td><td>—</td></tr>
+              <tr><td>창 밖 모델 항목 (가상 목록)</td><td>ItemContainer·VirtualizedItem으로 모델이 답한다</td><td>지어진 행만</td><td>코드에서 확인하지 못했다</td><td>—</td></tr>
+              <tr><td>표면</td><td>HWND마다 fragment root</td><td>창 view마다 다리, popup은 판마다</td><td>view 하나, popup은 같은 view 아래 가지</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>그린 적이 없는 창에는 접근 tree가 없다 — 숨긴 채 시작한 창은 요소를 내지 않는다. UIA 클라이언트가 듣고 있지 않으면 사건도 쏘지 않는다.</p></div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>이름 없는 누를 것은 사라진다.</strong> 기본 규칙은 이름이 비면 <code>none</code>이다. 글리프 단추에 tooltip도 access name도 없으면 접근 tree에 없다. 탭의 닫기 단추가 그 경우다.</li>
+          <li><strong>tooltip은 이름과 도움말을 겸한다.</strong> 같은 글이 이름과 HelpText로 두 번 실린다. 실제로 몇 번 읽히는지는 스크린 리더가 정한다. 짧은 이름은 <code>set_access_name</code>에 둔다.</li>
+          <li><strong>컨테이너에 tooltip을 달면 화면에 글 상자가 뜬다.</strong> 목록·탭 막대의 이름은 <code>set_access_name</code>이다.</li>
+          <li><strong>절대 명령은 기본 실행이 없다.</strong> 펼치기·접기·값 정하기·더하기·빼기·흘림 백분율은 목표 상태를 나르는 메시지가 없으면 할 수 없는 일이다. 클릭(뒤집기)으로 대신하면 오래된 발행본을 본 두 명령이 두 번 뒤집기 때문이다.</li>
+          <li><strong><code>plan_access_request</code>는 비활성을 보지 않는다.</strong> 그것만 test하면 비활성 요소도 계획이 선다. 거절은 다리가 <code>enabled()</code>·<code>access_reachable</code>로 한다.</li>
+          <li><strong>factory는 "묻기만 해도" 불린다.</strong> UIA의 패턴 질의, <code>IsReadOnly</code>, macOS·iOS의 허용 판정이 계획을 세운다. 상태를 바꾸는 factory는 보조 기술이 훑기만 해도 앱을 바꾼다 (코드에서 확인한 동작).</li>
+          <li><strong>중복 id는 뒤의 요소를 지운다.</strong> 형제 줄에는 첫 등록만 선다. 같은 키를 두 목록이나 두 탭 막대에 쓰면 뒤의 것이 접근 tree에서 사라진다.</li>
+          <li><strong>id가 frame마다 바뀌면 보조 기술이 자리를 잃는다.</strong> 다리와 VoiceOver 요소는 id로 frame을 넘는다. 색인이나 주소로 id를 짓지 않는다.</li>
+          <li><strong>live region은 역할이 있는 요소에만 뜻이 있다.</strong> 배치 판에 걸면 접혀서 아무것도 알리지 않는다. 한 frame에 live region 하나는 한 번만 알린다.</li>
+          <li><strong>역할이 바뀌면 다른 요소다.</strong> property가 아니라 부모의 structure로 알린다.</li>
+          <li><strong>modal 뒤는 닿지 않는다.</strong> 가둠 밖이어도 포인터가 닿는 자리(덮이지 않은 캡션 단추)는 닿는다 — 상자의 아홉 점을 사람이 쓰는 <code>hit_test</code>로 훑는다. 숨긴 가지는 닿지 않고, 스크롤로 잘린 것은 닿는다.</li>
+          <li><strong>검사기의 <code class="free">access</code> 줄은 <code>accessibility()</code> 그대로다.</strong> <code>enabled</code>·<code>help</code>·<code>live</code>가 없고, <code>dump_tree</code>는 접기 전의 모든 요소를 쓴다. 접힌 접근 tree는 <code>make_access_snapshot</code>으로 본다.</li>
+          <li><strong>값 글이 있는 범위 요소의 Value 패턴.</strong> <code>IsReadOnly</code>는 RangeValue와 같은 답이라 쓸 수 있는 요소는 "쓸 수 있음"이라 답하지만, 글로 쓰는 <code>Value.SetValue</code>는 <code>E_ACCESSDENIED</code>다. 값은 <code>RangeValue.SetValue</code>로만 바뀐다 (코드에서 확인한 동작).</li>
+          <li><strong>다중 선택의 큰 변화는 항목마다 알리지 않는다.</strong> 20개를 넘으면 <code>selection_invalidated</code> 하나다.</li>
+          <li><strong>그리지 않은 창에는 tree가 없다.</strong> 숨긴 채 시작한 창은 자동화로 읽히지 않는다.</li>
+          <li><strong>끌기처럼 포인터만의 몸짓에는 보조 기술 명령이 없다.</strong> <code>access_command</code>에 "옮겨라"가 없다. 순서 바꾸기·떼어 내기는 메뉴 명령 같은 다른 길을 앱이 준다.</li>
+          <li><strong>Android에서는 아무것도 읽히지 않는다.</strong> <code>access_info</code>를 고쳐도 Android에서는 아무도 읽지 않는다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>아이콘만 있는 단추를 스크린 리더가 "단추"로도 읽지 않는다.</summary><div class="faq-a"><p class="faq-short">이름이 비어 역할이 <code>none</code>으로 접혔다. <code>set_tooltip</code>이나 <code>set_access_name</code>으로 이름을 준다.</p><p>기본 <code>accessibility()</code>는 누를 수 있고 이름이 있어야 <code>button</code>이다 (<a class="xref" href="#build-name">이름 붙이기</a>).</p></div></details>
+          <details class="faq"><summary>이름은 어디서 오나? 우선순위는?</summary><div class="faq-a"><p class="faq-short"><code>set_access_name</code> → <code>set_search_label</code> → tooltip.</p><p>자기 글을 그리는 요소(글자 단추·라벨·목록 행·탭)는 그 글이 이름이다. <code>accessibility()</code>를 재정의한 요소도 보통 <code>access_name()</code>을 쓴다.</p></div></details>
+          <details class="faq"><summary>목록에 이름을 주려고 tooltip을 달았더니 글 상자가 뜬다.</summary><div class="faq-a"><p class="faq-short"><code>set_access_name</code>을 쓴다.</p><p>그리기에도 글자 탐색에도 쓰이지 않는 이름이다. 목록 안의 스크롤 막대는 목록의 이름을 물려받는다.</p></div></details>
+          <details class="faq"><summary>직접 그린 요소를 슬라이더로 읽히게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>accessibility()</code>를 재정의해 <code>role = access_role::slider</code>와 <code>range</code>를 낸다.</p><p>값을 정할 수 있게 하려면 <code>set_access_handler</code>로 <code>set_value</code>를 받아 목표 값 메시지를 낸다 (<a class="xref" href="#build-custom">직접 그린 요소</a>).</p></div></details>
+          <details class="faq"><summary>보조 기술이 "펼쳐라"를 보냈는데 아무 일도 없다.</summary><div class="faq-a"><p class="faq-short"><code>expand</code>·<code>collapse</code>는 기본 실행이 없다.</p><p>목표 상태를 나르는 메시지(목록의 <code>set_expanded</code> 같은 것)를 처리기나 <code>access_actions</code> 재정의로 낸다. <code>expanded</code>를 답하지 않으면 아예 할 수 없는 명령이다.</p></div></details>
+          <details class="faq"><summary>이미 펼친 그룹에 Expand가 오면?</summary><div class="faq-a"><p class="faq-short">빈 계획이라 UIA는 <code>S_OK</code>로 답하고 아무것도 하지 않는다.</p><p>절대 명령은 "이미 그 상태"면 할 일이 없다. 누르기(<code>invoke</code>)만은 빈 계획이 거절이다.</p></div></details>
+          <details class="faq"><summary>상태 글이 바뀔 때 읽히게 하려면?</summary><div class="faq-a"><p class="faq-short">그 글을 담은 역할 있는 요소에 <code>set_live_region(access_live::polite)</code>. 끊고 읽어야 하면 <code>assertive</code>.</p><p>안쪽 줄의 글이 바뀌어도 그 요소가 한 번 알린다 (<a class="xref" href="#build-live">live region</a>).</p></div></details>
+          <details class="faq"><summary>임의의 글을 바로 읽히는 함수가 있나?</summary><div class="faq-a"><p class="faq-short">없다.</p><p>live region, <code>alert</code> 역할(토스트), 입력 칸의 <code>error</code>, 머리글로 초점 옮기기(<code>focus_request</code>)를 쓴다. 모두 다음 발행본의 대조가 알린다.</p></div></details>
+          <details class="faq"><summary>비활성 단추가 왜 눌리지 않는지 읽히게 하려면?</summary><div class="faq-a"><p class="faq-short">tooltip에 까닭을 적는다. 그것이 도움말이다.</p><p>비활성 단추도 이름과 까닭을 지닌 채 tree에 남는다. 활성이나 까닭이 바뀌면 property로 알린다.</p></div></details>
+          <details class="faq"><summary>스크린 리더가 요소로 옮겨 가면 키보드 초점도 옮겨 가나?</summary><div class="faq-a"><p class="faq-short">아니다.</p><p>보조 기술의 커서는 논리 초점을 옮기지 않는다. 클라이언트가 SetFocus를 청할 때만 옮기고, 그때는 초점 테가 보인다.</p></div></details>
+          <details class="faq"><summary>modal 대화 상자 뒤의 단추를 보조 기술로 누를 수 있나?</summary><div class="faq-a"><p class="faq-short">없다. 다만 가둠 밖이어도 포인터가 닿는 자리는 누를 수 있다.</p><p>덮이지 않은 캡션 단추가 그렇다 — 사람이 누를 수 있는 것은 보조 기술도 누를 수 있다.</p></div></details>
+          <details class="faq"><summary>자동화 script가 요소를 집는 id는?</summary><div class="faq-a"><p class="faq-short"><code class="free">&lt;kind의 수&gt;:&lt;owner&gt;</code> 꼴의 AutomationId·<code>accessibilityIdentifier</code>다.</p><p>kind 이름이 아니라 열거 값의 수다. 그래서 라이브러리는 새 kind를 열거의 끝에 더한다.</p></div></details>
+          <details class="faq"><summary>접근 tree를 test에서 확인하려면?</summary><div class="faq-a"><p class="faq-short"><code>make_access_snapshot</code>으로 발행본을 떠서 역할·이름·부모를 본다. 바뀐 것은 <code>diff_access_snapshots</code>다.</p><p>그 두 함수가 플랫폼 다리가 쓰는 것이다 (<a class="xref" href="#build-test">확인하기</a>).</p></div></details>
+          <details class="faq"><summary>실행 중에 요소의 역할과 이름을 보려면?</summary><div class="faq-a"><p class="faq-short"><code>ui_frame::inspector</code>에 <code>enabled = true</code>인 <code>inspector_config</code>를 싣는다.</p><p>정보 상자의 <code class="free">access</code> 낱말이 역할과 이름이다. 켜는 키는 앱이 정한다.</p></div></details>
+          <details class="faq"><summary>보조 기술로 누를 때와 마우스로 누를 때 메시지 순서가 다른가?</summary><div class="faq-a"><p class="faq-short">같다.</p><p>누르기·켬끔·고르기는 <code>access_click_event</code>로 input thread에서 <code>on_click</code> 뒤에 나간다. 클릭 대상으로 상태를 잇는 앱도 같은 대상을 본다.</p></div></details>
+          <details class="faq"><summary>값을 정할 수 있는 별점을 UIA Value 패턴으로 SetValue하면?</summary><div class="faq-a"><p class="faq-short">거절된다 (<code>E_ACCESSDENIED</code>). 값은 RangeValue로 정한다.</p><p>글로 쓰는 Value.SetValue는 편집 칸만 받는다. 그런데 <code>IsReadOnly</code>는 RangeValue와 같은 답이라 거짓으로 읽힌다 (코드에서 확인한 동작).</p></div></details>
+          <details class="faq"><summary>Android에서 TalkBack이 무엇을 읽나?</summary><div class="faq-a"><p class="faq-short">luil 화면은 읽히지 않는다.</p><p>Android host에는 접근성 계층이 없다. <code>AccessibilityNodeProvider</code>를 쓰려면 Java 클래스가 있어야 해서 들이지 않았다 (<a class="xref" href="platforms.html#s7">플랫폼과 host</a>).</p></div></details>
+        </div>
+      </section>
+
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+</body>
+</html>
