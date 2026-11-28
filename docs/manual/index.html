@@ -331,7 +331,7 @@
       shown += items.length;
       grid.append(el("div", { class: "atlas-cat" },
         el("h3", null, c.name, el("span", { class: "c", text: `${c.key} · ${items.length}` })),
-        st.cat === c.key || (!q && st.cat === "all" && !st.lec && !st.core && st.pf === "all") ? el("p", { text: c.desc }) : null,
+        st.cat === c.key || (!q && st.cat === "all" && !st.lec && !st.core && st.pf === "all") ? el("p", { html: window.LU.escapeHtml(c.desc).replace(/`([^`]+)`/g, "<code>$1</code>") }) : null,
         el("div", { class: "atlas-items" }, items.map((it) => card(it, q)))));
     }
     if (!shown) grid.append(el("div", { class: "atlas-empty", text: "맞는 항목이 없다. 찾는 말을 줄이거나 거르기를 풀어 보라." }));
