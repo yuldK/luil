@@ -436,7 +436,7 @@
       "how to do does i the a an is are can in of on for with what why when where which my me and or &").split(" ")
   );
   // 질문처럼 친 낱말의 끝("트리 뷰는", "만드나요")을 떼어 본다. 뗀 꼴은 원래 낱말보다 낮게 친다.
-  const SEARCH_ENDINGS = ["하려면", "으려면", "려면", "하나요", "인가요", "할까요", "합니다", "합니까", "되나요", "하는데", "나요", "까요", "에서는", "에서", "으로는", "으로", "에는", "에게", "부터", "까지", "처럼", "하기", "하고", "하는", "하면", "해서", "해도", "하게", "이나", "은", "는", "이", "가", "을", "를", "의", "에", "로", "와", "과", "도", "만", "요", "고", "면"];
+  const SEARCH_ENDINGS = ["하려면", "으려면", "려면", "하나요", "인가요", "할까요", "합니다", "합니까", "되나요", "하는데", "나요", "까요", "에서는", "에서", "으로는", "으로", "에는", "에게", "부터", "까지", "처럼", "하기", "하고", "하는", "하면", "해서", "해도", "하게", "이나", "은", "는", "이", "가", "을", "를", "의", "에", "로", "와", "과", "도", "만", "요", "고", "면", "기"];
   const ALIAS_MAP = new Map();
   SEARCH_ALIASES.forEach((group, gi) =>
     group.forEach((w) => {
@@ -451,16 +451,23 @@
   const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const matcherCache = new Map();
 
-  // 사용자가 친 낱말(두 글자 이상)은 글 어디에 들어 있어도 맞는다. 묶음에서 온 말은 낱말 경계를 본다:
-  // 짧은 영어(tab)는 table에 걸리지 않고, 한 글자 한국어(창·표·열)는 앞뒤가 다른 글자가 아니거나 조사가 올 때만 맞는다.
-  function matcherFor(word, exact) {
-    const key = (exact ? "=" : "~") + word;
+  // mode — "typed": 사용자가 친 낱말. 영어 식별자 꼴이면 낱말 머리에서만 맞는다(ime가 runtime에 걸리지 않게).
+  //         한 글자 한국어(열·표·창)는 앞뒤 경계를 본다. 나머지는 글 어디서나.
+  //        "stem": 끝을 뗀 꼴. 한 글자면 낱말 머리(세 → 세려면), 두 글자 이상이면 글 어디서나.
+  //        "alias": 묶음에서 온 말. 영어는 낱말 머리에서, 셋 이하면 꼬리도 본다(tab이 table에 걸리지 않게).
+  //                 한 글자 한국어는 앞뒤 경계를 본다.
+  function matcherFor(word, mode) {
+    const key = mode + ":" + word;
     let m = matcherCache.get(key);
     if (m) return m;
     const j = word.replace(/\s+/g, "");
+    const oneHangul = /^[가-힣]$/.test(j);
+    const wordEnd = "(?=$|[^가-힣]|[은는이가을를의에로와과도만으까부처랑])";
     let re = null;
-    if (!exact && /^[a-z0-9_]+$/.test(j)) re = new RegExp("(^|[^a-z])" + escRe(j) + (j.length <= 3 ? "(?![a-z])" : ""));
-    else if (!exact && /^[가-힣]$/.test(j)) re = new RegExp("(^|[^가-힣])" + j + "(?=$|[^가-힣]|[은는이가을를의에로와과도만으까부처랑])");
+    if (mode === "alias" && /^[a-z0-9_]+$/.test(j)) re = new RegExp("(^|[^a-z])" + escRe(j) + (j.length <= 3 ? "(?![a-z])" : ""));
+    else if ((mode === "alias" || mode === "typed") && oneHangul) re = new RegExp("(^|[^가-힣])" + j + wordEnd);
+    else if (mode === "typed" && /^[a-z][a-z0-9_:.~-]*$/.test(j)) re = new RegExp("(^|[^a-z])" + escRe(j));
+    else if (mode === "stem" && oneHangul) re = new RegExp("(^|[^가-힣])" + j);
     m = re ? (x) => re.test(x) : (x, xj) => x.includes(word) || xj.includes(j);
     matcherCache.set(key, m);
     return m;
@@ -488,22 +495,21 @@
       i += n;
     }
     return merged.map((w) => {
-      // 한 글자 낱말(열·표·창)은 "열린"·"표시"에 걸리지 않게 낱말 경계로 찾는다
-      const alts = [{ s: w, w: 1, m: matcherFor(w, !/^[가-힣]$/.test(w)) }];
+      const alts = [{ s: w, w: 1, m: matcherFor(w, "typed") }];
       const seen = new Set([w]);
       const forms = [w];
       if (/^[가-힣]{2,}$/.test(w)) for (const e of SEARCH_ENDINGS) if (w.length > e.length && w.endsWith(e)) forms.push(w.slice(0, -e.length));
       forms.forEach((f, fi) => {
         if (fi > 0 && !seen.has(f)) {
           seen.add(f);
-          alts.push({ s: f, w: 0.7, m: matcherFor(f, f.length > 1) });
+          alts.push({ s: f, w: 0.7, m: matcherFor(f, "stem") });
         }
         for (const gi of ALIAS_MAP.get(f) || ALIAS_MAP.get(f.replace(/\s+/g, "")) || []) {
           for (const a of SEARCH_ALIASES[gi]) {
             const s = norm(a);
             if (seen.has(s)) continue;
             seen.add(s);
-            alts.push({ s, w: 0.8, m: matcherFor(s, false) });
+            alts.push({ s, w: 0.8, m: matcherFor(s, "alias") });
           }
         }
       });
