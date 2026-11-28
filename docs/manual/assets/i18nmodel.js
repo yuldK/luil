@@ -8,7 +8,7 @@
  *   string_lookup::text·format                              → text·format (:144-172)
  * 수(int64)는 BigInt다. 글은 UTF-16 code unit으로 다루지만 특별한 글자({ } - _ A-Z)가 모두 ASCII라 UTF-8 바이트로 다루는 원본과 결과가 같다.
  * DATA는 시험 표(tests/strings)를 생성기로 지은 test_strings.h를 컴파일한 프로그램이 낸 값이다. 라이브러리 표는 언어 태그만 싣는다.
- * 대조: scratchpad의 verify_i18n.js가 컴파일한 원본의 출력(고르기 4,013, 복수 1,230, text 45, format 12,015, 깨진 괄호 6,000)과 견준다.
+ * 대조: 설명서를 쓸 때 이 커밋의 원본을 링크해 컴파일한 대조기의 출력(고르기 4,013, 복수 1,230, text 45, format 12,015, 깨진 괄호 6,000)과 견줬다. 대조기는 저장소에 없다.
  */
 (function (root) {
   "use strict";
