@@ -2,9 +2,11 @@
  *
  * 둘이다. 판정은 전부 assets/commandmodel.js(commands.cpp·command_palette.cpp를 옮기고 원본과 대조한 것)를 부른다.
  *  1. 단축키 판정기 — 물리 키 → key_pressed_event → match_command·chord_of·shortcut_label·system_reserved_chord
- *     물리 키를 이벤트로 바꾸는 갈래는 플랫폼 host의 것을 옮겼다:
- *       Win32  window_surface.cpp post_key_event + surface_input.cpp modified_key_from_virtual
- *       macOS  macos_input.cpp key_event_for (Command+화살표 바꾸기, 글자 키 관문)
+ *     물리 키를 이벤트로 바꾸는 갈래는 플랫폼 host의 것을 읽어 옮겼다 (C++ 대조기는 이 갈래를 거치지 않는다):
+ *       Win32    window_surface.cpp post_key_event + surface_input.cpp modified_key_from_virtual
+ *       Android  android_input.cpp input_translator::translate + modified_key
+ *       macOS    macos_input.cpp key_event_for (Command+화살표 바꾸기, 글자 키 관문 — iOS host도 이것을 쓴다)
+ *     tests/surface_input_tests.cpp·android_input_tests.cpp·macos_input_tests.cpp의 장면을 node에서 되풀이해 맞췄다.
  *  2. 명령 팔레트 — 질의 → search_query → filter_commands·command_palette_items → ↑/↓·Enter·Esc (process_menu_key)
  * 브라우저의 키 코드를 key_code 이름으로 옮기는 짝은 이 실습이 지은 것이다 (미국 배열 자리 이름).
  */
@@ -73,6 +75,11 @@
       if (characterKey(phys.key) && key !== "space" && !phys.meta && !phys.ctrl) return { none: "macOS는 Command나 Control이 없는 글자 키를 키로 보내지 않는다 — 문자 입력이다 (Option 글자도 그렇다)" };
       return { event: { key, control: phys.ctrl, shift: phys.shift, alt: phys.alt, meta: command, primary_shortcut: primary, repeat: phys.repeat }, remap };
     }
+    if (platform === "android") {
+      // android_input.cpp translate 446-497 · modified_key 126-147: 단축키 수정자는 Ctrl·Alt·Meta, 편집 역할(primary)은 Ctrl, Meta는 따로
+      if (characterKey(phys.key) && !phys.ctrl && !phys.alt && !phys.meta) return { none: "Android는 Ctrl·Alt·Meta가 없는 글자 키를 키로 보내지 않는다 — 글자다" };
+      return { event: { key: phys.key, control: phys.ctrl, shift: phys.shift, alt: phys.alt, meta: phys.meta, primary_shortcut: phys.ctrl, repeat: phys.repeat }, remap: "" };
+    }
     // Win32: window_surface.cpp post_key_event 1585-1611, surface_input.cpp modified_key_from_virtual 218-240
     if (characterKey(phys.key) && !phys.ctrl && !phys.alt) return { none: "Win32는 Ctrl이나 Alt가 없는 글자 키를 키로 보내지 않는다 — 문자 입력(WM_CHAR)이다" };
     return { event: { key: phys.key, control: phys.ctrl, shift: phys.shift, alt: phys.alt, meta: phys.meta, primary_shortcut: null, repeat: phys.repeat }, remap: "" };
@@ -116,7 +123,7 @@
       return b;
     };
 
-    const platformSeg = seg("플랫폼", [["win", "Windows·Android"], ["mac", "macOS·iOS"]], () => S.platform, (v) => (S.platform = v));
+    const platformSeg = seg("플랫폼", [["win", "Windows"], ["android", "Android"], ["mac", "macOS·iOS"]], () => S.platform, (v) => (S.platform = v));
     const scopeSeg = seg("지금 범위", [["window", "window"], ["focused", "focused"], ["modal", "modal"]], () => S.scope, (v) => (S.scope = v));
     const mods = [toggle("Ctrl", "ctrl", "물리 Ctrl (macOS에서는 Control)"), toggle("Shift", "shift", "물리 Shift"), toggle("Alt", "alt", "물리 Alt (macOS에서는 Option)"), toggle("Meta", "meta", "Windows 키 / macOS Command")];
     const keySel = el("select", { "aria-label": "키 (key_code)", onchange: () => { S.key = keySel.value; render(); } }, KEY_OPTIONS.map((k) => el("option", { value: k }, keyCaption(k) + "  ·  " + k)));
@@ -159,7 +166,7 @@
       scopeSeg._sync();
       mods.forEach((m) => m._sync());
       mods[2].textContent = S.platform === "mac" ? "Option" : "Alt";
-      mods[3].textContent = S.platform === "mac" ? "Command" : "Win";
+      mods[3].textContent = S.platform === "mac" ? "Command" : S.platform === "android" ? "Meta" : "Win";
       mods[0].textContent = S.platform === "mac" ? "Control" : "Ctrl";
       keySel.value = S.key;
       repeatBox.checked = S.repeat;
@@ -176,7 +183,7 @@
         note.append(el("p", { text: made.none + ". 단축키 판정까지 가지 않는다." }));
       } else {
         const e = made.event;
-        const prim = e.primary_shortcut === null ? "비어 있음 → control을 따른다" : yesno(e.primary_shortcut);
+        const prim = e.primary_shortcut === null ? "비어 있음 → control을 따른다" : yesno(e.primary_shortcut) + (S.platform === "android" ? " (control을 그대로 싣는다)" : " (Command)");
         evOut.append(
           ...kv("key", el("code", { text: e.key })),
           ...kv("control · shift · alt · meta", [yesno(e.control), yesno(e.shift), yesno(e.alt), yesno(e.meta)].join(" · ")),

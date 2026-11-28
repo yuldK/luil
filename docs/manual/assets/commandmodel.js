@@ -7,7 +7,7 @@
  *   - src/ui/ui_interaction.cpp: search_query, 열린 메뉴의 ↑/↓·Enter·Esc 판정(process_menu_key의 팔레트에 닿는 갈래)
  *   - src/ui/menu_element.cpp: 강조가 없을 때 기본 항목을 강조처럼 그리는 판정(shown_as_default)
  * 맞춘 방법:
- *   - commands.cpp·command_palette.cpp·case_fold.cpp를 컴파일해 링크한 대조기에 무작위 입력 약 4만 줄(단축키 글 두 플랫폼,
+ *   - commands.cpp·command_palette.cpp·case_fold.cpp를 컴파일해 링크한 대조기에 무작위 입력 여섯 벌, 약 6만 줄(단축키 글 두 플랫폼,
  *     해석, 맞추기, 겹침, 팔레트 거르기·줄)을 넣어 이 파일의 답과 한 줄씩 견줬다. search_query는 ui_interaction.cpp를
  *     통째로 링크할 수 없어 그 함수 본문(1270-1281행)을 그대로 옮겨 붙여 대조했다.
  *   - 메뉴 키 판정은 controller를 혼자 링크할 수 없어 tests/command_palette_tests.cpp(170-210행)의 장면을 node에서 되풀이했다.

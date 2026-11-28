@@ -1,0 +1,1357 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>체크·라디오·선택 묶음 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — check_element의 다섯 모양(체크박스·라디오·스위치·토글 단추·토글 칩), 삼상 체크, choice_group_element의 라디오 묶음과 segmented, 테마·강조색 피커를 만드는 법과 키보드 규칙.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+
+  /* 실습 1: 선택 묶음 — luil 치수: 라디오 행 24, 고리 14, 점 6, 트랙 26, 안쪽 2, 칸 사이 2 (논리 픽셀) */
+  .lw-body.cg { display: grid; gap: 10px; }
+  .cg-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .cg-tools select { font-size: var(--fs-xs); min-height: 26px; max-width: 100%; }
+  .cg-check { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+  .seg button:disabled { opacity: 0.45; cursor: default; }
+  .cg-grid { display: grid; gap: 12px; }
+  @media (min-width: 1100px) { .cg-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .cg-side { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .cg-stage { display: grid; gap: 10px; padding: 12px; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--panel); outline: none; font-size: 12px; line-height: 1; user-select: none; -webkit-user-select: none; min-width: 0; }
+  .cg-stage:focus { border-color: var(--accent); }
+  .cg-btn { justify-self: start; height: 28px; padding: 0 12px; min-width: 64px; display: inline-flex; align-items: center; justify-content: center; border-radius: var(--r-control); background: var(--sunk); color: var(--fg); cursor: pointer; box-sizing: border-box; }
+  .cg-btn.ring, .cg-radio.ring, .cg-seg.ring { box-shadow: 0 0 0 2px var(--accent); }
+  .cg-group.radio { display: grid; }
+  .cg-radio { height: 24px; display: flex; align-items: center; gap: 8px; padding-left: 4px; border-radius: var(--r-control); cursor: pointer; color: var(--fg); }
+  .cg-radio:hover { background: var(--sunk); }
+  .cg-radio.inert, .cg-seg.inert { cursor: default; }
+  .cg-ring { flex: none; width: 14px; height: 14px; border-radius: 50%; box-sizing: border-box; border: 1.5px solid var(--line-3); display: grid; place-items: center; }
+  .cg-ring.on { border-color: var(--accent); }
+  .cg-ring.on::after { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .cg-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .cg-group.toggle { position: relative; height: 26px; border-radius: 6px; background: var(--sunk); max-width: 100%; }
+  .cg-seg { position: absolute; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: var(--fg-2); cursor: pointer; box-sizing: border-box; overflow: hidden; }
+  .cg-seg span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 4px; }
+  .cg-seg:not(.on):hover { background: var(--line); }
+  .cg-seg.on { background: var(--panel); border: 1px solid var(--line-2); color: var(--fg); font-weight: 600; }
+  .cg-keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--fg-3); }
+  .cg-keys kbd { font-family: var(--font-code); font-size: 10.5px; border: 1px solid var(--line-2); border-radius: 3px; padding: 0 4px; color: var(--fg-2); background: var(--panel); }
+  .cg-state { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .cg-state dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .cg-state dd { margin: 0; overflow-wrap: anywhere; min-width: 0; }
+  .cg-state code { font-size: 11.5px; }
+  @media (max-width: 560px) { .cg-state { grid-template-columns: minmax(0, 1fr); gap: 0; } .cg-state dd { margin-bottom: 6px; } }
+  .cg-sub { font-size: var(--fs-xs); color: var(--fg-3); }
+  .cg-access { margin: 0; padding: 8px 12px 8px 28px; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); font-size: 12px; display: grid; gap: 3px; }
+  .cg-access li.sub { margin-left: 16px; }
+  .cg-access code { font-size: 11.5px; }
+  .cg-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 260px; overflow: auto; padding: 4px 0; font-size: 12px; min-width: 0; }
+  .cg-log.short { height: 230px; }
+  .cg-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .cg-entry:first-child { background: var(--accent-wash); }
+  .cg-entry .in { font-weight: 600; color: var(--fg); }
+  .cg-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .cg-entry .msg::before { content: "→ "; color: var(--fg-3); }
+  .cg-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
+
+  /* 실습 2: 삼상 체크 — check_row_height 24, check_box_size 14 */
+  .lw-body.tri { display: grid; gap: 10px; }
+  .tri-list { display: grid; gap: 0; padding: 8px 10px; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--panel); }
+  .tri-row { appearance: none; border: 0; background: transparent; font: inherit; font-size: 13px; color: var(--fg); height: 24px; display: flex; align-items: center; gap: 8px; padding: 0 4px; border-radius: var(--r-control); cursor: pointer; text-align: left; justify-self: start; min-width: 0; max-width: 100%; }
+  .tri-row:hover { background: var(--sunk); }
+  .tri-row:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--accent); }
+  .tri-row.child { margin-left: 22px; }
+  .tri-box { flex: none; width: 14px; height: 14px; box-sizing: border-box; border: 1.5px solid var(--line-3); border-radius: 3px; display: grid; place-items: center; }
+  .tri-box.on { background: var(--accent); border-color: var(--accent); }
+  .tri-box.on::after { content: ""; width: 6px; height: 3px; border-left: 2px solid var(--on-accent); border-bottom: 2px solid var(--on-accent); transform: translateY(-1px) rotate(-45deg); }
+  .tri-box.mixed { background: var(--accent); border-color: var(--accent); }
+  .tri-box.mixed::after { content: ""; width: 8px; height: 2px; background: var(--on-accent); }
+  .tri-row.st-radio .tri-box { border-radius: 50%; background: transparent; }
+  .tri-row.st-radio .tri-box.on { border-color: var(--accent); }
+  .tri-row.st-radio .tri-box.on::after { width: 6px; height: 6px; border: 0; border-radius: 50%; background: var(--accent); transform: none; }
+  .tri-row.st-toggle_switch .tri-box { width: 30px; height: 16px; border-radius: 8px; justify-items: start; padding: 0 2px; }
+  .tri-row.st-toggle_switch .tri-box::after { content: ""; width: 10px; height: 10px; border: 0; border-radius: 50%; background: var(--fg-3); transform: none; }
+  .tri-row.st-toggle_switch .tri-box.on { justify-items: end; }
+  .tri-row.st-toggle_switch .tri-box.on::after { background: var(--on-accent); }
+  .tri-row.st-toggle_button, .tri-row.st-toggle_chip { height: 28px; padding: 0 12px; border: 1px solid var(--line-2); margin: 2px 0; }
+  .tri-row.st-toggle_chip { border-radius: 14px; }
+  .tri-row.st-toggle_button .tri-box, .tri-row.st-toggle_chip .tri-box { display: none; }
+  .tri-table { min-width: 320px; }
+  .tri-table td { font-size: 12px; }
+</style>
+</head>
+<body data-page="choices">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>체크·라디오·선택 묶음</h1>
+      <p class="summary">체크박스·라디오·스위치·토글 단추·토글 칩은 모두 <code>check_element</code> 하나이고 <code>check_style</code>만 다르다. 서로 배타적인 값 여럿은 <code>choice_group_element</code>가 묶고, 테마와 강조색은 그림까지 지은 피커가 있다. 켜짐·고른 값은 언제나 앱 상태이고, element는 그것을 그리며 바꾸자는 메시지만 낸다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>check_element.h</code>·<code>choice_group_element.h</code>·<code>theme_picker_element.h</code></dd></div>
+          <div><dt>실습</dt><dd>선택 묶음 — Tab·화살표·글자 찾기·고르기 / 삼상 체크 — 부모 상태 모으기</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="input.html">입력과 초점</a> · <a class="xref" href="buttons.html">단추와 명령</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>다섯 체크 모양과 선택 묶음 가운데 무엇을 쓸지 고른다.</li>
+            <li>폴더처럼 일부만 켜진 체크를 <code>aggregate_check</code>로 짓는다.</li>
+            <li>라디오 묶음과 segmented의 키보드 규칙 — Tab 한 자리, 화살표는 초점만 — 을 안다.</li>
+            <li>같은 화면의 두 묶음이 id를 겹치는 함정 같은 조용한 오류를 피한다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>무엇을 쓰나</h2>
+          <p class="lede">켬/끔 하나면 <code>check_element</code>, 여럿 가운데 하나를 고르면 <code>choice_group_element</code>, 테마·강조색이면 라이브러리가 그림까지 지은 피커다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEAB2;</i><code>check_element</code></h4>
+            <ul>
+              <li>다섯 모양: <code>checkbox</code>·<code>radio</code>·<code>toggle_switch</code>·<code>toggle_button</code>·<code>toggle_chip</code>.</li>
+              <li>켜짐(<code>checked</code>)과 일부(<code>mixed</code>)는 앱 상태다. 누르면 <code>toggle</code> 하나가 나간다.</li>
+              <li>라벨까지 줄 전체가 눌린다. 낱개마다 Tab 자리다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB17;</i><code>choice_group_element</code></h4>
+            <ul>
+              <li>배타 선택이다. 세로 라디오 행(<code>choice_style::radio</code>)이나 한 판 위의 segmented(<code>choice_style::toggle</code>).</li>
+              <li>고른 값(<code>selected</code>)은 앱이 든다. 누르면 <code>select(value)</code>.</li>
+              <li>Tab에서 한 자리이고 화살표는 <strong>초점만</strong> 옮긴다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEAC6;</i><code>theme_picker_element</code></h4>
+            <ul>
+              <li>밝게·시스템·어둡게 카드 셋. 미리 보기를 라이브러리가 그린다.</li>
+              <li>강조색 견본은 <code>accent_picker_element</code>다. 시스템 강조색이 있으면 맨 앞에 선다.</li>
+              <li>골라도 화면은 앱이 <code>ui_frame::appearance</code>에 실어야 바뀐다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>켬/끔 하나 (다음에 저장될 설정)</td><td><code>check_style::checkbox</code></td><td><a class="xref" href="#build-checks">낱개 체크</a></td></tr>
+              <tr><td>켬/끔이 <strong>즉시</strong> 반영되는 설정</td><td><code>check_style::toggle_switch</code></td><td><a class="xref" href="#build-switch">스위치</a></td></tr>
+              <tr><td>폴더처럼 일부만 켜짐</td><td><code>checkbox</code> + <code>mixed</code> + <code>aggregate_check</code></td><td><a class="xref" href="#build-mixed">삼상 체크</a></td></tr>
+              <tr><td>표 칸처럼 라벨이 밖에 있는 체크</td><td><code>label</code>을 비우고 <code>tooltip</code></td><td><a class="xref" href="#build-labelless">라벨 없는 체크</a></td></tr>
+              <tr><td>눌린 상태가 남는 글자 단추 (서식 막대 "굵게")</td><td><code>check_style::toggle_button</code></td><td><a class="xref" href="#build-toggle-button">토글 단추</a></td></tr>
+              <tr><td>여럿을 함께 켜는 알약 줄 (거르기·서식)</td><td><code>check_style::toggle_chip</code></td><td><a class="xref" href="#build-chips">토글 칩</a></td></tr>
+              <tr><td>배타 선택, 세로 목록</td><td><code>choice_group_element</code> + <code>choice_style::radio</code></td><td><a class="xref" href="#build-radio">라디오 묶음</a></td></tr>
+              <tr><td>배타 선택, 가로 segmented</td><td><code>choice_style::toggle</code> (+ <code>choice_width</code>)</td><td><a class="xref" href="#build-segmented">segmented</a></td></tr>
+              <tr><td>한 화면에 묶음 여럿</td><td>값에 묶음 접두를 붙인다</td><td><a class="xref" href="#build-prefix">값 충돌 피하기</a></td></tr>
+              <tr><td>밝게/시스템/어둡게, 강조색</td><td><code>theme_picker_element</code> · <code>accent_picker_element</code></td><td><a class="xref" href="#build-theme">테마 카드</a> · <a class="xref" href="#build-accent">강조색</a></td></tr>
+              <tr><td>보이기만 하고 누를 수 없는 묶음</td><td><code>select</code>를 비운다</td><td><a class="xref" href="#build-readonly">표시 전용</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>다섯 모양</h3>
+        <div class="prose">
+          <p>헤더 주석은 "넷은 그리는 모양만 다르고 계약이 같다"고 적지만 <code>check_style</code>의 값은 다섯이다. 계약은 다섯 모두 같다 — 상태를 설정으로 받아 그리고, 누르면 <code>toggle</code> 액션 하나를 낸다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>모양</th><th>높이</th><th>표시 폭</th><th>켜짐 그림</th><th><code>mixed</code></th><th>접근 역할 / 상태</th></tr></thead>
+            <tbody>
+              <tr><td><code>checkbox</code></td><td>24</td><td>14</td><td>강조색 네모 + 체크, 일부면 가운데 줄</td><td>뜻 있음</td><td><code>check_box</code> / <code>checked</code>·<code>mixed</code></td></tr>
+              <tr><td><code>radio</code></td><td>24</td><td>14</td><td>고리 + 안쪽 점</td><td>무시</td><td><code>radio_button</code> / <code>selected</code></td></tr>
+              <tr><td><code>toggle_switch</code></td><td>24</td><td>30×16</td><td>채운 트랙, 손잡이 오른쪽</td><td>무시</td><td><code>toggle_switch</code> / <code>checked</code></td></tr>
+              <tr><td><code>toggle_button</code></td><td>28</td><td>0</td><td>글자 단추 <code>accent</code> 모양 + 강조 테</td><td>무시</td><td><code>button</code> / <code>checked</code></td></tr>
+              <tr><td><code>toggle_chip</code></td><td>28</td><td>0</td><td>옅은 강조 바탕 + 강조 테 + 체크 표시</td><td>무시</td><td><code>button</code> / <code>checked</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>높이와 표시 폭은 논리 픽셀이고 <code>check_element::height_for</code>·<code>indicator_width_for</code>가 답한다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 켜짐은 앱이, 누름은 메시지로</h2>
+          <p class="lede">element는 스스로 뒤집지 않는다. 앱이 준 값을 그리고, 사용자의 누름을 앱의 메시지로 바꿔 돌려줄 뿐이다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>임자</th><th>싣는 자리</th></tr></thead>
+            <tbody>
+              <tr><td>켜짐 · 일부</td><td>앱</td><td><code>check_config::checked</code> · <code>mixed</code></td></tr>
+              <tr><td>고른 값</td><td>앱</td><td><code>choice_group_config::selected</code> · <code>theme_picker_config::selected</code> · <code>accent_picker_config::selected</code></td></tr>
+              <tr><td>hover · 눌림 · 키보드 초점 · 글자 찾기 질의</td><td>input thread의 <code>interaction_controller</code></td><td>— (<code>interaction_snapshot</code>)</td></tr>
+              <tr><td>지금 그리는 테마</td><td>앱이 고른 선호 + OS 상태(고대비·밝은 모드)를 UI thread가 해석</td><td><code>ui_frame::appearance</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>한 번의 누름이 지나가는 길</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>체크 줄(라벨 포함) 아무 데나 누르고 뗀다. 또는 초점이 선 자리에서 Space·Enter.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>controller가 그 element의 <code>left_click</code> 액션을 부른다. 체크는 <code>toggle</code>, 묶음 항목은 <code>select(value)</code>다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱의 <code>handle</code>이 메시지를 받아 켜짐이나 고른 값을 바꾼다. 일부 상태에서 무엇이 될지도 여기서 정한다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>다음 <code>make_frame()</code>이 새 값으로 다시 짓는다. 묶음에 다시 들어올 자리(진입 자리)도 새 값이다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>보조 기술의 Toggle·Select는 표면이 같은 액션을 계획한다. 이미 고른 항목의 Select는 아무 일도 하지 않는다.</span></div>
+        </div>
+        <h3>id</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>element</th><th>id</th></tr></thead>
+            <tbody>
+              <tr><td>체크</td><td><code>{ check, owner }</code> — owner의 기본값은 빈 글이다</td></tr>
+              <tr><td>묶음 root</td><td><code>{ choice_group, owner }</code></td></tr>
+              <tr><td>묶음 항목</td><td><code>{ choice, value }</code> — <strong>묶음 owner가 붙지 않는다</strong></td></tr>
+              <tr><td>테마 root / 카드</td><td><code>{ choice_group, owner }</code> / <code>{ choice, owner + "/light" }</code> 따위</td></tr>
+              <tr><td>강조색 root / 견본</td><td><code>{ choice_group, owner }</code> / <code>{ choice, owner + "/" + 강조색 id }</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>같은 id가 둘이면 그리기 순서의 첫 element가 임자가 되고 <code>ui_tree::duplicate_ids</code>에 드러난다. 묶음 항목에는 owner가 없으므로 같은 화면의 두 묶음에 같은 값("system")이 있으면 항목이 겹친다 (<a class="xref" href="#build-prefix">값 충돌 피하기</a>).</p>
+        </div>
+        <h3>초점 묶음과 Tab</h3>
+        <div class="prose">
+          <ul>
+            <li>묶음 root가 초점 묶음을 세운다. 라디오는 세로(↑/↓), segmented는 가로(←/→)다. 테마 카드는 가로이고 한 줄에 한 장이면 세로, 강조색은 늘 가로다.</li>
+            <li>묶음은 Tab에서 <strong>한 자리</strong>다. 들어오면 고른 값의 항목에 서고, 그 항목이 없거나 초점을 받을 수 없으면 첫 항목이다.</li>
+            <li>화살표·Home·End·글자 찾기는 <strong>초점만</strong> 옮긴다. 선택 메시지는 Space·Enter·누름이 낸다. 고르지 않은 항목에서 Tab을 치면 묶음을 떠나 다음 자리로 간다.</li>
+            <li>낱개 체크는 그 자체로 Tab 자리다 — <code>toggle</code>이 있을 때만.</li>
+          </ul>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">일부 상태는 앱이 계산하고, 다음 상태도 앱이 정한다</span><code>check_state { unchecked, checked, mixed }</code>와 <code>aggregate_check</code>가 자식 상태를 모은다 — 모두 켜짐이면 켜짐, 모두 꺼짐이면 꺼짐, 그 밖은 일부, 자식이 없으면 꺼짐이다. 일부인 체크를 눌러도 나가는 것은 <code>toggle</code> 하나다. 무엇이 될지(보통 켜짐 — Windows 탐색기와 Qt의 기본)는 앱이 정한다.</div></div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 선택 묶음과 삼상 체크">
+        <header class="sec-head">
+          <h2>실습: 선택 묶음과 삼상 체크</h2>
+          <p class="lede">앞 단추 · 선택 묶음 · 뒤 단추가 선 tree를 키보드로 다룬다. 초점이 어디로 가고 언제 메시지가 나가는지 오른쪽에 쌓인다.</p>
+        </header>
+        <div class="lw" data-title="선택 묶음" data-surface="choice_group_element · interaction_controller" data-reset id="cg-lab">
+          <div class="lw-body cg"></div>
+          <div class="lw-foot">판정은 <code>assets/choicemodel.js</code>가 한다 — Tab 순서와 묶음 진입(<code>ui_tree.cpp</code>의 <code>collect_focus_stops</code>·<code>group_entry</code>·<code>focus_stop_of</code>), 실행 키·Tab·묶음 화살표·Home·End·글자 찾기·누름의 초점(<code>ui_interaction.cpp</code>), 축과 진입·칸 배치(<code>choice_group_element.cpp</code>), 글자 접기(<code>textlab.js</code>가 옮긴 <code>case_fold.cpp</code> 표)를 옮겼다. <code>tests/ui_interaction_tests.cpp</code>(화살표·Home·End, 글자 찾기, 묶음에서 Tab)와 <code>tests/choice_group_element_tests.cpp</code>(진입, 칸 폭)의 장면을 같은 차례로 되풀이해 57가지 판정이 모두 같음을 확인했다. Space는 Windows·Android처럼 키와 글자(' ')로 함께 넣는다 — 그래서 Space로 고른 직후 1초 안에 친 글자는 공백 뒤에 붙어 맞지 않는다. 문서를 떠날 수 있게 마지막 자리의 Tab은 문서로 나간다 (luil 창에서는 처음으로 돈다). segmented 칸 폭은 브라우저 글꼴로 잰 근사다. 항목 이름은 저장소의 글자 찾기 시험에서 왔다.</div>
+        </div>
+        <div class="lw" data-title="삼상 체크" data-surface="check_element · aggregate_check" data-reset id="tri-lab">
+          <div class="lw-body tri"></div>
+          <div class="lw-foot">부모의 상태는 <code>aggregate_check</code>를, 접근 정보는 <code>check_element::accessibility</code>를 옮긴 함수가 낸다 (<code>tests/check_element_tests.cpp</code>의 장면으로 맞췄다). 부모를 누를 때의 규칙 — 모두 켜졌으면 모두 끄고 그 밖은 모두 켠다 — 은 라이브러리가 아니라 데모 앱(<code>examples/demo/workbench_page.cpp</code>)의 것이다. 부모 모양을 바꾸면 <code>mixed</code>가 <code>checkbox</code>에서만 그려지고 읽히는 것을 볼 수 있다. 체크는 브라우저 단추라 Tab·Space·Enter가 그대로 선다. 그림은 재현이다.</div>
+        </div>
+      </section>
+
+      <section class="sec" id="build-checks">
+        <header class="sec-head">
+          <h2>만들기: 체크박스·라디오·스위치 낱개</h2>
+          <p class="lede">같은 element를 <code>style</code>만 바꿔 쓴다. 높이는 <code>check_row_height</code>(24)로 담는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/choices_section.cpp:64-81" data-path="examples/widgets/choices_section.cpp" data-start="64"><script type="text/plain">
+        // 낱개 컨트롤 셋: 같은 element를 style만 바꿔 쓴다.
+        // 상태는 앱 것이고 element는 "뒤집자"는 메시지만 낸다 — 스스로 바뀌지 않는다.
+        const auto make_check = [](std::u8string owner, const luil::check_style style, std::u8string label, const bool checked) {
+            luil::check_config config {};
+            config.owner = owner;
+            config.style = style;
+            config.label = std::move(label);
+            config.checked = checked;
+            config.toggle = luil::make_message_action(check_intent { std::move(owner) });
+            return std::make_unique<luil::check_element>(std::move(config));
+        };
+
+        luil::stack_config checks_config {};
+        auto checks { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"checks" }, checks_config) };
+        checks->add(make_check(u8"wrap", luil::check_style::checkbox, u8"줄 바꿈 (checkbox)", state.wrap_lines), luil::check_row_height);
+        checks->add(make_check(u8"metric", luil::check_style::radio, u8"미터법 (radio)", state.use_metric), luil::check_row_height);
+        checks->add(make_check(u8"dark", luil::check_style::toggle_switch, u8"어두운 미리보기 (switch)", state.dark_preview), luil::check_row_height);
+        const float checks_height { 3.0f * luil::check_row_height };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:100-105" data-path="examples/widgets/app.h" data-start="100"><script type="text/plain">
+    // choices: 낱개 컨트롤 하나를 뒤집는다.
+    // 어느 것인지는 owner가 말한다 — element는 뒤집지 않고 이 메시지만 낸다.
+    struct check_intent
+    {
+        std::u8string owner {};
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:82-92" data-path="examples/widgets/app.cpp" data-start="82"><script type="text/plain">
+        // 뒤집는 것은 앱이다. element는 어느 것인지만 말한다.
+        if (const auto* const check { message.get<check_intent>() }; check != nullptr)
+        {
+            if (check->owner == u8"wrap")
+                state_.wrap_lines = state_.wrap_lines == false;
+            else if (check->owner == u8"metric")
+                state_.use_metric = state_.use_metric == false;
+            else if (check->owner == u8"dark")
+                state_.dark_preview = state_.dark_preview == false;
+            return;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>높이는 slot이 아니라 <code>height_for × 배율</code>이다. 큰 slot에 담아도 위쪽 24(단추형 28)만 element이고 나머지는 비어 있다.</li>
+            <li>라벨까지 <strong>줄 전체</strong>가 눌린다. 작은 네모만 겨냥하게 하지 않는다.</li>
+            <li>이 예제는 라디오 모양을 켬/끔으로 뒤집는다. 보조 기술은 그런 라디오를 끌 수 없다 — <a class="xref" href="#pitfalls">함정</a>을 본다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-switch">
+        <header class="sec-head">
+          <h2>만들기: 즉시 적용 스위치</h2>
+          <p class="lede">스위치는 켬/끔이 곧바로 반영되는 설정에 쓴다. 동작(메시지)은 체크박스와 같다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1122-1130" data-path="examples/demo/workbench_page.cpp" data-start="1122"><script type="text/plain">
+        // 경로 열 고정이다. 눌러도 실행 취소 걸음은 쌓이지 않는다 (보기 상태). 서 있는지는 창이 넓어야 하므로 UIA로 되읽는다.
+        luil::check_config freeze_config {};
+        freeze_config.owner = u8"workbench-freeze";
+        freeze_config.style = luil::check_style::toggle_switch;
+        freeze_config.label = u8"경로 열 고정";
+        freeze_config.checked = freeze_path_;
+        freeze_config.toggle = luil::make_message_action(workbench_freeze_intent {});
+        freeze_config.tooltip = u8"가로로 흘려도 경로 열을 제자리에 둔다";
+        row->add_fit(std::make_unique<luil::check_element>(std::move(freeze_config)));
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:403-406" data-path="examples/demo/gallery_page.cpp" data-start="403"><script type="text/plain">
+        page.begin_card(u8"즉시 적용 스위치");
+        page.add(toggle(u8"autosave", u8"자동 저장", autosave_, luil::check_style::toggle_switch), luil::check_row_height);
+        page.add(make_label({ kind_text, u8"gallery/autosave-status" }, autosave_ ? u8"바뀐 내용을 자동으로 저장합니다." : u8"저장 단추를 눌러야 저장합니다.", 11.0f, luil::label_color_role::dim), 18.0f);
+        page.end_card();
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>add_fit</code>은 <code>preferred_size</code>를 쓴다: 안쪽 여백 4 + 표시 폭(스위치 30) + 4, 라벨이 있으면 간격 8 + 글 폭. 높이는 <code>height_for</code>다.</li>
+            <li><code>tooltip</code>은 <code>toggle</code>이 있을 때만 걸린다. 누를 수 없는 체크에는 커서도 툴팁도 없다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-mixed">
+        <header class="sec-head">
+          <h2>만들기: 일부 상태를 가진 "모두" 체크</h2>
+          <p class="lede">자식들의 상태를 <code>aggregate_check</code>로 모아 <code>checked</code>·<code>mixed</code>에 싣는다. 누르면 무엇이 될지는 앱의 <code>handle</code>이 정한다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1056-1067" data-path="examples/demo/workbench_page.cpp" data-start="1056"><script type="text/plain">
+        // 전체 스테이지 체크다. 일부만 스테이지했으면 일부 상태로 그리고 읽힌다.
+        std::vector<luil::check_state> states {};
+        for (const change& item : changes_)
+            states.push_back(item.staged ? luil::check_state::checked : luil::check_state::unchecked);
+        const luil::check_state all { luil::aggregate_check(states) };
+        luil::check_config all_config {};
+        all_config.owner = u8"workbench-stage-all";
+        all_config.label = u8"모두 스테이지";
+        all_config.checked = all == luil::check_state::checked;
+        all_config.mixed = all == luil::check_state::mixed;
+        all_config.toggle = luil::make_message_action(workbench_stage_all_intent {});
+        row->add_fit(std::make_unique<luil::check_element>(std::move(all_config)));
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:766-774" data-path="examples/demo/workbench_page.cpp" data-start="766"><script type="text/plain">
+        if (message.get<workbench_stage_all_intent>() != nullptr)
+        {
+            const bool all { std::all_of(changes_.begin(), changes_.end(), [](const change& item) { return item.staged; }) };
+            std::vector<std::u8string> keys {};
+            for (const change& item : changes_)
+                keys.push_back(item.path);
+            stage_changes(all ? u8"모두 스테이지 취소" : u8"모두 스테이지", keys, all == false);
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>저장소에는 부모 체크만 있고 자식 줄까지 함께 짓는 예제는 없다. 폴더 하나와 그 안의 파일들을 묶어 썼다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="부모와 자식이 함께 있는 삼상 체크 (직접 작성)" data-compile="pre-tristate"><script type="text/plain">
+constexpr luil::ui_element_kind kind_layout { luil::application_element_kind(0) };
+
+// 앱 상태: 폴더 하나와 그 안의 파일들이다.
+struct file_entry
+{
+    std::u8string path {};
+    bool selected { false };
+};
+
+struct folder_state
+{
+    std::vector<file_entry> files {};
+};
+
+struct toggle_folder_intent
+{
+};
+
+struct toggle_file_intent
+{
+    std::u8string path {};
+};
+
+[[nodiscard]] std::unique_ptr<luil::ui_element> make_folder_checks(const folder_state& state)
+{
+    // 부모의 상태는 자식에서 모은다 — 모두 켜짐/모두 꺼짐/그 밖은 일부.
+    std::vector<luil::check_state> children {};
+    for (const file_entry& file : state.files)
+        children.push_back(file.selected ? luil::check_state::checked : luil::check_state::unchecked);
+    const luil::check_state folder { luil::aggregate_check(children) };
+
+    auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"folder" }, luil::stack_config {}) };
+    luil::check_config parent {};
+    parent.owner = u8"folder";
+    parent.label = u8"src";
+    parent.checked = folder == luil::check_state::checked;
+    parent.mixed = folder == luil::check_state::mixed;
+    parent.toggle = luil::make_message_action(toggle_folder_intent {});
+    column->add(std::make_unique<luil::check_element>(std::move(parent)), luil::check_row_height);
+
+    for (const file_entry& file : state.files)
+    {
+        luil::check_config child {};
+        // owner는 화면 안에서 유일해야 한다 (id = { check, owner }).
+        child.owner = u8"file:" + file.path;
+        child.label = file.path;
+        child.checked = file.selected;
+        child.toggle = luil::make_message_action(toggle_file_intent { file.path });
+        column->add(std::make_unique<luil::check_element>(std::move(child)), luil::check_row_height);
+    }
+    return column;
+}
+
+// logic thread의 처리다. 일부 상태에서 누르면 모두 켠다 (Windows 탐색기·Qt의 기본).
+void handle_toggle_folder(folder_state& state)
+{
+    const bool all { std::all_of(state.files.begin(), state.files.end(), [](const file_entry& file) { return file.selected; }) };
+    for (file_entry& file : state.files)
+        file.selected = all == false;
+}
+
+void handle_toggle_file(folder_state& state, const toggle_file_intent& intent)
+{
+    for (file_entry& file : state.files)
+        if (file.path == intent.path)
+            file.selected = file.selected == false;
+}
+</script></div>
+        <script type="text/plain" id="pre-tristate" data-prelude>
+#include "luil/ui/check_element.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/ui_element.h"
+#include <algorithm>
+#include <memory>
+#include <string>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="code" data-lang="cpp" data-src="tests/check_element_tests.cpp:133-148" data-path="tests/check_element_tests.cpp" data-start="133"><script type="text/plain">
+TEST_CASE("A parent check aggregates its children", "[ui][check]")
+{
+    using luil::check_state;
+    REQUIRE(luil::aggregate_check({}) == check_state::unchecked);
+    const std::vector<check_state> all_on { check_state::checked, check_state::checked };
+    REQUIRE(luil::aggregate_check(all_on) == check_state::checked);
+    const std::vector<check_state> all_off { check_state::unchecked, check_state::unchecked };
+    REQUIRE(luil::aggregate_check(all_off) == check_state::unchecked);
+    const std::vector<check_state> some { check_state::checked, check_state::unchecked };
+    REQUIRE(luil::aggregate_check(some) == check_state::mixed);
+    // 일부 상태인 자식이 하나라도 있으면 부모도 일부다 (손주가 섞였다).
+    const std::vector<check_state> nested { check_state::checked, check_state::mixed };
+    REQUIRE(luil::aggregate_check(nested) == check_state::mixed);
+    const std::vector<check_state> lone_mixed { check_state::mixed };
+    REQUIRE(luil::aggregate_check(lone_mixed) == check_state::mixed);
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>손주가 있는 트리라면 자식의 상태를 <code>check_state::mixed</code>로 넘겨도 된다. 하나라도 일부면 부모도 일부다.</li>
+            <li><code>mixed</code>는 <code>checkbox</code>에만 뜻이 있다. 그림은 <code>checked</code>보다 앞서 가운데 줄이고, 보조 기술은 Indeterminate로 읽는다.</li>
+            <li>행이 많으면 표의 체크 칸(<code>table_config::check_column</code>·<code>check_state_of</code>·<code>toggle_check</code>)이 이미 있다 (<a class="xref" href="table.html">표</a>). 목록의 계층 위 집계는 <a class="xref" href="lists.html#build-check">목록 문서</a>에 있다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-labelless">
+        <header class="sec-head">
+          <h2>만들기: 라벨이 칸 밖에 있는 체크</h2>
+          <p class="lede"><code>label</code>을 비우면 컨트롤만 그린다. 이름은 <code>tooltip</code>으로 준다 — 그리고 <code>toggle</code>을 함께 준다.</p>
+        </header>
+        <div class="prose">
+          <p>라이브러리 안에서는 표의 체크 칸이 같은 방식이다: 라벨 없이 툴팁에 행 이름을 넣는다. "메일 [ ]  푸시 [ ]" 같은 줄을 묶어 썼다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-label="라벨이 칸 밖에 있는 한 줄 (직접 작성)" data-compile="pre-labelless"><script type="text/plain">
+constexpr luil::ui_element_kind kind_layout { luil::application_element_kind(0) };
+constexpr luil::ui_element_kind kind_text { luil::application_element_kind(1) };
+
+struct toggle_notify_intent
+{
+    std::u8string channel {};
+};
+
+// "메일 [ ]  푸시 [ ]"처럼 라벨이 칸 밖에 있는 한 줄이다.
+[[nodiscard]] std::unique_ptr<luil::ui_element> make_channel_row(const std::u8string& channel, const std::u8string& title, const bool on)
+{
+    luil::stack_config row_config {};
+    row_config.direction = luil::stack_direction::row;
+    row_config.spacing = 8.0f;
+    auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"row:" + channel }, row_config) };
+    row->add_flexible(std::make_unique<luil::label_element>(luil::ui_element_id { kind_text, u8"title:" + channel }, luil::label_config { .text = title }));
+
+    luil::check_config check {};
+    check.owner = u8"notify:" + channel;
+    check.checked = on;
+    // 라벨이 비면 보조 기술의 이름은 접근 이름 술어(set_access_name → search_label → tooltip)가 답한다.
+    // tooltip은 toggle이 있을 때만 걸린다 — 둘을 함께 준다.
+    check.tooltip = title;
+    check.toggle = luil::make_message_action(toggle_notify_intent { channel });
+    // 라벨이 없으면 preferred_size가 안쪽 여백 + 표시 부분 폭만 답한다 (add_fit이 그것을 쓴다).
+    row->add_fit(std::make_unique<luil::check_element>(std::move(check)));
+    return row;
+}
+</script></div>
+        <script type="text/plain" id="pre-labelless" data-prelude>
+#include "luil/ui/check_element.h"
+#include "luil/ui/label_element.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/ui_element.h"
+#include <memory>
+#include <string>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li>접근 이름은 라벨이 있으면 라벨, 없으면 <code>set_access_name</code> → <code>search_label</code> → 툴팁 차례로 찾는다.</li>
+            <li>표시 폭만 따로 맞춰 여러 줄을 세우려면 <code>indicator_width_for</code>를 쓴다 (체크박스·라디오 14, 스위치 30, 단추형 0).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-toggle-button">
+        <header class="sec-head">
+          <h2>만들기: 서식 막대의 토글 단추</h2>
+          <p class="lede"><code>check_style::toggle_button</code>은 눌린 상태가 남는 글자 단추다. 아이콘 단추의 <code>active</code>와 달리 켜짐이 보조 기술에도 읽힌다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/rich_text_sample.h:163-187" data-path="examples/demo/rich_text_sample.h" data-start="163"><script type="text/plain">
+        // 서식 토글 다섯 줄이다. 누르는 동안 초점이 칸에 남아 IME 조합이 끊기지 않는다 (`set_preserve_pointer_focus`).
+        [[nodiscard]] std::unique_ptr<luil::stack_element> make_toolbar(const luil::ui_element_kind layout_kind, const float spacing) const
+        {
+            const luil::rich_text_state on { luil::rich_text_state_of(state_) };
+            luil::stack_config config {};
+            config.direction = luil::stack_direction::row;
+            config.spacing = spacing;
+            auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { layout_kind, u8"rich-toolbar" }, config) };
+            const auto add = [&row](std::u8string owner, std::u8string label, const bool checked, const luil::rich_text_command command) {
+                luil::check_config toggle {};
+                toggle.owner = std::move(owner);
+                toggle.style = luil::check_style::toggle_button;
+                toggle.label = std::move(label);
+                toggle.checked = checked;
+                toggle.toggle = luil::make_message_action(rich_text_command_intent { command });
+                auto element { std::make_unique<luil::check_element>(std::move(toggle)) };
+                element->set_preserve_pointer_focus(true);
+                row->add_fit(std::move(element));
+            };
+            add(u8"rich-bold", u8"굵게", on.bold, luil::rich_text_command::bold);
+            add(u8"rich-italic", u8"기울임", on.italic, luil::rich_text_command::italic);
+            add(u8"rich-underline", u8"밑줄", on.underline, luil::rich_text_command::underline);
+            add(u8"rich-code", u8"코드", on.code, luil::rich_text_command::code);
+            add(u8"rich-link", u8"링크", on.link, luil::rich_text_command::link);
+            return row;
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>set_preserve_pointer_focus(true)</code>를 단 단추는 눌러도 입력 칸의 논리 초점이 남는다. 편집기 옆 서식 막대에 필요하다 — 누를 때마다 IME 조합이 끊기지 않는다.</li>
+            <li>크기는 글자 단추 식이다 (최소 64, 높이 28). 꺼짐은 <code>normal</code>, 켜짐은 <code>accent</code> 모양에 1 논리 픽셀 강조 테다.</li>
+            <li>접근 정보는 <code>button</code> + <code>checked</code>라 Windows에서는 Toggle 패턴이고 Invoke는 빠진다. 같은 서식의 단축키(Ctrl+B 따위)는 <code>make_rich_text_commands</code>가 짓는 명령표로 맞춘다 (<a class="xref" href="buttons.html#build-scope">단추와 명령 — 범위</a>).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-chips">
+        <header class="sec-head">
+          <h2>만들기: 토글 칩 줄</h2>
+          <p class="lede">칩은 따로 켜고 끄는 알약이다. 켜지면 체크 표시가 붙고, 폭은 켬/끔과 상관없이 같다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:149-158" data-path="examples/demo/gallery_page.cpp" data-start="149"><script type="text/plain">
+        [[nodiscard]] std::unique_ptr<luil::check_element> toggle(std::u8string key, std::u8string label, const bool checked, const luil::check_style style)
+        {
+            luil::check_config config {};
+            config.owner = u8"gallery/" + key;
+            config.style = style;
+            config.label = std::move(label);
+            config.checked = checked;
+            config.toggle = luil::make_message_action(gallery_toggle_intent { std::move(key) });
+            return std::make_unique<luil::check_element>(std::move(config));
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:362-367" data-path="examples/demo/gallery_page.cpp" data-start="362"><script type="text/plain">
+        page.begin_card(u8"토글 칩", u8"칩마다 따로 켜고 끕니다.");
+        auto toggles { row(u8"gallery/toggles") };
+        toggles->add_fit(toggle(u8"bold", u8"굵게", bold_, luil::check_style::toggle_chip));
+        toggles->add_fit(toggle(u8"italic", u8"기울임", italic_, luil::check_style::toggle_chip));
+        toggles->add_fit(toggle(u8"pinned", u8"상단 고정", pinned_, luil::check_style::toggle_chip));
+        page.add(std::move(toggles), luil::text_button_height);
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:206-216" data-path="examples/demo/gallery_page.cpp" data-start="206"><script type="text/plain">
+        if (const auto* const toggle { message.get<gallery_toggle_intent>() }; toggle != nullptr)
+        {
+            if (toggle->key == u8"autosave")
+                autosave_ = !autosave_;
+            if (toggle->key == u8"bold")
+                bold_ = !bold_;
+            if (toggle->key == u8"italic")
+                italic_ = !italic_;
+            if (toggle->key == u8"pinned")
+                pinned_ = !pinned_;
+            return true;
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>칩 폭은 왼쪽 10 + 체크 12 + 간격 6 + 글 + 오른쪽 12다. 체크 자리를 늘 비워 두고 꺼지면 글을 가운데로 옮겨, 줄에 맞춰 놓은 칩이 누를 때마다 들썩이지 않는다.</li>
+            <li>켜진 칩의 옅은 강조 바탕과 강조 테는 활성일 때만이다. 꺼진 칩은 테만 그린다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-radio">
+        <header class="sec-head">
+          <h2>만들기: 라디오 묶음</h2>
+          <p class="lede">항목(값·라벨), 고른 값, 고른 값을 메시지로 바꾸는 factory, 묶음의 이름을 준다. 높이는 <code>height_for</code>로 담는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/choices_section.cpp:21-37" data-path="examples/widgets/choices_section.cpp" data-start="21"><script type="text/plain">
+        // 라디오 목록: 접이식 그룹의 내용으로 넣는다.
+        luil::choice_group_config fruit {};
+        fruit.owner = u8"fruit";
+        fruit.style = luil::choice_style::radio;
+        fruit.items = {
+            { u8"apple", u8"사과" },
+            { u8"grape", u8"포도" },
+            { u8"peach", u8"복숭아" },
+        };
+        fruit.selected = state.fruit;
+        // 선택 메시지 factory는 고른 값(value)을 받아 메시지를 만든다.
+        fruit.select = [](const std::u8string& value) { return luil::make_app_action(choose_fruit_intent { value }); };
+        // 묶음의 이름이 「무엇을 고르는 중인가」다.
+        fruit.name = u8"과일";
+        // 높이는 정적 사이저가 알려 준다 (논리 픽셀). 배치 길이에 같은 값을 쓴다.
+        const float fruit_height { luil::choice_group_element::height_for(fruit) };
+        auto fruit_group { std::make_unique<luil::choice_group_element>(fruit) };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:85-94" data-path="examples/widgets/app.h" data-start="85"><script type="text/plain">
+    // choices: 선택과 접기.
+    struct choose_fruit_intent
+    {
+        std::u8string value {};
+    };
+
+    struct choose_view_intent
+    {
+        std::u8string value {};
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:67-76" data-path="examples/widgets/app.cpp" data-start="67"><script type="text/plain">
+        if (const auto* const fruit { message.get<choose_fruit_intent>() }; fruit != nullptr)
+        {
+            state_.fruit = fruit->value;
+            return;
+        }
+        if (const auto* const view { message.get<choose_view_intent>() }; view != nullptr)
+        {
+            state_.view = view->value;
+            return;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>높이는 항목 수 × 24다. 라디오 묶음은 <code>preferred_size</code>가 없어 <code>add_fit</code>으로 담으면 높이가 0이다.</li>
+            <li>행 하나는 고리 14·점 6, 왼쪽 여백 4, 글까지 간격 8이다.</li>
+            <li><code>name</code>이 "무엇을 고르는 중인가"다. 화면 읽기가 "포도, 선택됨"까지는 항목이 말하지만 묶음의 뜻은 묶음만 말할 수 있다. 비면 이름 없는 선택 묶음으로 선다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-segmented">
+        <header class="sec-head">
+          <h2>만들기: segmented — 맞춤과 채움</h2>
+          <p class="lede">같은 묶음을 <code>choice_style::toggle</code>로 바꾸면 한 판 위의 segmented다. 폭은 맞춤(<code>fit</code>, 기본)과 채움(<code>fill</code>) 둘이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/choices_section.cpp:50-62" data-path="examples/widgets/choices_section.cpp" data-start="50"><script type="text/plain">
+        // 토글 묶음: 같은 choice_group을 모양만 바꿔 쓴다.
+        luil::choice_group_config view {};
+        view.owner = u8"view";
+        view.style = luil::choice_style::toggle;
+        view.items = {
+            { u8"list", u8"목록" },
+            { u8"grid", u8"바둑판" },
+            { u8"detail", u8"자세히" },
+        };
+        view.selected = state.view;
+        view.select = [](const std::u8string& value) { return luil::make_app_action(choose_view_intent { value }); };
+        view.name = u8"보기 방식";
+        const float view_height { luil::choice_group_element::height_for(view) };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:408-429" data-path="examples/demo/gallery_page.cpp" data-start="408"><script type="text/plain">
+        luil::choice_group_config choices {};
+        choices.owner = u8"gallery/density";
+        choices.name = u8"표시 밀도";
+        choices.style = luil::choice_style::toggle;
+        choices.items = { { u8"compact", u8"간결하게" }, { u8"comfortable", u8"여유롭게" }, { u8"wide", u8"넓게" } };
+        choices.selected = choice_;
+        choices.select = [](const std::u8string& value) { return luil::make_app_action(gallery_choice_intent { value }); };
+        page.begin_card(u8"선택 묶음", u8"여럿 가운데 하나를 고릅니다. 고른 칸만 판이 떠오릅니다.");
+        // 기본은 맞춤이다 — 칸이 가장 긴 글에 맞춘 같은 폭이라 화면이 넓어도 고른 칸이 멀어지지 않는다.
+        page.add(std::make_unique<luil::choice_group_element>(std::move(choices)), luil::choice_toggle_height);
+        page.gap(14.0f);
+        // 설정 화면처럼 줄을 맞출 때는 앱이 판 폭 채움을 고른다.
+        page.add(make_label({ kind_text, u8"gallery/language-title" }, u8"판 폭에 채움 — 언어", 11.0f, luil::label_color_role::dim), 18.0f);
+        luil::choice_group_config languages {};
+        languages.owner = u8"gallery/language";
+        languages.name = u8"언어";
+        languages.style = luil::choice_style::toggle;
+        languages.width = luil::choice_width::fill;
+        languages.items = { { u8"system", u8"시스템" }, { u8"ko", u8"한국어" }, { u8"en", u8"English" } };
+        languages.selected = language_;
+        languages.select = [](const std::u8string& value) { return luil::make_app_action(gallery_choice_intent { value, u8"language" }); };
+        page.add(std::make_unique<luil::choice_group_element>(std::move(languages)), luil::choice_toggle_height);
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="408-414" data-title="맞춤">기본 폭(<code>fit</code>)이다. 모든 칸이 가장 긴 글에 맞춘 같은 폭이고 왼쪽에 붙는다. 화면이 넓어도 고른 칸이 멀어지지 않는다.</li>
+            <li data-lines="415-417" data-title="담기">높이는 <code>choice_toggle_height</code>(26)다.</li>
+            <li data-lines="418-429" data-title="채움">설정 화면처럼 여러 줄의 묶음을 같은 폭으로 맞출 때는 <code>choice_width::fill</code>로 받은 폭을 칸들이 나눠 갖는다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:272-276" data-path="examples/demo/gallery_page.cpp" data-start="272"><script type="text/plain">
+        if (const auto* const choice { message.get<gallery_choice_intent>() }; choice != nullptr)
+        {
+            (choice->group == u8"language" ? language_ : choice_) = choice->value;
+            return true;
+        }
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>배치 규칙 (논리 픽셀)</th><th>값</th></tr></thead>
+            <tbody>
+              <tr><td>칸의 맞춤 폭</td><td><code>ceil(가장 넓은 글) + 14 × 2</code> — 글은 보통 굵기와 고른 칸 굵기(<code>selected_choice</code>) 가운데 넓은 쪽으로 잰다. 고른 칸이 바뀌어도 들썩이지 않는다</td></tr>
+              <tr><td>트랙 폭</td><td>칸 폭 × n + 2 × (n − 1) + 2 × 2</td></tr>
+              <tr><td><code>fit</code>의 자리</td><td><code>min(받은 폭, 트랙 폭)</code>, 왼쪽에 붙는다. 모자라면 칸이 같은 비율로 준다</td></tr>
+              <tr><td><code>fill</code>의 자리</td><td>받은 폭 전부</td></tr>
+              <tr><td>칸 하나</td><td>트랙 안쪽을 같은 폭으로 나눈다. 높이 26 − 2 × 2 = 22. 칸 사이 2 틈은 아무것도 hit하지 않는다</td></tr>
+              <tr><td><code>preferred_size</code></td><td><code>fit</code>은 트랙 폭, <code>fill</code>은 <strong>받은 폭(<code>available_width</code>) 그대로</strong>, 라디오는 답하지 않는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>고른 칸만 밝은 판(<code>thumb_background</code>)과 1px <code>divider</code> 테가 뜨고 글이 진해진다. 강조색을 쓰지 않는다 — 강조 채움은 "누르면 실행"하는 기본 단추의 그림이다.</li>
+            <li>칸 글이 칸 안 폭(양옆 14를 뺀 자리)보다 길면 잘린다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-prefix">
+        <header class="sec-head">
+          <h2>만들기: 같은 화면의 묶음 여럿 — 값 충돌 피하기</h2>
+          <p class="lede">묶음 항목의 id는 <code>{ choice, value }</code>라 묶음 owner가 들어가지 않는다. 같은 화면의 두 묶음에 같은 값이 있으면 값에 접두를 붙인다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/device_page.cpp:103-110" data-path="examples/mobile_demo/device_page.cpp" data-start="103"><script type="text/plain">
+        // 언어 칸의 값이다. 값이 곧 항목의 id라 방향 묶음의 system과 겹치지 않게 묶음 owner를 앞에 붙인다.
+        //  - 메시지와 페이지 상태는 붙이지 않은 값("system"·"ko"·"en")이다. 셸이 그 값을 언어 태그로 쓴다.
+        constexpr std::u8string_view language_cell_prefix { u8"device-language-" };
+
+        [[nodiscard]] std::u8string language_cell(const std::u8string_view language)
+        {
+            return std::u8string { language_cell_prefix } + std::u8string { language };
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/device_page.cpp:272-282" data-path="examples/mobile_demo/device_page.cpp" data-start="272"><script type="text/plain">
+        luil::choice_group_config languages {};
+        languages.owner = u8"device-language";
+        languages.name = u8"기본 문구 언어";
+        languages.style = luil::choice_style::toggle;
+        languages.width = luil::choice_width::fill;
+        languages.items = { { language_cell(u8"system"), u8"시스템" }, { language_cell(u8"ko"), u8"한국어" }, { language_cell(u8"en"), u8"English" } };
+        languages.selected = language_cell(language_);
+        languages.select = [](const std::u8string& key) { return luil::make_app_action(device_language_intent { key.substr(language_cell_prefix.size()) }); };
+        const float languages_height { luil::choice_group_element::height_for(languages) };
+        column.gap(6.0f);
+        column.add(std::make_unique<luil::choice_group_element>(std::move(languages)), languages_height, choice_width);
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>메시지와 앱 상태에는 접두를 떼고 싣는다 (<code>select</code> 람다가 <code class="free">substr</code>로 뗀다). <code>selected</code>에는 붙여서 넘긴다.</li>
+            <li>헤더 주석은 owner를 "같은 화면에 그룹이 여럿일 때 구분하는 키"라고 하지만 owner는 root id에만 들어간다. 겹치면 그리기 순서의 첫 항목이 임자가 되어 hover와 초점이 엉킨다.</li>
+            <li>테마·강조색 피커는 스스로 owner를 붙인다 (<code>owner/light</code>, <code>owner/강조색 id</code>). 그래도 같은 owner의 피커 둘은 겹친다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-theme">
+        <header class="sec-head">
+          <h2>만들기: 테마 카드</h2>
+          <p class="lede">고른 선호와 미리 보기 강조색을 주고, 고른 값은 메시지로 받아 저장한 뒤 frame의 <code>appearance</code>에 싣는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/theme_page.cpp:247-257" data-path="examples/demo/theme_page.cpp" data-start="247"><script type="text/plain">
+        page.begin_card(u8"테마");
+        luil::theme_picker_config themes {};
+        themes.owner = u8"theme";
+        themes.selected = appearance_.theme;
+        themes.accent_id = appearance_.accent_id;
+        themes.select = [](const luil::theme_preference value) { return luil::make_app_action(theme_intent { value }); };
+        const float themes_height { luil::theme_picker_element::height_for(themes, content_width) };
+        page.add(std::make_unique<luil::theme_picker_element>(std::move(themes)), themes_height);
+        page.gap(6.0f);
+        page.add(make_label({ kind_text, u8"theme-system-help" }, u8"'시스템'을 고르면 Windows의 앱 모드를 따릅니다.", 11.0f, luil::label_color_role::dim), 18.0f);
+        page.end_card();
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/theme_page.cpp:105-109" data-path="examples/demo/theme_page.cpp" data-start="105"><script type="text/plain">
+        if (const auto* const theme { message.get<theme_intent>() }; theme != nullptr)
+        {
+            appearance_.theme = theme->theme;
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:927-927" data-path="examples/demo_main.cpp" data-start="927"><script type="text/plain">
+                frame->appearance = theme_.appearance();
+</script></div>
+        <div class="prose">
+          <p>휴대폰 폭에서는 세 장이 한 줄에 들게 카드 폭을 줄인다. 다음 줄로 넘기면 왼쪽에 두 장만 서서 화면을 많이 먹는다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/theme_page.cpp:83-97" data-path="examples/mobile_demo/theme_page.cpp" data-start="83"><script type="text/plain">
+        // 테마 선호는 라이브러리의 테마 카드로 그린다. 글을 주지 않아 기기 페이지에서 고른 언어의 기본 문구를 따른다.
+        const float themes_width { width - 2.0f * page_padding };
+        luil::theme_picker_config themes {};
+        themes.owner = u8"theme";
+        themes.selected = appearance_.theme;
+        themes.accent_id = appearance_.accent_id;
+        // 폰 폭에서도 세 장이 한 줄에 들게 줄인다. 다음 줄로 넘기면 왼쪽에 두 장만 서서 화면을 많이 먹는다.
+        themes.card_width = std::min(themes.card_width, (themes_width - 2.0f * themes.gap) / 3.0f);
+        themes.select = [](const luil::theme_preference value) { return luil::make_app_action(theme_intent { value }); };
+        const float themes_height { luil::theme_picker_element::height_for(themes, themes_width) };
+
+        page_column column { u8"theme" };
+        column.note(u8"theme-hint", u8"테마 선호");
+        column.gap(6.0f);
+        column.add(std::make_unique<luil::theme_picker_element>(std::move(themes)), themes_height, themes_width);
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>배치 (논리 픽셀, 받은 폭 W)</th><th>값</th></tr></thead>
+            <tbody>
+              <tr><td>카드 폭</td><td><code>min(max(48, card_width), W)</code> — 기본 112, 넓어도 늘지 않는다</td></tr>
+              <tr><td>카드 높이</td><td><code>max(32, preview_height) + 26</code> — 기본 70 + 26 = 96</td></tr>
+              <tr><td>한 줄의 카드 수</td><td><code>floor((W + gap) / (카드 폭 + gap))</code>를 1~3으로 자른다. 카드는 밝게·시스템·어둡게 차례로 왼쪽부터 놓인다</td></tr>
+              <tr><td>높이 (<code>height_for</code>)</td><td>카드 높이 × 줄 수 + gap × (줄 수 − 1)</td></tr>
+              <tr><td>화살표 축</td><td>한 줄에 한 장이면 세로, 아니면 가로 — <strong>2 + 1의 두 줄이어도 가로</strong>라 ↑/↓로 줄을 오가지 못한다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><code>height_for</code>에는 element가 실제로 받는 <strong>논리 폭</strong>을 준다. 배치는 <code>slot.width / scale</code>로 줄 수를 정한다. 물리 폭을 주면 줄 수가 틀린다.</li>
+            <li>미리 보기는 <code>accent_id</code>의 강조색으로 밝은·어두운 팔레트를 그리고, 시스템 카드는 대각선으로 나눈다. 고대비 팔레트는 미리 보기에 없다.</li>
+            <li>글과 이름을 주지 않으면 라이브러리 언어의 기본 낱말이다 ("밝게/시스템/어둡게", 묶음 이름 "테마"). <code>labels</code>는 밝게·시스템·어둡게 차례이고 칸마다 따로 덮을 수 있다.</li>
+            <li>"시스템"을 골라도 고대비가 켜져 있으면 고대비가 이기고, 그다음 OS의 밝은 앱 설정을 따른다 (<a class="xref" href="theming.html">테마와 스타일</a>).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-accent">
+        <header class="sec-head">
+          <h2>만들기: 강조색 견본</h2>
+          <p class="lede">카탈로그의 강조색을 견본으로 늘어놓는다. OS가 강조색을 알렸으면 맨 앞에 시스템 견본이 선다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/theme_page.cpp:259-265" data-path="examples/demo/theme_page.cpp" data-start="259"><script type="text/plain">
+        page.begin_card(u8"강조색 · " + std::u8string { luil::accent_for(appearance_.accent_id).label });
+        luil::accent_picker_config accents {};
+        accents.owner = u8"accent";
+        accents.selected = appearance_.accent_id;
+        accents.select = [](const std::u8string& key) { return luil::make_app_action(accent_intent { key }); };
+        const float accents_height { luil::accent_picker_element::height_for(accents, content_width) };
+        page.add(std::make_unique<luil::accent_picker_element>(std::move(accents)), accents_height);
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/theme_page.cpp:110-114" data-path="examples/demo/theme_page.cpp" data-start="110"><script type="text/plain">
+        if (const auto* const accent { message.get<accent_intent>() }; accent != nullptr)
+        {
+            appearance_.accent_id = accent->id;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>견본은 32 논리 픽셀, 간격 8이다. 드는 만큼으로 줄 수를 정한 뒤 줄마다 고르게 나눈다 — 마지막 줄에 한두 개만 남지 않는다. 높이는 <code>accent_picker_element::height_for(config, 논리 폭)</code>이다.</li>
+            <li><code>include_system</code>이 참이어도 시스템 견본(id <code>system</code>)은 OS가 강조색을 알렸을 때만 선다. 그 뒤는 카탈로그(<code>accent_catalog</code>) 차례다.</li>
+            <li>견본마다 툴팁과 접근 이름이 강조색 이름이다 (라이브러리 언어).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-readonly">
+        <header class="sec-head">
+          <h2>만들기: 누를 수 없는 (표시 전용) 묶음</h2>
+          <p class="lede"><code>select</code>를 비우면 항목이 눌리지 않고 Tab 자리도 없다. 흐리게 그리는 "비활성"과는 다르다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/theme_picker_tests.cpp:123-131" data-path="tests/theme_picker_tests.cpp" data-start="123"><script type="text/plain">
+TEST_CASE("Read-only theme cards do not offer keyboard activation", "[ui][theme-picker]")
+{
+    auto config { themes() };
+    config.select = {};
+    const luil::ui_tree tree { luil::make_arranged_tree(std::make_unique<luil::theme_picker_element>(config), { 0.0f, 0.0f, 700.0f, 200.0f }, 1.0f) };
+    REQUIRE(tree.focus_order().empty());
+    for (const auto& child : tree.root()->children())
+        REQUIRE(child->action(luil::ui_trigger::left_click) == nullptr);
+}
+</script></div>
+        <div class="code" data-lang="cpp" data-src="tests/choice_group_element_tests.cpp:169-177" data-path="tests/choice_group_element_tests.cpp" data-start="169"><script type="text/plain">
+TEST_CASE("A choice group without a select factory builds inert choices", "[ui][choice]")
+{
+    luil::choice_group_config config { make_config(luil::choice_style::radio) };
+    config.select = nullptr;
+    const luil::choice_group_element group { std::move(config) };
+    REQUIRE(group.children().size() == 3);
+    REQUIRE(group.children()[0]->action(luil::ui_trigger::left_click) == nullptr);
+    REQUIRE(group.children()[0]->interactive() == false);
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>체크도 <code>toggle</code>이 없으면 눌리지 않고 커서·툴팁도 걸리지 않는다 — 바꿀 수 없는 자리에 바꾸는 시늉을 두지 않는다.</li>
+            <li>설정에는 <code>enabled</code> 칸이 없다. 체크는 <code>set_enabled(false)</code>로 흐려지고 초점을 받지 않는다. 묶음은 항목을 element 안에서 지어 앱이 끌 공개 자리가 없다 (<a class="xref" href="#pitfalls">함정</a>).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 필드는 <a class="xref" href="api.html#check-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="check_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/check_element.h:9-68" data-path="include/luil/ui/check_element.h" data-start="9"><script type="text/plain">
+    // 낱개 컨트롤이 그려지는 모양이다.
+    // 넷은 **그리는 모양만 다르고 계약이 같다** — 상태를 설정으로 받아 그리고,
+    // 바꾸자는 메시지만 낸다. 무엇이 바뀌는지(뒤집기·고르기)는 앱이 액션으로 정한다.
+    enum class check_style
+    {
+        // 네모와 체크 표시다.
+        checkbox,
+        // 동그라미와 안쪽 점이다. 낱개 배타 선택에 쓴다.
+        //  - 서로 배타적인 묶음은 `choice_group_element`가 낫다.
+        radio,
+        // 미끄러지는 손잡이가 있는 스위치다. 켬/끔이 즉시 반영되는 설정에 쓴다.
+        toggle_switch,
+        // 누른 상태가 남는 글자 버튼이다. 배타 선택은 choice_group으로 묶는다.
+        toggle_button,
+        // 따로 켜고 끄는 알약 모양 칩이다. 켜지면 체크 표시가 붙고 옅은 강조 바탕에 강조 테를 두른다.
+        //  - 서식·거르기처럼 여럿을 함께 켜는 줄에 쓴다. 높이는 글자 버튼과 같다.
+        //  - 폭은 켬/끔과 무관하게 같다 — 체크 자리를 늘 비워 두고 꺼지면 글을 가운데로 옮긴다.
+        //    줄에 맞춰 놓은 칩이 누를 때마다 들썩이지 않는다.
+        toggle_chip,
+    };
+
+    struct check_config
+    {
+        // 같은 화면에 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        check_style style { check_style::checkbox };
+        // 비어 있으면 컨트롤만 그린다 (표 안의 칸처럼 라벨이 밖에 있을 때).
+        std::u8string label {};
+        // 켜졌는지다 (앱 상태).
+        bool checked { false };
+        // 일부만 켜졌다 (앱 상태). 폴더 안의 몇 항목만 고른 것, 고른 항목들의 값이 서로 다른 것이다.
+        //  - 참이면 `checked`보다 앞서 가운데 줄로 그리고, 보조 기술은 일부 상태(Indeterminate)로 읽는다.
+        //  - 체크박스만 뜻이 있다. 라디오와 스위치에는 가운데 상태가 없어 무시한다.
+        //  - 누름은 지금처럼 `toggle` 하나다. 일부 상태에서 무엇이 될지는 앱이 정한다 (보통은 켜짐 —
+        //    Windows 탐색기와 Qt의 기본이다). 자식들의 상태를 모아 이 값을 정하는 것은 `aggregate_check`다.
+        bool mixed { false };
+        // 없으면 컨트롤이 눌리지 않는다.
+        // 바꿀 수 없는 자리에 바꾸는 시늉을 두지 않는다.
+        ui_action toggle {};
+        std::u8string tooltip {};
+    };
+
+    // 체크 하나의 세 상태다.
+    enum class check_state
+    {
+        unchecked,
+        checked,
+        mixed,
+    };
+
+    // 자식들의 상태를 모은 부모의 상태다 (폴더의 체크).
+    //  - 모두 켜졌으면 켜짐, 모두 꺼졌으면 꺼짐, 그 밖(섞였거나 일부 상태인 자식이 있다)은 일부다.
+    //  - 자식이 없으면 꺼짐이다.
+    [[nodiscard]] check_state aggregate_check(std::span<const check_state> children) noexcept;
+
+    // 컨트롤 한 줄의 높이와 표시 부분의 크기다 (논리 픽셀).
+    inline constexpr float check_row_height { 24.0f };
+    inline constexpr float check_box_size { 14.0f };
+    inline constexpr float check_switch_width { 30.0f };
+    inline constexpr float check_switch_height { 16.0f };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>뜻·주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>id <code>{ check, owner }</code>. 같은 화면에서 유일해야 한다 — owner 없는 체크 둘은 겹친다</td></tr>
+                  <tr><td><code>style</code></td><td><code>checkbox</code></td><td>다섯 모양</td></tr>
+                  <tr><td><code>label</code></td><td>빈 글</td><td>비면 컨트롤만 그린다. 있으면 접근 이름이다</td></tr>
+                  <tr><td><code>checked</code></td><td>거짓</td><td>앱 상태. <code>radio</code> 모양은 접근 정보에 <code>selected</code>로 간다</td></tr>
+                  <tr><td><code>mixed</code></td><td>거짓</td><td>앱 상태. <code>checkbox</code>만 뜻이 있다. 누름은 그대로 <code>toggle</code></td></tr>
+                  <tr><td><code>toggle</code></td><td>없음</td><td>눌리지 않고, Tab 자리도 커서도 툴팁도 없다</td></tr>
+                  <tr><td><code>tooltip</code></td><td>빈 글</td><td><strong><code>toggle</code>이 있을 때만 걸린다.</strong> 라벨이 비면 이것이 접근 이름</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="choice_group_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/choice_group_element.h:11-70" data-path="include/luil/ui/choice_group_element.h" data-start="11"><script type="text/plain">
+    // 선택지를 그리는 방식이다.
+    enum class choice_style
+    {
+        // 세로 목록의 라디오 행이다.
+        radio,
+        // 가로로 늘어선 선택 묶음이다 (segmented control). 한 판(트랙) 위에서 고른 칸에만 밝은 판이 뜬다.
+        toggle,
+    };
+
+    // 선택 묶음(`choice_style::toggle`)이 받은 폭을 쓰는 방식이다.
+    enum class choice_width
+    {
+        // 칸을 가장 긴 글에 맞춘 같은 폭으로 놓고 왼쪽에 붙는다. 남는 폭은 비운다.
+        //  - 짧은 글의 칸이 멀리 떨어지지 않아 고른 칸이 한눈에 들어온다.
+        //  - 받은 폭이 모자라면 칸을 같은 비율로 줄인다.
+        fit,
+        // 받은 폭을 칸들이 같은 크기로 나눠 갖는다. 설정 화면에서 여러 줄의 묶음을 같은 폭으로 맞출 때 쓴다.
+        fill,
+    };
+
+    struct choice_item
+    {
+        // 선택지를 가리키는 앱 정의 값이다 (ui_element_id::owner 규약).
+        std::u8string value {};
+        std::u8string label {};
+    };
+
+    // 고른 값을 담은 메시지다.
+    using choice_message_factory = std::function<input_action(const std::u8string& value)>;
+
+    struct choice_group_config
+    {
+        // 같은 화면에 그룹이 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        choice_style style { choice_style::radio };
+        std::vector<choice_item> items {};
+        // 선택된 값이다 (앱 상태).
+        // element는 이 값을 받아 그리고 선택 메시지만 낸다.
+        std::u8string selected {};
+        // 없으면 선택지가 눌리지 않는다.
+        choice_message_factory select {};
+        // 묶음의 이름이다 (「테마」·「유형」·「난이도」).
+        //
+        // **항목만으로는 반쪽이다.** 화면 읽기가 「어두움, 선택됨」까지는 말해도
+        // 무엇을 고르는 중인지는 묶음이 말한다 — 화면에 세운 머리글과 같은 말을
+        // 적는다. 비면 이름 없는 선택 묶음으로 선다.
+        std::u8string name {};
+        // 선택 묶음이 받은 폭을 쓰는 방식이다. 라디오에는 뜻이 없다.
+        choice_width width { choice_width::fit };
+    };
+
+    // 라디오 행 하나의 높이, 선택 묶음 전체(트랙)의 높이다 (논리 픽셀).
+    inline constexpr float choice_radio_row_height { 24.0f };
+    inline constexpr float choice_toggle_height { 26.0f };
+    // 선택 묶음을 여러 줄 쌓을 때 줄 사이에 두는 간격이다 (논리 픽셀).
+    inline constexpr float choice_toggle_gap { 4.0f };
+    // 트랙의 안쪽 여백, 칸 사이 간격, 칸 안의 좌우 여백이다 (논리 픽셀).
+    inline constexpr float choice_track_padding { 2.0f };
+    inline constexpr float choice_segment_gap { 2.0f };
+    inline constexpr float choice_segment_padding { 14.0f };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>뜻·주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>묶음 root의 id다. <strong>항목 id에는 들어가지 않는다</strong></td></tr>
+                  <tr><td><code>style</code></td><td><code>radio</code></td><td>세로 행 / 가로 segmented. 화살표 축도 정한다</td></tr>
+                  <tr><td><code>items</code></td><td>빈 목록</td><td>그리기 순서가 곧 화살표 순서다. <code>value</code>는 항목 id의 owner</td></tr>
+                  <tr><td><code>selected</code></td><td>빈 글</td><td>앱 상태. <code>items</code>에 없으면 아무 항목도 골라 그리지 않고 Tab 진입은 첫 항목</td></tr>
+                  <tr><td><code>select</code></td><td>없음</td><td>항목이 눌리지 않고 묶음이 Tab 순서에서 빠진다</td></tr>
+                  <tr><td><code>name</code></td><td>빈 글</td><td>이름 없는 선택 묶음으로 선다</td></tr>
+                  <tr><td><code>width</code></td><td><code>fit</code></td><td>segmented만. <code>fill</code>이면 받은 폭 전부</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="theme_picker_element">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/theme_picker_element.h:14-31,48-56" data-path="include/luil/ui/theme_picker_element.h" data-start="14"><script type="text/plain">
+    struct theme_picker_config
+    {
+        std::u8string owner {};
+        theme_preference selected { theme_preference::system };
+        // 묶음의 접근 이름이다. 비면 기본 문구("테마")다.
+        std::u8string name {};
+        // 밝게·시스템·어둡게 순서다. 표시 언어는 앱이 정한다. 칸마다 비면 기본 낱말이라 하나만 덮어도 된다.
+        std::array<std::u8string, 3> labels {};
+        std::function<input_action(theme_preference)> select {};
+        std::u8string accent_id { default_accent_id };
+        // 카드 한 장의 폭과 미리 보기 높이, 카드 사이 간격이다 (논리 픽셀).
+        //  - 카드는 이 크기로 고정이다. 받은 폭이 넓어도 늘어나지 않고 왼쪽부터 놓인다 — 미리 보기의 비율이
+        //    창 폭에 따라 일그러지지 않는다.
+        //  - 세 장이 한 줄에 들지 않으면 다음 줄로 넘어간다. 한 장도 들지 않으면 받은 폭으로 줄인다.
+        float card_width { 112.0f };
+        float preview_height { 70.0f };
+        float gap { 12.0f };
+    };
+⋯@48
+    struct accent_picker_config
+    {
+        std::u8string owner {};
+        std::u8string selected { default_accent_id };
+        // 묶음의 접근 이름이다. 비면 기본 문구("강조색")다.
+        std::u8string name {};
+        bool include_system { true };
+        std::function<input_action(const std::u8string&)> select {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>뜻·주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>theme_picker_config::selected</code></td><td><code>theme_preference::system</code></td><td>앱 상태. 카드 차례는 밝게·시스템·어둡게</td></tr>
+                  <tr><td><code>labels</code></td><td>셋 다 빈 글</td><td>칸마다 비면 기본 낱말 (공백만 있는 글은 앱의 글로 쓴다)</td></tr>
+                  <tr><td><code>select</code></td><td>없음</td><td>카드가 눌리지 않고 Tab 자리도 없다</td></tr>
+                  <tr><td><code>accent_id</code></td><td><code>default_accent_id</code></td><td>미리 보기에 쓸 강조색</td></tr>
+                  <tr><td><code>card_width</code> · <code>preview_height</code> · <code>gap</code></td><td>112 · 70 · 12</td><td>카드 폭(최소 48), 미리 보기 높이(최소 32, 카드 높이는 + 26), 카드 사이(음수면 0)</td></tr>
+                  <tr><td><code>accent_picker_config::include_system</code></td><td>참</td><td>OS가 강조색을 알렸을 때만 시스템 견본을 맨 앞에 세운다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">켜짐과 고른 값을 바꾸는 메시지는 셋 — 체크의 <code>toggle</code>, 묶음의 <code>select(value)</code>, 피커의 <code>select</code> — 뿐이다. 초점을 옮기는 키는 메시지를 내지 않는다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>나가는 것</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>체크 줄을 누르고 뗀다 (다섯 모양 모두)</td><td><code>toggle</code> 액션의 메시지</td><td>그 owner의 상태를 바꾼다</td></tr>
+              <tr><td>초점 체크에서 Space·Enter</td><td>같은 <code>toggle</code></td><td>같다</td></tr>
+              <tr><td>일부 상태 체크를 누른다</td><td>같은 <code>toggle</code> 하나 (일부용 메시지는 없다)</td><td>다음 상태를 정한다 (보통 켜짐)</td></tr>
+              <tr><td>보조 기술 Toggle (체크·스위치·토글 단추·칩)</td><td><code>checked</code>가 실려 있으면 클릭과 같은 <code>toggle</code></td><td>같다</td></tr>
+              <tr><td>묶음 항목을 누른다 / Space·Enter</td><td><code>select(value)</code> — 이미 고른 항목이어도 나간다</td><td>고른 값을 바꾼다</td></tr>
+              <tr><td>묶음 안 화살표·Home·End</td><td><strong>없다</strong> — 초점만 옮긴다</td><td>—</td></tr>
+              <tr><td>묶음 안 글자</td><td><strong>없다</strong> — 라벨 접두가 맞는 항목으로 초점만 옮긴다</td><td>—</td></tr>
+              <tr><td>보조 기술 Select (항목)</td><td>이미 골랐으면 아무 일 없음, 아니면 <code>select(value)</code></td><td>같다</td></tr>
+              <tr><td>테마 카드 누름·Space·Enter·Select</td><td><code>select(theme_preference)</code></td><td>저장하고 <code>ui_frame::appearance</code>에 싣는다</td></tr>
+              <tr><td>강조색 견본 누름·Space·Enter·Select</td><td><code>select(강조색 id)</code></td><td>저장해 싣는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>액션 람다는 값만 캡처한다. 묶음의 항목 람다는 묶음 element의 <code>select</code>를 참조로 잡지만, 그 element는 같은 tree 안에 있어 tree가 살아 있는 동안만 불린다. 메뉴와 달리 이 element들은 키 반복을 거르지 않는다 — 누른 채 둔 Space가 체크를 거듭 뒤집는지는 실제 기기에서 돌려 보지 않았다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">낱개 체크는 각자 Tab 자리이고, 묶음은 통째로 한 자리다. 묶음 안에서는 화살표가 초점을, Space·Enter가 선택을 맡는다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="키">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>초점 자리</th><th>하는 일</th></tr></thead>
+                <tbody>
+                  <tr><td>Tab · Shift+Tab</td><td>낱개 체크</td><td>한 자리 (<code>toggle</code>이 있을 때)</td></tr>
+                  <tr><td>Tab · Shift+Tab</td><td>묶음</td><td>묶음 전체가 한 자리. 들어오면 고른 값(없으면 첫 항목)</td></tr>
+                  <tr><td>Tab</td><td>고르지 않은 항목</td><td>묶음을 떠나 다음 자리로 (묶음의 대표 자리에서 센다)</td></tr>
+                  <tr><td>Space · Enter (Shift 허용)</td><td>체크·항목·카드·견본</td><td>그 액션 (<code>toggle</code> / <code>select</code>)</td></tr>
+                  <tr><td>↑ · ↓</td><td>라디오 묶음 (세로)</td><td>이전·다음 항목으로 초점. 끝에서 돈다</td></tr>
+                  <tr><td>← · →</td><td>segmented · 테마 카드(여러 칸) · 강조색 (가로)</td><td>같다</td></tr>
+                  <tr><td>축이 안 맞는 화살표</td><td>라디오의 ←/→, segmented의 ↑/↓</td><td>묶음이 받지 않는다 → <code>key_handler</code>·정책</td></tr>
+                  <tr><td>Home · End</td><td>축이 선 묶음</td><td>첫·끝 항목. 돌지 않고, 이미 끝이어도 키는 묶음이 가진다</td></tr>
+                  <tr><td>화살표 · Home · End</td><td>항목이 하나뿐인 묶음</td><td>받지 않는다</td></tr>
+                  <tr><td>Ctrl · Alt · Meta + 화살표 (macOS Command 포함)</td><td>묶음</td><td>받지 않는다 — 앱 단축키다. Shift는 된다</td></tr>
+                  <tr><td>글자</td><td>묶음</td><td>첫 글자는 <strong>다음</strong> 항목부터, 이어 친 글자는 <strong>지금</strong> 항목부터 라벨 접두를 찾는다 (대소문자 접기). 1초가 끊기거나 초점이 다른 길로 옮기면 새 질의다. 맞는 것이 없으면 자리는 그대로이고 글자는 묶음이 삼킨다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose">
+              <p>화살표는 <strong>그리기 차례</strong>로 돈다. 테마 카드가 2 + 1의 두 줄로 접혀도 축은 가로라 ↑/↓는 묶음의 키가 아니다. 초점 묶음 전반은 <a class="xref" href="input.html#s7">입력과 초점 — 초점의 규칙</a>에 있다.</p>
+            </div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>element</th><th>역할</th><th>이름</th><th>상태</th><th>Windows (UIA)</th></tr></thead>
+                <tbody>
+                  <tr><td><code>checkbox</code></td><td><code>check_box</code></td><td>라벨, 비면 access name → search label → 툴팁</td><td><code>checked</code>, <code>mixed</code></td><td>CheckBox + Toggle (On · Off · Indeterminate)</td></tr>
+                  <tr><td>낱개 <code>radio</code></td><td><code>radio_button</code></td><td>같다</td><td><code>selected</code></td><td>RadioButton + SelectionItem, container 없음</td></tr>
+                  <tr><td><code>toggle_switch</code></td><td><code>toggle_switch</code></td><td>같다</td><td><code>checked</code></td><td>Button + Toggle (스위치 ControlType이 없다)</td></tr>
+                  <tr><td><code>toggle_button</code> · <code>toggle_chip</code></td><td><code>button</code></td><td>같다</td><td><code>checked</code></td><td>Button + Toggle (Invoke 빠짐)</td></tr>
+                  <tr><td>묶음 root</td><td><code>radio_group</code></td><td><code>name</code></td><td>—</td><td>Group + Selection</td></tr>
+                  <tr><td>묶음 항목 (두 모양)</td><td><code>radio_button</code></td><td>라벨</td><td><code>selected</code></td><td>RadioButton + SelectionItem</td></tr>
+                  <tr><td>테마 root / 카드</td><td><code>radio_group</code> / <code>radio_button</code></td><td>이름 / 라벨 (기본 문구)</td><td><code>selected</code></td><td>같다</td></tr>
+                  <tr><td>강조색 root / 견본</td><td><code>radio_group</code> / <code>radio_button</code></td><td>"강조색" / 강조색 이름</td><td><code>selected</code></td><td>같다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose">
+              <ul>
+                <li>macOS: 스위치는 <code>AXCheckBox</code>에 <code>AXSwitch</code> 하위 역할이다. 체크·스위치의 값은 0/1, 일부는 2다. 토글 단추·칩(<code>button</code>)에는 이 값 규칙이 없다. AXPress는 <code>checked</code>가 있으면 Toggle, <code>selected</code>가 있으면 Select로 간다.</li>
+                <li>iOS: 켬·고름은 값이 아니라 Selected trait이고, 일부 상태는 켜졌다고 말하지 않는다.</li>
+                <li>Android: 접근 역할·상태를 소비하는 코드가 없다. 역할 대응 전체는 <a class="xref" href="accessibility.html">접근성</a> 문서에 있다.</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">세 element의 코드에는 플랫폼 분기가 없다. 차이는 입력 장치, OS 상태, 접근성 다리에서 난다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>항목</th><th>내용</th></tr></thead>
+            <tbody>
+              <tr><td>터치의 hover</td><td>없다. hover 바탕은 포인터가 올라 있을 때만이라 터치에서는 눌림만 보인다</td></tr>
+              <tr><td>터치 크기</td><td>체크 줄 24, 단추형 28, segmented 칸 22, 라디오 행 24 (논리 픽셀). 판정 영역을 넓히는 장치는 없다. 체크는 slot을 키워도 bounds가 <code>height_for</code>로 고정이다. 휴대폰 데모는 체크에 44 slot을 준다</td></tr>
+              <tr><td>휴대폰의 묶음 폭</td><td>휴대폰 데모는 <code>fill</code>로 화면 폭에 채운다 — 손가락이 닿는 칸이 넓다</td></tr>
+              <tr><td>휴대폰의 테마 카드</td><td>세 장이 한 줄에 들게 <code>card_width</code>를 줄인다</td></tr>
+              <tr><td>"시스템" 테마</td><td>고대비가 어떤 선호보다 세고, 그다음 OS의 밝은 앱 설정을 따른다</td></tr>
+              <tr><td>시스템 강조색 견본</td><td>Windows·macOS는 OS 강조색을 세운다. Android는 읽어 온 동적 강조색을 세운다. iOS는 비운다 (견본이 서지 않는다). 실제 기기에서 확인하지 않았다</td></tr>
+              <tr><td>기본 낱말</td><td>라이브러리 언어를 따른다 — ko "밝게/시스템/어둡게", en "Light/System/Dark"</td></tr>
+              <tr><td>실행 키의 수식 키</td><td>Ctrl·Alt·Meta(macOS Command 포함)와 함께인 Space·Enter는 체크를 뒤집지 않는다</td></tr>
+              <tr><td>Space의 글자</td><td>Windows(<code>WM_CHAR</code> ' ')와 Android는 Space를 키와 글자로 함께 보낸다. 묶음 안이면 그 공백이 글자 찾기 질의에 붙는다 (아래 함정). macOS·iOS의 순서는 코드에서 확인하지 않았다</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>두 묶음의 같은 값은 항목 id가 겹친다.</strong> 항목 id는 <code>{ choice, value }</code>이고 묶음 owner가 없다. 겹치면 첫 것이 임자가 되어 hover·초점·Tab 진입이 엉킨다. 값에 묶음 접두를 붙인다 (<a class="xref" href="#build-prefix">값 충돌 피하기</a>).</li>
+          <li><strong>체크 owner의 기본값은 빈 글이다.</strong> owner 없는 체크 둘은 id가 같다.</li>
+          <li><strong>화살표로는 고르지 않는다.</strong> 초점만 옮기고 Space·Enter가 고른다. "옮기면 고른다"(초점을 따라가는 선택) 규칙은 라이브러리에 없다. 키보드가 초점을 옮긴 직후 불리는 <code>interaction_policy::on_focus_moved</code>가 메시지를 돌려줄 수 있는 자리이지만 저장소는 그것을 스크롤 되살리기에만 쓴다. 선택에 쓰는 것은 시험하지 않았고, Tab 진입에도 불린다는 점을 앱이 가려야 한다.</li>
+          <li><strong>라디오 묶음·테마·강조색 피커를 <code>add_fit</code>으로 담으면 높이가 0이다.</strong> <code>preferred_size</code>가 없다. <code>height_for</code>로 담는다.</li>
+          <li><strong>segmented <code>fill</code>의 <code>preferred_size</code>는 받은 폭 그대로다.</strong> 헤더 주석은 "<code>fit</code>의 트랙 폭"이라고만 하지만 <code>fill</code>이면 <code>available_width</code>를 답한다. 그런데 가로 stack의 맞춤 항목(<code>add_fit</code>)은 원하는 폭을 <strong>제한 없이</strong>(무한대로) 묻는다 — <code>fill</code> 묶음은 그 무한대를 그대로 답하고 stack은 맞춤 항목의 답을 자르지 않으므로, 가로 줄에 <code>add_fit</code>으로 담으면 그 자리의 폭이 무한대가 된다. 가로 줄에서는 고정 길이나 <code>add_flexible</code>로 담는다. 코드로 읽은 결론이고 시험은 없다.</li>
+          <li><strong>테마·강조색 <code>height_for</code>의 폭은 논리 픽셀이다.</strong> 물리 폭을 주면 줄 수가 틀린다.</li>
+          <li><strong>두 줄로 접힌 테마 카드·강조색에서 ↑/↓가 먹지 않는다.</strong> 축이 가로다 (테마 카드는 한 줄에 한 장일 때만 세로). 헤더는 "방향키로 카드를 오간다"고만 한다. 줄을 오가려면 ←/→로 그리기 차례를 따라간다.</li>
+          <li><strong>같은 글자를 1초 안에 거듭 치면 돌지 않는다.</strong> 이어 친 글자는 질의에 붙으므로 "a", "a"는 "aa"를 찾는다. 그 글자로 시작하는 항목들을 도는 것은 1초를 넘겨 다시 칠 때다 (시험도 그렇게 잠근다).</li>
+          <li><strong>Space로 고른 직후 1초 안에 친 글자는 맞지 않는다 (Windows·Android).</strong> 두 host는 Space를 키와 글자(' ')로 함께 보내고, 묶음의 글자 찾기는 그 공백도 질의에 붙인다. 그래서 질의가 공백으로 시작한다. host가 둘 다 보낸다는 것은 시험이 잠그지만, 그 뒤 글자 찾기가 막히는 것은 코드를 따라가 얻은 결론이다.</li>
+          <li><strong><code>check_style::radio</code>를 켬/끔으로 쓰면 보조 기술은 끌 수 없다.</strong> 라디오는 <code>selected</code>만 싣고, 이미 골라진 것의 Select는 아무 일도 하지 않으며, <code>checked</code>가 없어 Toggle도 없다. 켬/끔이면 <code>checkbox</code>·<code>toggle_switch</code>를 쓴다.</li>
+          <li><strong>체크의 <code>tooltip</code>은 <code>toggle</code>이 없으면 버려진다.</strong> 헤더는 조건을 적지 않는다. 라벨 없는 읽기 전용 체크는 이름도 없다 — 이름이 필요하면 <code>set_access_name</code>을 준다.</li>
+          <li><strong>선택 묶음을 흐리게 끌 공개 칸이 없다.</strong> 설정에 <code>enabled</code>가 없고 root의 <code>set_enabled(false)</code>는 자식에 이어지지 않는다. 그림도 반쪽이다: segmented 칸은 비활성 그림이 있으나 라디오 행은 고리·글 색이 활성 여부를 보지 않는다. 눌리지 않게만 하려면 <code>select</code>를 비운다.</li>
+          <li><strong><code>mixed</code>는 <code>checkbox</code>에만 뜻이 있다.</strong> 토글 단추·칩·스위치·라디오에 줘도 그림과 접근 정보 모두 무시한다.</li>
+          <li><strong>일부 상태의 "다음"은 앱이 정한다.</strong> element는 <code>toggle</code> 하나만 낸다. 부모의 상태는 frame마다 자식에서 다시 모은다.</li>
+          <li><strong>체크 높이는 slot이 아니라 <code>height_for</code>다.</strong> 큰 slot에 담아도 손가락 판정 영역이 커지지 않는다.</li>
+          <li><strong><code>selected</code>가 <code>items</code>에 없으면</strong> 아무 항목도 골라 그려지지 않고 Tab 진입은 첫 항목이다.</li>
+          <li><strong>segmented <code>fit</code>은 왼쪽에 붙는다.</strong> 가운데 정렬은 담는 쪽 배치가 한다.</li>
+          <li><strong>고른 칸을 강조색으로 칠하지 않는다.</strong> 설계다. 강조 채움은 기본 단추의 그림이다.</li>
+          <li><strong>테마를 골라도 화면이 바로 바뀌지 않는다.</strong> 앱이 저장해 <code>ui_frame::appearance</code>에 실어야 한다. 고대비가 켜져 있으면 어떤 선택도 고대비 팔레트로 그린다. 카드 미리 보기는 고대비를 보이지 않는다.</li>
+          <li><strong>같은 owner의 테마 피커 둘은 카드 id가 겹친다.</strong></li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>체크를 누르면 체크가 저절로 켜지나?</summary><div class="faq-a"><p class="faq-short">아니다. <code>toggle</code> 메시지만 나간다.</p><p>앱이 <code>handle</code>에서 상태를 바꾸고 다음 frame에 <code>checked</code>로 넘겨야 켜진다. 시험도 "스스로 뒤집지 않는다"를 잠근다.</p></div></details>
+          <details class="faq"><summary>체크박스와 스위치는 언제 갈라 쓰나?</summary><div class="faq-a"><p class="faq-short">스위치는 켬/끔이 곧바로 반영되는 설정이다.</p><p>"저장" 단추를 눌러야 적용되는 폼에는 체크박스를 쓴다. 메시지와 동작은 같고 그림과 접근 역할(<code>toggle_switch</code>)만 다르다.</p></div></details>
+          <details class="faq"><summary>"일부 선택" 체크는 어떻게 만드나?</summary><div class="faq-a"><p class="faq-short"><code>checkbox</code>에 <code>mixed = true</code>를 준다. 값은 <code>aggregate_check</code>로 모은다.</p><p>자식 상태를 <code>check_state</code>로 모아 넘기면 모두 켜짐·모두 꺼짐·일부가 나온다. <a class="xref" href="#lab">실습</a>에서 자식을 눌러 볼 수 있다.</p></div></details>
+          <details class="faq"><summary>일부 상태에서 누르면 무엇이 되나?</summary><div class="faq-a"><p class="faq-short">앱이 정한다. 보통은 켜짐이다.</p><p>Windows 탐색기와 Qt의 기본이 켜짐이다. 데모 작업대는 "모두 켜져 있지 않으면 모두 켠다"를 쓴다.</p></div></details>
+          <details class="faq"><summary>라디오 단추 여럿은 <code>check_style::radio</code>로 만드나?</summary><div class="faq-a"><p class="faq-short">배타 묶음은 <code>choice_group_element</code>가 낫다.</p><p>Tab 한 자리, 화살표 이동, 이름 있는 <code>radio_group</code>, 진입 자리가 따라온다. 낱개 라디오는 선택 container가 없어 보조 기술이 묶음으로 읽지 못한다.</p></div></details>
+          <details class="faq"><summary>화살표로 옮기면 선택도 바뀌나?</summary><div class="faq-a"><p class="faq-short">아니다. 초점만 옮기고 Space·Enter로 고른다.</p><p>메시지가 없으니 앱 상태도 그대로다. "옮기면 고른다"가 꼭 필요하면 <code>interaction_policy::on_focus_moved</code>에서 직접 메시지를 내야 하는데, 저장소가 그렇게 쓰는 예는 없다.</p></div></details>
+          <details class="faq"><summary>묶음에 Tab으로 들어오면 어디에 서나?</summary><div class="faq-a"><p class="faq-short">고른 값의 항목, 없으면 첫 항목이다.</p><p>묶음이 <code>selected</code>를 진입 자리로 단다. 그 항목이 눌리지 않으면(초점을 받을 수 없으면) 첫 구성원이다.</p></div></details>
+          <details class="faq"><summary>묶음의 높이는 얼마로 잡나?</summary><div class="faq-a"><p class="faq-short"><code>choice_group_element::height_for(config)</code>다.</p><p>라디오는 항목 수 × 24, segmented는 26 (논리 픽셀). 담는 쪽이 배치에 같은 값을 쓴다.</p></div></details>
+          <details class="faq"><summary>segmented 칸이 창 폭에 맞게 늘지 않는다.</summary><div class="faq-a"><p class="faq-short">기본 <code>fit</code>은 가장 긴 글에 맞춘다. 채우려면 <code>width = choice_width::fill</code>이다.</p><p><code>fill</code>은 받은 폭 전부를 같은 크기로 나눈다. 가로 줄에 담을 때는 <code>add_fit</code>이 아니라 고정 길이나 <code>add_flexible</code>로 담는다 (<a class="xref" href="#pitfalls">함정</a>).</p></div></details>
+          <details class="faq"><summary>칸 글이 길면?</summary><div class="faq-a"><p class="faq-short">트랙이 받은 폭보다 넓으면 받은 폭으로 줄고 칸이 같이 준다. 글은 칸 안에서 잘린다.</p><p>칸 안 폭은 양옆 14를 뺀 자리다. 글을 줄이거나 라디오 묶음을 쓴다.</p></div></details>
+          <details class="faq"><summary>두 묶음에 "system"이 둘 다 있으면?</summary><div class="faq-a"><p class="faq-short">항목 id가 겹친다. 값에 접두를 붙인다.</p><p>휴대폰 데모는 언어 칸의 값을 "device-language-system"처럼 지어 넘기고, 메시지에서는 접두를 뗀다.</p></div></details>
+          <details class="faq"><summary>스크린 리더는 묶음을 어떻게 읽나?</summary><div class="faq-a"><p class="faq-short">묶음은 <code>radio_group</code>(이름 = <code>name</code>), 항목은 <code>radio_button</code> + <code>selected</code>다.</p><p>segmented도 같다. <code>name</code>이 비면 이름 없는 선택 묶음이라 "무엇을 고르는 중인가"가 빠진다.</p></div></details>
+          <details class="faq"><summary>토글 단추는 체크와 무엇이 다른가?</summary><div class="faq-a"><p class="faq-short">같은 element의 모양이다.</p><p>글자 단추 모양으로 그리고 <code>button</code> + <code>checked</code>(Toggle 패턴)로 읽힌다. 아이콘 단추의 <code>active</code>와 달리 켜짐이 보조 기술에 실린다 (<a class="xref" href="buttons.html#build-toggle">단추와 명령</a>).</p></div></details>
+          <details class="faq"><summary>서식 막대 단추를 눌러도 편집 칸의 초점이 남게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>set_preserve_pointer_focus(true)</code>를 단다.</p><p>누르는 동안 논리 초점이 칸에 남아 IME 조합이 끊기지 않는다.</p></div></details>
+          <details class="faq"><summary>칩이 켜질 때 폭이 바뀌나?</summary><div class="faq-a"><p class="faq-short">바뀌지 않는다.</p><p>체크 자리를 늘 비워 두고, 꺼지면 글을 그 자리까지 합친 폭의 가운데로 옮긴다.</p></div></details>
+          <details class="faq"><summary>테마 피커의 글을 영어로 바꾸려면?</summary><div class="faq-a"><p class="faq-short"><code>name</code>과 <code>labels</code>(밝게·시스템·어둡게 차례)를 준다.</p><p>비워 두면 라이브러리 언어의 기본 낱말이다. 칸마다 따로 덮을 수 있다.</p></div></details>
+          <details class="faq"><summary>테마를 고른 뒤 무엇을 해야 하나?</summary><div class="faq-a"><p class="faq-short">앱 상태에 저장하고 frame의 <code>appearance</code>에 싣는다.</p><p>데모는 <code>appearance_settings::theme</code>에 넣고 frame마다 <code>ui_frame::appearance</code>로 넘긴다. 실제 팔레트는 UI thread가 OS 상태와 함께 고른다 (<a class="xref" href="theming.html">테마와 스타일</a>).</p></div></details>
+          <details class="faq"><summary>강조색 견본에 "시스템"이 안 보인다.</summary><div class="faq-a"><p class="faq-short">OS가 강조색을 알렸을 때만 선다.</p><p><code>include_system</code>이 참이어도 플랫폼이 강조색을 주지 않으면 견본이 없다. iOS는 비운다.</p></div></details>
+          <details class="faq"><summary>체크를 흐리게 끄려면?</summary><div class="faq-a"><p class="faq-short"><code>set_enabled(false)</code>다.</p><p>선·채움·글이 <code>disabled_foreground</code>로 그려지고 초점을 받지 않는다. 묶음에는 공개 자리가 없어 <code>select</code>를 비우는 것이 길이다.</p></div></details>
+          <details class="faq"><summary>표 안 칸처럼 라벨 없는 체크의 이름은?</summary><div class="faq-a"><p class="faq-short"><code>label</code>을 비우고 <code>tooltip</code>과 <code>toggle</code>을 함께 준다.</p><p>툴팁은 <code>toggle</code>이 있을 때만 걸리므로 둘이 짝이다 (<a class="xref" href="#build-labelless">라벨 없는 체크</a>).</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/check_element.h" target="_blank" rel="noopener">include/luil/ui/check_element.h</a><span class="n">최상위 기호 9</span></div>
+            <div class="hdr-syms"><a href="api.html#check-style" title="열거형"><span class="kb e">E</span>check_style</a><a href="api.html#check-config" title="구조체"><span class="kb t">S</span>check_config</a><a href="api.html#check-state" title="열거형"><span class="kb e">E</span>check_state</a><a href="api.html#aggregate-check" title="함수"><span class="kb f">f</span>aggregate_check</a><a href="api.html#check-row-height" title="상수"><span class="kb ">k</span>check_row_height</a><a href="api.html#check-box-size" title="상수"><span class="kb ">k</span>check_box_size</a><a href="api.html#check-switch-width" title="상수"><span class="kb ">k</span>check_switch_width</a><a href="api.html#check-switch-height" title="상수"><span class="kb ">k</span>check_switch_height</a><a href="api.html#check-element" title="클래스"><span class="kb t">C</span>check_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/choice_group_element.h" target="_blank" rel="noopener">include/luil/ui/choice_group_element.h</a><span class="n">최상위 기호 12</span></div>
+            <div class="hdr-syms"><a href="api.html#choice-style" title="열거형"><span class="kb e">E</span>choice_style</a><a href="api.html#choice-width" title="열거형"><span class="kb e">E</span>choice_width</a><a href="api.html#choice-item" title="구조체"><span class="kb t">S</span>choice_item</a><a href="api.html#choice-message-factory" title="별칭"><span class="kb t">=</span>choice_message_factory</a><a href="api.html#choice-group-config" title="구조체"><span class="kb t">S</span>choice_group_config</a><a href="api.html#choice-radio-row-height" title="상수"><span class="kb ">k</span>choice_radio_row_height</a><a href="api.html#choice-toggle-height" title="상수"><span class="kb ">k</span>choice_toggle_height</a><a href="api.html#choice-toggle-gap" title="상수"><span class="kb ">k</span>choice_toggle_gap</a><a href="api.html#choice-track-padding" title="상수"><span class="kb ">k</span>choice_track_padding</a><a href="api.html#choice-segment-gap" title="상수"><span class="kb ">k</span>choice_segment_gap</a><a href="api.html#choice-segment-padding" title="상수"><span class="kb ">k</span>choice_segment_padding</a><a href="api.html#choice-group-element" title="클래스"><span class="kb t">C</span>choice_group_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/theme_picker_element.h" target="_blank" rel="noopener">include/luil/ui/theme_picker_element.h</a><span class="n">최상위 기호 4</span></div>
+            <div class="hdr-syms"><a href="api.html#theme-picker-config" title="구조체"><span class="kb t">S</span>theme_picker_config</a><a href="api.html#theme-picker-element" title="클래스"><span class="kb t">C</span>theme_picker_element</a><a href="api.html#accent-picker-config" title="구조체"><span class="kb t">S</span>accent_picker_config</a><a href="api.html#accent-picker-element" title="클래스"><span class="kb t">C</span>accent_picker_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<script src="assets/textlab.js"></script>
+<script src="assets/choicemodel.js"></script>
+<script src="assets/choices-lab.js"></script>
+<script>
+  LuilChoicesLab.setupGroup(document.getElementById("cg-lab"));
+  LuilChoicesLab.setupTristate(document.getElementById("tri-lab"));
+</script>
+</body>
+</html>
