@@ -1449,6 +1449,17 @@ input[type="radio"] {
   line-height: 1.5;
 }
 
+/* 실습의 메시지 기록이 아직 비었을 때 */
+.lw [aria-label="메시지 기록"]:empty::before {
+  content: "요소를 누르거나 끌거나 키를 눌러 보라. 요소가 낸 메시지와 앱이 바꾼 상태가 여기에 차례로 쌓인다.";
+  display: block;
+  padding: 10px 12px;
+  color: var(--fg-3);
+  font-family: var(--font-body);
+  font-size: var(--fs-xs);
+  line-height: 1.6;
+}
+
 /* 이벤트 기록 */
 .log {
   font-family: var(--font-code);

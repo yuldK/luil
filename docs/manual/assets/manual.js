@@ -294,60 +294,292 @@
     return String(s || "").normalize("NFC").toLowerCase();
   }
 
-  // 낱말마다 제목·본문에서 찾는다. 한국어는 띄어쓰기가 흔들리므로 공백을 지운 글에서도 찾는다.
-  function searchIndex(data, query) {
+  // 사람들이 흔히 치는 말(외래어·영어)과 설명서가 쓰는 말을 잇는다. 묶음 안의 어느 말로 찾아도 묶음의 다른 말로도 찾는다.
+  // 설명서는 "단추·끌기·초점·글꼴"처럼 우리말을 쓰므로 "버튼·드래그·포커스·폰트"로 찾으면 이 표가 다리를 놓는다.
+  const SEARCH_ALIASES = [
+    ["만들", "만드", "만들기", "짓기", "짓는", "make", "create", "생성", "구현", "implement"],
+    ["드래그", "drag", "끌기", "끌어", "끄는", "끌면", "끌고", "드래그앤드롭", "드래그 앤 드롭", "drag-and-drop", "drag&drop", "dnd"],
+    ["드롭", "drop", "놓기", "놓는", "놓을", "놓으면", "놓아", "놓은", "놓이"],
+    ["다이얼로그", "dialog", "대화 상자", "대화상자", "모달", "modal", "메시지 상자", "메시지박스", "message_box", "messagebox", "알림창"],
+    ["리스트", "list", "목록", "리스트뷰", "listview", "list view"],
+    ["트리", "tree", "계층", "hierarchy"],
+    ["트리 뷰", "트리뷰", "treeview", "tree view", "tree_view"],
+    ["뷰", "view"],
+    ["테이블", "table", "표", "데이터 그리드", "datagrid", "data grid", "그리드뷰", "gridview"],
+    ["윈도우", "window", "창", "윈도"],
+    ["윈도우즈", "윈도우", "windows", "win32"],
+    ["맥", "mac", "macos", "맥os", "osx", "cocoa", "코코아"],
+    ["아이폰", "iphone", "ios", "아이패드", "ipad"],
+    ["안드로이드", "android"],
+    ["모바일", "mobile", "휴대폰", "스마트폰", "phone"],
+    ["포커스", "focus", "초점", "포커싱"],
+    ["포커스 링", "focus ring", "focus_ring", "초점 링", "초점 테두리", "포커스 표시"],
+    ["레이아웃", "layout", "배치"],
+    ["폰트", "font", "글꼴", "서체", "typeface"],
+    ["버튼", "button", "단추"],
+    ["체크박스", "체크 박스", "checkbox", "check_box", "체크 상자"],
+    ["라디오", "radio", "라디오 버튼", "라디오 단추"],
+    ["스위치", "switch", "토글", "toggle"],
+    ["콤보", "combo", "콤보박스", "콤보 박스", "combobox", "드롭다운", "dropdown", "drop_down", "셀렉트", "셀렉트박스", "select box", "선택 상자"],
+    ["팝업", "popup", "pop-up", "팝오버", "popover", "flyout", "플라이아웃"],
+    ["툴팁", "tooltip", "tool tip", "풍선 도움말", "안내 풍선", "힌트", "hint"],
+    ["호버", "hover", "마우스 오버", "mouseover", "마우스를 올리", "마우스 올리", "머무름", "머무르"],
+    ["메뉴", "menu"],
+    ["메뉴바", "메뉴 막대", "menubar", "menu_bar", "menu bar"],
+    ["우클릭", "오른쪽 클릭", "오른쪽 단추", "right click", "right-click", "컨텍스트 메뉴", "컨텍스트메뉴", "context menu", "context_menu"],
+    ["프로그레스", "progress", "진행률", "진행 막대", "진행 표시", "프로그레스바", "progress bar", "로딩 바"],
+    ["스피너", "spinner", "로딩 표시", "busy"],
+    ["캘린더", "calendar", "달력", "날짜 선택", "날짜 고르기", "date picker", "date_picker", "datepicker", "데이트피커"],
+    ["타임피커", "time picker", "time_picker", "timepicker", "시간 선택", "시각 고르기"],
+    ["컬러", "color", "colour", "색", "색상", "색 고르기", "색 판", "컬러 피커", "color picker", "color_picker", "colorpicker"],
+    ["슬라이더", "slider", "트랙바", "trackbar"],
+    ["스크롤", "scroll", "스크롤바", "scrollbar", "스크롤 막대"],
+    ["줌", "zoom", "확대", "축소", "확대 축소"],
+    ["탭", "tab", "tabs", "탭 막대", "tab_bar"],
+    ["이벤트", "event", "사건"],
+    ["렌더링", "rendering", "render", "그리기", "렌더러", "renderer", "paint", "draw"],
+    ["애니메이션", "animation", "animate", "모션", "motion", "움직임", "트랜지션", "transition", "tween", "easing", "이징"],
+    ["실행 취소", "undo", "redo", "되돌리기", "되돌", "다시 실행", "언두", "리두", "히스토리"],
+    ["단축키", "shortcut", "hotkey", "핫키", "키 조합", "가속기", "accelerator", "key_chord", "chord", "키바인딩", "keybinding", "key binding"],
+    ["클립보드", "clipboard", "복사", "붙여넣기", "붙여 넣기", "copy", "paste", "잘라내기", "cut"],
+    ["스레드", "쓰레드", "thread", "스레딩", "threading", "멀티스레드"],
+    ["비동기", "async", "백그라운드", "background", "워커", "worker"],
+    ["타이머", "timer", "interval"],
+    ["다국어", "i18n", "국제화", "현지화", "l10n", "번역", "localization", "localisation", "로캘", "로케일", "locale"],
+    ["접근성", "accessibility", "a11y", "스크린 리더", "스크린리더", "screen reader", "낭독", "narrator", "내레이터", "voiceover", "보이스오버", "talkback", "uia", "보조 기술"],
+    ["고대비", "high contrast", "high_contrast", "하이 콘트라스트", "명암"],
+    ["다크", "dark", "어두운", "어둡게", "다크모드", "다크 모드", "dark mode", "야간 모드"],
+    ["테마", "theme", "스킨", "skin"],
+    ["배율", "dpi", "scale", "스케일", "hidpi", "레티나", "retina", "고해상도"],
+    ["이미지", "image", "그림", "사진", "png", "jpeg", "jpg", "gif", "webp", "svg", "비트맵", "bitmap"],
+    ["비디오", "video", "영상", "동영상", "media_player", "미디어 플레이어"],
+    ["자막", "subtitle", "srt"],
+    ["웹뷰", "webview", "web view", "웹 페이지", "브라우저", "browser"],
+    ["잉크", "ink", "펜", "pen", "필기", "손글씨", "스타일러스", "stylus"],
+    ["텍스트박스", "텍스트 박스", "textbox", "text box", "텍스트 필드", "text field", "textfield", "입력창", "입력 창", "입력 칸", "한 줄 칸", "여러 줄 칸", "text_input", "text_edit", "에디트", "editbox", "텍스트 입력"],
+    ["한글", "한국어", "ime", "입력기", "조합", "composition", "preedit", "한글 입력"],
+    ["라벨", "label", "레이블", "글 표시"],
+    ["마크다운", "markdown"],
+    ["서식", "서식 글", "rich text", "rich_text", "리치 텍스트", "굵게", "bold", "italic", "기울임"],
+    ["구문 강조", "코드 강조", "syntax highlight", "syntax highlighting", "highlight", "하이라이트", "하이라이팅"],
+    ["링크", "link", "하이퍼링크", "hyperlink", "url"],
+    ["줄바꿈", "줄 바꿈", "line break", "line_break", "word wrap", "줄 나눔", "줄 나누기"],
+    ["말줄임", "말 줄임", "ellipsis", "엘립시스", "생략 부호", "truncate", "truncation", "잘림"],
+    ["셀", "cell"],
+    ["컬럼", "칼럼", "column", "열"],
+    ["로우", "row", "행", "줄"],
+    ["정렬", "sort", "sorting", "소트"],
+    ["헤더", "header", "머리글"],
+    ["사이드바", "sidebar", "side bar", "내비게이션", "navigation", "nav"],
+    ["스플리터", "splitter", "split", "분할", "pane"],
+    ["도킹", "docking", "dock", "도크"],
+    ["그리드", "grid", "격자", "바둑판"],
+    ["알림", "notification", "notify", "토스트", "toast", "스낵바", "snackbar", "배너", "banner"],
+    ["시트", "sheet", "바텀 시트", "바텀시트", "bottom sheet", "bottom_sheet", "액션 시트", "action sheet"],
+    ["아이콘", "icon", "codicon", "코디콘", "글리프", "glyph"],
+    ["배지", "badge", "뱃지"],
+    ["경로 막대", "breadcrumb", "브레드크럼", "빵부스러기", "경로 표시"],
+    ["별점", "rating", "평점"],
+    ["숫자 칸", "스핀박스", "spinbox", "spin box", "spin_box", "number box", "numeric", "숫자 입력", "업다운"],
+    ["가상", "virtual", "가상화", "virtualized", "virtualization", "virtualize", "큰 목록", "대용량"],
+    ["다중 선택", "복수 선택", "멀티 선택", "여러 선택", "multi select", "multiselect", "multi-select", "item_selection"],
+    ["선택", "selection", "고르기", "고른", "고름"],
+    ["지연 로딩", "lazy", "lazy loading", "늦게 불러", "게으른"],
+    ["리사이즈", "resize", "크기 조절", "크기 조정", "크기를 바꾸"],
+    ["전체 화면", "전체화면", "fullscreen", "full screen", "풀스크린"],
+    ["트레이", "tray", "시스템 트레이", "알림 영역"],
+    ["앱 바", "app bar", "app_bar", "캡션", "caption", "타이틀바", "title bar", "titlebar", "title_bar", "제목 표시줄"],
+    ["창 여러 개", "다중 창", "멀티 윈도우", "multi window", "multiple windows", "보조 창", "새 창"],
+    ["파일 대화 상자", "파일 열기", "file dialog", "file_dialog", "open file", "파일 고르기", "파일 선택", "save as", "다른 이름으로 저장"],
+    ["네트워크", "network", "http", "https", "fetch", "다운로드", "download", "요청", "request"],
+    ["웹소켓", "websocket", "web socket", "소켓", "socket"],
+    ["smb", "공유 폴더", "네트워크 드라이브", "samba", "삼바"],
+    ["파일 감시", "file watch", "file_watcher", "watcher", "감시", "변경 감지"],
+    ["비밀", "secret", "keychain", "키체인", "credential", "자격 증명", "비밀번호", "password"],
+    ["취소", "cancel", "cancellation", "중단", "abort"],
+    ["재시도", "retry", "되풀이", "다시 시도"],
+    ["저장", "save", "보관", "persist", "persistence", "영속"],
+    ["성능", "performance", "최적화", "optimize", "optimization", "느리", "느려", "버벅"],
+    ["디버그", "debug", "디버깅", "debugging"],
+    ["테스트", "test", "시험", "unit test", "테스팅"],
+    ["빌드", "build", "cmake", "컴파일", "compile", "vcpkg"],
+    ["설치", "install", "시작하기", "첫 앱", "hello world", "헬로 월드", "튜토리얼", "tutorial", "getting started", "입문"],
+    ["위젯", "widget", "컴포넌트", "component", "컨트롤", "control"],
+    ["더블 클릭", "더블클릭", "double click", "double-click", "double_click", "doubleclick", "두 번 누르", "두 번 클릭", "두 번 눌"],
+    ["롱프레스", "롱 프레스", "길게 누르", "길게 눌", "long press", "long_press", "longpress"],
+    ["제스처", "gesture", "핀치", "pinch", "스와이프", "swipe", "플링", "fling", "튕기"],
+    ["마우스", "mouse", "포인터", "pointer"],
+    ["터치", "touch", "손가락"],
+    ["키보드", "keyboard", "키 입력", "key"],
+    ["화살표", "arrow", "방향키", "화살표 키", "arrow key"],
+    ["메시지", "message", "msg"],
+    ["불변", "immutable", "immutability"],
+    ["너비", "폭", "width", "가로 길이"],
+    ["높이", "height", "세로 길이"],
+    ["크기", "size", "사이즈"],
+    ["위치", "position", "좌표", "자리"],
+    ["여백", "padding", "margin", "간격", "gap", "spacing", "틈"],
+    ["맞춤", "정렬", "align", "alignment", "가운데 정렬", "왼쪽 정렬", "오른쪽 정렬"],
+    ["숨기", "숨김", "hide", "hidden", "감추", "안 보이"],
+    ["비활성", "disabled", "disable", "꺼진", "못 누르"],
+    ["기본값", "default", "디폴트"],
+    ["아이템", "item", "항목"],
+    ["노드", "node", "가지"],
+    ["펼치기", "펼침", "펼친", "expand", "expanded", "접힌", "collapse", "collapsed"],
+    ["콜백", "callback", "핸들러", "handler", "액션", "action", "이벤트 핸들러"],
+    ["클릭", "click", "누르", "누름", "눌러"],
+    ["업데이트", "update", "갱신", "다시 그리", "redraw", "repaint", "refresh", "새로 고침", "invalidate"],
+  ];
+  const SEARCH_STOP = new Set(
+    ("어떻게 어떡해 어떻게든 방법 방법은 방법이 무엇 무엇을 무엇이 뭐 뭘 뭔가 뭔가요 왜 언제 어디 어디서 어디에 수 있나 있나요 있어요 있을까 있을까요 " +
+      "있는 있다 없나 없나요 싶다 싶어요 싶은데 싶습니다 하려면 하나요 하나 하는 합니까 합니다 해요 하면 되나요 되나 돼요 되요 좀 것 거 및 그리고 또는 앤 " +
+      "how to do does i the a an is are can in of on for with what why when where which my me and or &").split(" ")
+  );
+  // 질문처럼 친 낱말의 끝("트리 뷰는", "만드나요")을 떼어 본다. 뗀 꼴은 원래 낱말보다 낮게 친다.
+  const SEARCH_ENDINGS = ["하려면", "으려면", "려면", "하나요", "인가요", "할까요", "합니다", "합니까", "되나요", "하는데", "나요", "까요", "에서는", "에서", "으로는", "으로", "에는", "에게", "부터", "까지", "처럼", "하기", "하고", "하는", "하면", "해서", "해도", "하게", "이나", "은", "는", "이", "가", "을", "를", "의", "에", "로", "와", "과", "도", "만", "요", "고", "면"];
+  const ALIAS_MAP = new Map();
+  SEARCH_ALIASES.forEach((group, gi) =>
+    group.forEach((w) => {
+      const k = norm(w);
+      for (const key of new Set([k, k.replace(/\s+/g, "")])) {
+        const list = ALIAS_MAP.get(key) || [];
+        if (!list.includes(gi)) list.push(gi);
+        ALIAS_MAP.set(key, list);
+      }
+    })
+  );
+  const escRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matcherCache = new Map();
+
+  // 사용자가 친 낱말(두 글자 이상)은 글 어디에 들어 있어도 맞는다. 묶음에서 온 말은 낱말 경계를 본다:
+  // 짧은 영어(tab)는 table에 걸리지 않고, 한 글자 한국어(창·표·열)는 앞뒤가 다른 글자가 아니거나 조사가 올 때만 맞는다.
+  function matcherFor(word, exact) {
+    const key = (exact ? "=" : "~") + word;
+    let m = matcherCache.get(key);
+    if (m) return m;
+    const j = word.replace(/\s+/g, "");
+    let re = null;
+    if (!exact && /^[a-z0-9_]+$/.test(j)) re = new RegExp("(^|[^a-z])" + escRe(j) + (j.length <= 3 ? "(?![a-z])" : ""));
+    else if (!exact && /^[가-힣]$/.test(j)) re = new RegExp("(^|[^가-힣])" + j + "(?=$|[^가-힣]|[은는이가을를의에로와과도만으까부처랑])");
+    m = re ? (x) => re.test(x) : (x, xj) => x.includes(word) || xj.includes(j);
+    matcherCache.set(key, m);
+    return m;
+  }
+
+  function searchTerms(query) {
+    const raw = norm(query)
+      .replace(/[?!.,;:"'`()[\]{}<>~…]+(?=\s|$)/g, " ")
+      .replace(/(^|\s)[?!.,;"'`()[\]{}<>~…]+/g, " ")
+      .split(/\s+/)
+      .filter(Boolean);
+    let toks = raw.filter((w) => !SEARCH_STOP.has(w));
+    if (!toks.length) toks = raw;
+    // 두세 낱말이 묶음의 한 말이면("대화 상자", "context menu") 한 낱말로 본다
+    const merged = [];
+    for (let i = 0; i < toks.length; ) {
+      let n = 1;
+      for (const len of [3, 2]) {
+        if (i + len <= toks.length && ALIAS_MAP.has(toks.slice(i, i + len).join(" "))) {
+          n = len;
+          break;
+        }
+      }
+      merged.push(toks.slice(i, i + n).join(" "));
+      i += n;
+    }
+    return merged.map((w) => {
+      // 한 글자 낱말(열·표·창)은 "열린"·"표시"에 걸리지 않게 낱말 경계로 찾는다
+      const alts = [{ s: w, w: 1, m: matcherFor(w, !/^[가-힣]$/.test(w)) }];
+      const seen = new Set([w]);
+      const forms = [w];
+      if (/^[가-힣]{2,}$/.test(w)) for (const e of SEARCH_ENDINGS) if (w.length > e.length && w.endsWith(e)) forms.push(w.slice(0, -e.length));
+      forms.forEach((f, fi) => {
+        if (fi > 0 && !seen.has(f)) {
+          seen.add(f);
+          alts.push({ s: f, w: 0.7, m: matcherFor(f, f.length > 1) });
+        }
+        for (const gi of ALIAS_MAP.get(f) || ALIAS_MAP.get(f.replace(/\s+/g, "")) || []) {
+          for (const a of SEARCH_ALIASES[gi]) {
+            const s = norm(a);
+            if (seen.has(s)) continue;
+            seen.add(s);
+            alts.push({ s, w: 0.8, m: matcherFor(s, false) });
+          }
+        }
+      });
+      return { w, alts };
+    });
+  }
+
+  // 낱말마다 절 제목·문서 제목·본문에서 찾는다. 한국어는 띄어쓰기가 흔들리므로 공백을 지운 글에서도 찾는다.
+  // 절 제목에 맞으면 가장 높고, 문서 제목(그 문서의 모든 절에 붙는다)은 그보다 낮다.
+  // 모든 낱말이 맞으면 덤을 얹는다. 낱말이 둘 이상이면 하나만 빠진 것도 "일부"로 함께 보인다.
+  function searchIndex(data, query, terms) {
     const q = norm(query).trim();
     if (!q) return [];
-    const words = q.split(/\s+/).filter(Boolean);
+    terms = terms || searchTerms(q);
+    const n = terms.length;
+    if (!n) return [];
     const qJoined = q.replace(/\s+/g, "");
     const out = [];
     for (const d of data) {
-      const title = d._t || (d._t = norm(d.st + " " + (d.pt || "")));
+      const st = d._s || (d._s = norm(d.st));
+      const stJ = d._sj || (d._sj = st.replace(/\s+/g, ""));
+      const pt = d._p || (d._p = norm(d.pt));
+      const ptJ = d._pj || (d._pj = pt.replace(/\s+/g, ""));
       const text = d._x || (d._x = norm(d.t));
       const textJ = d._j || (d._j = text.replace(/\s+/g, ""));
-      const titleJ = d._tj || (d._tj = title.replace(/\s+/g, ""));
+      let hit = 0;
       let score = 0;
-      let ok = true;
-      for (const w of words) {
-        const inTitle = title.includes(w) || titleJ.includes(w);
-        const inText = text.includes(w) || textJ.includes(w);
-        if (!inTitle && !inText) {
-          ok = false;
-          break;
+      let inTitle = false;
+      for (const t of terms) {
+        let best = 0;
+        for (const a of t.alts) {
+          if (10 * a.w <= best) continue;
+          if (a.m(st, stJ)) {
+            best = 10 * a.w;
+            inTitle = true;
+          } else if (4 * a.w > best && a.m(pt, ptJ)) best = 4 * a.w;
+          else if (a.w > best && a.m(text, textJ)) best = a.w;
         }
-        score += inTitle ? 10 : 1;
+        if (best) {
+          hit++;
+          score += best;
+        }
       }
-      if (!ok) {
+      if (hit < n && n > 1 && (stJ.includes(qJoined) || textJ.includes(qJoined))) {
         // 낱말로 나누면 놓치는 "트리뷰" 같은 붙여 쓴 질의
-        if (words.length > 1 && (titleJ.includes(qJoined) || textJ.includes(qJoined))) score = titleJ.includes(qJoined) ? 12 : 3;
-        else continue;
+        hit = n;
+        score = stJ.includes(qJoined) ? 20 : 3;
       }
-      if (norm(d.st).startsWith(words[0])) score += 6;
-      if (d.k === "api" && norm(d.st).split("::").pop() === q) score += 30;
-      if (d.k === "page") score += 2;
-      out.push({ d, score });
+      if (!hit || (hit < n && (n < 2 || hit < n - 1))) continue;
+      if (hit === n && n > 1) score += 6;
+      if (n === 1 && st.startsWith(terms[0].w)) score += 6;
+      if (d.k === "api" && st.split("::").pop() === q) score += 30;
+      if (d.k === "page") score += inTitle ? 6 : 2;
+      if (d.k !== "api") score += n > 1 ? 3 : 0.5;
+      out.push({ d, score, part: hit < n });
     }
     out.sort((a, b) => b.score - a.score);
-    return out.slice(0, 24).map((r) => r.d);
+    return out.slice(0, 24).map((r) => (r.part ? Object.assign({ partial: true }, r.d) : r.d));
   }
 
-  function snippet(text, query) {
+  // 결과 글에서 맞은 말 둘레를 잘라 보이고 맞은 말에 표시를 한다.
+  function snippet(text, terms) {
     const t = String(text || "");
-    const words = norm(query).split(/\s+/).filter(Boolean);
     const lower = norm(t);
+    const marks = [];
+    for (const term of terms) for (const a of term.alts) if (a.s.length > 1 || /[a-z0-9]/.test(a.s)) marks.push(a.s);
     let at = -1;
-    for (const w of words) {
-      at = lower.indexOf(w);
+    for (const s of marks) {
+      at = lower.indexOf(s);
       if (at >= 0) break;
     }
     const start = Math.max(0, at - 36);
     const piece = (start > 0 ? "…" : "") + t.slice(start, start + 120) + (start + 120 < t.length ? "…" : "");
     let html = escapeHtml(piece);
-    for (const w of words) {
-      if (!w) continue;
-      const re = new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-      html = html.replace(re, (m) => "<mark>" + m + "</mark>");
-    }
+    const pats = [...new Set(marks.map((s) => escapeHtml(s)))].sort((a, b) => b.length - a.length).map(escRe);
+    if (pats.length) html = html.replace(new RegExp(pats.join("|"), "gi"), (m) => "<mark>" + m + "</mark>");
     return html;
   }
 
@@ -379,7 +611,8 @@
       }
       const data = await loadSearch();
       if (q !== input.value) return;
-      results = searchIndex(data, q);
+      const terms = searchTerms(q);
+      results = searchIndex(data, q, terms);
       pop.textContent = "";
       if (!results.length) {
         pop.append(el("div", { class: "s-empty", text: data.length ? "찾은 것이 없습니다. 다른 낱말이나 API 이름으로 찾아 보세요." : "검색 색인을 싣지 못했습니다." }));
@@ -389,8 +622,8 @@
         const a = el("a", { href, role: "option" });
         a.append(
           el("span", { class: "s-head" }, el("span", { class: "s-kind", text: KIND_LABEL[r.k] || "문서" }), el("span", { class: "s-title", text: r.st })),
-          el("span", { class: "s-where", text: r.pt }),
-          el("span", { class: "s-snip", html: snippet(r.t, q) })
+          el("span", { class: "s-where", text: r.partial ? r.pt + " · 낱말 일부만 맞음" : r.pt }),
+          el("span", { class: "s-snip", html: snippet(r.t, terms) })
         );
         pop.append(a);
       }
@@ -593,6 +826,48 @@
     return lines.map((l) => l.slice(Math.min(min, l.match(/^[ \t]*/)[0].length)));
   }
 
+  // highlight.js의 기본 묶음에 없는 언어(cmake·powershell)는 처음 만날 때 같은 판의 언어 파일을 불러오고,
+  // 그 언어로 된 상자만 줄을 그대로 둔 채 다시 칠한다. 불러오지 못하면 강조 없이 둔다.
+  const codeSource = new WeakMap();
+  const langWait = new Map();
+  function needLanguage(lang, box) {
+    if (!/^[a-z0-9-]+$/.test(lang)) return;
+    if (langWait.has(lang)) {
+      const waiting = langWait.get(lang);
+      if (waiting) waiting.push(box);
+      return;
+    }
+    langWait.set(lang, [box]);
+    const s = document.createElement("script");
+    s.src = "https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/" + lang + ".min.js";
+    s.onload = () => {
+      const boxes = langWait.get(lang) || [];
+      langWait.set(lang, null);
+      if (window.hljs && window.hljs.getLanguage(lang)) boxes.forEach(rehighlight);
+    };
+    s.onerror = () => langWait.set(lang, null);
+    document.head.append(s);
+  }
+
+  function rehighlight(box) {
+    const info = codeSource.get(box);
+    if (!info) return;
+    let html;
+    try {
+      html = window.hljs.highlight(info.plain, { language: info.lang, ignoreIllegals: true }).value;
+    } catch (e) {
+      return;
+    }
+    const hl = splitHighlighted(html);
+    const rows = box.querySelectorAll("pre .ln:not(.gap) .lc");
+    let r = 0;
+    info.gapInfo.forEach((g, i) => {
+      if (g) return;
+      const lc = rows[r++];
+      if (lc) lc.innerHTML = hl[i] || " ";
+    });
+  }
+
   function renderCode(box) {
     if (box.dataset.rendered) return;
     box.dataset.rendered = "1";
@@ -610,13 +885,17 @@
     const commentFor = lang === "cmake" || lang === "powershell" || lang === "bash" || lang === "python" ? "# ⋯" : "// ⋯";
     const plain = lines.map((l, i) => (gapInfo[i] ? commentFor : l)).join("\n");
     let html;
-    if (window.hljs && lang !== "text") {
+    if (window.hljs && lang !== "text" && window.hljs.getLanguage(lang)) {
       try {
         html = window.hljs.highlight(plain, { language: lang, ignoreIllegals: true }).value;
       } catch (e) {
         html = escapeHtml(plain);
       }
-    } else html = escapeHtml(plain);
+    } else {
+      html = escapeHtml(plain);
+      if (window.hljs && lang !== "text") needLanguage(lang, box);
+    }
+    codeSource.set(box, { plain, gapInfo, lang });
     const hl = splitHighlighted(html);
 
     const code = el("code");
