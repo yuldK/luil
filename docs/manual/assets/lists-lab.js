@@ -159,10 +159,11 @@
     }
 
     const cursorKey = () => (multi.checked ? S.selection.cursor : S.cursor || S.selected);
+    // 목록이 보는 커서다: 앱이 이름 댄 항목, 그 키가 모델에 없으면 첫 활성 항목 (virtual_list_element 생성자)
     function cursorIndex() {
       const k = cursorKey();
-      const i = items.findIndex((it) => it.key === k);
-      return i;
+      const i = k ? items.findIndex((it) => it.key === k) : -1;
+      return i >= 0 ? i : items.findIndex((it) => it.enabled);
     }
     const isSelected = (key) => (multi.checked ? T.selectionContains(S.selection, key) : S.selected === key);
 
@@ -377,7 +378,7 @@
         moveCursor(target, ctx, stepLabel(e, NAME[e.key]) + (step.endsWith("_page") ? ` (page_rows ${pr})` : ""));
         return;
       }
-      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !ctrl && !e.shiftKey) {
+      if ((e.key === "ArrowLeft" || e.key === "ArrowRight") && !ctrl && !e.shiftKey && !e.metaKey) {
         e.preventDefault();
         const r = T.stepTree(items, ci, e.key === "ArrowRight", true);
         if (!r) log(NAME[e.key], [], "갈 곳이 없다 — 키를 소비하지 않아 위로 흐른다 (표라면 가로 스크롤이 된다)");
@@ -454,17 +455,45 @@
       } else log(inputLabel, msgs, `앱 정책: 파일을 연다 — "${it.label}"`);
     }
 
-    // 포인터
-    let lastClick = { i: -1, t: 0 };
-    canvas.addEventListener("mousedown", (e) => {
+    // 초점 테: luil은 키보드로 옮긴 초점(Tab)에만 테를 그린다. 누름으로 잡은 초점은 화살표를 눌러도 테가 없다 (focus_visible)
+    let pointerPress = false;
+    view.addEventListener(
+      "mousedown",
+      () => {
+        pointerPress = true;
+        view.classList.remove("kbd");
+        setTimeout(() => (pointerPress = false), 0);
+      },
+      true
+    );
+    view.addEventListener("focus", () => view.classList.toggle("kbd", !pointerPress));
+    view.addEventListener("blur", () => view.classList.remove("kbd"));
+
+    // 포인터: 클릭·두 번 누름은 누를 때가 아니라 뗄 때 난다. 누른 것(행 또는 삼각형) 위에서 떼야 하고, 판정은 뗄 때의 줄로 한다
+    let press = null;
+    let lastClick = { key: null, t: 0, x: 0, y: 0 };
+    function partAt(e) {
       const r = e.target.closest(".tv-row");
-      if (!r) return;
+      if (!r) return null;
+      const i = Number(r.dataset.i);
+      return items[i] ? { i, key: items[i].key, exp: !!e.target.closest("[data-exp]") } : null;
+    }
+    canvas.addEventListener("mousedown", (e) => {
+      const p = partAt(e);
+      if (!p) return;
       e.preventDefault();
       view.focus({ preventScroll: true });
-      const i = Number(r.dataset.i);
+      press = e.button === 0 ? p : null;
+    });
+    canvas.addEventListener("mouseup", (e) => {
+      const p = partAt(e);
+      const pressed = press;
+      press = null;
+      if (e.button !== 0 || !p || !pressed || p.key !== pressed.key || p.exp !== pressed.exp) return;
+      const i = p.i;
       const it = items[i];
-      if (e.button === 2) return;
-      if (e.target.closest("[data-exp]")) {
+      if (p.exp) {
+        lastClick = { key: null, t: 0, x: 0, y: 0 }; // 삼각형은 행과 다른 element라 두 번 누름의 짝이 끊긴다
         setExpanded(it.key, it.expansion !== "expanded", "삼각형 클릭");
         return;
       }
@@ -473,12 +502,13 @@
         return;
       }
       const now = performance.now();
-      if (lastClick.i === i && now - lastClick.t < 500) { // interaction_config::double_click_time 500ms
-        lastClick = { i: -1, t: 0 };
+      // interaction_config::double_click_time 500ms · double_click_distance 4
+      if (lastClick.key === it.key && now - lastClick.t <= 500 && Math.hypot(e.clientX - lastClick.x, e.clientY - lastClick.y) <= 4) {
+        lastClick = { key: null, t: 0, x: 0, y: 0 };
         activate(i, "두 번 누름", "double_click");
         return;
       }
-      lastClick = { i, t: now };
+      lastClick = { key: it.key, t: now, x: e.clientX, y: e.clientY };
       const ctrl = e.ctrlKey || e.metaKey;
       // 누름은 고르기(pick·select)와 커서 옮기기를 함께 낸다. 커서가 이미 그 행이면 커서 메시지는 없다 (move_cursor)
       const moved = cursorIndex() !== i;
@@ -506,6 +536,10 @@
       const r = e.target.closest(".tv-row");
       if (!r) return;
       e.preventDefault();
+      if (e.target.closest("[data-exp]")) {
+        log("삼각형 우클릭", [], "가상 목록의 삼각형에는 우클릭 액션이 없고, 우클릭은 행으로 올라가지 않는다 — 메시지가 없다");
+        return;
+      }
       const it = items[Number(r.dataset.i)];
       if (!it.enabled) return;
       log("우클릭", [`context_menu(${fmtKey(it.key)}, { .position = … })`], "고르지도 커서를 옮기지도 않는다 — 고른 행을 먼저 고를지는 앱이 정한다");

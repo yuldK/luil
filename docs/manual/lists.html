@@ -21,25 +21,26 @@
   .tv-tools label { display: inline-flex; gap: 5px; align-items: center; white-space: nowrap; cursor: pointer; }
   .tv-tools select { font-size: var(--fs-xs); min-height: 26px; }
   .tv { position: relative; height: 266px; overflow: hidden; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--panel); outline: none; font-size: 13px; line-height: 24px; user-select: none; -webkit-user-select: none; touch-action: none; }
-  .tv:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  /* 테는 키보드로 잡은 초점에만 그린다 (luil의 focus_visible). .kbd는 lists-lab.js가 Tab으로 들어올 때 단다 */
+  .tv.kbd:focus { box-shadow: 0 0 0 2px var(--accent); }
   .tv-canvas { position: absolute; left: 0; right: 0; top: 0; }
   .tv-row { position: absolute; left: 0; right: 0; height: 24px; display: flex; align-items: center; gap: 4px; padding-right: 8px; white-space: nowrap; color: var(--fg); cursor: default; }
   .tv-row:hover { background: var(--sunk); }
   .tv-row.sel { background: var(--accent-wash); }
   .tv-row.sel:hover { background: var(--accent-wash-2); }
-  .tv:focus .tv-row.cur::after { content: ""; position: absolute; inset: 1px 2px; border: 1px solid var(--accent); border-radius: 3px; pointer-events: none; }
+  .tv.kbd:focus .tv-row.cur::after { content: ""; position: absolute; inset: 1px 2px; border: 1px solid var(--accent); border-radius: 3px; pointer-events: none; }
   .tv-row.dis { color: var(--fg-3); }
   .tv-row.status { color: var(--fg-2); font-style: italic; }
   .tv-row.status.failed { color: var(--error); font-style: normal; }
   .tv-exp { flex: none; width: 16px; height: 24px; display: grid; place-items: center; color: var(--fg-3); }
   .tv-exp[data-exp] { cursor: pointer; }
   .tv-exp[data-exp]:hover { color: var(--fg); }
-  .tv-exp .ci { font-size: 14px; transition: transform .12s ease; }
+  .tv-exp .ci { font-size: 14px; } /* luil은 삼각형 글리프를 바로 바꾼다 — 움직임이 없다 */
   .tv-exp.open .ci { transform: rotate(90deg); }
   .tv-ico { flex: none; font-size: 15px; color: var(--fg-2); }
   .tv-row.status.loading .tv-ico { animation: tv-spin 1s linear infinite; }
   @keyframes tv-spin { to { transform: rotate(360deg); } }
-  @media (prefers-reduced-motion: reduce) { .tv-row.status.loading .tv-ico { animation: none; } .tv-exp .ci { transition: none; } }
+  @media (prefers-reduced-motion: reduce) { .tv-row.status.loading .tv-ico { animation: none; } }
   .tv-label { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
   .tv-empty { padding: 10px 12px; color: var(--fg-3); font-size: var(--fs-sm); }
   .tv-status { font-family: var(--font-code); font-size: 11px; color: var(--fg-3); }
@@ -132,7 +133,7 @@
           </div>
         </div>
         <div class="prose">
-          <p><strong>트리 뷰는 두 목록의 모드다.</strong> 앱은 지금 보이는 노드만 깊이 우선으로 펴서 줄마다 <code>depth</code>와 <code>expansion</code>(<code>none</code>·<code>collapsed</code>·<code>expanded</code>)을 붙여 넘긴다. 접힌 가지의 자식은 담지 않는다. 그래서 라이브러리에는 트리 모델이 없고, 화살표는 화면 순서 그대로 돈다. 계층 모델을 줄로 펴는 일은 순수 함수 <code>flatten_tree</code>가 돕는다. 표(<code>table_element</code>)의 트리 열도 같은 가상 목록 위에 선다.</p>
+          <p><strong>트리 뷰는 두 목록의 모드다.</strong> 앱은 지금 보이는 노드만 깊이 우선으로 펴서 줄마다 <code>depth</code>와 <code>expansion</code>(<code>none</code>·<code>collapsed</code>·<code>expanded</code>)을 붙여 넘긴다. 접힌 가지의 자식은 담지 않는다. 그래서 라이브러리에는 트리 모델이 없고, 화살표는 화면 순서 그대로 움직인다 (<code>list_element</code>는 끝에서 돌고, 가상 목록은 끝에서 멈춘다). 계층 모델을 줄로 펴는 일은 순수 함수 <code>flatten_tree</code>가 돕는다. 표(<code>table_element</code>)의 트리 열도 같은 가상 목록 위에 선다.</p>
         </div>
         <div class="table-wrap">
           <table class="t">
@@ -378,6 +379,7 @@
 </script></div>
         <div class="prose">
           <p>펼침은 키의 집합이고, 목표 상태 그대로 넣고 뺀다. 같은 메시지가 겹쳐 와도 결과가 같다(멱등). <code>toggle</code>을 쓰면 오래된 frame을 보고 낸 두 번의 클릭이 두 번 뒤집는다.</p>
+          <p>이 앱은 접을 때 고른 키(<code>tree_selected_</code>)를 고치지 않는다. 고른 자식이 든 가지를 접으면 그 행이 사라져 아무것도 고른 것으로 그려지지 않고, 다시 펴면 그 자식이 고른 행으로 다시 선다.</p>
         </div>
         <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">이 모드에는 ←/→가 없다</span><code>list_element</code>의 트리는 그리기와 삼각형만 트리다. 펼치고 접는 길은 삼각형 클릭과 보조 기술의 Expand·Collapse뿐이고, ←/→는 세로 묶음의 키가 아니라 앱 정책으로 흐른다. 키보드로 계층을 다루려면 다음 조각의 가상 목록을 쓴다.</div></div>
       </section>
@@ -446,7 +448,7 @@
         column->add_flexible(std::make_unique<luil::virtual_list_element>(std::move(list)));
 </script></div>
         <div class="prose">
-          <p>저장소 계층 패널이다. 노드 줄은 목록의 기본 행(이름 한 줄)이고, 상태 줄(불러오는 중·실패)만 앱이 <code>build_row</code>로 짓는다 — 상태 줄의 키는 <code>노드 키 + U+001F + loading/failed</code>라서 <code>tree_loading_suffix</code>로 가린다. <code>selected</code>와 <code>cursor</code>에 같은 키를 싣는다. 화살표가 곧 선택인 트리다.</p>
+          <p>저장소 계층 패널이다. 노드 줄은 목록의 기본 행(이름 한 줄)이고, 상태 줄(불러오는 중·실패)만 앱이 <code>build_row</code>로 짓는다 — 상태 줄의 키는 <code>노드 키 + U+001F + loading/failed</code>라서 <code>tree_loading_suffix</code>·<code>tree_failed_suffix</code>로 가린다. <code>selected</code>와 <code>cursor</code>에 같은 키를 싣는다. 화살표가 곧 선택인 트리다.</p>
         </div>
         <h3>펼치면 불러오고, 늦은 결과는 버린다</h3>
         <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:594-637" data-path="examples/demo/workbench_page.cpp" data-start="594"><script type="text/plain">
@@ -604,7 +606,7 @@ TEST_CASE("Left and right walk the hierarchy", "[ui][list][tree][keys]")
             </tbody>
           </table>
         </div>
-        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">커서가 든 가지를 접으면</span>라이브러리는 커서를 고치지 않는다. 커서 키가 모델에서 사라지면 목록은 첫 활성 항목을 커서로 보는데, 앱 상태는 사라진 키를 가리켜 둘이 어긋난다. 접는 메시지를 받은 앱이 커서를 그 가지로 올리는 것이 안전하다 — <a class="xref" href="#build-large">아주 큰 목록</a>의 예가 그렇게 한다.</div></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">커서가 든 가지를 접으면</span>라이브러리는 커서를 고치지 않는다. 커서 키가 모델에서 사라지면 목록은 첫 활성 항목을 커서로 보는데, 앱 상태는 사라진 키를 가리켜 둘이 어긋난다. 그대로 두고 다시 펴면 커서는 그 자식으로 돌아온다. 접는 메시지를 받은 앱이 커서를 그 가지로 올리는 것이 안전하다 — <a class="xref" href="#build-large">아주 큰 목록</a>의 예가 그렇게 한다.</div></div>
       </section>
 
       <section class="sec" id="build-select">
@@ -655,7 +657,7 @@ TEST_CASE("Left and right walk the hierarchy", "[ui][list][tree][keys]")
         }
 </script></div>
         <div class="prose">
-          <p>화살표·Page·Home/End·글자는 <code>move</code>를 내고, 이 앱은 커서만 옮긴다. 누르면 <code>select</code>가 오고 고른 것과 커서를 함께 옮긴다. 화살표가 곧 선택인 목록을 원하면 <code>move</code>를 받을 때 선택도 옮기면 된다 — 정하는 것은 앱이다.</p>
+          <p>화살표·Page·Home/End·글자는 <code>move</code>를 내고, 이 앱은 커서만 옮긴다. 누르면 <code>select</code>와 (그 행이 커서가 아니면) <code>move</code>가 함께 온다 — 위 주석의 "누름에 <code>select</code>만 낸다"는 낡은 말이다. 이 앱이 <code>select</code>에서도 커서를 옮기는 것은 겹칠 뿐 해가 없다. 화살표가 곧 선택인 목록을 원하면 <code>move</code>를 받을 때 선택도 옮기면 된다 — 정하는 것은 앱이다.</p>
         </div>
         <h3>여러 선택: 목록 설정과 handle</h3>
         <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1214-1227" data-path="examples/demo/workbench_page.cpp" data-start="1214"><script type="text/plain">
@@ -850,7 +852,7 @@ TEST_CASE("The selection helpers turn list messages into the next selection", "[
           <ul>
             <li>상태는 켬·끔·일부(<code>check_state::mixed</code>) 셋이고, 다음 상태는 앱이 정한다. 일부를 누르면 보통 켬이다.</li>
             <li>체크 박스는 Tab의 자리가 아니다. 눌러도 초점이 본문 목록에 남는다.</li>
-            <li>Space는 커서 행의 <code>toggle_check</code>다. 단, 본문이 <code>rows.activate</code>를 쓰면 Space는 실행 키라서 체크까지 오지 않는다.</li>
+            <li>Space는 커서 행의 <code>toggle_check</code>다. Shift·Ctrl·Alt·Meta와 함께면 체크가 아니다. 본문이 <code>rows.activate</code>를 쓰면 Space는 실행 키라서 체크까지 오지 않는다.</li>
             <li><strong>라이브러리는 체크를 위아래로 전파하지 않는다.</strong> 폴더의 일부 상태는 앱이 <code>aggregate_check</code>로 계산한다.</li>
           </ul>
         </div>
@@ -966,8 +968,8 @@ namespace sample {
 </script></div>
         <div class="prose">
           <ul>
-            <li><code>reorder(moved, target)</code>를 달면 모든 행이 끌 수 있고 받을 수 있는 자리가 되고, 잡는 손잡이가 선다. 따로 켜는 플래그가 없다 — "손잡이는 있는데 끌리지 않는" 조합이 생기지 않는다.</li>
-            <li>"target 자리로"의 뜻은 앱이 정한다. 이 데모는 "지우고 대상 <strong>앞</strong>에 끼운다"라서 아래로 끌어 놓으면 놓은 행의 바로 위에 선다.</li>
+            <li><code>reorder(moved, target)</code>를 달면 모든 행이 끌 수 있고 받을 수 있는 자리가 되고, 왼쪽에 손잡이 그림이 선다. 손잡이는 그림일 뿐이고 끌기는 행 어디서나 시작한다. 따로 켜는 플래그가 없다 — "손잡이는 있는데 끌리지 않는" 조합이 생기지 않는다.</li>
+            <li>"target 자리로"의 뜻은 앱이 정한다. 이 데모는 "지우고 대상 <strong>앞</strong>에 끼운다"라서 어느 쪽으로 끌든 놓은 행의 바로 위에 선다. 그래서 이 데모로는 맨 끝 자리로 옮길 수 없다. 뒤에 끼울지는 앱이 두 키의 순서를 보고 정할 수 있다.</li>
             <li>받는 쪽은 같은 목록의 행이고, 자기 자신 위와 밖에서 온 파일 끌기는 받지 않는다.</li>
             <li>트리에서는 "저 자리로"가 앞·뒤·자식으로 갈리므로 <code>reorder</code>의 뜻이 하나가 아니다. 계층의 끌어 놓기는 가상 목록의 <code>drop</code>으로 앱이 정한다.</li>
           </ul>
@@ -1026,8 +1028,9 @@ namespace sample {
         <div class="prose">
           <ul>
             <li><code>context.x</code>·<code>context.y</code>는 메뉴를 띄울 자리다 (물리 픽셀, 창 좌표). 수식 키는 그 순간의 것이다.</li>
-            <li>터치의 길게 누르기와 펜의 배럴 버튼도 우클릭이라 이 하나로 함께 선다. 삼각형 위의 우클릭도 그 행의 메뉴다. 비활성 행에서는 나지 않는다.</li>
-            <li>키보드의 Shift+F10은 초점 element에서 root 쪽으로 우클릭 액션을 찾는다. <code>list_element</code>는 초점이 행이라 그 행의 메뉴가 열리지만, <code>virtual_list_element</code>는 초점이 목록 자신이라 <strong>행의 메뉴에 닿지 않는다</strong>(코드에서 확인한 동작). 가상 목록에서 키보드로 메뉴를 열려면 앱이 단축키를 따로 둔다.</li>
+            <li>터치의 길게 누르기와 펜의 배럴 버튼도 우클릭이라 이 하나로 함께 선다. 비활성 행에서는 나지 않는다.</li>
+            <li><code>list_element</code>에서는 삼각형 위의 우클릭도 그 행의 메뉴다. 가상 목록의 삼각형에는 우클릭 액션이 없어 아무 메시지도 나지 않는다 (코드에서 확인한 동작).</li>
+            <li>키보드의 Shift+F10은 초점 element에서 root 쪽으로 우클릭 액션을 찾는다. <code>list_element</code>는 초점이 행이라 그 행의 메뉴가 열리지만, <code>virtual_list_element</code>는 초점이 목록 자신이라 <strong>행의 메뉴에 닿지 않는다</strong>(코드에서 확인한 동작). 초점이 <code>build_row</code>로 지은 행 안의 컨트롤에 있을 때만 조상인 그 행의 메뉴가 열린다. 가상 목록에서 키보드로 메뉴를 열려면 앱이 단축키를 따로 둔다.</li>
             <li><code>build_row</code>가 지은 단추 위의 우클릭은 그 단추의 몫이다. 우클릭은 부모로 올라가지 않는다.</li>
           </ul>
         </div>
@@ -1088,7 +1091,7 @@ TEST_CASE("A second press on the same row sends its key to the double click fact
 </script></div>
         <div class="prose">
           <ul>
-            <li>두 번 누름의 판정은 500ms·4px(<code>double_click_time</code>·<code>double_click_distance</code>)다. 터치는 12 논리 픽셀 허용치다.</li>
+            <li>두 번 누름은 같은 행을 기본 500ms·4px(창 좌표) 안에 다시 누른 것이다 (<code>double_click_time</code>·<code>double_click_distance</code>). 터치는 12 논리 픽셀 허용치다.</li>
             <li><code>activate</code>는 키보드만의 문이다. 목록의 빈 자리(마지막 행 아래)를 눌러도 커서 행이 실행되지 않는다.</li>
             <li>저장소 계층은 <code>activate</code>로 실패 줄의 다시 시도를 실행한다 — 위 <a class="xref" href="#build-lazy">지연 로딩</a> 예의 <code>workbench_tree_activate_intent</code>다.</li>
           </ul>
@@ -1122,7 +1125,7 @@ TEST_CASE("A second press on the same row sends its key to the double click fact
             <li><code>list_element</code>는 모든 행을 tree에 세우므로 십만 줄이 곧 십만 element다. <code>virtual_list_element</code>는 창에 걸치는 행(위아래 <code>overscan</code> 2줄 더)과 커서 행, 창 밖의 고른 행 64개까지만 짓는다.</li>
             <li>공유 모델은 <strong>넘긴 뒤에 고치지 않는다</strong>. 게시된 tree를 여러 thread가 읽으므로, 바꿀 때는 새 vector로 갈아 끼운다. 앞 frame의 tree는 옛 vector를 쥔 채 끝까지 산다.</li>
             <li>설계 문서는 10만 항목을 frame마다 넘기는 비용을 "값으로 약 2.1ms, 공유로 약 0.1ms"로 적는다. 창에 걸치는 구간 찾기는 앞에서부터 높이를 더하는 O(n)이고, 누적 높이 캐시는 아직 없다.</li>
-            <li>트리를 크게 쓸 때는 펼침이 바뀔 때만 <code>flatten_tree</code>를 다시 부르고, 그 사이에는 같은 <code>shared_ptr</code>을 넘긴다. 아래 예가 그 모양이고, 보조 기술이 목록(List)이 아니라 계층(Tree)으로 읽게 역할도 바꾼다 — 기본값은 <code>list</code>·<code>list_item</code>이다.</li>
+            <li>트리를 크게 쓸 때는 펼침이나 모델이 바뀔 때만 <code>flatten_tree</code>를 다시 부르고, 그 사이에는 같은 <code>shared_ptr</code>을 넘긴다. 아래 예가 그 모양이고, 보조 기술이 목록(List)이 아니라 계층(Tree)으로 읽게 역할도 바꾼다 — 기본값은 <code>list</code>·<code>list_item</code>이다.</li>
           </ul>
         </div>
         <div class="code tall" data-lang="cpp" data-label="큰 트리: 공유 모델 + 펼침 캐시 + Tree 역할 (직접 작성)" data-compile="pre-large"><script type="text/plain">
@@ -1148,7 +1151,12 @@ struct tree_scroll_intent
 class big_tree
 {
 public:
-    std::vector<luil::tree_node> roots {};
+    // 모델을 갈아 끼운다 (불러온 결과를 들일 때도 여기다). 편 줄을 버려 다음 build가 다시 편다.
+    void set_roots(std::vector<luil::tree_node> roots)
+    {
+        roots_ = std::move(roots);
+        rows_.reset();
+    }
 
     // tree_expand_intent를 받은 자리다.
     void expand(const std::u8string& key, const bool expanded)
@@ -1178,7 +1186,7 @@ public:
     {
         // 바뀌지 않은 frame에는 같은 vector를 공유해 넘긴다 (참조 수 하나만 오른다).
         if (rows_ == nullptr)
-            rows_ = std::make_shared<const std::vector<luil::virtual_list_item>>(luil::tree_row_items(luil::flatten_tree(roots, expanded_)));
+            rows_ = std::make_shared<const std::vector<luil::virtual_list_item>>(luil::tree_row_items(luil::flatten_tree(roots_, expanded_)));
         scroll_ = luil::clamp_scroll(luil::virtual_list_content_height(*rows_, row_height), viewport_height, scroll_);
 
         luil::virtual_list_config config {};
@@ -1202,6 +1210,7 @@ public:
 
 private:
     static constexpr float row_height { 22.0f };
+    std::vector<luil::tree_node> roots_ {};
     std::unordered_set<std::u8string> expanded_ {};
     std::shared_ptr<const std::vector<luil::virtual_list_item>> rows_ {};
     std::u8string cursor_ {};
@@ -1216,6 +1225,7 @@ private:
 #include <memory>
 #include <string>
 #include <unordered_set>
+#include <utility>
 #include <vector>
 namespace sample {
 /*SAMPLE*/
@@ -1326,7 +1336,7 @@ struct pick_file_intent
         <div class="prose">
           <ul>
             <li>빈 <code>list_element</code>는 행이 없으니 Tab의 자리가 없다.</li>
-            <li>빈 <code>virtual_list_element</code>는 <code>move</code>나 <code>activate</code>가 있으면 Tab의 자리로 남는다. 화살표는 갈 곳이 없어 삼키고, Space·Enter는 커서가 없어 아무것도 내지 않는다.</li>
+            <li>빈 <code>virtual_list_element</code>는 <code>move</code>·<code>move_with</code>·<code>activate</code> 중 하나라도 있으면 Tab의 자리로 남는다. 화살표는 갈 곳이 없어 삼키고, Space·Enter는 커서가 없어 아무것도 내지 않는다.</li>
           </ul>
         </div>
       </section>
@@ -1887,7 +1897,7 @@ struct pick_file_intent
               <tr><td>휠 · 막대</td><td><code>scroll(delta)</code> · <code>scroll_to(offset)</code></td><td><code>scroll(delta)</code> · <code>scroll_to(offset)</code></td></tr>
               <tr><td>보조 기술 Expand · Collapse</td><td><code>set_expanded</code>. <code>toggle</code>만 있으면 거절된다</td><td><code>set_expanded</code></td></tr>
               <tr><td>보조 기술 Add · RemoveFromSelection</td><td>—</td><td><code>add_to_selection</code>·<code>remove_from_selection</code>, 없으면 <code>pick(key, { .control = true })</code></td></tr>
-              <tr><td>그룹 머리행 클릭 · Space · Enter</td><td colspan="2"><code>grouped_list_config::activate(그룹 키)</code></td></tr>
+              <tr><td>그룹 머리행 클릭 · Space · Enter</td><td colspan="2"><code>grouped_list_element</code>의 일이다: <code>grouped_list_config::activate(그룹 키)</code></td></tr>
             </tbody>
           </table>
         </div>
@@ -1945,14 +1955,14 @@ struct pick_file_intent
                   <tr><td>↑ · ↓</td><td>활성 항목 한 칸. 비활성은 건너뛰고 칸으로 세지 않는다. <strong>끝에서 멈춘다</strong> (삼키고 메시지 없음)</td></tr>
                   <tr><td>PageUp · PageDown</td><td>커서부터 <strong>실제 행 높이</strong>를 더해 창 높이를 넘기 전까지. 칸 수는 활성 행만 센다</td></tr>
                   <tr><td>Home · End</td><td>모델의 처음·끝 <strong>활성</strong> 항목</td></tr>
-                  <tr><td>커서를 모를 때</td><td>첫 걸음이 첫 활성 항목을 집는다</td></tr>
+                  <tr><td>커서가 빌 때</td><td><code>cursor</code>가 비면 <code>selected</code>가 커서다. 그 키도 비었거나 모델에 없으면 첫 활성 항목이 커서다. 그래서 커서를 주지 않은 목록의 첫 ↓는 둘째 활성 항목으로 간다</td></tr>
                   <tr><td>← · → (계층)</td><td><a class="xref" href="#build-lazy">←/→ 표</a>대로. Ctrl·Shift와 함께면 계층 키가 아니다</td></tr>
                   <tr><td>Shift + 단계 키</td><td><code>move_with</code>면 <code>extend</code>. <code>move</code>만 든 목록에서는 Shift가 보이지 않아 그냥 이동이다</td></tr>
                   <tr><td>Ctrl + 단계 키</td><td><code>move_with</code>면 <code>keep_selection</code>(커서만). <code>move</code>만이면 앱 단축키다</td></tr>
                   <tr><td>Space · Enter</td><td><code>activate(커서 키)</code>. 비활성 커서면 아무것도 내지 않는다. <code>activate</code>가 없으면 키가 앱으로 흐른다</td></tr>
                   <tr><td>Ctrl+Space · Ctrl+A</td><td><code>toggle_at_cursor</code> · <code>select_all</code> (여러 선택만). 비활성 커서의 Ctrl+Space는 삼킨다</td></tr>
                   <tr><td>글자</td><td>모델 <strong>전체</strong>에서 <code>label</code> 접두를 대소문자 없이 찾는다. 첫 글자는 커서 다음부터, 1초 안에 이어 친 글자는 커서부터. 끝에서 처음으로 돈다. 못 찾아도 글자는 목록이 삼킨다</td></tr>
-                  <tr><td>Shift+F10</td><td>행의 메뉴에 닿지 않는다 (초점이 목록 자신이라서 — 코드에서 확인한 동작)</td></tr>
+                  <tr><td>Shift+F10</td><td>행의 메뉴에 닿지 않는다 (초점이 목록 자신이라서 — 코드에서 확인한 동작). 초점이 행 안의 컨트롤에 있으면 그 행의 메뉴다</td></tr>
                 </tbody>
               </table>
             </div>
@@ -2009,7 +2019,7 @@ struct pick_file_intent
               <tr><td>두 번 탭</td><td>같은 대상에서 500ms·12 논리 픽셀 안이면 <code>double_click</code>. 마우스 클릭 뒤의 탭은 두 번 탭이 아니다</td></tr>
               <tr><td>길게 누르기</td><td>움직이지 않고 600ms면 손을 떼기 전에 <strong>우클릭</strong> → <code>context_menu</code>. 우클릭 액션이 없는 대상은 길게 눌러도 탭이다</td></tr>
               <tr><td>빠른 쓸기</td><td>400ms 안에 축 방향으로 12 논리 픽셀을 넘기면 스크롤. 놓으면 관성으로 잇는다</td></tr>
-              <tr><td>끌기 (순서 바꾸기)</td><td>스크롤이 될 수 없게 된 뒤에야 선다: 400ms의 스크롤 창이 닫힐 때까지 거의 움직이지 않다가, 길게 누르기(600ms)가 차기 전에 12 논리 픽셀 넘게 움직인다. 흘릴 것이 없는 목록에서는 바로 끌기다</td></tr>
+              <tr><td>끌기 (순서 바꾸기)</td><td>스크롤이 될 수 없게 된 뒤에야 선다: 400ms의 스크롤 창이 닫힐 때까지 거의 움직이지 않다가 12 논리 픽셀 넘게 움직인다. 행에 메뉴(우클릭 액션)가 있으면 길게 누르기(600ms)가 차기 전이어야 한다. 흘릴 것이 없는 목록에서는 바로 끌기다</td></tr>
               <tr><td>펜 배럴 버튼</td><td>우클릭이다</td></tr>
               <tr><td>쓸어서 지우기</td><td>목록에 없다</td></tr>
             </tbody>
@@ -2036,7 +2046,7 @@ struct pick_file_intent
           <li><strong>펼침은 앱의 것이다.</strong> 삼각형을 눌러도 앱이 펼친 집합을 고쳐 다시 평탄화하지 않으면 화면이 그대로다. 접힌 가지의 자식을 <code>items</code>에 넣으면 그대로 보인다 — 라이브러리는 거르지 않는다.</li>
           <li><strong><code>toggle</code>만 주면 보조 기술이 펼칠 수 없다.</strong> Expand·Collapse는 절대값 <code>set_expanded</code>로만 선다.</li>
           <li><strong>factory 없이 <code>expansion</code>만 주면 삼각형이 없다.</strong> 그런데 그 행은 보조 기술에 펼침 상태를 그대로 알린다.</li>
-          <li><strong>고른 자식·커서가 든 가지를 접어도 라이브러리는 아무것도 고치지 않는다.</strong> <code>list_element</code>는 그 행이 사라져 초점이 거둬지고 <code>selected</code>는 낡은 채 남는다. 가상 목록은 첫 활성 항목을 커서로 그리지만 앱의 <code>cursor</code>는 옛 키다. 앱이 커서를 부모로 올리거나 <code>selection_reconcile</code>을 부른다 — 이때 커서는 접힌 가지 <strong>다음</strong> 줄로 간다(다음이 없을 때만 앞쪽).</li>
+          <li><strong>고른 자식·커서가 든 가지를 접어도 라이브러리는 아무것도 고치지 않는다.</strong> <code>list_element</code>는 그 행이 사라져 초점이 거둬지고 <code>selected</code>는 낡은 채 남는다. 가상 목록은 첫 활성 항목을 커서로 그리지만 앱의 <code>cursor</code>는 옛 키다. 그대로 두고 다시 펴면 낡은 자식이 고른 행(가상 목록은 커서도)으로 다시 나타난다. 앱이 커서를 부모로 올리거나 <code>selection_reconcile</code>을 부른다 — 이때 커서는 접힌 가지 <strong>다음</strong> 줄로 간다(다음이 없을 때만 앞쪽).</li>
           <li><strong>큰 모델을 <code>items</code>로 넘기면 frame마다 모델만큼 복사한다.</strong> <code>shared_items</code>로 넘기고, 넘긴 vector는 고치지 말고 갈아 끼운다.</li>
           <li><strong><code>list_element</code>에 보이는 행만 잘라 넣지 않는다.</strong> End와 화살표가 데이터 전체가 아니라 잘라 넣은 부분으로 조용히 좁아진다. 많으면 가상 목록이다.</li>
           <li><strong>tree를 짓기 전에 <code>clamp_scroll</code>로 스크롤 값을 다듬는다.</strong> 앱 값과 목록이 재는 값이 어긋나면 커서를 따라가는 스크롤이 한 번에 닿지 않는다.</li>
@@ -2064,7 +2074,7 @@ struct pick_file_intent
           <details class="faq"><summary>트리 뷰는 어떻게 만드나?</summary><div class="faq-a"><p class="faq-short">트리 전용 element는 없다. 지금 보이는 노드만 깊이 우선으로 펴서 <code>depth</code>·<code>expansion</code>과 함께 넘긴다.</p><p>작은 트리는 <code>list_element</code>에 <code>set_expanded</code>를 단다 (<a class="xref" href="#build-tree">작은 트리</a>). 크거나 ←/→가 필요하면 <code>virtual_list_element</code>에 <code>set_expanded</code>를 단다 (<a class="xref" href="#build-lazy">지연 로딩</a>). 계층 모델을 펴는 일은 <code>flatten_tree</code>가 한다.</p></div></details>
           <details class="faq"><summary>펼침 상태는 누가 들고 있나?</summary><div class="faq-a"><p class="faq-short">앱이다. 목록은 <code>toggle(key)</code>나 <code>set_expanded(key, bool)</code> 메시지만 낸다.</p><p>데모는 <code>std::vector&lt;std::u8string&gt;</code>에, 작업대는 <code>std::unordered_set&lt;std::u8string&gt;</code>에 든다. 앱이 그 집합으로 다시 평탄화하지 않으면 삼각형을 눌러도 화면이 그대로다.</p></div></details>
           <details class="faq"><summary>여러 개를 고르려면?</summary><div class="faq-a"><p class="faq-short"><code>virtual_list_element</code>에서 <code>multiple_selection = true</code>를 켜고 <code>selection_model.h</code>로 계산한다. <code>list_element</code>는 단일 선택이다.</p><p><code>selection</code>·<code>cursor</code>를 싣고 <code>pick</code>·<code>move_with</code>·<code>toggle_at_cursor</code>·<code>select_all</code>을 단다. 받은 메시지는 <code>selection_pick</code>·<code>selection_move</code>·<code>selection_toggle</code>·<code>selection_select_all</code>로 다음 값을 계산한다 (<a class="xref" href="#build-select">선택</a>).</p></div></details>
-          <details class="faq"><summary>노드가 10만 개면?</summary><div class="faq-a"><p class="faq-short"><code>virtual_list_element</code>를 쓰고 모델은 <code>shared_items</code>로 공유해 넘긴다.</p><p>tree에 서는 것은 창에 걸치는 행과 커서 행, 창 밖의 고른 행(64개까지)뿐이다. 펼침이 바뀔 때만 <code>flatten_tree</code>를 다시 부른다 (<a class="xref" href="#build-large">아주 큰 목록</a>). 걸치는 구간 계산은 여전히 frame마다 O(n) 더하기다.</p></div></details>
+          <details class="faq"><summary>노드가 10만 개면?</summary><div class="faq-a"><p class="faq-short"><code>virtual_list_element</code>를 쓰고 모델은 <code>shared_items</code>로 공유해 넘긴다.</p><p>tree에 서는 것은 창에 걸치는 행과 커서 행, 창 밖의 고른 행(64개까지)뿐이다. 펼침이나 모델이 바뀔 때만 <code>flatten_tree</code>를 다시 부른다 (<a class="xref" href="#build-large">아주 큰 목록</a>). 걸치는 구간 계산은 여전히 frame마다 O(n) 더하기다.</p></div></details>
           <details class="faq"><summary>화살표로 움직이면 선택도 따라오나?</summary><div class="faq-a"><p class="faq-short"><code>list_element</code>는 따라오지 않는다. 가상 목록은 <code>move</code>를 받은 앱이 정한다.</p><p><code>list_element</code>는 초점만 옮기고 Space·Enter·클릭이 <code>select</code>를 낸다. 작업대 트리는 <code>move</code>와 <code>select</code>에 같은 메시지를 줘서 "화살표 = 선택"으로 만들고, 로그 목록은 커서만 옮긴다.</p></div></details>
           <details class="faq"><summary>←/→로 접고 펴거나 부모로 갈 수 있나?</summary><div class="faq-a"><p class="faq-short"><code>virtual_list_element</code>에 <code>set_expanded</code>가 있을 때만 된다.</p><p>←는 펼친 가지를 접고, 접혔거나 잎이면 부모로 간다. →는 접힌 가지를 펴고, 펼친 가지면 첫 자식으로 간다. <code>list_element</code>에서 ←/→는 앱 정책으로 흐른다.</p></div></details>
           <details class="faq"><summary>클릭은 "고르기", Enter와 더블 클릭은 "열기"로 가르려면?</summary><div class="faq-a"><p class="faq-short">가상 목록에 <code>select</code>(클릭), <code>activate</code>(Enter·Space), <code>double_click</code>(두 번 누름)을 따로 준다.</p><p><code>list_element</code>에는 그 갈래가 없다 — Enter가 곧 <code>select</code>다.</p></div></details>
@@ -2072,7 +2082,7 @@ struct pick_file_intent
           <details class="faq"><summary>행에 체크 박스를 둘 수 있나? 폴더의 "일부"는?</summary><div class="faq-a"><p class="faq-short">목록 설정에는 없다. 표의 <code>check_column</code>·<code>check_state_of</code>·<code>toggle_check</code>를 쓴다.</p><p>폴더의 일부 상태는 앱이 <code>aggregate_check</code>로 계산해 <code>check_state::mixed</code>로 답한다. 가지를 누르면 자식 전부를 바꾸는 전파도 앱이 한다 (<a class="xref" href="#build-check">체크 박스</a>).</p></div></details>
           <details class="faq"><summary>끌어서 순서를 바꿀 때 "앞에/뒤에/안에"는?</summary><div class="faq-a"><p class="faq-short">라이브러리는 구분하지 않는다. 놓을 자리는 언제나 행 전체다.</p><p><code>list_element</code>는 <code>reorder(moved, target)</code> 하나이고 데모는 대상 앞에 끼운다. 가상 목록은 받는 행에 <code>drop</code>이 오고 뜻은 앱이 정한다.</p></div></details>
           <details class="faq"><summary>같은 키를 두 목록에 써도 되나?</summary><div class="faq-a"><p class="faq-short">가상 목록끼리는 된다. <code>list_element</code>끼리는 안 된다.</p><p>가상 목록의 자리표에는 목록 owner가 든다. <code>list_element</code>의 행 id는 <code>{ list_row, key }</code>라 같은 표면에서 겹치면 <code>duplicate_ids()</code>에 나타나고 초점·액션이 첫 행으로 간다.</p></div></details>
-          <details class="faq"><summary>고른 자식이 든 부모를 접으면 선택과 초점은?</summary><div class="faq-a"><p class="faq-short">라이브러리는 고치지 않는다. 앱이 고친다.</p><p><code>list_element</code>는 초점 행이 사라져 초점이 거둬지고, <code>selected</code>는 그대로지만 그 행이 없어 고른 것으로 그려지지 않는다. 가상 목록은 첫 활성 항목을 커서로 본다. 앱이 커서를 부모로 올리거나, <code>selection_reconcile</code>을 부르면 커서가 접힌 가지 다음 줄로 간다.</p></div></details>
+          <details class="faq"><summary>고른 자식이 든 부모를 접으면 선택과 초점은?</summary><div class="faq-a"><p class="faq-short">라이브러리는 고치지 않는다. 앱이 고친다.</p><p><code>list_element</code>는 초점 행이 사라져 초점이 거둬지고, <code>selected</code>는 그대로지만 그 행이 없어 고른 것으로 그려지지 않는다. 가상 목록은 첫 활성 항목을 커서로 본다. 그대로 두고 다시 펴면 그 자식이 다시 고른 행(가상 목록은 커서도)이 된다. 앱이 커서를 부모로 올리거나, <code>selection_reconcile</code>을 부르면 커서가 접힌 가지 다음 줄로 간다.</p></div></details>
           <details class="faq"><summary>펼칠 때 자식을 불러오려면 (지연 로딩)?</summary><div class="faq-a"><p class="faq-short">노드를 <code>node_load::unloaded</code>로 두고, 펼침 메시지에서 <code>tree_nodes_to_load</code>와 <code>request_ledger</code>로 요청한다.</p><p>자식이 없어도 <code>unloaded</code>면 가지로 보인다. 요청한 노드는 <code>loading</code>으로 바꾸고, 결과는 <code>settle</code>이 참일 때만 들인다. 실패 줄은 Enter로 다시 시도할 수 있게 활성이다 (<a class="xref" href="#lab">실습</a>에서 해 볼 수 있다).</p></div></details>
           <details class="faq"><summary>스크린 리더가 Tree로 읽게 하려면?</summary><div class="faq-a"><p class="faq-short">가상 목록에서 <code>role = access_role::tree</code>, <code>row_role = access_role::tree_item</code>을 준다.</p><p>Windows는 Tree / TreeItem이 되고 <code>Level</code>은 모델의 깊이에서 난다. <code>list_element</code>로는 할 수 없다. macOS는 AXOutline이 되지만 평탄화한 행의 AXDisclosureLevel은 0이다.</p></div></details>
           <details class="faq"><summary>휠을 굴려도 <code>list_element</code>가 흐르지 않는다.</summary><div class="faq-a"><p class="faq-short"><code>scroll</code> factory가 있는지, 앱 정책의 <code>on_wheel</code>이 <code>route_wheel</code>을 부르는지 본다.</p><p><code>scroll</code>이 있고 내용이 넘쳐야 목록이 흘리는 자리가 된다. 앱 정책이 있으면 휠은 <code>on_wheel</code>로만 가는데 기본 구현은 아무것도 하지 않는다.</p></div></details>
