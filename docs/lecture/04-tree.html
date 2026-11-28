@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>04 불변 UI tree · luil 해부학</title>
+<meta name="description" content="luil 해부학 4강. frame마다 새로 짓는 불변 element tree, 값으로 된 id, tree가 한 번 짓는 색인, 위에서부터 찾는 hit test, 그리기 순서와 Tab 순서, 조용한 오동작을 드러내는 진단.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .tree-lab { display: grid; gap: 16px; }
+  @media (min-width: 980px) { .tree-lab { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .surface { position: relative; width: 100%; max-width: 420px; aspect-ratio: 320 / 236; border: 1px solid var(--line-2); border-radius: var(--r-window); background: var(--bg); overflow: hidden; touch-action: manipulation; user-select: none; -webkit-user-select: none; }
+  .surface .el { position: absolute; box-sizing: border-box; font-size: clamp(10px, 2.9cqw, 12.5px); line-height: 1.2; display: flex; align-items: center; gap: 6px; padding: 0 8px; overflow: hidden; white-space: nowrap; }
+  .surface { container-type: inline-size; }
+  .surface .el.caption { background: var(--panel-2); border-bottom: 1px solid var(--line); font-weight: 600; }
+  .surface .el.title { color: var(--fg-2); }
+  .surface .el.row { border-radius: var(--r-row); cursor: pointer; }
+  .surface .el.row.hover { background: var(--sunk); box-shadow: inset 0 0 0 1px var(--line-2); }
+  .surface .el.row.dupe-hover { box-shadow: inset 0 0 0 2px var(--error); }
+  .surface .el.row .box { width: 14px; height: 14px; border-radius: 3px; border: 1px solid var(--line-3); display: inline-grid; place-items: center; flex: none; font-family: codicon; font-size: 11px; }
+  .surface .el.row.done .box { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .surface .el.row.done .txt { text-decoration: line-through; color: var(--fg-3); }
+  .surface .el.button { justify-content: center; border: 1px solid var(--line-2); border-radius: var(--r-control); background: var(--panel); cursor: pointer; }
+  .surface .el.button.hover { background: var(--sunk); }
+  .tree-view { font-family: var(--font-code); font-size: 12px; line-height: 1.75; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); padding: 8px 10px; overflow-x: auto; }
+  .tree-view .ln { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; white-space: nowrap; border-radius: 3px; padding: 0 4px; }
+  .tree-view .ln.hover { background: var(--accent-wash); }
+  .tree-view .ln > span:first-child { white-space: pre; }
+  .tree-view .obj { color: var(--fg-3); }
+  .tree-view .obj.new { color: var(--accent-ink); }
+  .tree-view .warn { color: var(--error); }
+  .tree-view .kind { color: var(--syn-type); }
+  .diag { display: grid; gap: 6px; font-size: var(--fs-sm); }
+  .diag .row { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+  .diag code.bad { border-color: var(--error); color: var(--error); }
+  .hit-scene { position: relative; width: 100%; max-width: 520px; aspect-ratio: 360 / 220; border: 1px solid var(--line-2); border-radius: var(--r-window); background: var(--bg); overflow: hidden; container-type: inline-size; touch-action: none; user-select: none; -webkit-user-select: none; cursor: crosshair; }
+  .hit-scene .n { position: absolute; box-sizing: border-box; font-size: clamp(9px, 3cqw, 12px); display: flex; align-items: center; padding: 0 6px; white-space: nowrap; overflow: hidden; pointer-events: none; }
+  .hit-scene .n.panel { border: 1px solid var(--line-2); background: var(--panel); align-items: flex-start; padding-top: 3px; color: var(--fg-3); }
+  .hit-scene .n.row { border: 1px solid var(--line); background: var(--panel-2); border-radius: 3px; }
+  .hit-scene .n.btn { border: 1px solid var(--line-2); border-radius: 3px; background: var(--panel); justify-content: center; }
+  .hit-scene .n.popup { border: 1px solid var(--line-3); border-radius: 4px; background: var(--panel); box-shadow: 0 6px 18px #0000002a; align-items: flex-end; padding-bottom: 4px; color: var(--fg-3); }
+  .hit-scene .n.item { border-radius: 3px; }
+  .hit-scene .n.hit { box-shadow: inset 0 0 0 2px var(--accent); background: var(--accent-wash); color: var(--fg); }
+  .hit-scene .badge { position: absolute; font-family: var(--font-code); font-size: 10px; width: 17px; height: 17px; border-radius: 50%; background: var(--t-ui); color: #fff; display: grid; place-items: center; pointer-events: none; }
+  .hit-scene .cross { position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px; pointer-events: none; border: 2px solid var(--accent); border-radius: 50%; }
+  .trace { font-family: var(--font-code); font-size: 11.5px; line-height: 1.7; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); padding: 8px 10px; min-height: 170px; overflow-x: auto; }
+  .trace div { white-space: nowrap; }
+  .trace .ok { color: var(--accent-ink); font-weight: 600; }
+  .trace .no { color: var(--fg-3); }
+  .trace .cut { color: var(--warn); }
+  .hit-grid { display: grid; gap: 16px; }
+  @media (min-width: 980px) { .hit-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); align-items: start; } }
+</style>
+</head>
+<body data-lecture="4">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="04">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 04</span><span>2부 · 뼈대</span></div>
+      <h1>불변 UI tree</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">화면은 고치는 것이 아니라 다시 짓는 것이다. 게시한 tree는 아무도 고치지 않으므로 세 스레드가 잠금 없이 함께 읽고, element는 주소가 아니라 값인 id로 frame을 건넌다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>45분</dd></div>
+            <div><dt>선수 지식</dt><dd>1~3강, 트리 순회(pre-order)</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>ui_element.h</code>·<code>ui_tree.h</code>·<code>ui_tree.cpp</code></dd></div>
+            <div><dt>실험</dt><dd>frame마다 새 tree, hit test 경로</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li>불변 tree가 잠금 없는 공유와 단순한 갱신을 동시에 주는 이유를 설명한다.</li>
+            <li>element의 정체성이 주소가 아니라 <code>ui_element_id</code>(kind, owner)인 이유를 안다.</li>
+            <li>tree가 생성 때 한 번 짓는 색인과 그 쓰임을 말할 수 있다.</li>
+            <li>hit test와 Tab 순서가 그리기 순서에서 나오는 규칙을 손으로 따라갈 수 있다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="4.1">
+        <header class="slide-head">
+          <span class="num">4.1</span>
+          <h2>게시하면 고치지 않는다</h2>
+          <p class="lede">element는 짓는 동안만 바뀔 수 있다. tree로 게시되는 순간부터는 읽기 전용이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element.h:1083-1095" data-path="include/luil/ui/ui_element.h" data-start="1083"><script type="text/plain">
+    // 모든 화면 요소의 최상위 추상 클래스다.
+    // 빌드 중에만 mutable이고 tree로 게시된 뒤에는 불변으로
+    // 취급하므로 여러 스레드가 동시에 읽어도 안전하다.
+    // "재설정"은 다음 snapshot의 tree 빌드에서 다른 값을 등록하는 것으로 달성한다.
+    class ui_element
+    {
+    public:
+        explicit ui_element(ui_element_id id) noexcept;
+        virtual ~ui_element() = default;
+        ui_element(const ui_element&) = delete;
+        ui_element(ui_element&&) = delete;
+        ui_element& operator=(const ui_element&) = delete;
+        ui_element& operator=(ui_element&&) = delete;
+</script></div>
+        <div class="prose">
+          <p>게시된 tree 하나를 세 곳이 동시에 읽는다. <strong>UI thread</strong>는 그리고, <strong>input thread</strong>는 hit test하며, Win32의 caption 비클라이언트 판정은 UI thread에서 <strong>동기로</strong> 같은 게시본을 조회한다. 아무도 쓰지 않으니 tree를 위한 잠금이 필요 없다. 잠금이 필요한 곳은 게시본을 건네는 slot 하나뿐이다.</p>
+          <p>"값을 바꾸고 싶다"는 다음 frame에서 다른 값으로 element를 다시 만드는 것으로 이룬다. 그래서 <code>ui_element</code>는 복사도 이동도 막혀 있고, setter는 게시 전에만 쓴다. 옛 tree는 <code>shared_ptr&lt;const ui_tree&gt;</code>라서, 아직 그것을 그리는 스레드가 있으면 그 스레드가 놓을 때까지 산다.</p>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">부분 갱신 경로가 없다</span>상태가 바뀌면 기존 element를 고치지 않고 새 tree를 게시한다. "이 라벨만 고친다"는 길이 없으니 화면의 구조와 앱 상태가 섞이지 않는다. 화면은 언제나 <code>make_frame(상태)</code>의 결과다.</div></div>
+      </section>
+
+      <section class="slide" id="s2" data-num="4.2">
+        <header class="slide-head">
+          <span class="num">4.2</span>
+          <h2>element의 정체성은 id다</h2>
+          <p class="lede">frame마다 객체가 새로 생기므로 주소로는 "같은 버튼"을 알아볼 수 없다. 그래서 값인 id를 쓴다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element_id.h:228-259" data-path="include/luil/ui/ui_element_id.h" data-start="228"><script type="text/plain">
+        end_of_library_kinds,
+        // 앱이 정의하는 kind는 이 값부터다 (`application_element_kind`).
+        // 라이브러리 kind가 늘어도 앱 상수가 밀리지 않도록 예약 대역을 넉넉히 둔다 (지금 쓰는 것의 열 배 넘게).
+        //  - 64에서 1024로 넓혔다. 앱 상수의 수와 자동화 id의 앞 숫자는 그때 한 번 바뀌었다.
+        first_application_kind = 1024,
+    };
+
+    // 라이브러리 kind가 앱 대역에 닿지 않는다.
+    static_assert(static_cast<std::uint32_t>(ui_element_kind::end_of_library_kinds) <= static_cast<std::uint32_t>(ui_element_kind::first_application_kind),
+        "Library element kinds overflow into application kinds. Widen the reserved band (first_application_kind).");
+
+    [[nodiscard]] constexpr ui_element_kind application_element_kind(const std::uint32_t index) noexcept
+    {
+        return static_cast<ui_element_kind>(static_cast<std::uint32_t>(ui_element_kind::first_application_kind) + index);
+    }
+
+    // 그 kind가 앱이 정의한 것인가다.
+    [[nodiscard]] constexpr bool is_application_element_kind(const ui_element_kind kind) noexcept
+    {
+        return static_cast<std::uint32_t>(kind) >= static_cast<std::uint32_t>(ui_element_kind::first_application_kind);
+    }
+
+    struct ui_element_id
+    {
+        ui_element_kind kind { ui_element_kind::none };
+        // 같은 kind가 여럿일 때 대상을 구분하는 앱 정의
+        // 키다 (항목의 식별자, 목록 행의 index 문자열 등).
+        // 뜻은 앱이 정한다.
+        std::u8string owner {};
+
+        [[nodiscard]] bool operator==(const ui_element_id&) const = default;
+    };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="250-258" data-title="kind와 owner 한 쌍">kind는 "무슨 종류인가"(버튼, 목록 행…), owner는 "그 종류 중 어느 것인가"를 가르는 앱 정의 문자열(항목 키, 행 번호…)이다. hover·눌림·초점은 모두 이 값으로 비교된다.</li>
+            <li data-lines="228-233" data-title="두 대역: 라이브러리와 앱">0부터 <code>end_of_library_kinds</code> 앞까지는 라이브러리 kind, 1024부터는 앱 kind다. 라이브러리는 앱 kind의 뜻을 모른다.</li>
+            <li data-lines="235-237" data-title="대역이 부딪히면 컴파일이 멈춘다">처음 예약 대역은 64였다. 라이브러리 kind가 그것을 넘어 앱의 첫 kind들과 같은 수가 되면서, kind로 찾는 코드가 서로를 집을 수 있었다. 대역을 1024로 넓히고 <code>static_assert</code>로 다시는 겹치지 못하게 했다.</li>
+            <li data-lines="239-248" data-title="앱 kind를 만드는 법">앱은 <code>application_element_kind(index)</code> = 1024 + index로 상수를 만든다. 1강의 hello가 <code>kind_label</code>, <code>kind_button</code>을 이렇게 정했다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>id의 유일성 범위는 <strong>tree 하나</strong>다. popup이나 보조 창처럼 다른 표면의 tree는 같은 id를 다시 써도 된다. 상호작용 상태는 표면 id와 함께 게시되므로 섞이지 않는다.</p>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="4.3">
+        <header class="slide-head">
+          <span class="num">4.3</span>
+          <h2>실험: 새 객체, 같은 id</h2>
+          <p class="lede">작은 할 일 앱의 tree를 매 frame 새로 짓는다. 객체 번호는 매번 바뀌지만, 포인터를 올린 행의 hover는 id로 이어진다.</p>
+        </header>
+        <div class="lw" data-title="할 일 앱의 tree" data-surface="make_frame(state) → ui_tree" data-reset id="tree-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <button class="btn" type="button" id="tl-resize"><i class="ci" aria-hidden="true">&#xEB4C;</i>창 크기 바꾸기</button>
+              <button class="btn" type="button" id="tl-frame"><i class="ci" aria-hidden="true">&#xEB37;</i>같은 상태로 다시 짓기</button>
+              <span class="sep"></span>
+              <label class="field"><input type="checkbox" id="tl-dup"> 버그: 두 행에 같은 id</label>
+              <label class="field"><input type="checkbox" id="tl-arr"> 버그: 버튼 배치 빠뜨림</label>
+            </div>
+            <div class="tree-lab">
+              <div style="display:grid;gap:10px;justify-items:start">
+                <div class="surface" id="tl-surface" aria-label="흉내 낸 할 일 앱. 행을 누르면 끝냄 표시가 바뀐다"></div>
+                <div class="readout" id="tl-stat"></div>
+              </div>
+              <div style="display:grid;gap:10px;min-width:0">
+                <div class="tree-view" id="tl-tree" aria-label="이번 frame의 tree, pre-order"></div>
+                <div class="diag" id="tl-diag"></div>
+              </div>
+            </div>
+          </div>
+          <div class="lw-foot">행 위에 포인터를 올리고 <b>창 크기 바꾸기</b>나 <b>같은 상태로 다시 짓기</b>를 눌러 보라. 오른쪽 객체 번호(<code>#…</code>)가 모두 바뀌어도 hover가 그대로인 것은 hover가 <code>row:b</code> 같은 id로 저장되어 있어서다. 버그를 켜면 tree의 진단이 그것을 드러낸다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s4" data-num="4.4">
+        <header class="slide-head">
+          <span class="num">4.4</span>
+          <h2>element가 하는 일</h2>
+          <p class="lede">배치하고, 그리고, 맞는지 답하고, 다음에 언제 달라지는지 예고한다. 모두 const이거나 게시 전에만 불린다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_element.h:1380-1412" data-path="include/luil/ui/ui_element.h" data-start="1380"><script type="text/plain">
+
+        // 부모가 준 slot 안에서 자기 bounds와 자식 배치를 확정한다.
+        virtual void arrange(const arrange_context& context) = 0;
+        // 내용이 원하는 크기다 (논리 픽셀). 기본은 없음(nullopt) — "나는 크기를 말하지 않는다".
+        //
+        // 배치는 여전히 부모가 정한다. 이것은 **묻는 컨테이너만** 부르는 선택적 질문이다 (`stack_element::add_fit`,
+        // `grid_element`의 맞춤 열). 고정 길이로 담는 지금까지의 tree는 이것을 부르지 않아 배치가 바뀌지 않는다.
+        //  - `available_width`는 줄 수가 폭에 달린 내용(여러 줄 글)이 높이를 정하는 폭이다. 제한이 없으면
+        //    무한대다. 넓이는 그보다 좁게 답해도 되고, 한 줄 내용은 무시한다.
+        //  - 글이 든 element(label·글자 버튼·체크·글리프)와 배치 컨테이너가 답한다. 답이 없는 자식은 맞춤
+        //    컨테이너에서 0이다.
+        //  - arrange 전에 불린다. 배치 결과(bounds)를 읽지 않고 config만으로 답한다.
+        [[nodiscard]] virtual std::optional<size_f> preferred_size(const measure_context& context, float available_width) const;
+        // 자신과 자식을 그린다.
+        // hover·눌림 강조는 interaction으로 판정한다.
+        virtual void draw(draw_context& context, const interaction_snapshot& interaction) const = 0;
+        // 좌표를 포함하는 가장 안쪽의 상호작용 대상을 돌려준다.
+        // 기본 구현은 자식을 역순(위에 그려진 것 먼저)으로 탐색한 뒤 자기 bounds를 검사한다.
+        [[nodiscard]] virtual const ui_element* hit_test(float x, float y) const;
+        // 좌표에서 payload를 수락하는 가장 위의 drop 대상을 돌려준다.
+        // hit test와 같은 규칙으로 자르는 컨테이너 밖 좌표는 그 안을 보지 않는다.
+        //  - 보이지 않는 것은 놓을 자리도 아니다.
+        [[nodiscard]] const ui_element* find_drop_target(float x, float y, const drag_payload& payload) const;
+        // hit_opaque에 막혔는지도 돌려준다. 보통 element는 drop 대상이 아니면 지나친다.
+        [[nodiscard]] drop_hit_result drop_hit_test(float x, float y, const drag_payload& payload) const;
+
+        // 다음에 그림이 달라지는 시각이다 (시간 update 계약).
+        // 시각만의 함수로 그리는 element(회전 표시·토스트 흐려짐·caret 깜빡임)가 재정의한다.
+        //  - nullopt(기본값)는 시간이 흘러도 그대로라는 뜻이다.
+        //  - context.now 이하는 "계속 움직이는 중"이라 platform이 짧은 주기로 다시 그린다.
+        // platform은 tree의 최솟값 시각에 맞춰 timer 하나만 걸므로 평소 비용은 0이다.
+        // 자식 몫은 tree가 모으므로 자기 것만 답한다.
+        [[nodiscard]] virtual std::optional<std::chrono::steady_clock::time_point> next_update(const update_context& context, const interaction_snapshot& interaction) const;
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1380-1382" data-title="arrange — 부모가 자리를 준다">부모가 준 slot(물리 픽셀) 안에서 자기 bounds와 자식 배치를 확정한다. 게시 전, logic thread의 <code>make_frame</code> 안에서 불린다(5강).</li>
+            <li data-lines="1383-1392" data-title="preferred_size — 묻는 컨테이너만">내용이 원하는 크기다. 배치는 여전히 부모가 정하고, 맞춤 열처럼 묻는 컨테이너만 부르는 선택적 질문이다. config만 보고 답한다.</li>
+            <li data-lines="1393-1395" data-title="draw — 상호작용은 인자로">자신과 자식을 그린다. hover·눌림은 element가 갖지 않고 <code>interaction_snapshot</code>으로 받아 자기 id와 비교한다. 그래서 같은 tree를 다른 상호작용으로 다시 그릴 수 있다.</li>
+            <li data-lines="1396-1398" data-title="hit_test — 위에 그린 것부터">좌표를 포함하는 가장 안쪽의 상호작용 대상을 돌려준다. 기본 구현은 자식을 역순으로 찾는다(4.6).</li>
+            <li data-lines="1406-1412" data-title="next_update — 시간 계약">시간이 흘러야 그림이 바뀌는 element(spinner, caret, 토스트의 흐려짐)만 재정의한다. 기본값 nullopt는 "시간이 흘러도 그대로"다. 플랫폼은 tree 전체의 가장 이른 시각에 timer 하나만 건다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s5" data-num="4.5">
+        <header class="slide-head">
+          <span class="num">4.5</span>
+          <h2>tree가 생성 때 한 번 짓는 색인</h2>
+          <p class="lede">tree는 불변이므로 질문의 답을 미리 계산해 둘 수 있다. 생성자가 pre-order로 한 번 훑으며 색인을 짓는다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/ui/ui_tree.cpp:100-113,536-580" data-path="src/ui/ui_tree.cpp" data-start="100"><script type="text/plain">
+    ui_tree::ui_tree(std::unique_ptr<ui_element> root)
+        : root_ { std::move(root) }
+    {
+        if (root_ != nullptr)
+        {
+            index_element(*root_, nullptr, nullptr, root_->visible());
+            find_focus_trap(*root_, trap_);
+            // 가둠이 정해진 뒤에 거른다 — 밖의 기본 버튼은 없는 것이다.
+            // 매 frame이 아니라 여기서 한 번 판정하면 그 뒤로는 물을 것이 없다.
+            find_default_button(*root_, default_button_);
+            if (default_button_ != nullptr && within_focus_trap(default_button_->id()) == false)
+                default_button_ = nullptr;
+        }
+    }
+⋯@536
+    void ui_tree::index_element(const ui_element& element, const ui_element* const scroll_container, const ui_element* access_parent, const bool visible_path)
+    {
+        index_.push_back(&element);
+        kinds_[static_cast<std::uint32_t>(element.id().kind)].push_back(element.id());
+        // 같은 id는 첫 등록이 이긴다.
+        // 뒤쪽 것은 중복 목록에 남아 test·진단이 잡아낸다.
+        const bool owns_id { lookup_.emplace(element.id(), &element).second };
+        if (owns_id == false)
+            duplicates_.push_back(element.id());
+        if (element.visible() && element.arranged() == false)
+            unarranged_.push_back(element.id());
+
+        // 접근 색인은 보이는 경로 위의 것만 담는다 (`contains_id`와 같은 규칙 —
+        // 보이지 않는 것은 읽을 자리도 아니다). 구조(`none`)는 형제 줄에 서지
+        // 않고 그 자식이 이 부모 자리로 승격된다 (`access_children`와 같은 접기).
+        //  - **id의 임자만 줄에 선다** — `find`가 답하는 그 element다. 줄의 자리를
+        //    id로 되묻기 때문에(`access_sibling_of`) 같은 id가 둘 서면 뒤의 것이
+        //    앞의 것의 자리를 답하고, "다음"이 제자리로 돌아와 UIA 클라이언트의
+        //    자식 훑기가 영영 끝나지 않는다. 임자가 아닌 것은 구조처럼 접혀 그
+        //    자식이 이 부모 자리로 올라오므로 그 아래가 통째로 사라지지는 않는다.
+        //    UIA에게도 같은 말이다 — runtime id가 id에서 나오므로 줄에 둘이 서면
+        //    한 창에 같은 runtime id가 둘이다.
+        const ui_element* next_access_parent { access_parent };
+        if (visible_path)
+        {
+            visible_index_.push_back(&element);
+            if (element.hover_region() != nullptr)
+                hover_regions_.push_back(&element);
+            std::size_t position { no_access_position };
+            if (element.accessibility().role != access_role::none && owns_id)
+            {
+                std::vector<const ui_element*>& siblings { access_parent != nullptr ? access_children_[access_parent] : access_top_ };
+                position = siblings.size();
+                siblings.push_back(&element);
+                next_access_parent = &element;
+            }
+            access_index_.emplace(element.id(), access_entry { access_parent, scroll_container, position });
+        }
+        // 자기 자신은 자기를 감싸지 않는다 — 들이려는 자리는 언제나 그 창 **안의**
+        // 무엇이다. 그래서 자식에게 넘길 때에야 이 element가 창이 된다.
+        const scroll_source* const source { element.scroll() };
+        const ui_element* const next_scroll_container { source != nullptr && source->scroll != nullptr ? &element : scroll_container };
+        for (const std::unique_ptr<ui_element>& child : element.children())
+            index_element(*child, next_scroll_container, next_access_parent, visible_path && child->visible());
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="100-113" data-title="생성자가 하는 일 전부">색인을 짓고, 초점을 가두는 element와 기본 버튼을 한 번 찾는다. 가둠 밖의 기본 버튼은 이 자리에서 걸러 둔다. 매 frame 묻는 질문을 매번 계산하지 않는다.</li>
+            <li data-lines="538-539" data-title="그리기 순서 색인과 kind 색인">pre-order(부모 먼저, 자식은 담은 순서) 목록과 kind별 id 목록이다. 키보드 탐색이 <code>ids_of_kind</code>로 쓴다.</li>
+            <li data-lines="540-546" data-title="id 색인 — 첫 등록이 이긴다">해시 맵에 넣으며, 같은 id가 이미 있으면 뒤의 것을 중복 목록에 남긴다. <code>find</code>는 포인터 이동·tooltip이 매 frame 부르는 길이라 문자열 선형 비교 대신 해시다.</li>
+            <li data-lines="547-548" data-title="배치되지 않은 보이는 element">보이는데 <code>arrange</code>가 한 번도 불리지 않았으면 진단 목록에 남긴다. 숨긴 element는 배치하지 않아도 된다.</li>
+            <li data-lines="550-573" data-title="접근 tree 색인">보조 기술(스크린 리더)이 읽는 접근 tree의 부모·형제 자리를 적어 둔다. 형제마다 root에서 부모를 다시 찾으면 긴 목록의 순회가 형제 수의 제곱이 되므로 O(1) 색인으로 둔다(11강).</li>
+            <li data-lines="574-579" data-title="흘리는 창과 보이는 경로">자식에게 내려갈 때 "가장 안쪽 스크롤 창"과 "여기까지 모두 보이는가"를 넘긴다. 숨긴 가지의 애니메이션은 창을 깨우지 않는다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s6" data-num="4.6">
+        <header class="slide-head">
+          <span class="num">4.6</span>
+          <h2>hit test: 위에 그린 것부터</h2>
+          <p class="lede">뒤에 담은 자식이 위에 그려진다. 그래서 자식을 뒤에서부터 묻고, 처음 맞은 것이 답이다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/ui_element.cpp:571-593" data-path="src/ui/ui_element.cpp" data-start="571"><script type="text/plain">
+    const ui_element* ui_element::hit_test(const float x, const float y) const
+    {
+        if (visible_ == false)
+            return nullptr;
+
+        // 자르는 컨테이너는 잘려 보이지 않는 자식이 눌리지도 않아야 한다.
+        if (clip_children_ && bounds_.contains(x, y) == false)
+            return nullptr;
+
+        // 뒤에 추가된 자식이 위에 그려지므로 역순으로 검사한다.
+        // 스크롤로 자식이 부모 slot 밖에 걸칠 수 있어 자식 탐색은 자기 bounds로 막지 않는다.
+        for (std::size_t index = children_.size(); index > 0; --index)
+        {
+            const ui_element* const hit { children_[index - 1]->hit_test(x, y) };
+            if (hit != nullptr)
+                return hit;
+        }
+
+        // hit_opaque는 상호작용 없이도 hit를 흡수한다.
+        // 위에 뜬 표면의 빈 자리 클릭이 아래로 새지 않는다.
+        if ((interactive() || hit_opaque_) && bounds_.contains(x, y))
+            return this;
+        return nullptr;
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="573-574" data-title="숨긴 가지는 통째로 없다">보이지 않으면 자식까지 볼 것 없이 놓친다.</li>
+            <li data-lines="576-578" data-title="자르는 컨테이너 밖은 안을 보지 않는다">스크롤 창처럼 자식을 자르는 컨테이너는, 좌표가 자기 bounds 밖이면 잘려 보이지 않는 자식이 눌리지 않게 안을 보지 않는다.</li>
+            <li data-lines="580-587" data-title="자식을 역순으로">마지막 자식부터 묻는다. 스크롤로 자식이 부모 slot 밖에 걸칠 수 있어, 자르지 않는 부모는 자기 bounds로 탐색을 막지 않는다.</li>
+            <li data-lines="589-593" data-title="상호작용 대상이거나 hit_opaque면 내가 답">자식이 모두 놓쳤고 좌표가 내 안이면, 상호작용 대상이거나 <code>hit_opaque</code>일 때 내가 답이다. hit_opaque는 modal 배경·메뉴·토스트처럼 위에 뜬 판의 빈자리 클릭이 아래로 새지 않게 흡수한다.</li>
+          </ol>
+        </div>
+        <div class="lw" data-title="hit test 따라가기" data-surface="ui_element::hit_test" id="hit-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <label class="field"><input type="checkbox" id="hl-popup" checked> popup 띄우기</label>
+              <label class="field"><input type="checkbox" id="hl-opaque" checked> popup이 hit_opaque</label>
+              <label class="field"><input type="checkbox" id="hl-clip" checked> 목록이 자식을 자름</label>
+              <label class="field"><input type="checkbox" id="hl-tab"> Tab 순서 보이기</label>
+              <label class="field"><input type="checkbox" id="hl-group"> 목록을 focus group으로</label>
+            </div>
+            <div class="hit-grid">
+              <div class="hit-scene" id="hl-scene" aria-label="포인터를 움직이면 그 자리의 hit test 경로가 오른쪽에 나온다"></div>
+              <div class="trace" id="hl-trace" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="lw-foot">해 볼 것: popup의 빈 아래쪽, 목록 아래로 잘려 나간 다섯째 행, popup과 겹친 행 위에 포인터를 대 보라. 체크를 하나씩 끄면 답이 어떻게 바뀌는지 오른쪽 경로가 보여 준다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s7" data-num="4.7">
+        <header class="slide-head">
+          <span class="num">4.7</span>
+          <h2>그리기 순서가 곧 Tab 순서</h2>
+          <p class="lede">따로 매기는 번호가 없다. 보이는 tree를 pre-order로 훑은 순서가 Tab이 도는 순서다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/ui_tree.cpp:240-251,403-420" data-path="src/ui/ui_tree.cpp" data-start="240"><script type="text/plain">
+    std::vector<ui_element_id> ui_tree::focus_order() const
+    {
+        std::vector<ui_element_id> order {};
+        // 가둠이 있으면 훑기가 **거기서 시작한다**. 밖의 자리는 목록에 없다.
+        //  - 가둠 자신은 자리가 아니라 자식부터 훑는다 (묶음과 같은 규칙).
+        //  - 묶음 접기는 그 안에서 그대로 일어난다. 두 규칙은 훑기의 시작점과
+        //    가지치기로 갈려 있어 서로를 모른다 (modal-dialog-design.md).
+        if (trap_ != nullptr)
+            collect_group_members(*trap_, order);
+        else if (root_ != nullptr)
+            collect_focus_stops(*root_, order);
+        return order;
+⋯@403
+    void ui_tree::collect_focus_stops(const ui_element& element, std::vector<ui_element_id>& order)
+    {
+        // 보이지 않는 가지는 그 안까지 통째로 건너뛴다.
+        // 색인(index_)은 보이지 않는 자식도 담으므로 여기서는 tree를 직접 걷는다.
+        if (element.visible() == false)
+            return;
+        // 묶음은 자리 하나로 접고 그 안으로 내려가지 않는다.
+        // 중첩된 묶음도 같은 규칙으로 접히므로 훑기는 이 함수 하나다.
+        if (element.focus_group() != focus_axis::none)
+        {
+            if (const std::optional<ui_element_id> entry { group_entry(element) }; entry.has_value())
+                order.push_back(*entry);
+            return;
+        }
+        if (element.focusable())
+            order.push_back(element.id());
+        for (const std::unique_ptr<ui_element>& child : element.children())
+            collect_focus_stops(*child, order);
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="240-251" data-title="가둠이 있으면 거기서 시작">modal dialog처럼 초점을 가두는 element가 있으면 그 안만 훑는다. 밖의 자리는 목록에 없다.</li>
+            <li data-lines="405-408" data-title="보이지 않는 가지는 건너뛴다">색인은 보이지 않는 자식도 담으므로 여기서는 tree를 직접 걷는다.</li>
+            <li data-lines="409-416" data-title="묶음은 자리 하나로 접는다">탭 막대·라디오 묶음처럼 항목이 줄선 것(focus group)은 Tab에서 한 자리다. 그 안은 화살표가 돈다. 중첩된 묶음도 같은 규칙으로 접힌다.</li>
+            <li data-lines="417-420" data-title="부모 먼저, 자식은 담은 순서">초점을 받을 수 있으면 넣고 자식으로 내려간다. 화면에 보이는 순서가 곧 도는 순서다.</li>
+          </ol>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">왜 번호를 따로 두지 않나</span>배치와 순서가 두 곳에 살면 반드시 어긋난다. 순서를 바꾸고 싶으면 <code>order_focus()</code>로 조정하고, 순회에서 빼려면 <code>tab_stop</code>을 끈다. 4.6의 실험에서 <b>Tab 순서 보이기</b>와 <b>목록을 focus group으로</b>를 켜 보라. 키 라우팅과 초점 규칙 전체는 6강에서 다룬다.</div></div>
+      </section>
+
+      <section class="slide" id="s8" data-num="4.8">
+        <header class="slide-head">
+          <span class="num">4.8</span>
+          <h2>조용한 오동작을 드러내는 진단</h2>
+          <p class="lede">어떤 버그는 아무 오류도 내지 않고 화면에서 무언가를 조용히 사라지게 한다. tree는 그런 버그를 값으로 드러낸다.</p>
+        </header>
+        <div class="cols two">
+          <div class="panel">
+            <h3><code>duplicate_ids()</code></h3>
+            <p>find·hover·초점이 전부 id로 상태를 잇는다. 같은 id가 둘이면 <code>find</code>는 늘 첫 것을 돌려주고, hover는 두 element에 함께 켜진다. 오류는 나지 않는다.</p>
+            <p>tree는 색인을 지으며 뒤쪽 중복을 모아 둔다. 비어 있어야 정상이고, 앱의 테스트가 이것을 확인한다.</p>
+          </div>
+          <div class="panel">
+            <h3><code>unarranged()</code></h3>
+            <p>배치 사슬은 어디서든 끊길 수 있다. 끊긴 element는 bounds가 0이라 그려지지도 맞지도 않고 화면에서 조용히 사라진다.</p>
+            <p>보이는데 <code>arrange</code>가 불리지 않은 element를 모아 둔다. 넘치지 않는 탭 막대의 넘침 버튼처럼 일부러 숨긴 것은 세지 않는다.</p>
+          </div>
+        </div>
+        <div class="code" data-lang="cpp" data-label="앱 테스트에서" data-nolink><script type="text/plain">
+// 앱의 화면 테스트는 진단이 비어 있는지부터 확인한다.
+const luil::ui_tree tree { build_settings_screen(state) };
+REQUIRE(tree.duplicate_ids().empty());
+REQUIRE(tree.unarranged().empty());
+</script></div>
+        <p class="small muted">위 테스트는 쓰는 법을 보이려고 지은 예시다. <code>build_settings_screen</code>은 저장소에 없는 이름이다.</p>
+      </section>
+
+      <section class="slide" id="s9" data-num="4.9">
+        <header class="slide-head">
+          <span class="num">4.9</span>
+          <h2>tree가 위에 얹는 것, tree 안의 tree</h2>
+          <p class="lede">초점 테와 끌기 표시, tooltip은 element가 아니라 tree가 맨 위에 그린다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/ui_tree.cpp:525-534" data-path="src/ui/ui_tree.cpp" data-start="525"><script type="text/plain">
+    void ui_tree::draw(draw_context& context, const interaction_snapshot& interaction) const
+    {
+        if (root_ == nullptr)
+            return;
+        root_->draw(context, interaction);
+        draw_focus_ring(context, interaction);
+        if (interaction.drag.has_value())
+            draw_drag_visual(context, *interaction.drag);
+        draw_tooltip(context, interaction);
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="529" data-title="element 전부">root부터 자식까지 그린다.</li>
+            <li data-lines="530" data-title="초점 테">키보드로 옮긴 초점에만 그린다. 한곳에서 얹으므로 모든 element의 초점 테가 같은 모양이다.</li>
+            <li data-lines="531-532" data-title="끌기 표시">끄는 중일 때만 ghost와 놓을 자리 강조를 얹는다. 조상의 잘림을 반영한 <code>visible_bounds()</code>라 강조가 잘린 영역을 넘지 않는다.</li>
+            <li data-lines="533" data-title="tooltip이 맨 위">tooltip은 무엇보다 위에 있어야 하므로 마지막이다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>독립 tree를 그리는 element가 둘 있다. 커스텀 <strong>tooltip 내용</strong>과 화면 전환의 <strong>떠나는 화면</strong>이다. 둘 다 앱이 따로 지은 <code>shared_ptr&lt;const ui_tree&gt;</code>이고 element가 빈 snapshot으로 그리기만 한다. 그 안의 id는 주 tree의 색인·hit test·초점·접근 tree에 들어가지 않으므로, 같은 id가 두 tree에 있어도 겹치지 않는다. 화면 전환은 9강에서 다시 본다.</p>
+        </div>
+      </section>
+
+      <section class="slide" id="s10" data-num="4.10">
+        <header class="slide-head">
+          <span class="num">4.10</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>tree는 frame마다 새로 짓고, 게시한 뒤에는 아무도 고치지 않는다. 그래서 UI·input·caption 판정이 잠금 없이 함께 읽는다.</li>
+          <li>element의 정체성은 주소가 아니라 <code>ui_element_id</code>(kind, owner)다. hover·눌림·초점은 이 값으로 frame을 건넌다.</li>
+          <li>kind는 라이브러리 대역(0~1023)과 앱 대역(1024~)으로 나뉘고, 둘이 겹치면 <code>static_assert</code>가 막는다.</li>
+          <li>tree는 생성 때 pre-order로 한 번 훑으며 id·kind·접근 tree 색인과 진단을 짓는다. 같은 id는 첫 등록이 이긴다.</li>
+          <li>hit test는 자식을 역순으로 묻고, 자르는 컨테이너 밖은 보지 않으며, hit_opaque는 빈자리 클릭을 흡수한다.</li>
+          <li>Tab 순서는 그리기 순서(pre-order)이고, focus group은 한 자리로 접히며, 가둠이 있으면 그 안만 돈다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s11" data-num="4.11">
+        <header class="slide-head">
+          <span class="num">4.11</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="3">
+            <p class="q">창 크기가 바뀌어 새 frame이 게시되었다. 포인터 아래의 행이 hover 표시를 잃지 않는 이유는?</p>
+            <ol class="choices">
+              <li>UI thread가 이전 tree의 element 포인터를 기억하기 때문에</li>
+              <li>행 element가 이전 frame에서 이동(move)되어 재사용되기 때문에</li>
+              <li>hover가 <code>ui_element_id</code> 값으로 저장되어, 새 tree의 같은 id를 가진 행과 다시 맞춰지기 때문에</li>
+              <li>logic thread가 hover 상태를 앱 상태로 들고 있기 때문에</li>
+            </ol>
+            <div class="explain">element는 매 frame 새 객체다(복사·이동도 막혀 있다). hover·초점은 input thread의 snapshot에 id 값으로 들어 있고, 새 tree를 받으면 마지막 포인터 좌표로 hover를 다시 판정한다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">root의 자식이 [목록 패널, 저장 버튼, popup] 순서로 담겼다. 세 곳이 모두 겹친 점을 누르면 무엇이 먼저 검사되는가?</p>
+            <ol class="choices">
+              <li>popup — 마지막에 담겨 가장 위에 그려지므로</li>
+              <li>목록 패널 — 처음 담겼으므로</li>
+              <li>저장 버튼 — 가장 작으므로</li>
+              <li>root — 부모가 먼저 답하므로</li>
+            </ol>
+            <div class="explain">뒤에 담은 자식이 위에 그려지므로 hit test는 자식을 역순으로 묻는다. 자식이 모두 놓쳤을 때만 부모 자신을 검사한다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">두 행에 실수로 같은 id를 주었다. 무슨 일이 일어나는가?</p>
+            <ol class="choices">
+              <li>tree 생성자가 예외를 던진다</li>
+              <li>두 번째 행이 그려지지 않는다</li>
+              <li>컴파일 오류가 난다</li>
+              <li>오류 없이 <code>find</code>는 늘 첫 행을 돌려주고, 뒤의 것은 <code>duplicate_ids()</code>에 남는다</li>
+            </ol>
+            <div class="explain">중복은 조용한 오동작이다. 첫 등록이 색인을 차지하고, hover는 같은 id를 가진 두 행에 함께 켜진다. tree는 중복을 진단 목록으로 드러내고, 앱 테스트가 그것이 비었는지 확인한다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q">Tab 순서에 대한 설명으로 맞는 것은?</p>
+            <ol class="choices">
+              <li>element마다 tab index 번호를 매겨 정한다</li>
+              <li>보이는 tree의 pre-order이고, focus group은 한 자리로 접힌다</li>
+              <li>화면 위에서 아래, 왼쪽에서 오른쪽 좌표 순서다</li>
+              <li>element를 만든 시각의 순서다</li>
+            </ol>
+            <div class="explain"><code>focus_order()</code>는 보이는 tree를 pre-order로 훑어 초점을 받을 수 있는 id를 모은다. 묶음은 대표 자리 하나로 접히고, 가둠이 있으면 그 안에서 시작한다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/course.js"></script>
+<script>
+(function () {
+  const { el } = window.LU;
+  const hex = () => "#" + Math.floor(Math.random() * 0xffff).toString(16).padStart(4, "0");
+
+  /* ---------- 4.3 할 일 앱 ---------- */
+  const state = { width: 320, items: [{ key: "a", text: "회의 자료 보내기", done: false }, { key: "b", text: "빌드 고치기", done: true }, { key: "c", text: "점심 예약", done: false }], frame: 1 };
+  let hoverId = null; // interaction snapshot: id 값
+  let lastPointer = null;
+  let tree = null;
+  let prevObjs = new Set();
+  const surface = document.getElementById("tl-surface");
+  const view = document.getElementById("tl-tree");
+  const diag = document.getElementById("tl-diag");
+  const stat = document.getElementById("tl-stat");
+  const dup = document.getElementById("tl-dup");
+  const arr = document.getElementById("tl-arr");
+
+  function node(kind, owner, rect, extra) {
+    return Object.assign({ kind, owner, obj: hex(), rect, children: [], arranged: !!rect, visible: true, interactive: false }, extra || {});
+  }
+  function idOf(n) { return n.kind + ":" + n.owner; }
+
+  function makeFrame() {
+    const W = state.width;
+    const root = node("root", "", { x: 0, y: 0, w: W, h: 236 });
+    root.children.push(node("caption", "", { x: 0, y: 0, w: W, h: 32 }, { label: "할 일" }));
+    const stack = node("stack", "layout", { x: 0, y: 32, w: W, h: 204 });
+    const doneN = state.items.filter((i) => i.done).length;
+    stack.children.push(node("label", "title", { x: 12, y: 42, w: W - 24, h: 22 }, { label: "할 일 " + state.items.length + "개 중 " + doneN + "개 끝냄" }));
+    state.items.forEach((it, i) => {
+      const owner = dup.checked && it.key === "b" ? "a" : it.key;
+      stack.children.push(node("row", owner, { x: 12, y: 70 + i * 34, w: W - 24, h: 30 }, { interactive: true, label: it.text, done: it.done, key: it.key }));
+    });
+    const btnRect = arr.checked ? null : { x: 12, y: 70 + state.items.length * 34 + 6, w: 96, h: 28 };
+    stack.children.push(node("button", "add", btnRect || { x: 0, y: 0, w: 0, h: 0 }, { interactive: true, label: "추가", arranged: !arr.checked }));
+    root.children.push(stack);
+    return root;
+  }
+
+  function index(root) {
+    const order = [];
+    const lookup = new Map();
+    const dups = [];
+    const unarr = [];
+    (function walk(n, depth) {
+      order.push({ n, depth });
+      const id = idOf(n);
+      if (lookup.has(id)) dups.push(id); else lookup.set(id, n);
+      if (n.visible && !n.arranged) unarr.push(id);
+      n.children.forEach((c) => walk(c, depth + 1));
+    })(root, 0);
+    return { root, order, lookup, dups, unarr };
+  }
+
+  function hitTest(n, x, y) {
+    if (!n.visible) return null;
+    for (let i = n.children.length - 1; i >= 0; i--) {
+      const h = hitTest(n.children[i], x, y);
+      if (h) return h;
+    }
+    const r = n.rect;
+    if (n.interactive && n.arranged && x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) return n;
+    return null;
+  }
+
+  function publish(reason) {
+    const prev = prevObjs;
+    tree = index(makeFrame());
+    prevObjs = new Set(tree.order.map((o) => o.n.obj));
+    if (reason !== "init") state.frame++;
+    // 새 tree를 받으면 마지막 포인터 좌표로 hover를 다시 판정한다.
+    if (lastPointer) { const h = hitTest(tree.root, lastPointer.x, lastPointer.y); hoverId = h ? idOf(h) : null; }
+    render(reason, prev);
+  }
+
+  function render(reason, prev) {
+    const W = state.width;
+    surface.style.aspectRatio = W + " / 236";
+    surface.style.maxWidth = (420 * W / 320) + "px";
+    surface.textContent = "";
+    const sx = 100 / W;
+    const sy = 100 / 236;
+    for (const { n } of tree.order) {
+      if (n.kind === "root" || n.kind === "stack" || !n.arranged) continue;
+      const r = n.rect;
+      const d = el("div", { class: "el " + n.kind + (n.kind === "label" ? " title" : "") });
+      Object.assign(d.style, { left: r.x * sx + "%", top: r.y * sy + "%", width: r.w * sx + "%", height: r.h * sy + "%" });
+      const id = idOf(n);
+      if (hoverId && id === hoverId) d.classList.add("hover");
+      if (hoverId && id === hoverId && tree.dups.includes(id)) d.classList.add("dupe-hover");
+      if (n.kind === "row") {
+        if (n.done) d.classList.add("done");
+        d.append(el("span", { class: "box", text: n.done ? "" : "" }), el("span", { class: "txt", text: n.label }));
+        d.addEventListener("click", () => { const it = state.items.find((x) => x.key === n.key); it.done = !it.done; publish("message"); });
+      } else d.textContent = n.label || "";
+      if (n.kind === "button") d.addEventListener("click", () => {
+        const pool = ["메일 답장", "리뷰 남기기", "문서 고치기"];
+        if (state.items.length < 4) { state.items.push({ key: "d", text: pool[0], done: false }); publish("message"); }
+      });
+      surface.append(d);
+    }
+    view.textContent = "";
+    for (const { n, depth } of tree.order) {
+      const id = idOf(n);
+      const isDup = tree.dups.includes(id) && tree.lookup.get(id) !== n;
+      const line = el("div", { class: "ln" + (hoverId === id ? " hover" : "") },
+        el("span", null, "  ".repeat(depth), el("span", { class: "kind", text: n.kind }), ":" + (n.owner || "∅"), isDup ? el("span", { class: "warn", text: "  ← 중복" }) : null, !n.arranged ? el("span", { class: "warn", text: "  ← 배치 안 됨" }) : null),
+        el("span", { class: "obj" + (prev && !prev.has(n.obj) ? " new" : ""), text: "객체 " + n.obj }));
+      view.append(line);
+    }
+    diag.textContent = "";
+    diag.append(
+      el("div", { class: "row" }, el("code", { text: "duplicate_ids()" }), tree.dups.length ? tree.dups.map((x) => el("code", { class: "bad", text: x })) : el("span", { class: "muted", text: "비어 있다 — 정상" })),
+      el("div", { class: "row" }, el("code", { text: "unarranged()" }), tree.unarr.length ? tree.unarr.map((x) => el("code", { class: "bad", text: x })) : el("span", { class: "muted", text: "비어 있다 — 정상" })),
+      el("div", { class: "row" }, el("code", { text: "hover (snapshot)" }), el("span", { text: hoverId || "없음" }))
+    );
+    stat.textContent = "frame " + state.frame + " · element " + tree.order.length + "개를 새로 지었다 · 창 폭 " + W + "px" + (reason && reason !== "init" ? " · 사유: " + ({ resize: "창 크기 메시지", rebuild: "다시 짓기", message: "앱 메시지" }[reason] || reason) : "");
+  }
+
+  surface.addEventListener("pointermove", (e) => {
+    const b = surface.getBoundingClientRect();
+    lastPointer = { x: (e.clientX - b.left) / b.width * state.width, y: (e.clientY - b.top) / b.height * 236 };
+    const h = hitTest(tree.root, lastPointer.x, lastPointer.y);
+    const id = h ? idOf(h) : null;
+    if (id !== hoverId) { hoverId = id; render(); }
+  });
+  surface.addEventListener("pointerleave", () => { lastPointer = null; if (hoverId) { hoverId = null; render(); } });
+  document.getElementById("tl-resize").addEventListener("click", () => { state.width = state.width === 320 ? 280 : 320; publish("resize"); });
+  document.getElementById("tl-frame").addEventListener("click", () => publish("rebuild"));
+  dup.addEventListener("change", () => publish("rebuild"));
+  arr.addEventListener("change", () => publish("rebuild"));
+  document.getElementById("tree-lab").addEventListener("lw-reset", () => {
+    state.width = 320; state.frame = 1; dup.checked = false; arr.checked = false;
+    state.items = [{ key: "a", text: "회의 자료 보내기", done: false }, { key: "b", text: "빌드 고치기", done: true }, { key: "c", text: "점심 예약", done: false }];
+    hoverId = null; lastPointer = null; prevObjs = new Set(); publish("init");
+  });
+  publish("init");
+
+  /* ---------- 4.6 hit test ---------- */
+  const scene = document.getElementById("hl-scene");
+  const trace = document.getElementById("hl-trace");
+  const opt = { popup: document.getElementById("hl-popup"), opaque: document.getElementById("hl-opaque"), clip: document.getElementById("hl-clip"), tab: document.getElementById("hl-tab"), group: document.getElementById("hl-group") };
+  function S() {
+    const rows = [0, 1, 2, 3, 4].map((i) => ({ name: "목록 행 " + (i + 1), cls: "row", r: { x: 16, y: 36 + i * 40, w: 168, h: 34 }, interactive: true, focusable: true, children: [] }));
+    const list = { name: "목록(흘리는 창)", cls: "panel", r: { x: 10, y: 10, w: 180, h: 200 }, clip: opt.clip.checked, group: opt.group.checked, children: rows };
+    const save = { name: "저장 버튼", cls: "btn", r: { x: 214, y: 12, w: 130, h: 32 }, interactive: true, focusable: true, children: [] };
+    const popup = { name: "popup 메뉴", cls: "popup", r: { x: 150, y: 70, w: 180, h: 132 }, opaque: opt.opaque.checked, visible: opt.popup.checked, children: [
+      { name: "복사", cls: "item", r: { x: 156, y: 76, w: 168, h: 30 }, interactive: true, focusable: true, children: [] },
+      { name: "붙여넣기", cls: "item", r: { x: 156, y: 108, w: 168, h: 30 }, interactive: true, focusable: true, children: [] },
+    ] };
+    return { name: "root", r: { x: 0, y: 0, w: 360, h: 220 }, children: [list, save, popup] };
+  }
+  const inside = (r, x, y) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h;
+  function hit(n, x, y, out, depth) {
+    const pad = "  ".repeat(depth);
+    if (n.visible === false) { out.push([pad + n.name + ": 보이지 않음 → 건너뜀", "no"]); return null; }
+    if (n.clip && !inside(n.r, x, y)) { out.push([pad + n.name + ": 자르는 컨테이너 밖 → 안을 보지 않음", "cut"]); return null; }
+    if (n.children.length) out.push([pad + n.name + ": 자식 " + n.children.length + "개를 뒤에서부터", ""]);
+    for (let i = n.children.length - 1; i >= 0; i--) {
+      const h = hit(n.children[i], x, y, out, depth + 1);
+      if (h) return h;
+    }
+    if ((n.interactive || n.opaque) && inside(n.r, x, y)) { out.push([pad + n.name + ": " + (n.interactive ? "상호작용 대상, 좌표 안 → 답" : "hit_opaque, 좌표 안 → 흡수"), "ok"]); return n; }
+    if (!n.children.length) out.push([pad + n.name + ": " + (inside(n.r, x, y) ? "좌표 안이지만 대상이 아님" : "좌표 밖"), "no"]);
+    else out.push([pad + n.name + ": 자식이 모두 놓침, " + (inside(n.r, x, y) ? "나는 대상이 아님" : "좌표 밖") + " → 놓침", "no"]);
+    return null;
+  }
+  function focusOrder(n, out) {
+    if (n.visible === false) return;
+    if (n.group) { const first = n.children.find((c) => c.focusable); if (first) out.push(first); return; }
+    if (n.focusable) out.push(n);
+    n.children.forEach((c) => focusOrder(c, out));
+  }
+  let pt = null;
+  function draw() {
+    const root = S();
+    scene.textContent = "";
+    const pct = (r) => ({ left: r.x / 360 * 100 + "%", top: r.y / 220 * 100 + "%", width: r.w / 360 * 100 + "%", height: r.h / 220 * 100 + "%" });
+    let result = null;
+    const out = [];
+    if (pt) { result = hit(root, pt.x, pt.y, out, 0); if (!result) out.push(["결과: nullptr — 아무것도 맞지 않았다", "no"]); else out.push(["결과: " + result.name, "ok"]); }
+    // 자르는 컨테이너는 그림도 자른다: 자식을 그 컨테이너 자리의 층(overflow 숨김)에 그린다.
+    (function paintInto(layerEl, n, box) {
+      for (const c of n.children) {
+        if (c.visible === false) continue;
+        const pos = { left: (c.r.x - box.x) / box.w * 100 + "%", top: (c.r.y - box.y) / box.h * 100 + "%", width: c.r.w / box.w * 100 + "%", height: c.r.h / box.h * 100 + "%" };
+        const d = el("div", { class: "n " + c.cls, text: c.cls === "panel" ? c.name : c.cls === "popup" ? "(빈자리)" : c.name });
+        Object.assign(d.style, pos);
+        if (c === result) d.classList.add("hit");
+        layerEl.append(d);
+        if (c.children.length) {
+          const layer = el("div", { class: "n" });
+          Object.assign(layer.style, pos, { padding: "0", overflow: c.clip ? "hidden" : "visible", display: "block" });
+          layerEl.append(layer);
+          paintInto(layer, c, c.r);
+        }
+      }
+    })(scene, root, root.r);
+    if (opt.tab.checked) {
+      const order = [];
+      focusOrder(root, order);
+      order.forEach((n, i) => {
+        const b = el("span", { class: "badge", text: String(i + 1) });
+        Object.assign(b.style, { left: "calc(" + (n.r.x / 360 * 100) + "% - 7px)", top: "calc(" + (n.r.y / 220 * 100) + "% - 7px)" });
+        scene.append(b);
+      });
+    }
+    if (pt) { const c = el("span", { class: "cross" }); Object.assign(c.style, { left: pt.x / 360 * 100 + "%", top: pt.y / 220 * 100 + "%" }); scene.append(c); }
+    trace.textContent = "";
+    if (!pt) trace.append(el("div", { class: "no", text: "왼쪽 장면 위에서 포인터를 움직이거나 눌러 보라." }));
+    for (const [t, c] of out) trace.append(el("div", { class: c, text: t }));
+  }
+  function at(e) {
+    const b = scene.getBoundingClientRect();
+    pt = { x: (e.clientX - b.left) / b.width * 360, y: (e.clientY - b.top) / b.height * 220 };
+    draw();
+  }
+  scene.addEventListener("pointermove", at);
+  scene.addEventListener("pointerdown", at);
+  Object.values(opt).forEach((c) => c.addEventListener("change", draw));
+  pt = { x: 200, y: 150 };
+  draw();
+})();
+</script>
+</body>
+</html>

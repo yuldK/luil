@@ -1,0 +1,983 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>03 스레드 경계 메시징 · luil 해부학</title>
+<meta name="description" content="luil 해부학 3강. 사건을 나르는 channel과 최신 상태를 나르는 latest_slot, 넘침 정책과 신호 병합, 타입을 지운 운반체 app_message.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .sim { display: grid; gap: 14px; }
+  .sim-row { display: grid; gap: 14px; }
+  @media (min-width: 900px) { .sim-row { grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); align-items: start; } }
+  .queue { display: flex; gap: 6px; align-items: stretch; padding: 10px; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--bg); overflow-x: auto; min-height: 76px; }
+  .queue .end { display: grid; place-items: center; font-size: var(--fs-xs); color: var(--fg-3); writing-mode: vertical-rl; text-orientation: mixed; padding: 0 2px; }
+  .cell { flex: 0 0 64px; height: 56px; border-radius: var(--r-row); border: 1px dashed var(--line-2); display: grid; place-items: center; align-content: center; gap: 2px; font-family: var(--font-code); font-size: 11px; color: var(--fg-3); }
+  .cell.full { border-style: solid; border-color: var(--line-3); background: var(--panel); color: var(--fg); }
+  .cell.full .k { font-size: 12px; font-weight: 600; }
+  .cell.press { border-color: var(--t-in); background: var(--t-in-wash); }
+  .cell.release { border-color: var(--t-ui); background: var(--t-ui-wash); }
+  .cell.intent { border-color: var(--t-lg); background: var(--t-lg-wash); }
+  .cell.flash { animation: flash 0.6s ease-out; }
+  @keyframes flash { from { box-shadow: 0 0 0 3px var(--accent); } to { box-shadow: 0 0 0 0 transparent; } }
+  .lamp { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-xs); color: var(--fg-2); }
+  .lamp i { width: 12px; height: 12px; border-radius: 50%; background: var(--line-2); transition: background 0.25s; }
+  .lamp.on i { background: var(--accent); box-shadow: 0 0 0 4px var(--accent-wash); }
+  .closed-badge { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--error); }
+  .took { display: flex; flex-wrap: wrap; gap: 4px; min-height: 28px; }
+  .took span { font-family: var(--font-code); font-size: 11px; padding: 3px 6px; border-radius: var(--r-control); background: var(--sunk); border: 1px solid var(--line); }
+  .took span.gap { background: var(--error-wash); border-color: var(--error); color: var(--error); }
+  .slotbox { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px 16px; align-items: center; padding: 14px; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--bg); }
+  .slotbox .big { font-family: var(--font-code); font-size: 1.6rem; font-weight: 600; line-height: 1; }
+  .slotbox .meta-line { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--fg-2); }
+  .vers { display: flex; flex-wrap: wrap; gap: 3px; }
+  .vers span { font-family: var(--font-code); font-size: 10.5px; width: 26px; height: 22px; display: grid; place-items: center; border-radius: 3px; border: 1px solid var(--line); color: var(--fg-3); }
+  .vers span.seen { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .vers span.skipped { background: var(--sunk); text-decoration: line-through; }
+  .vers span.latest { border-color: var(--accent); color: var(--fg); }
+  .judge { display: grid; gap: 12px; }
+  .judge .res { font-family: var(--font-code); font-size: var(--fs-sm); padding: 10px 12px; border-radius: var(--r-row); border: 1px solid var(--line); background: var(--bg); }
+  .judge .res.hit { border-color: var(--accent); background: var(--accent-wash); }
+  .judge .res.miss { border-color: var(--line-2); }
+</style>
+</head>
+<body data-lecture="3">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="03">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 03</span><span>2부 · 뼈대</span></div>
+      <h1>스레드 경계 메시징</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">사건은 순서대로, 상태는 최신 것만. channel과 latest_slot 두 장치가 세 스레드 사이의 모든 이야기를 나른다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>50분</dd></div>
+            <div><dt>선수 지식</dt><dd>2강, mutex·condition variable</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>include/luil/messaging/</code>, <code>app_message.h</code></dd></div>
+            <div><dt>실험</dt><dd>channel·latest_slot 시뮬레이터, get&lt;T&gt; 판정기</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li>사건과 상태를 서로 다른 장치로 나르는 이유를 설명한다.</li>
+            <li>channel의 post·receive·drain·close와 두 넘침 정책의 결과를 예측한다.</li>
+            <li>latest_slot의 version, 신호 병합, 실패한 신호의 되돌림을 설명한다.</li>
+            <li>app_message가 타입을 지운 채 메시지를 나르는 방법과 그 한계를 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="3.1">
+        <header class="slide-head">
+          <span class="num">3.1</span>
+          <h2>사건과 상태는 다르게 나른다</h2>
+          <p class="lede">클릭은 하나도 잃으면 안 되고 순서가 중요하다. frame은 최신 것만 의미가 있다. 둘을 같은 장치로 나르면 어느 한쪽이 망가진다.</p>
+        </header>
+        <div class="cols two">
+          <div class="panel">
+            <h3><i class="ci" aria-hidden="true">&#xEB09;</i><code>channel</code> — 우편함</h3>
+            <p>편지가 온 순서대로 쌓이고, 받는 사람이 하나씩 꺼낸다. 클릭·키·앱 메시지 같은 <b>사건</b>을 나른다.</p>
+            <ul>
+              <li>여러 생산자, 소비자 하나 (<span class="term" data-term="MPSC" data-tip="Multi-Producer Single-Consumer. 여러 스레드가 넣고, 정해진 한 스레드만 꺼내는 큐.">MPSC</span>)</li>
+              <li>FIFO, 유한 용량</li>
+              <li>넘치면 <code>reject_newest</code> 또는 <code>drop_oldest</code></li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3><i class="ci" aria-hidden="true">&#xEAAD;</i><code>latest_slot</code> — 전광판</h3>
+            <p>새 글이 옛 글을 덮는다. 보는 사람은 언제 보든 가장 최신 글을 본다. frame·tree·interaction 같은 <b>상태</b>를 나른다.</p>
+            <ul>
+              <li>게시자·조회자 여럿 가능</li>
+              <li>새 값이 이전 값을 대체, version은 1부터 증가</li>
+              <li>소비자가 느리면 중간 version을 건너뛴다</li>
+            </ul>
+          </div>
+        </div>
+        <div class="prose">
+          <p>frame을 FIFO로 나르면 UI가 잠깐 느려진 사이 낡은 frame이 줄줄이 쌓여, 메모리를 먹고 화면은 과거를 그린다. 반대로 클릭을 "최신 값 하나"로 나르면 빠르게 두 번 누른 클릭 중 하나가 사라진다. luil은 둘을 갈라 각자에 맞는 의미론을 준다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th><code>channel</code></th><th><code>latest_slot</code></th></tr></thead>
+            <tbody>
+              <tr><th>의미</th><td>클릭·키·앱 메시지 같은 사건</td><td>frame·tree·interaction 같은 상태</td></tr>
+              <tr><th>생산자/소비자</th><td>MPSC / 단일 소비자</td><td>게시자·조회자 다수 가능</td></tr>
+              <tr><th>보관</th><td>FIFO, 유한 용량</td><td>새 값이 이전 값을 대체</td></tr>
+              <tr><th>포화</th><td><code>reject_newest</code> 또는 <code>drop_oldest</code></td><td>중간 version을 건너뜀</td></tr>
+              <tr><th>luil 안의 쓰임</th><td><code>input_inbox</code>, <code>app_inbox</code></td><td><code>frame_slot</code>, <code>tree_slot</code>, <code>interaction_slot</code> …</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="slide" id="s2" data-num="3.2">
+        <header class="slide-head">
+          <span class="num">3.2</span>
+          <h2>channel 읽기 ① post</h2>
+          <p class="lede">post는 절대 블로킹하지 않는다. 잠금은 짧게, 신호는 잠금 밖에서 낸다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="include/luil/messaging/channel.h:97-137" data-path="include/luil/messaging/channel.h" data-start="97"><script type="text/plain">
+        [[nodiscard]] post_result post(payload_type payload, std::uint64_t& sequence)
+        {
+            std::function<void()> signal {};
+            post_result result { post_result::posted };
+            {
+                std::lock_guard<std::mutex> lock { mutex_ };
+                if (closed_)
+                    return post_result::channel_closed;
+
+                const bool was_empty { queue_.empty() };
+                if (queue_.size() >= options_.capacity)
+                {
+                    if (options_.policy == overflow_policy::reject_newest)
+                    {
+                        ++statistics_.rejected;
+                        return post_result::channel_full;
+                    }
+                    queue_.pop_front();
+                    ++statistics_.dropped_oldest;
+                    result = post_result::posted_after_drop;
+                }
+
+                sequence = next_sequence_;
+                queue_.push_back(envelope<payload_type> {
+                    next_sequence_++,
+                    options_.clock ? options_.clock() : std::chrono::steady_clock::now(),
+                    std::move(payload),
+                });
+                ++statistics_.posted;
+                if (queue_.size() > statistics_.peak_depth)
+                    statistics_.peak_depth = queue_.size();
+
+                if (was_empty)
+                    signal = signal_callback_;
+            }
+
+            condition_.notify_one();
+            if (signal)
+                signal();
+            return result;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="97-100" data-title="받은 번호를 돌려준다">받아들인 항목만 접수 번호(<code>sequence</code>)를 얻고, 그 번호를 호출자에게 알려 준다. 소비자가 "이 번호까지 처리했다"를 알리면 생산자가 자기 메시지와 맞춰 볼 수 있다(2강의 tree ticket이 이것을 쓴다).</li>
+            <li data-lines="102-105" data-title="닫힌 채널은 받지 않는다">close 뒤의 게시는 <code>channel_closed</code>다. 번호도 쓰지 않는다.</li>
+            <li data-lines="107-117" data-title="넘칠 때의 두 갈래"><code>reject_newest</code>면 새 항목을 거절하고 통계만 센다(<code>channel_full</code>). <code>drop_oldest</code>면 맨 앞을 버리고 받는다(<code>posted_after_drop</code>). 어느 쪽이든 post는 기다리지 않는다.</li>
+            <li data-lines="119-127" data-title="봉투에 담는다">접수 번호와 시각을 붙여 <code>envelope</code>에 담는다. 시계는 주입할 수 있어 test가 고정 시계를 넣는다. 최대 깊이(<code>peak_depth</code>)도 센다.</li>
+            <li data-lines="104,128-129" data-title="비어 있던 채널만 신호한다">잠금 안에서 "넣기 전에 비어 있었나"를 기록하고, 그랬을 때만 신호 함수를 꺼내 둔다. 이미 쌓여 있으면 소비자는 깨어 있거나 곧 깨므로 신호를 다시 낼 이유가 없다. 연속 게시는 깨우기 하나로 병합된다.</li>
+            <li data-lines="132-136" data-title="신호는 잠금 밖에서">condition variable을 깨우고, 잠금을 놓은 뒤에 신호 함수를 부른다. 신호 함수(예: <code>PostMessageW</code>)가 잠금을 쥔 채 불리면 다른 생산자가 그동안 막힌다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="3.3">
+        <header class="slide-head">
+          <span class="num">3.3</span>
+          <h2>channel 실험</h2>
+          <p class="lede">입력 사건을 넣고 꺼내 보자. 용량을 넘기면 두 정책이 무엇을 잃는지 갈린다.</p>
+        </header>
+        <div class="lw" data-title="channel&lt;raw_input_event&gt;" data-surface="channel.h 동작 그대로" data-reset id="ch-lab">
+          <div class="lw-body sim">
+            <div class="controls">
+              <span class="field">정책</span>
+              <div class="seg" role="group" aria-label="넘침 정책" id="ch-policy">
+                <button type="button" data-v="reject_newest" aria-pressed="true">reject_newest</button>
+                <button type="button" data-v="drop_oldest">drop_oldest</button>
+              </div>
+              <span class="field">용량</span>
+              <div class="seg" role="group" aria-label="용량" id="ch-cap">
+                <button type="button" data-v="4">4</button>
+                <button type="button" data-v="6" aria-pressed="true">6</button>
+                <button type="button" data-v="8">8</button>
+              </div>
+              <span class="lamp" id="ch-lamp"><i></i><span>신호 0번</span></span>
+            </div>
+            <div class="queue" id="ch-queue" aria-label="채널 안의 봉투들, 왼쪽이 맨 앞"></div>
+            <div class="sim-row">
+              <div class="controls">
+                <span class="field">생산자</span>
+                <button class="btn" type="button" data-post="move">move</button>
+                <button class="btn" type="button" data-post="press">press</button>
+                <button class="btn" type="button" data-post="release">release</button>
+                <button class="btn soft" type="button" data-post="burst">move ×6</button>
+              </div>
+              <div class="controls">
+                <span class="field">소비자</span>
+                <button class="btn primary" type="button" id="ch-recv">try_receive</button>
+                <button class="btn" type="button" id="ch-drain">drain(3)</button>
+                <button class="btn ghost" type="button" id="ch-close">close()</button>
+              </div>
+            </div>
+            <div>
+              <div class="small muted" style="margin-bottom:6px">소비자가 꺼낸 순서</div>
+              <div class="took" id="ch-took"></div>
+            </div>
+            <div class="stat-row" id="ch-stats"></div>
+            <div class="log" id="ch-log" aria-live="polite"></div>
+          </div>
+          <div class="lw-foot">해 볼 것: <b>drop_oldest</b>로 바꾸고 press → move ×6을 넣은 뒤 꺼내 보라. press가 버려지고, 소비자는 번호가 건너뛴 것을 본다. luil의 input pump는 이때 진행 중인 누름·끌기를 취소한다. <b>reject_newest</b>에서는 같은 순서가 마지막 move들을 거절한다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s4" data-num="3.4">
+        <header class="slide-head">
+          <span class="num">3.4</span>
+          <h2>넘칠 때, 무엇을 잃을 것인가</h2>
+          <p class="lede">정책은 전달을 보장하지 않는다. 무엇을 잃을지 고를 뿐이고, 잃은 사실을 알아차리는 길을 함께 둔다.</p>
+        </header>
+        <div class="cols two">
+          <div class="panel">
+            <h3><code>input_inbox</code> · drop_oldest · 4096</h3>
+            <p>포인터 이동의 중간 좌표는 버려도 된다. 최신 좌표가 중요하다. 하지만 버려진 것 중에 누름·뗌·초점 상실이 섞일 수 있다.</p>
+            <p>그래서 소비자는 <code>envelope.sequence</code>가 건너뛴 것을 보면 <code>cancel_dropped_gestures()</code>로 진행 중인 누름과 끌기를 취소한다. 초점은 유지하고 다음 초점 이벤트가 갱신한다.</p>
+          </div>
+          <div class="panel">
+            <h3><code>app_inbox</code> · reject_newest · 1024</h3>
+            <p>앱 메시지는 버리면 안 된다. 넘치면 새 것을 거절하고 <code>channel_full</code>을 돌려줘 게시한 쪽이 알게 한다.</p>
+            <p>input pump는 여유가 생길 때까지 짧게 재시도하고, 종료 신호는 종료 예산 안에서 재시도한다(2강). <code>post_app_message</code>는 반환값을 보지 않으므로 거절은 <code>app_inbox_statistics()</code>로 확인한다.</p>
+          </div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="tests/messaging_channel_tests.cpp:120-140" data-path="tests/messaging_channel_tests.cpp" data-start="120"><script type="text/plain">
+TEST_CASE("A full drop_oldest channel drops the head and shows a sequence gap", "[messaging][channel]")
+{
+    messaging::channel<int> channel { fixed_clock_options(2, messaging::overflow_policy::drop_oldest) };
+    REQUIRE(channel.post(1) == messaging::post_result::posted);
+    REQUIRE(channel.post(2) == messaging::post_result::posted);
+    REQUIRE(channel.post(3) == messaging::post_result::posted_after_drop);
+
+    const messaging::channel_statistics statistics { channel.statistics() };
+    REQUIRE(statistics.posted == 3u);
+    REQUIRE(statistics.dropped_oldest == 1u);
+
+    messaging::envelope<int> received {};
+    REQUIRE(channel.try_receive(received) == messaging::receive_status::received);
+    REQUIRE(received.payload == 2);
+    // 버린 항목의 sequence 0이 비고 1부터 이어진다.
+    // 소비자가 구멍을 관찰할 수 있다.
+    REQUIRE(received.sequence == 1u);
+    REQUIRE(channel.try_receive(received) == messaging::receive_status::received);
+    REQUIRE(received.payload == 3);
+    REQUIRE(received.sequence == 2u);
+}
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="122-125" data-title="용량 2에 세 번 넣는다">셋째 post는 맨 앞(1)을 버리고 받아들인다. 결과는 <code>posted_after_drop</code>이다.</li>
+            <li data-lines="127-129" data-title="통계에 남는다">접수는 3건, 버린 것은 1건이다. 유실은 조용하지 않고 숫자로 남는다.</li>
+            <li data-lines="131-139" data-title="번호의 구멍이 유실을 말한다">첫 수신의 번호가 0이 아니라 1이다. 소비자는 번호 0이 사라졌다는 것을 이 구멍으로 안다. 접수된 항목에만 번호가 붙기 때문에 가능한 일이다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s5" data-num="3.5">
+        <header class="slide-head">
+          <span class="num">3.5</span>
+          <h2>channel 읽기 ② 소비자와 close</h2>
+          <p class="lede">꺼내는 쪽은 한 스레드뿐이다. debug 빌드는 그 약속을 assert로 지킨다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="include/luil/messaging/channel.h:139-207,226-236" data-path="include/luil/messaging/channel.h" data-start="139"><script type="text/plain">
+        [[nodiscard]] receive_status try_receive(envelope<payload_type>& out)
+        {
+            std::lock_guard<std::mutex> lock { mutex_ };
+            assert_consumer_thread();
+            if (queue_.empty())
+                return closed_ ? receive_status::closed : receive_status::empty;
+
+            out = std::move(queue_.front());
+            queue_.pop_front();
+            return receive_status::received;
+        }
+
+        [[nodiscard]] receive_status receive_wait(envelope<payload_type>& out, const std::chrono::milliseconds wait_limit)
+        {
+            std::unique_lock<std::mutex> lock { mutex_ };
+            assert_consumer_thread();
+            condition_.wait_for(lock, wait_limit, [this] { return queue_.empty() == false || closed_; });
+            if (queue_.empty() == false)
+            {
+                out = std::move(queue_.front());
+                queue_.pop_front();
+                return receive_status::received;
+            }
+            return closed_ ? receive_status::closed : receive_status::timed_out;
+        }
+
+        // 한 번의 잠금으로 최대 max_count개를 꺼낸다.
+        // 반환값은 꺼낸 수다.
+        // 상한이 한 번의 wake에서 무한히 소비하는 것을 막아 렌더링 기회를 보존한다.
+        [[nodiscard]] std::size_t drain(std::vector<envelope<payload_type>>& out, const std::size_t max_count)
+        {
+            std::lock_guard<std::mutex> lock { mutex_ };
+            assert_consumer_thread();
+            std::size_t count { 0 };
+            while (count < max_count && queue_.empty() == false)
+            {
+                out.push_back(std::move(queue_.front()));
+                queue_.pop_front();
+                ++count;
+            }
+            return count;
+        }
+
+        void close() noexcept
+        {
+            std::function<void()> signal {};
+            {
+                std::lock_guard<std::mutex> lock { mutex_ };
+                if (closed_)
+                    return;
+                closed_ = true;
+                signal = signal_callback_;
+            }
+            condition_.notify_all();
+
+            // callback 계약은 예외 금지지만 close는 noexcept이므로 방어한다.
+            if (signal)
+            {
+                try
+                {
+                    signal();
+                }
+                catch (...)
+                {
+                }
+            }
+        }
+
+        [[nodiscard]] bool closed() const noexcept
+⋯@226
+    private:
+        void assert_consumer_thread() noexcept
+        {
+#ifndef NDEBUG
+            const std::thread::id current { std::this_thread::get_id() };
+            if (consumer_thread_ == std::thread::id {})
+                consumer_thread_ = current;
+            else
+                assert(consumer_thread_ == current && "channel consumer must stay on a single thread");
+#endif
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="139-149" data-title="try_receive — 기다리지 않는다">비어 있으면 닫혔는지에 따라 <code>closed</code> 또는 <code>empty</code>다. 닫힌 뒤에도 남은 항목은 끝까지 꺼낼 수 있다(drain 의미론).</li>
+            <li data-lines="151-166" data-title="receive_wait — 상한이 있는 기다림">condition variable로 최대 <code>wait_limit</code>만 잔다. 2강의 logic loop가 250ms나 다음 tick까지로 이 값을 준다. 시간이 다 되면 <code>timed_out</code>이다.</li>
+            <li data-lines="168-180" data-title="drain — 한 번의 잠금으로 여러 개">최대 <code>max_count</code>개를 꺼낸다. 상한이 한 번 깰 때 끝없이 소비하는 것을 막아 렌더링 기회를 보존한다. logic loop는 63을 준다.</li>
+            <li data-lines="182-207" data-title="close — 한 번만, 그리고 신호">이미 닫혔으면 아무 일도 없다. 닫고, 기다리는 소비자를 모두 깨우고, 신호를 낸다. <code>noexcept</code> 함수라 신호 함수가 계약을 어기고 던져도 삼킨다.</li>
+            <li data-lines="226-236" data-title="소비자는 한 스레드">debug 빌드는 첫 수신 스레드의 id를 기억하고, 다른 스레드가 꺼내면 assert한다. MPSC라는 계약을 실행 중에 확인하는 장치다. release 빌드에서는 비용이 없다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s6" data-num="3.6">
+        <header class="slide-head">
+          <span class="num">3.6</span>
+          <h2>latest_slot 읽기</h2>
+          <p class="lede">값 하나, version 하나, 그리고 "아직 가져가지 않은 새 값이 있다"는 표시 하나. 125줄이 전부다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="include/luil/messaging/latest_slot.h:16-78" data-path="include/luil/messaging/latest_slot.h" data-start="16"><script type="text/plain">
+
+    // 최신 값 하나만 유지하는 상태 mailbox다.
+    // 게시가 이전 값을 덮어쓰므로 소비자는 항상 최신만 본다.
+    // view/layout snapshot 전달용이며 값은 복사 가능해야 한다.
+    // signal callback은 "소비자가 아직 가져가지 않은 새 값"이 처음 생길 때와 close에서 호출된다.
+    // 연속 게시는 callback을 다시 부르지 않으므로 wake 하나로 병합된다.
+    // callback은 전달에 성공했는지를 돌려준다 (창 메시지 큐 포화 같은 실패).
+    // 실패한 신호는 없던 것으로 되돌려, 다음 게시가 다시 신호하게 한다 —
+    // 그래야 일시적인 전달 실패 한 번이 영구적인 미갱신으로 굳지 않는다.
+    template<typename value_type>
+    class latest_slot
+    {
+    public:
+        latest_slot() = default;
+        latest_slot(const latest_slot&) = delete;
+        latest_slot(latest_slot&&) = delete;
+        latest_slot& operator=(const latest_slot&) = delete;
+        latest_slot& operator=(latest_slot&&) = delete;
+        ~latest_slot() = default;
+
+        // 새 version을 돌려준다.
+        // 닫힌 slot은 저장하지 않고 0을 돌려준다.
+        // version은 1부터 시작하므로 0은 "게시되지 않음"이다.
+        [[nodiscard]] std::uint64_t publish(value_type value)
+        {
+            std::function<bool()> signal {};
+            std::uint64_t version { 0 };
+            {
+                std::lock_guard<std::mutex> lock { mutex_ };
+                if (closed_)
+                    return 0;
+
+                value_ = std::move(value);
+                version = ++version_;
+                has_value_ = true;
+                if (pending_ == false)
+                {
+                    pending_ = true;
+                    signal = signal_callback_;
+                }
+            }
+
+            if (signal && signal() == false)
+            {
+                // pending을 되돌려야 다음 게시가 다시 신호한다.
+                // 그 사이 다른 게시·소비가 지나갔어도 손해는 여분의 신호 하나뿐이다.
+                std::lock_guard<std::mutex> lock { mutex_ };
+                pending_ = false;
+            }
+            return version;
+        }
+
+        // 마지막으로 본 version보다 새 값이 있을 때만 돌려준다.
+        // 닫힌 뒤에도 남은 값은 한 번 더 가져갈 수 있다 (drain 의미론).
+        [[nodiscard]] std::optional<versioned<value_type>> take_newer(const std::uint64_t last_seen_version)
+        {
+            std::lock_guard<std::mutex> lock { mutex_ };
+            if (has_value_ == false || version_ <= last_seen_version)
+                return std::nullopt;
+
+            pending_ = false;
+            return versioned<value_type> { version_, value_ };
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="16-25" data-title="계약을 주석이 말한다">최신 값 하나만 유지한다. 신호는 소비자가 가져가지 않은 새 값이 처음 생길 때만 부르고, 연속 게시는 깨우기 하나로 병합된다. 신호 함수는 전달에 성공했는지를 돌려준다.</li>
+            <li data-lines="39-50" data-title="publish — 덮고, 번호를 올린다">닫혔으면 0을 돌려준다. version은 1부터 시작하므로 0은 "게시되지 않음"이다. 값을 덮어쓰고 version을 올린다.</li>
+            <li data-lines="51-56" data-title="pending — 병합의 핵심">아직 소비되지 않은 신호가 있으면(<code>pending_</code>) 신호를 다시 내지 않는다. UI가 깨어나기 전에 frame이 열 번 게시되어도 창 메시지는 하나다.</li>
+            <li data-lines="58-67" data-title="실패한 신호는 없던 것으로">신호 함수가 실패를 알리면(창 메시지 큐가 가득 찬 경우 등) <code>pending_</code>을 되돌린다. 그래야 다음 게시가 다시 신호한다. 한 번의 일시적 실패가 영구적인 미갱신으로 굳지 않는다.</li>
+            <li data-lines="70-78" data-title="take_newer — 본 것보다 새로울 때만">소비자는 자기가 본 version을 들고 와서, 그보다 새 값이 있을 때만 받는다. 받으면 <code>pending_</code>을 내려 다음 게시가 신호하게 한다. 중간 version은 자연히 건너뛴다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s7" data-num="3.7">
+        <header class="slide-head">
+          <span class="num">3.7</span>
+          <h2>latest_slot 실험</h2>
+          <p class="lede">logic이 frame을 여러 번 게시하는 동안 UI가 한 번만 깨어나는 모습을 보자.</p>
+        </header>
+        <div class="lw" data-title="latest_slot&lt;frame&gt;" data-surface="latest_slot.h 동작 그대로" data-reset id="sl-lab">
+          <div class="lw-body sim">
+            <div class="sim-row">
+              <div class="slotbox">
+                <div class="big" id="sl-val">—</div>
+                <div>
+                  <div class="meta-line" id="sl-meta">version 0 · has_value false · pending false</div>
+                  <div class="meta-line" id="sl-closed"></div>
+                </div>
+              </div>
+              <div class="controls">
+                <span class="lamp" id="sl-lamp"><i></i><span>신호 0번</span></span>
+                <label class="field"><input type="checkbox" id="sl-ok" checked> 신호 전달 성공</label>
+              </div>
+            </div>
+            <div class="sim-row">
+              <div class="controls">
+                <span class="field"><span class="thread-chip lg">logic</span></span>
+                <button class="btn" type="button" id="sl-pub">publish(frame)</button>
+                <button class="btn soft" type="button" id="sl-pub5">publish ×5</button>
+                <button class="btn ghost" type="button" id="sl-close">close()</button>
+              </div>
+              <div class="controls">
+                <span class="field"><span class="thread-chip ui">UI</span></span>
+                <button class="btn primary" type="button" id="sl-take">take_newer(last_seen)</button>
+              </div>
+            </div>
+            <div>
+              <div class="small muted" style="margin-bottom:6px">게시된 version — 칠한 칸이 UI가 실제로 본 것</div>
+              <div class="vers" id="sl-vers"></div>
+            </div>
+            <div class="log" id="sl-log" aria-live="polite"></div>
+          </div>
+          <div class="lw-foot">해 볼 것: publish ×5 뒤에 take_newer를 한 번. 신호는 1번, UI가 본 version은 마지막 하나다. 이번에는 <b>신호 전달 성공</b>을 끄고 publish, 다시 켜고 publish를 눌러 보라. 실패한 신호가 다음 게시의 신호를 막지 않는다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="tests/messaging_latest_slot_tests.cpp:53-80" data-path="tests/messaging_latest_slot_tests.cpp" data-start="53"><script type="text/plain">
+TEST_CASE("A failed signal lets the next publish signal again", "[messaging][slot]")
+{
+    messaging::latest_slot<int> slot {};
+    int signal_count { 0 };
+    bool deliverable { false };
+    slot.set_signal_callback([&signal_count, &deliverable] {
+        ++signal_count;
+        return deliverable;
+    });
+
+    // 전달 실패한 신호는 없던 것이 된다 — 병합 대상이 아니다.
+    REQUIRE(slot.publish(1) == 1u);
+    REQUIRE(signal_count == 1);
+
+    // 실패가 병합으로 굳으면 이 게시는 신호 없이 잠긴다.
+    deliverable = true;
+    REQUIRE(slot.publish(2) == 2u);
+    REQUIRE(signal_count == 2);
+
+    // 성공한 신호부터는 평소처럼 병합된다.
+    REQUIRE(slot.publish(3) == 3u);
+    REQUIRE(signal_count == 2);
+
+    const auto taken { slot.take_newer(0) };
+    REQUIRE(taken.has_value());
+    REQUIRE(taken->value == 3);
+}
+
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="55-61" data-title="전달 여부를 바꿀 수 있는 신호">신호 함수가 <code>deliverable</code>을 돌려준다. 처음에는 실패다.</li>
+            <li data-lines="63-65" data-title="실패한 신호는 병합되지 않는다">첫 게시는 신호를 냈지만 실패했다. 이것이 "이미 신호했음"으로 남으면 다음 게시는 신호 없이 잠긴다.</li>
+            <li data-lines="67-70" data-title="다음 게시가 다시 신호한다">전달이 가능해진 뒤의 게시가 신호를 낸다. 실패가 굳지 않았다.</li>
+            <li data-lines="72-79" data-title="성공한 뒤로는 평소처럼">성공한 신호부터는 병합된다. 소비자는 최신 값 3을 받는다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s8" data-num="3.8">
+        <header class="slide-head">
+          <span class="num">3.8</span>
+          <h2>타입을 지운 운반체 app_message</h2>
+          <p class="lede">라이브러리는 앱의 메시지 타입을 모른다. 그래도 나를 수 있게, 값을 <code>shared_ptr&lt;const void&gt;</code>와 타입 정보 한 쌍으로 싼다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="include/luil/ui/app_message.h:7-47" data-path="include/luil/ui/app_message.h" data-start="7"><script type="text/plain">
+namespace luil {
+    // 앱 메시지의 불투명 운반체다.
+    // UI element의 액션은 앱이 정의한 메시지 타입을 이 상자에 담아 반환하고,
+    // 라이브러리는 내용을 해석하지 않은 채 앱이 지정한 배출구(logic inbox)로 전달만 한다.
+    // 앱은 경계에서 `get`으로 복원한다.
+    //
+    // 값은 공유 소유라 복사가 싸고, channel을 값으로 지나도 payload 복사가 없다.
+    // 담은 값은 불변으로 취급한다.
+    //  - 게시된 tree의 액션이 여러 스레드에서 실행될 수 있기 때문이다.
+    class app_message
+    {
+    public:
+        app_message() = default;
+
+        template<typename message_type>
+        explicit app_message(message_type value)
+            : value_ { std::make_shared<const message_type>(std::move(value)) }
+            , type_ { &typeid(message_type) }
+        {
+        }
+
+        [[nodiscard]] bool empty() const noexcept
+        {
+            return value_ == nullptr;
+        }
+
+        // 담긴 타입이 다르면 nullptr다.
+        // 앱 경계에서 알려진 타입 하나로 복원하는 용도라 계층 변환은 지원하지 않는다.
+        template<typename message_type>
+        [[nodiscard]] const message_type* get() const noexcept
+        {
+            if (type_ == nullptr || *type_ != typeid(message_type))
+                return nullptr;
+            return static_cast<const message_type*>(value_.get());
+        }
+
+    private:
+        std::shared_ptr<const void> value_ {};
+        const std::type_info* type_ { nullptr };
+    };
+}
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="8-17" data-title="해석하지 않고 나른다">element 액션은 앱 타입을 이 상자에 담아 돌려주고, 라이브러리는 내용을 보지 않고 logic inbox로 보낸다. 앱은 경계에서 꺼낸다.</li>
+            <li data-lines="20-26" data-title="담는 순간 불변이 된다">생성자가 <code>make_shared&lt;const T&gt;</code>로 값을 한 번 옮겨 담고 <code>typeid(T)</code>를 기억한다. 게시된 tree의 액션은 여러 스레드에서 실행될 수 있으므로 담은 값은 <code>const</code>다.</li>
+            <li data-lines="28-31" data-title="비어 있을 수 있다">기본 생성은 빈 메시지다. 액션이 아무것도 내지 않는 경우를 값으로 표현한다.</li>
+            <li data-lines="33-41" data-title="정확히 같은 타입일 때만">저장된 타입과 묻는 타입이 정확히 같을 때만 포인터를 돌려준다. 상속 변환은 하지 않는다. 앱 경계에서 알려진 타입 하나로 꺼내는 용도이기 때문이다.</li>
+            <li data-lines="43-45" data-title="복사가 싸다">멤버는 공유 포인터 하나와 type_info 포인터 하나다. channel을 값으로 지나도 payload는 복사되지 않는다.</li>
+          </ol>
+        </div>
+        <div class="lw" data-title="get&lt;T&gt;() 판정기" data-surface="*type_ == typeid(T) ?" id="judge-lab">
+          <div class="lw-body judge">
+            <div class="code" data-lang="cpp" data-label="앱이 정의한 메시지 타입 (예시)"><script type="text/plain">
+struct increment_intent {};
+struct metrics_intent { float width {}, height {}, scale { 1.0f }; };
+struct base_intent {};
+struct derived_intent : base_intent {};
+</script></div>
+            <div class="controls">
+              <label class="field" for="jd-store">담은 값</label>
+              <select id="jd-store">
+                <option value="increment_intent">app_message { increment_intent {} }</option>
+                <option value="metrics_intent">app_message { metrics_intent {} }</option>
+                <option value="derived_intent" selected>app_message { derived_intent {} }</option>
+                <option value="">app_message {} (빈 메시지)</option>
+              </select>
+              <label class="field" for="jd-ask">묻는 타입</label>
+              <select id="jd-ask">
+                <option value="increment_intent">get&lt;increment_intent&gt;()</option>
+                <option value="metrics_intent">get&lt;metrics_intent&gt;()</option>
+                <option value="base_intent" selected>get&lt;base_intent&gt;()</option>
+                <option value="derived_intent">get&lt;derived_intent&gt;()</option>
+              </select>
+            </div>
+            <div class="res" id="jd-res" aria-live="polite"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s9" data-num="3.9">
+        <header class="slide-head">
+          <span class="num">3.9</span>
+          <h2>input_action — 실행할 스레드는 타입이 정한다</h2>
+          <p class="lede">액션이 돌려주는 값은 11갈래 variant다. 프레임워크는 갈래를 보고 그 값을 처리할 스레드로 보낸다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_events.h:853-854" data-path="include/luil/ui/ui_events.h" data-start="853"><script type="text/plain">
+    using input_action = std::variant<std::monostate, app_message, ui_command, app_ui_command, clipboard_copy_request, clipboard_paste_request, capture_request, record_request, haptic_request,
+        clipboard_files_copy_request, clipboard_files_paste_request>;
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>갈래</th><th>가는 곳</th><th>예</th></tr></thead>
+            <tbody>
+              <tr><td><code>std::monostate</code></td><td>없음</td><td>아무 일도 하지 않는 액션</td></tr>
+              <tr class="hi"><td><code>app_message</code></td><td><span class="thread-chip lg">logic</span> app inbox → <code>handle</code></td><td><code>increment_intent</code> — 앱 상태를 바꾸는 모든 것</td></tr>
+              <tr><td><code>ui_command</code></td><td><span class="thread-chip ui">UI</span> 프레임워크가 직접 실행</td><td>최소화, 최대화 전환, 전체 화면, 창 닫기, 앱 종료</td></tr>
+              <tr><td><code>app_ui_command</code></td><td><span class="thread-chip ui">UI</span> 앱의 UI handler</td><td>파일 대화 상자, 외부 프로그램 실행</td></tr>
+              <tr><td><code>clipboard_copy_request</code> · <code>clipboard_paste_request</code></td><td><span class="thread-chip ui">UI</span></td><td>텍스트 컨트롤 공통의 복사·붙여넣기</td></tr>
+              <tr><td><code>clipboard_files_copy_request</code> · <code>clipboard_files_paste_request</code></td><td><span class="thread-chip ui">UI</span></td><td>파일 목록 클립보드</td></tr>
+              <tr><td><code>capture_request</code> · <code>record_request</code></td><td><span class="thread-chip ui">UI</span></td><td>화면 남기기와 녹화</td></tr>
+              <tr><td><code>haptic_request</code></td><td>플랫폼 햅틱 출력</td><td>길게 누르기의 진동</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="walk">
+          <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element.h:194-204" data-path="include/luil/ui/ui_element.h" data-start="194"><script type="text/plain">
+    // 액션은 상태를 바꾸지 않고 후속 메시지를 반환한다.
+    using ui_action = std::function<std::vector<input_action>(const ui_action_context&)>;
+
+    // "실행되면 이 메시지 하나"인 액션이다.
+    // set_action과 config의 액션 자리에 바로 꽂는, 가장 흔한 꼴의 도우미다.
+    // 좌표가 필요한 액션은 여전히 lambda를 직접 쓴다.
+    template<typename intent_type>
+    [[nodiscard]] ui_action make_message_action(intent_type intent)
+    {
+        return [intent = std::move(intent)](const ui_action_context&) -> std::vector<input_action> { return { make_app_action(intent) }; };
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="194-195" data-title="액션의 모양">액션은 문맥(눌린 수식 키·좌표 등)을 받아 <code>input_action</code> 목록을 돌려주는 함수다. 상태를 바꾸지 않고 후속 메시지를 돌려준다.</li>
+            <li data-lines="197-204" data-title="가장 흔한 꼴">"실행되면 이 메시지 하나"인 액션을 만든다. intent를 값으로 캡처하므로 공유 상태에 닿지 않는다. 1강의 hello 버튼이 이것을 쓴다.</li>
+          </ol>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">const가 지켜 주지 못하는 것</span>payload가 <code>const</code>여도, 그 안에 외부 포인터나 mutable 캡처가 있으면 안전하지 않다. 게시된 액션은 공유되는 앱 상태를 직접 바꾸면 안 된다. 바꾸고 싶은 것은 메시지로 말한다.</div></div>
+      </section>
+
+      <section class="slide" id="s10" data-num="3.10">
+        <header class="slide-head">
+          <span class="num">3.10</span>
+          <h2>lock-free가 아닌 이유</h2>
+          <p class="lede">두 장치는 mutex로 내부 저장소를 지키는 평범한 자료구조다. 빠르기보다 맞기를 먼저 골랐다.</p>
+        </header>
+        <div class="cols two">
+          <div class="panel">
+            <h3>단순함이 주는 것</h3>
+            <ul>
+              <li>잠금 구간이 짧고(넣기·꺼내기 한 번), 경합은 스레드 셋뿐이다.</li>
+              <li>정책·통계·close·신호 병합 같은 의미론을 잠금 안에서 그대로 쓸 수 있다.</li>
+              <li>헤더만으로 된 component라 다른 프로젝트에 복사해도 그대로 컴파일된다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>검증하는 법</h3>
+            <ul>
+              <li>header-only라 별도 실행 파일에서 AddressSanitizer로 전체 구현을 검사한다(Release 테스트, 12강).</li>
+              <li>MSVC의 <code>/RTC1</code>과 ASan은 함께 쓰지 않는다.</li>
+              <li>여러 생산자의 순서 보존, close와 경쟁하는 생산자, 스트레스 테스트가 있다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">신호 함수의 세 가지 약속</span>짧아야 하고, 예외가 없어야 하고, 채널 API를 다시 부르면 안 된다. 조립 순서는 채널·slot 생성 → callback 설정 → 스레드 시작이다. 신호는 잠금 밖에서 불리지만, 신호 안에서 같은 채널에 넣으면 의미론이 꼬인다.</div></div>
+      </section>
+
+      <section class="slide" id="s11" data-num="3.11">
+        <header class="slide-head">
+          <span class="num">3.11</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>사건은 channel(FIFO, 유한 용량, 소비자 하나)로, 상태는 latest_slot(최신 값 하나, version)으로 나른다.</li>
+          <li>post는 블로킹하지 않는다. 넘치면 <code>reject_newest</code>는 새 것을 거절해 알리고, <code>drop_oldest</code>는 맨 앞을 버린다.</li>
+          <li>접수된 항목에만 번호가 붙으므로 소비자는 번호의 구멍으로 유실을 알아챈다. input은 그때 진행 중인 몸짓을 취소한다.</li>
+          <li>신호는 "비어 있다가 채워질 때"와 "새 값이 처음 생길 때"만 나간다. 연속 게시는 깨우기 하나로 병합되고, 실패한 신호는 되돌린다.</li>
+          <li><code>app_message</code>는 <code>shared_ptr&lt;const void&gt;</code>와 type_info로 타입을 지운다. <code>get&lt;T&gt;</code>는 정확히 같은 타입만 꺼낸다.</li>
+          <li><code>input_action</code>의 갈래가 실행할 스레드를 정한다. 앱 상태를 바꾸는 갈래는 <code>app_message</code> 하나다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s12" data-num="3.12">
+        <header class="slide-head">
+          <span class="num">3.12</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="2">
+            <p class="q">용량 2인 <code>drop_oldest</code> 채널에 1, 2, 3을 차례로 post했다. 첫 <code>try_receive</code>가 받는 봉투는?</p>
+            <ol class="choices">
+              <li>payload 1, sequence 0</li>
+              <li>payload 2, sequence 1</li>
+              <li>payload 2, sequence 0</li>
+              <li>payload 3, sequence 2</li>
+            </ol>
+            <div class="explain">셋째 post가 맨 앞(1, 번호 0)을 버린다. 남은 첫 봉투는 payload 2이고 번호는 1이다. 번호 0의 구멍이 유실을 알린다.</div>
+          </div>
+          <div class="quiz" data-answer="3">
+            <p class="q">UI가 잠든 동안 logic이 frame을 다섯 번 게시했다. 신호 함수는 모두 성공했다. 신호는 몇 번 나가는가?</p>
+            <ol class="choices">
+              <li>5번</li>
+              <li>0번</li>
+              <li>1번</li>
+              <li>2번</li>
+            </ol>
+            <div class="explain">첫 게시가 <code>pending_</code>을 세우고 신호한다. UI가 <code>take_newer</code>로 가져가기 전까지 나머지 게시는 신호하지 않는다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">latest_slot이 실패한 신호의 <code>pending_</code>을 되돌리는 이유는?</p>
+            <ol class="choices">
+              <li>되돌리지 않으면 다음 게시들이 신호 없이 잠겨 화면이 영영 갱신되지 않을 수 있어서</li>
+              <li>실패한 신호를 즉시 다시 보내기 위해서</li>
+              <li>version 번호를 되돌리기 위해서</li>
+              <li>소비자가 같은 값을 두 번 받게 하려고</li>
+            </ol>
+            <div class="explain">실패가 "이미 신호했음"으로 남으면 소비자는 깨지 않고, 다음 게시도 병합되어 신호하지 않는다. 일시적인 실패 한 번이 영구적인 미갱신으로 굳는다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q"><code>app_message { derived_intent {} }</code>에 <code>get&lt;base_intent&gt;()</code>를 부르면? (<code>derived_intent</code>는 <code>base_intent</code>를 상속한다)</p>
+            <ol class="choices">
+              <li><code>base_intent</code>로 잘린(slicing) 포인터를 돌려준다</li>
+              <li>컴파일 오류가 난다</li>
+              <li>예외를 던진다</li>
+              <li><code>nullptr</code>를 돌려준다</li>
+            </ol>
+            <div class="explain"><code>get</code>은 저장된 <code>type_info</code>와 묻는 타입을 정확히 비교한다. 계층 변환은 지원하지 않으므로 <code>nullptr</code>다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/course.js"></script>
+<script>
+(function () {
+  const { el } = window.LU;
+
+  function seg(id, onChange) {
+    const g = document.getElementById(id);
+    g.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-v]");
+      if (!b) return;
+      g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+      onChange(b.dataset.v);
+    });
+  }
+  function logTo(box, cls, text) {
+    box.append(el("div", { class: "row " + cls }, el("span", { class: "t", text: "" }), el("span", { class: "m", text })));
+    while (box.childNodes.length > 60) box.firstChild.remove();
+    box.scrollTop = box.scrollHeight;
+  }
+  function pulse(lamp, n) {
+    lamp.classList.add("on");
+    lamp.querySelector("span").textContent = "신호 " + n + "번";
+    clearTimeout(lamp._t);
+    lamp._t = setTimeout(() => lamp.classList.remove("on"), 650);
+  }
+
+  /* ---------- 3.3 channel ---------- */
+  const C = { cap: 6, policy: "reject_newest", q: [], next: 0, closed: false, posted: 0, dropped: 0, rejected: 0, peak: 0, signals: 0, took: [], last: -1 };
+  const qEl = document.getElementById("ch-queue");
+  const tookEl = document.getElementById("ch-took");
+  const statEl = document.getElementById("ch-stats");
+  const logC = document.getElementById("ch-log");
+  const lampC = document.getElementById("ch-lamp");
+
+  function drawC(flashSeq) {
+    qEl.textContent = "";
+    qEl.append(el("span", { class: "end", text: "앞(head)" }));
+    for (let i = 0; i < C.cap; i++) {
+      const e = C.q[i];
+      if (e) qEl.append(el("div", { class: "cell full " + e.kind + (e.seq === flashSeq ? " flash" : ""), title: "sequence " + e.seq }, el("span", { class: "k", text: e.kind }), el("span", { text: "#" + e.seq })));
+      else qEl.append(el("div", { class: "cell", text: "빈칸" }));
+    }
+    qEl.append(el("span", { class: "end", text: "뒤(tail)" }));
+    if (C.closed) qEl.append(el("span", { class: "closed-badge", text: "closed" }));
+    statEl.textContent = "";
+    const st = [["posted", C.posted], ["dropped_oldest", C.dropped], ["rejected", C.rejected], ["peak_depth", C.peak], ["다음 번호", C.next]];
+    for (const [k, v] of st) statEl.append(el("div", null, el("span", { class: "k", text: k }), el("span", { class: "v", text: String(v) })));
+  }
+
+  function post(kind) {
+    if (C.closed) { logTo(logC, "bad", "post(" + kind + ") → channel_closed"); return; }
+    const wasEmpty = C.q.length === 0;
+    let result = "posted";
+    if (C.q.length >= C.cap) {
+      if (C.policy === "reject_newest") { C.rejected++; logTo(logC, "bad", "post(" + kind + ") → channel_full · 새 항목을 거절했다"); drawC(); return; }
+      const d = C.q.shift();
+      C.dropped++;
+      result = "posted_after_drop";
+      logTo(logC, "bad", "맨 앞 " + d.kind + " #" + d.seq + "을 버렸다");
+    }
+    const env = { seq: C.next++, kind };
+    C.q.push(env);
+    C.posted++;
+    C.peak = Math.max(C.peak, C.q.length);
+    logTo(logC, "in", "post(" + kind + ") → " + result + " · sequence " + env.seq);
+    if (wasEmpty) { C.signals++; pulse(lampC, C.signals); logTo(logC, "good", "비어 있던 채널이 채워졌다 → 신호 (소비자를 깨운다)"); }
+    drawC(env.seq);
+  }
+
+  function receive() {
+    if (!C.q.length) { logTo(logC, "", "try_receive → " + (C.closed ? "closed" : "empty")); return false; }
+    const e = C.q.shift();
+    // input pump와 같다: 기대 번호는 0에서 시작하고, 다르면 처리 전에 몸짓을 거둔다 (ui_interaction.cpp 4978-4980).
+    const gap = e.seq !== C.last + 1;
+    C.took.push({ e, gap, from: C.last + 1 });
+    C.last = e.seq;
+    tookEl.append(el("span", { class: gap ? "gap" : "", title: gap ? "번호 건너뜀" : "" , text: (gap ? "⋯ " : "") + e.kind + " #" + e.seq }));
+    logTo(logC, "ui", "try_receive → received · " + e.kind + " #" + e.seq);
+    if (gap) logTo(logC, "bad", "기대한 번호는 #" + C.took[C.took.length - 1].from + "인데 #" + e.seq + "가 왔다 → 처리 전에 cancel_dropped_gestures(): 진행 중인 누름·끌기를 거둔다");
+    drawC();
+    return true;
+  }
+
+  document.querySelectorAll("#ch-lab [data-post]").forEach((b) => b.addEventListener("click", () => {
+    if (b.dataset.post === "burst") for (let i = 0; i < 6; i++) post("move");
+    else post(b.dataset.post);
+  }));
+  document.getElementById("ch-recv").addEventListener("click", receive);
+  document.getElementById("ch-drain").addEventListener("click", () => {
+    let n = 0;
+    while (n < 3 && C.q.length) { receive(); n++; }
+    logTo(logC, "", "drain(3) → " + n + "개 (한 번의 잠금)");
+  });
+  document.getElementById("ch-close").addEventListener("click", () => {
+    if (C.closed) { logTo(logC, "", "close() → 이미 닫혔다, 아무 일도 없다"); return; }
+    C.closed = true;
+    C.signals++;
+    pulse(lampC, C.signals);
+    logTo(logC, "good", "close() → 닫고 신호. 남은 " + C.q.length + "개는 계속 꺼낼 수 있다");
+    drawC();
+  });
+  seg("ch-policy", (v) => { C.policy = v; logTo(logC, "", "정책: " + v); });
+  seg("ch-cap", (v) => { C.cap = Number(v); while (C.q.length > C.cap) C.q.pop(); drawC(); });
+  function resetC() {
+    Object.assign(C, { q: [], next: 0, closed: false, posted: 0, dropped: 0, rejected: 0, peak: 0, signals: 0, took: [], last: -1 });
+    tookEl.textContent = "";
+    logC.textContent = "";
+    lampC.querySelector("span").textContent = "신호 0번";
+    logTo(logC, "", "빈 채널이다. 생산자 버튼으로 사건을 넣어 보라.");
+    drawC();
+  }
+  document.getElementById("ch-lab").addEventListener("lw-reset", resetC);
+  resetC();
+
+  /* ---------- 3.7 latest_slot ---------- */
+  const S = { value: null, version: 0, has: false, pending: false, closed: false, signals: 0, lastSeen: 0, frame: 0, seen: new Set() };
+  const valEl = document.getElementById("sl-val");
+  const metaEl = document.getElementById("sl-meta");
+  const closedEl = document.getElementById("sl-closed");
+  const versEl = document.getElementById("sl-vers");
+  const logS = document.getElementById("sl-log");
+  const lampS = document.getElementById("sl-lamp");
+  const okBox = document.getElementById("sl-ok");
+
+  function drawS() {
+    valEl.textContent = S.has ? "frame " + S.value : "—";
+    metaEl.textContent = "version " + S.version + " · has_value " + S.has + " · pending " + S.pending;
+    closedEl.textContent = S.closed ? "closed — publish는 0을 돌려준다" : "UI가 본 version: " + S.lastSeen;
+    versEl.textContent = "";
+    for (let v = 1; v <= S.version; v++) {
+      const cls = S.seen.has(v) ? "seen" : v <= S.lastSeen ? "skipped" : v === S.version ? "latest" : "";
+      versEl.append(el("span", { class: cls, title: S.seen.has(v) ? "UI가 본 version" : v <= S.lastSeen ? "건너뛴 version" : "아직 가져가지 않음", text: String(v) }));
+    }
+  }
+  function publish() {
+    if (S.closed) { logTo(logS, "bad", "publish → 0 (닫힌 slot은 저장하지 않는다)"); return; }
+    S.frame++;
+    S.value = S.frame;
+    S.version++;
+    S.has = true;
+    let note = "";
+    if (!S.pending) {
+      S.pending = true;
+      S.signals++;
+      pulse(lampS, S.signals);
+      if (!okBox.checked) { S.pending = false; note = " · 신호 실패 → pending을 되돌린다"; }
+      else note = " · 신호 (UI를 깨운다)";
+    } else note = " · pending이라 신호 없음 (병합)";
+    logTo(logS, "lg", "publish(frame " + S.value + ") → version " + S.version + note);
+    drawS();
+  }
+  document.getElementById("sl-pub").addEventListener("click", publish);
+  document.getElementById("sl-pub5").addEventListener("click", () => { for (let i = 0; i < 5; i++) publish(); });
+  document.getElementById("sl-take").addEventListener("click", () => {
+    if (!S.has || S.version <= S.lastSeen) { logTo(logS, "", "take_newer(" + S.lastSeen + ") → nullopt (새 값 없음)"); return; }
+    const skipped = S.version - S.lastSeen - 1;
+    logTo(logS, "ui", "take_newer(" + S.lastSeen + ") → version " + S.version + ", frame " + S.value + (skipped > 0 ? " · 중간 " + skipped + "개 건너뜀" : ""));
+    S.pending = false;
+    S.lastSeen = S.version;
+    S.seen.add(S.version);
+    drawS();
+  });
+  document.getElementById("sl-close").addEventListener("click", () => {
+    if (S.closed) return;
+    S.closed = true;
+    S.signals++;
+    pulse(lampS, S.signals);
+    logTo(logS, "good", "close() → 닫고 신호. 남은 값은 한 번 더 가져갈 수 있다");
+    drawS();
+  });
+  function resetS() {
+    Object.assign(S, { value: null, version: 0, has: false, pending: false, closed: false, signals: 0, lastSeen: 0, frame: 0, seen: new Set() });
+    okBox.checked = true;
+    logS.textContent = "";
+    lampS.querySelector("span").textContent = "신호 0번";
+    logTo(logS, "", "빈 slot이다. version 0은 '게시되지 않음'이다.");
+    drawS();
+  }
+  document.getElementById("sl-lab").addEventListener("lw-reset", resetS);
+  resetS();
+
+  /* ---------- 3.8 get<T> ---------- */
+  const store = document.getElementById("jd-store");
+  const ask = document.getElementById("jd-ask");
+  const res = document.getElementById("jd-res");
+  function judge() {
+    const s = store.value;
+    const a = ask.value;
+    res.className = "res";
+    if (!s) { res.classList.add("miss"); res.textContent = "nullptr — 빈 메시지다 (type_ == nullptr). empty()가 true다."; return; }
+    if (s === a) { res.classList.add("hit"); res.textContent = "const " + a + "* — typeid가 정확히 같다. static_cast로 꺼낸 포인터를 돌려준다."; return; }
+    res.classList.add("miss");
+    if (s === "derived_intent" && a === "base_intent") res.textContent = "nullptr — derived_intent는 base_intent를 상속하지만, get은 type_info를 정확히 비교한다. 계층 변환은 없다.";
+    else res.textContent = "nullptr — 저장된 타입은 " + s + "이고 묻는 타입은 " + a + "다. hello의 handle()처럼 다음 타입을 물으면 된다.";
+  }
+  store.addEventListener("change", judge);
+  ask.addEventListener("change", judge);
+  judge();
+})();
+</script>
+</body>
+</html>

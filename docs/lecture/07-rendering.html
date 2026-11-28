@@ -1,0 +1,933 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>07 그리기: frame에서 픽셀까지 · luil 해부학</title>
+<meta name="description" content="luil 해부학 7강. frame_state와 하나뿐인 draw_frame, 층 순서와 웹뷰 구멍, GPU 실패에서 CPU로 물러서는 renderer_host, 예고를 모아 timer 하나로 다시 그리기, 역할 기반 팔레트와 raster test.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .lab2 { display: grid; gap: 16px; }
+  @media (min-width: 980px) { .lab2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .layers { position: relative; width: 100%; max-width: 460px; aspect-ratio: 460 / 290; border: 1px solid var(--line-2); border-radius: var(--r-window); overflow: hidden; container-type: inline-size; }
+  .layers > div { position: absolute; }
+  .layers .web { left: 52%; top: 26%; width: 44%; height: 66%; background: repeating-linear-gradient(45deg, #e8f0fe 0 10px, #d2e3fc 10px 20px); color: #174ea6; font: 600 clamp(9px, 3cqw, 12px) var(--font-body); display: grid; place-items: center; text-align: center; padding: 6px; }
+  .layers .bg { inset: 0; background: var(--lbg); }
+  .layers .tree { inset: 0; }
+  .layers .cap { left: 0; right: 0; top: 0; height: 12.5%; background: var(--lcap); border-bottom: 1px solid var(--line); display: flex; align-items: center; padding-left: 3%; font-size: clamp(9px, 2.8cqw, 12px); color: var(--fg); }
+  .layers .list { left: 3%; top: 18%; width: 44%; display: grid; gap: 4px; }
+  .layers .list i { display: block; height: clamp(14px, 6.2cqw, 26px); border-radius: 3px; background: var(--panel); border: 1px solid var(--line); }
+  .layers .btn1 { left: 3%; top: 80%; width: 22%; height: 11%; background: var(--accent); border-radius: 3px; color: var(--on-accent); font-size: clamp(8px, 2.6cqw, 12px); display: grid; place-items: center; }
+  .layers .webslot { left: 52%; top: 26%; width: 44%; height: 66%; background: var(--panel-2); border: 1px dashed var(--line-3); display: grid; place-items: center; font-size: clamp(8px, 2.4cqw, 11px); color: var(--fg-3); }
+  .layers .ring { left: calc(3% - 4px); top: calc(80% - 4px); width: calc(22% + 8px); height: calc(11% + 8px); border: 2px solid var(--accent); border-radius: 5px; }
+  .layers .ghost { left: 24%; top: 54%; padding: 2px 8px; border: 1px solid var(--accent); background: color-mix(in srgb, var(--panel) 85%, transparent); font-size: clamp(8px, 2.5cqw, 11px); border-radius: 3px; }
+  .layers .tip { left: 40%; top: 66%; width: 34%; padding: 3px 7px; background: var(--tooltip-bg, var(--panel)); border: 1px solid var(--line-3); border-radius: 2px; font-size: clamp(8px, 2.5cqw, 11px); }
+  .layers .hole { left: 52%; top: 26%; width: 44%; height: 66%; }
+  .layer-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; counter-reset: ly; }
+  .layer-list li { display: grid; grid-template-columns: 2em auto minmax(0, 1fr); gap: 8px; align-items: center; padding: 5px 10px; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); font-size: var(--fs-sm); }
+  .layer-list li .n { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--fg-3); }
+  .layer-list li .d { font-size: var(--fs-xs); color: var(--fg-2); }
+  .rh-state { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .badge-big { font-family: var(--font-code); font-weight: 600; font-size: 1rem; padding: 6px 12px; border-radius: var(--r-row); border: 1px solid var(--line-2); }
+  .badge-big.gpu { border-color: var(--t-ui); background: var(--t-ui-wash); }
+  .badge-big.cpu { border-color: var(--warn); background: var(--warn-wash); }
+  .badge-big.dead { border-color: var(--error); background: var(--error-wash); color: var(--error); }
+  .errline { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--error); overflow-wrap: anywhere; min-height: 1.4em; }
+  .bars2 { display: grid; gap: 14px; }
+  @media (min-width: 860px) { .bars2 { grid-template-columns: 1fr 1fr; } }
+  .hb { display: grid; gap: 6px; }
+  .hb .r { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr); gap: 10px; align-items: center; font-size: var(--fs-xs); }
+  .hb .r .lab { color: var(--fg-2); line-height: 1.35; }
+  .hb .r .track { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .hb .r .b { height: 16px; border-radius: 0 4px 4px 0; background: var(--accent); min-width: 2px; flex: none; }
+  .hb .r .b.alt { background: var(--t-ui); }
+  .hb .r .v { font-family: var(--font-code); white-space: nowrap; }
+  .timer-rows { display: grid; gap: 8px; }
+  .timer-rows .tr { display: grid; grid-template-columns: 7em minmax(0, 1fr); gap: 10px; align-items: center; }
+  .timer-rows select { width: 100%; }
+  .wake { display: inline-block; padding: 1px 6px; border-radius: 3px; background: var(--accent-wash); color: var(--accent-ink); font-size: var(--fs-xs); margin-left: 6px; }
+  .pal { display: grid; gap: 16px; }
+  @media (min-width: 980px) { .pal { grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); align-items: start; } }
+  .mini { border-radius: 8px; overflow: hidden; border: 1px solid var(--line-2); font: 12px/1.4 "Segoe UI", var(--font-body); }
+  .mini .mc { height: 30px; display: flex; align-items: center; padding: 0 10px; font-size: 12px; }
+  .mini .mb { padding: 12px; display: grid; gap: 10px; }
+  .mini .mp { border-radius: 4px; padding: 10px; display: grid; gap: 6px; }
+  .mini .row { position: relative; height: 24px; display: flex; align-items: center; padding-left: 10px; border-radius: 4px; }
+  .mini .row .mark { position: absolute; left: 0; top: 5px; bottom: 5px; width: 3px; border-radius: 1.5px; }
+  .mini .btns { display: flex; gap: 8px; flex-wrap: wrap; }
+  .mini .b { height: 26px; padding: 0 12px; border-radius: 3px; display: inline-flex; align-items: center; font-size: 12px; }
+  .mini .inp { height: 26px; border-radius: 3px; display: flex; align-items: center; padding: 0 8px; font-size: 11px; }
+  .roles td:first-child { font-family: var(--font-code); font-size: 11.5px; white-space: nowrap; }
+  .sw { display: inline-block; width: 16px; height: 16px; border-radius: 3px; border: 1px solid var(--line-2); vertical-align: -3px; margin-right: 6px; background-image: linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%), linear-gradient(45deg, #ccc 25%, #fff 25%, #fff 75%, #ccc 75%); background-size: 8px 8px; background-position: 0 0, 4px 4px; position: relative; }
+  .sw i { position: absolute; inset: 0; border-radius: 2px; }
+</style>
+</head>
+<body data-lecture="7">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="07">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 07</span><span>3부 · 사람과 화면 사이</span></div>
+      <h1>그리기: frame에서 픽셀까지</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">두 불변 입력을 표면의 크기·DPI·테마와 합쳐 frame_state를 만들고, 하나뿐인 draw_frame이 Skia 캔버스에 그린다. 화면에 내는 길은 플랫폼마다 다르고, GPU가 실패하면 CPU로 물러선다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>55분</dd></div>
+            <div><dt>선수 지식</dt><dd>4강, GPU·스왑체인이라는 말</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>frame_state.cpp</code>·<code>skia_renderer.cpp</code>·<code>surface_invalidate.cpp</code></dd></div>
+            <div><dt>실험</dt><dd>층 순서, 물러섬, timer 계획, 팔레트</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li><code>frame_state</code>가 모으는 것과 <code>draw_frame</code>의 층 순서를 말할 수 있다.</li>
+            <li><code>renderer_host</code>의 네 모드와 물러섬 상태 전이를 예측할 수 있다.</li>
+            <li>"옛 렌더러를 먼저 놓는다"가 화면의 정확성인 이유를 설명한다.</li>
+            <li>시간에 따른 다시 그리기를 예고와 timer 하나로 묶는 식을 계산할 수 있다.</li>
+            <li>색을 역할로만 말하는 팔레트와 raster test의 의도를 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="7.1">
+        <header class="slide-head">
+          <span class="num">7.1</span>
+          <h2>그리는 함수는 하나, 내는 길은 여럿</h2>
+          <p class="lede">모든 백엔드가 같은 <code>draw_frame</code>을 부른다. 다른 것은 Skia 표면을 어디에 만들고, 그린 것을 어떻게 화면에 내는가다.</p>
+        </header>
+        <div class="prose">
+          <p>UI thread는 logic이 게시한 <code>ui_frame</code>과 input의 <code>interaction_snapshot</code>을 받아, 표면의 물리 크기·DPI 배율·창 상태·테마·accent·고대비 색과 합친다. 그 결과가 <code>frame_state</code>, 곧 렌더러가 한 frame을 그리는 데 필요한 전부다. 화면 남기기(capture)도 스왑체인을 되읽지 않고 같은 <code>frame_state</code>를 raster 표면에 한 번 더 그린다. 그래서 화면과 캡처가 갈리지 않는다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>플랫폼</th><th>GPU 경로 (먼저 쓴다)</th><th>CPU 경로 (물러설 자리)</th></tr></thead>
+            <tbody>
+              <tr><td>Windows</td><td>D3D12 장치 + Skia Ganesh로 스왑체인 back buffer에 그린다. 스왑체인은 HWND가 아니라 DirectComposition visual에 붙는다 (<code>CreateSwapChainForComposition</code>, premultiplied 알파)</td><td>Skia raster 표면에 그린 뒤 <code>GetDC</code> + <code>StretchDIBits</code>로 창 DC에 복사한다 (GDI 제시)</td></tr>
+              <tr><td>Android</td><td>Activity가 사는 동안 하나인 Vulkan 장치 위에, 창마다 <code>VkSurfaceKHR</code>과 FIFO 스왑체인을 세운다</td><td>네이티브 창의 버퍼를 잠가 그 메모리에 바로 그린다. 버퍼를 풀어 올리는 것이 곧 제시다</td></tr>
+              <tr><td>macOS · iOS</td><td><code>CAMetalLayer</code>의 drawable을 Ganesh로 감싸 그리고 <code>presentDrawable</code> (iOS는 macOS 렌더러 파일을 그대로 쓴다)</td><td>매 frame 새 버퍼에 그려 CGImage로 만들고 <code>CALayer.contents</code>에 준다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">Skia는 157판(<code>b94213a11b3a</code>)을 고정해 쓰고, GPU 백엔드는 모두 Ganesh다.</p>
+      </section>
+
+      <section class="slide" id="s2" data-num="7.2">
+        <header class="slide-head">
+          <span class="num">7.2</span>
+          <h2>층 순서와 웹뷰 구멍</h2>
+          <p class="lede">배경을 칠하고, tree를 그리고, tree가 초점 테·끌기 표시·tooltip을 얹고, 마지막에 웹뷰 자리를 알파 0으로 비운다. 비워야 그 아래 합성된 웹 페이지가 드러난다.</p>
+        </header>
+        <div class="lw" data-title="draw_frame의 층" data-surface="frame_state.cpp · ui_tree::draw" data-reset id="ly-lab">
+          <div class="lw-body">
+            <div class="lab2">
+              <div style="display:grid;gap:10px">
+                <div class="layers" id="ly-stage" aria-label="층을 쌓은 결과"></div>
+                <div class="controls">
+                  <label class="field"><input type="checkbox" id="ly-tipover" checked> tooltip이 웹뷰 위로 걸침</label>
+                  <label class="field"><input type="checkbox" id="ly-plan" checked> 덮인 frame은 구멍을 빼기 (<code>plan_webview_layout</code>)</label>
+                </div>
+              </div>
+              <div style="display:grid;gap:10px">
+                <ol class="layer-list" id="ly-list"></ol>
+                <p class="small" id="ly-note"></p>
+              </div>
+            </div>
+          </div>
+          <div class="lw-foot">층을 하나씩 꺼 보라. 구멍은 다 그린 뒤에 비운다 — 도중에 비우면 뒤에 그려지는 것이 그 자리를 도로 덮는다. 그 대가로 구멍 자리에 그린 것은 모두 지워지므로, tooltip처럼 웹뷰 위를 덮어야 하는 frame에서는 그 사각형을 아예 구멍 목록에서 뺀다. 판정은 "전부 아니면 전무"다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/host/frame_state.cpp:106-126,148-165" data-path="src/host/frame_state.cpp" data-start="106"><script type="text/plain">
+        // tree가 화면 전체를 그린다 (caption 포함).
+        // 없으면 배경만 칠한다.
+        const ui_color background_color { state.backdrop ? colors.backdrop_background : colors.window_background };
+        canvas.clear(state.transparent ? SK_ColorTRANSPARENT : background_color);
+        // 내용은 안전 영역의 원점에서 시작한다. 배경은 위에서 표면 전체에 칠했다.
+        //  - 옮긴 원점은 tree에만 쓴다. 아래의 테두리와 웹뷰 구멍은 표면 좌표다.
+        if (state.tree != nullptr)
+        {
+            SkAutoCanvasRestore restore_origin { &canvas, true };
+            canvas.translate(static_cast<float>(state.origin_x), static_cast<float>(state.origin_y));
+            state.tree->draw(context, state.interaction);
+            // 검사기는 tooltip과 끌기 그림 위에 얹는다. 꺼져 있으면 비용은 포인터 검사 하나다.
+            if (state.inspector != nullptr)
+                draw_inspector(context, *state.tree, state.interaction, *state.inspector);
+        }
+
+        // 주 tree 위의 popup이다 (모바일). 뒤의 것이 위다.
+        //  - 주 tree의 tooltip·끌기 표시는 위에서 이미 그렸으므로 popup이 그 위를 덮는다. 터치
+        //    화면에는 주 tree의 hover tooltip이 서지 않아 겹칠 일이 드물다.
+        for (const overlay_layer& layer : state.overlays)
+            draw_overlay(canvas, context, colors, scale, layer, state.inspector);
+⋯@148
+        // 웹뷰가 드러날 자리를 비운다.
+        //
+        // **다 그린 뒤다.** 그리기 도중에 비우면 뒤에 그려지는 것이 도로 덮는다.
+        // 여기서 비우면 그 자리에 그려진 것이 전부 지워지는데, 그래도 되는 frame만
+        // 목록에 담겨 온다 (`plan_webview_layout`의 판정).
+        //  - 알파 0이 합성에서 뜻을 가지려면 스왑체인이 `PREMULTIPLIED`여야 한다.
+        //    그 값이 없으면 여기서 지운 자리가 **불투명 검정**이 된다.
+        if (state.holes.empty())
+            return;
+        SkPaint clear {};
+        clear.setBlendMode(SkBlendMode::kClear);
+        for (const pixel_rect& hole : state.holes)
+        {
+            if (hole.width <= 0 || hole.height <= 0)
+                continue;
+            canvas.drawRect(SkRect::MakeXYWH(static_cast<float>(hole.x), static_cast<float>(hole.y), static_cast<float>(hole.width), static_cast<float>(hole.height)), clear);
+        }
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="106-109" data-title="배경은 표면 전체에">원점을 옮기기 전에 표면 전체를 칠한다. 배경 효과(mica·acrylic)가 선 표면은 <code>backdrop_background</code>, 투명 표면은 투명이다.</li>
+            <li data-lines="110-120" data-title="tree를 그린다">원점만큼 옮긴 뒤 tree를 그리고 검사기를 얹는다. tree 안에서는 root와 자식, 초점 테, 끌기 표시, tooltip 순서다(4강 4.9).</li>
+            <li data-lines="121-126" data-title="모바일 popup 층">Android처럼 표면이 하나인 플랫폼에서는 popup이 같은 캔버스 위의 층이다. 뒤의 것이 위다.</li>
+            <li data-lines="148-165" data-title="마지막에 구멍">사각형마다 <code>kClear</code>로 칠해 알파 0으로 비운다. 알파 0이 합성에서 뜻을 가지려면 스왑체인이 premultiplied여야 하고, 아니면 비운 자리가 불투명한 검정이 된다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="7.3">
+        <header class="slide-head">
+          <span class="num">7.3</span>
+          <h2>렌더러 물러섬: renderer_host</h2>
+          <p class="lede">플랫폼은 GPU·CPU 렌더러를 만드는 함수만 넘긴다. 무엇을 언제 바꿀지는 플랫폼을 모르는 정책 객체 하나가 정한다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th><code>renderer_mode</code></th><th>동작</th></tr></thead>
+            <tbody>
+              <tr><td><code>automatic</code> (기본)</td><td>GPU를 먼저 세운다. 생성·크기 변경·그리기 중 하나라도 실패하면 CPU를 만들고, 옛 GPU 렌더러를 놓고, <b>같은 frame</b>을 CPU로 다시 그린다. 그 표면은 다시 GPU를 시도하지 않는다.</td></tr>
+              <tr><td><code>gpu</code></td><td>이 플랫폼의 GPU 경로(Windows Direct3D, Android Vulkan, Apple Metal). 실패를 호출자에게 돌려준다.</td></tr>
+              <tr><td><code>direct3d</code></td><td>Windows의 GPU 경로. <code>gpu</code>와 같다. 앱이 플랫폼마다 다른 값을 쓰지 않도록 <code>gpu</code>를 나중에 더했다.</td></tr>
+              <tr><td><code>cpu</code></td><td>CPU 렌더러만 만든다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="lw" data-title="renderer_host 상태 기계" data-surface="skia_renderer.cpp 규칙 · test가 고정한 사건 순서" data-reset id="rh-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <span class="field">모드</span>
+              <div class="seg" role="group" aria-label="렌더러 모드" id="rh-mode"><button type="button" data-v="automatic" aria-pressed="true">automatic</button><button type="button" data-v="gpu">gpu</button><button type="button" data-v="cpu">cpu</button></div>
+              <span class="field">플랫폼</span>
+              <div class="seg" role="group" aria-label="플랫폼" id="rh-plat"><button type="button" data-v="Direct3D" aria-pressed="true">Windows</button><button type="button" data-v="Vulkan">Android</button><button type="button" data-v="Metal">Apple</button></div>
+            </div>
+            <div class="controls">
+              <span class="field">고장 주입</span>
+              <label class="field"><input type="checkbox" id="rh-fgpu"> GPU 생성 실패</label>
+              <label class="field"><input type="checkbox" id="rh-fcpu"> CPU 생성 실패</label>
+              <label class="field" for="rh-loss">장치 손실</label>
+              <select id="rh-loss"><option value="0">없음</option><option value="1" selected>1 frame 뒤</option><option value="3">3 frame 뒤</option></select>
+              <label class="field"><input type="checkbox" id="rh-fresize"> GPU resize 실패</label>
+            </div>
+            <div class="controls">
+              <button class="btn" type="button" id="rh-create"><i class="ci" aria-hidden="true">&#xEB7F;</i>표면 만들기 (create)</button>
+              <button class="btn primary" type="button" id="rh-render"><i class="ci" aria-hidden="true">&#xEB2C;</i>frame 그리기 (render)</button>
+              <button class="btn" type="button" id="rh-resize"><i class="ci" aria-hidden="true">&#xEB4C;</i>크기 바꾸기 (resize)</button>
+            </div>
+            <div class="lab2">
+              <div style="display:grid;gap:10px">
+                <div class="rh-state"><span class="badge-big" id="rh-badge">아직 없음</span><span class="tag" id="rh-fb">used_fallback = false</span><span class="tag" id="rh-frames">frame 0</span></div>
+                <div class="errline" id="rh-err"></div>
+              </div>
+              <div class="log" id="rh-log" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="lw-foot">해 볼 것: automatic + "1 frame 뒤 손실"로 만들고 두 번 그리기 — 둘째 frame에서 CPU 생성 → GPU 소멸 → CPU로 같은 frame을 그린다. 그 frame은 성공(true)이지만 error에는 GPU 실패 글이 남는다. gpu 모드로 같은 일을 하면 오류를 돌려줄 뿐 물러서지 않는다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s4" data-num="7.4">
+        <header class="slide-head">
+          <span class="num">7.4</span>
+          <h2>물러섬 코드 읽기</h2>
+          <p class="lede">CPU를 먼저 만들고, 옛 렌더러를 놓고, 같은 frame을 다시 그린다. 이 순서 하나하나가 화면의 정확성이다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/host/skia_renderer.cpp:98-144" data-path="src/host/skia_renderer.cpp" data-start="98"><script type="text/plain">
+    bool renderer_host::render(frame_state state, std::u8string& error)
+    {
+        state.backend = renderer_->backend();
+        state.used_fallback = used_fallback_;
+
+        // 주입된 손실은 실제 렌더를 부르지 않고 실패로 친다 — device lost가
+        // **그리는 도중에** 나는 자리를 재현하는 것이 이 주입점의 전부다.
+        if (injected_loss_due())
+            error = u8"The smoke test injected a " + factories_.gpu_name + u8" device loss.";
+        else if (renderer_->render(state, error))
+            return true;
+
+        if (mode_ != renderer_mode::automatic || renderer_->backend() == renderer_backend::cpu)
+            return false;
+
+        if (switch_to_cpu(error) == false)
+            return false;
+
+        state.backend = renderer_->backend();
+        state.used_fallback = true;
+        return renderer_->render(state, error);
+    }
+
+    bool renderer_host::switch_to_cpu(std::u8string& error)
+    {
+        renderer_factory_result cpu_result { create_with(factories_.create_cpu, u8"CPU rendering") };
+        if (cpu_result.renderer == nullptr)
+        {
+            error += u8" CPU fallback initialization also failed: ";
+            error += cpu_result.error;
+            return false;
+        }
+
+        // **옛 렌더러를 먼저 놓는다.** Win32의 CPU 렌더러는 `GetDC` + `StretchDIBits`로
+        // 그리는데, 창이 합성 대상으로 남아 있는 동안 그 픽셀은 visual tree
+        // 아래에 깔려 화면에 닿지 못한다. Direct3D 렌더러의 소멸자가 창의
+        // `IDCompositionTarget`을 놓아 주어야 GDI가 드러난다
+        // (webview-composition-design.md). 다른 플랫폼도 표면 하나에 제시 경로가 둘
+        // 붙지 않도록 같은 순서를 쓴다.
+        //  - 대입 한 줄로도 같은 순서지만(`unique_ptr`은 새 것을 담은 뒤 옛 것을
+        //    지우고, 어느 쪽이든 다음 `render`보다 앞이다), 그 순서가 화면의
+        //    **정확성**이라 한 줄을 따로 세워 읽는 사람이 지우지 못하게 한다.
+        renderer_.reset();
+        renderer_ = std::move(cpu_result.renderer);
+        used_fallback_ = true;
+        return true;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="98-104" data-title="state를 값으로, 손실 주입">frame_state를 값으로 받아 backend와 used_fallback을 채운다. 손실 주입이 올 차례면 실제 렌더를 부르지 않고 실패로 친다. 실제 장치 손실 경로를 test와 기기에서 재현하려는 장치다.</li>
+            <li data-lines="105-111" data-title="물러설 수 없으면 실패를 돌려준다">automatic이 아니거나 이미 CPU면 그대로 false다. 이미 CPU인데 실패했다면 더 물러설 곳이 없다.</li>
+            <li data-lines="112-119" data-title="같은 frame을 CPU로 다시">CPU로 바꾸는 데 성공하면 같은 state를 used_fallback=true로 다시 그린다. 사용자는 한 frame도 잃지 않는다. 다만 error에는 GPU 실패 글이 남아 있어 플랫폼이 기록한다.</li>
+            <li data-lines="121-130" data-title="CPU를 먼저 만든다">CPU를 만들지 못하면 GPU 렌더러를 그대로 둔 채 실패를 돌려준다. 만들 수 있는지 확인하기 전에 GPU를 놓으면 아무것도 없는 상태가 된다.</li>
+            <li data-lines="131-144" data-title="옛 렌더러를 먼저 놓는다">Win32의 CPU 렌더러는 GDI로 그리는데, 창이 합성 대상으로 남아 있으면 그 픽셀은 visual tree 아래에 깔려 화면에 닿지 못한다. Direct3D 렌더러의 소멸자가 <code>IDCompositionTarget</code>을 놓아야 GDI가 드러난다. Android도 창이 생산자를 하나만 받아 같은 순서다. 대입 한 줄로도 같은 순서지만, 지우지 못하게 한 줄을 따로 세웠다.</li>
+          </ol>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">이 순서가 틀리면</span>오류 하나 없이 화면이 마지막 frame에 얼어붙는다. Win32 설정이 생성 실패와 실행 중 손실을 따로 주입할 수 있게 둔 것도 그 경로를 재현하기 위해서다. Android는 물러서는 단위가 창이 아니라 Activity 전체다. 창이 홈·화면 끄기마다 다시 생기므로, 창 단위로 두면 손실 뒤에도 매번 GPU를 다시 시도하게 된다.</div></div>
+      </section>
+
+      <section class="slide" id="s5" data-num="7.5">
+        <header class="slide-head">
+          <span class="num">7.5</span>
+          <h2>Direct3D의 한 frame</h2>
+          <p class="lede">back buffer의 fence를 기다리고, 그리고, flush·submit, Present, Signal. GPU와 CPU가 같은 버퍼를 동시에 쓰지 않게 하는 순서다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/win32/direct3d_skia_renderer.cpp:237-295" data-path="src/win32/direct3d_skia_renderer.cpp" data-start="237"><script type="text/plain">
+            [[nodiscard]] bool render(const frame_state& state, std::u8string& error) override
+            {
+                // 투명한 구멍이 있는 frame에서는 LCD 서브픽셀 글자를 끈다.
+                // 알파 0인 배경에 채널별 커버리지가 섞이면 경계에 잘못된 색이 생긴다.
+                // 구멍 유무가 바뀔 때만 같은 백버퍼를 다른 픽셀 배치로 다시 감싼다.
+                // 구멍이 없는 frame은 LCD 표시를 유지한다.
+                if (const bool subpixel { state.holes.empty() }; subpixel != subpixel_text_)
+                {
+                    subpixel_text_ = subpixel;
+                    if (wait_for_gpu() == false)
+                    {
+                        error = fence_wait_error(u8"Failed to wait for the GPU before changing the text pixel geometry");
+                        return false;
+                    }
+                    context_->flush();
+                    context_->submit(GrSyncCpu::kYes);
+                    release_surfaces();
+                    if (setup_surfaces(error) == false)
+                        return false;
+                }
+
+                const UINT frame_index { swap_chain_->GetCurrentBackBufferIndex() };
+                // 재생 중 밀린 장을 기다리면 다음 장까지 늦어진다. 사용 중인 버퍼는 다음 게시 때 다시 시도한다.
+                if (state.prefer_latest_presentation && fence_->GetCompletedValue() < frame_fence_values_[frame_index])
+                    return true;
+                if (wait_for_fence(frame_fence_values_[frame_index]) == false)
+                {
+                    error = fence_wait_error(u8"Failed to wait for the Direct3D back buffer fence");
+                    return false;
+                }
+
+                // UI 글꼴은 설정이 정한다.
+                // registry가 cache하므로 매 frame 물어도 된다.
+                const sk_sp<SkTypeface> ui { configured_ui_typeface() };
+                draw_frame(*surfaces_[frame_index]->getCanvas(), codicon_typeface_.get(), ui.get(), state);
+                GrFlushInfo flush_info {};
+                context_->flush(surfaces_[frame_index].get(), SkSurfaces::BackendSurfaceAccess::kPresent, flush_info);
+                context_->submit();
+
+                const UINT present_flags { state.prefer_latest_presentation ? DXGI_PRESENT_DO_NOT_WAIT : 0u };
+                HRESULT result { swap_chain_->Present(state.prefer_latest_presentation ? 0 : 1, present_flags) };
+                // 표시 큐가 가득 차서 건너뛰어도 이미 제출한 그리기의 fence는 기록해야 한다.
+                const bool skipped { state.prefer_latest_presentation && result == DXGI_ERROR_WAS_STILL_DRAWING };
+                if (FAILED(result) && skipped == false)
+                {
+                    error = make_hresult_error(u8"Failed to present the Direct3D frame", result);
+                    return false;
+                }
+
+                const std::uint64_t signal_value { ++next_fence_value_ };
+                result = queue_->Signal(fence_.get(), signal_value);
+                if (FAILED(result))
+                {
+                    error = make_hresult_error(u8"Failed to signal the Direct3D queue", result);
+                    return false;
+                }
+                frame_fence_values_[frame_index] = signal_value;
+                return true;
+            }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="239-256" data-title="구멍이 있으면 LCD 글자를 끈다">알파 0 배경에 채널별 커버리지가 섞이면 경계에 잘못된 색이 생긴다. 구멍 유무가 바뀔 때만 같은 back buffer를 다른 픽셀 배치로 다시 감싼다.</li>
+            <li data-lines="258-266" data-title="이 버퍼가 비었나">버퍼 두 장(<code>FLIP_DISCARD</code>) 중 이번 것의 fence를 기다린다. 대기에는 상한(10초, 500ms 조각)이 있다. 무기한 대기는 CPU 물러섬을 포함한 모든 복구 코드보다 앞에 선 관문이 되기 때문이다.</li>
+            <li data-lines="268-274" data-title="같은 draw_frame">UI 글꼴을 묻고(cache됨) 다른 백엔드와 같은 <code>draw_frame</code>을 부른 뒤 Skia가 쌓은 명령을 GPU로 보낸다.</li>
+            <li data-lines="276-284" data-title="Present">수직 동기 1로 제시한다. 동영상처럼 최신 장이 중요한 frame은 기다리지 않는 제시를 쓰고 "아직 그리는 중"은 건너뛴다.</li>
+            <li data-lines="286-294" data-title="Signal로 다음 차례를 표시">이 버퍼를 쓴 GPU 작업의 끝을 fence 값으로 남긴다. 다음에 같은 버퍼를 쓸 frame이 이 값을 기다린다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s6" data-num="7.6">
+        <header class="slide-head">
+          <span class="num">7.6</span>
+          <h2>메모리는 모드가, 크기는 빌드가 정한다</h2>
+          <p class="lede">2026-09-29, RTX 4080에서 Release hello로 잰 값이다. Direct3D의 상주 메모리는 대부분 드라이버가 장치·큐·스왑체인에 잡는 몫이다.</p>
+        </header>
+        <div class="bars2">
+          <figure class="fig">
+            <div class="canvas"><div class="hb" id="mem-bars"></div></div>
+            <figcaption><b>Private 메모리 (MB).</b> CPU로 그리면 두 빌드 모두 약 7MB다(여러 번 재어 6.9–7.4MB).</figcaption>
+          </figure>
+          <figure class="fig">
+            <div class="canvas"><div class="hb" id="exe-bars"></div></div>
+            <figcaption><b>실행 파일 크기 (MB).</b> <code>LUIL_ENABLE_DIRECT3D=OFF</code>는 Direct3D 렌더러 파일 하나를 stub으로 바꾸고, 링커가 Skia GPU 코드를 걷어 낸다. D3D12·DXGI·D3DCompiler DLL도 올라오지 않는다.</figcaption>
+          </figure>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">CPU 렌더러로 충분한 경우</span>문서는 "CPU 렌더러는 FHD 이하에서 한 frame에 수 ms 안쪽이다. 4K에서 계속 움직이는 화면처럼 프레임 예산이 빠듯한 앱에만 Direct3D가 필요하다"고 적는다. 960×540 표면의 spinner 하나는 평균 렌더 0.68ms, 2880×1620은 3.44ms였다(Debug CPU 렌더러).</div></div>
+      </section>
+
+      <section class="slide" id="s7" data-num="7.7">
+        <header class="slide-head">
+          <span class="num">7.7</span>
+          <h2>언제 다시 그리나: 사건과 예고</h2>
+          <p class="lede">게시·크기·DPI·테마가 바뀌면 그린다. 시간이 흘러야 바뀌는 그림은 element가 예고한 시각을 모아 timer 하나로 깨운다. 예고가 없으면 timer도 없다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th><code>next_update</code>의 답</th><th>뜻</th><th>예</th></tr></thead>
+            <tbody>
+              <tr><td><code>nullopt</code></td><td>시간이 흘러도 그림이 그대로다</td><td>버튼, 라벨, 목록</td></tr>
+              <tr><td>미래 시각</td><td>그 시각에 한 번 다시 그린다</td><td>caret 깜빡임 530ms, tooltip 지연 500ms</td></tr>
+              <tr><td>지금 이하</td><td>계속 움직이는 중 — 짧은 주기로 다시 그린다</td><td>(spinner는 16ms 미래를 예고한다)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="lw" data-title="timer 계획기" data-surface="plan_update_timer · Win32" data-reset id="tm-lab">
+          <div class="lw-body">
+            <div class="lab2">
+              <div class="timer-rows" id="tm-rows"></div>
+              <div style="display:grid;gap:10px">
+                <div class="stat-row" id="tm-stats"></div>
+                <p class="small" id="tm-note"></p>
+              </div>
+            </div>
+          </div>
+          <div class="lw-foot">표면마다 예고를 골라 보라. 미래 예고에는 15ms 여유를 더하고(timer가 ms 단위로 잘려 와 "아직 아니다"를 피하려고), 지금 이하는 33ms로 잇는다. 그 tick까지 시각이 되는 표면이 함께 깨어난다. macOS·iOS의 연속 간격은 16ms다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/host/surface_invalidate.cpp:7-10,23-52" data-path="src/host/surface_invalidate.cpp" data-start="7"><script type="text/plain">
+        // 예고한 시각을 확실히 지나 있도록 더하는 여유다.
+        // timer는 밀리초 단위로 잘려 오므로, 여유 없이 깨우면 element가
+        // "아직 아니다"라며 같은 시각을 다시 예고해 한 번 더 돈다.
+        constexpr std::chrono::milliseconds update_timer_slack { 15 };
+⋯@23
+    update_timer_plan plan_update_timer(const std::span<const surface_update_deadline> deadlines, const std::chrono::steady_clock::time_point now, const std::chrono::milliseconds repaint_interval)
+    {
+        std::optional<std::chrono::steady_clock::time_point> earliest {};
+        for (const surface_update_deadline& deadline : deadlines)
+            if (deadline.next.has_value() && (earliest.has_value() == false || *deadline.next < *earliest))
+                earliest = deadline.next;
+
+        update_timer_plan plan {};
+        // 아무도 예고하지 않았으면 걸 timer가 없다.
+        if (earliest.has_value() == false)
+            return plan;
+
+        plan.armed = true;
+        // "지금 이하"는 연속 애니메이션이라 짧은 주기로 잇는다.
+        std::chrono::milliseconds delay { repaint_interval };
+        if (*earliest > now)
+            delay = std::chrono::duration_cast<std::chrono::milliseconds>(*earliest - now) + update_timer_slack;
+        constexpr std::chrono::milliseconds::rep maximum { maximum_update_timer_delay };
+        const std::chrono::milliseconds capped { std::min(delay.count(), maximum) };
+        plan.delay_milliseconds = static_cast<unsigned int>(capped.count());
+
+        // 그 tick까지 시각이 되는 표면이 함께 깨어난다.
+        // 상한이 지연을 줄인 경우에도 가장 이른 예고를 답한 표면은 반드시 든다 —
+        // 그 표면을 빠뜨리면 예고를 낸 쪽이 영영 깨어나지 않는다.
+        const std::chrono::steady_clock::time_point fires_at { now + capped };
+        for (const surface_update_deadline& deadline : deadlines)
+            if (deadline.next.has_value() && (*deadline.next <= fires_at || *deadline.next == *earliest))
+                plan.wake.push_back(deadline.surface);
+        return plan;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="7-10" data-title="15ms의 여유">timer는 밀리초 단위로 잘려 온다. 여유 없이 깨우면 element가 "아직 아니다"라며 같은 시각을 다시 예고해 timer가 한 번 더 돈다.</li>
+            <li data-lines="25-33" data-title="가장 이른 예고">모든 표면의 예고 중 가장 이른 것을 찾는다. 아무도 예고하지 않았으면 걸 timer가 없다. 평소에는 사건이 있을 때만 그린다.</li>
+            <li data-lines="35-42" data-title="지연 계산">미래면 남은 시간 + 15ms, 지금 이하면 연속 주기(Win32 33ms)다. Win32 timer의 상한으로 자른다.</li>
+            <li data-lines="44-51" data-title="함께 깨울 표면">그 tick까지 시각이 되는 표면을 모두 깨운다. 가장 이른 것 하나만 깨우면 같은 tick의 다른 표면이 빠지고, 전부 깨우면 보조 창 하나의 spinner가 모든 창을 같은 주기로 다시 그리게 한다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s8" data-num="7.8">
+        <header class="slide-head">
+          <span class="num">7.8</span>
+          <h2>색은 역할로만 말한다</h2>
+          <p class="lede">element는 구체 색을 받지 않는다. "기본 버튼", "고른 행"처럼 뜻을 고르면, 그리는 순간 팔레트가 그 뜻을 색으로 바꾼다. 테마를 바꾸면 화면 전체가 손대지 않고 따라온다.</p>
+        </header>
+        <div class="lw" data-title="팔레트 조합" data-surface="compose_palette · assets/style.json · accents.json" id="pl-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <span class="field">테마</span>
+              <div class="seg" role="group" aria-label="테마" id="pl-theme"><button type="button" data-v="dark" aria-pressed="true">dark</button><button type="button" data-v="light">light</button><button type="button" data-v="hc">고대비</button></div>
+              <span class="field">키 컬러</span>
+              <div class="seg" role="group" aria-label="키 컬러" id="pl-accent"><button type="button" data-v="mint" aria-pressed="true">mint</button><button type="button" data-v="blue">blue</button><button type="button" data-v="violet">violet</button><button type="button" data-v="coral">coral</button><button type="button" data-v="amber">amber</button></div>
+            </div>
+            <div class="pal">
+              <div class="mini" id="pl-mini" aria-label="고른 팔레트로 그린 작은 화면"></div>
+              <div class="table-wrap"><table class="t roles" id="pl-roles"></table></div>
+            </div>
+          </div>
+          <div class="lw-foot">파생 역할은 키 컬러 역할에 tone 알파를 바꿔 끼워 만든다(soft 0.25, selection 0.35, row selection 0.18, pressed 0.70). 채운 바탕 위 글자는 바탕의 상대 휘도가 0.179 이하면 흰색, 아니면 검정이다 — mint는 dark에서 검정, light에서 흰색이 된다. 고대비는 OS 시스템 색을 알파 없이 쓰고, 고른 행의 채움을 접어 왼쪽 표식만 남긴다(여기 값은 OS 색을 읽지 못할 때의 기본값).</div>
+        </div>
+        <div class="code" data-lang="cpp" data-label="include/luil/theme/ui_theme.h:30-35" data-src="include/luil/theme/ui_theme.h:30-35" data-path="include/luil/theme/ui_theme.h" data-start="30"><script type="text/plain">
+    [[nodiscard]] constexpr ui_color with_alpha(const ui_color color, const float alpha) noexcept
+    {
+        const float clamped { alpha < 0.0f ? 0.0f : (alpha > 1.0f ? 1.0f : alpha) };
+        const auto value { static_cast<std::uint32_t>(clamped * 255.0f + 0.5f) };
+        return (color & 0x00ffffffU) | (value << 24U);
+    }
+</script></div>
+        <p class="small muted"><code>with_alpha</code>는 알파를 곱하지 않고 바꿔 끼운다. <code>ui_color</code>는 <code>0xAARRGGBB</code>다. 그리기·DWM 창 테두리·웹뷰의 바닥색이 같은 <code>frame_palette</code>를 보므로, 어두운 화면에서 흰 웹뷰 판이 번쩍이지 않는다.</p>
+      </section>
+
+      <section class="slide" id="s9" data-num="7.9">
+        <header class="slide-head">
+          <span class="num">7.9</span>
+          <h2>그림을 테스트하는 법: raster test</h2>
+          <p class="lede">빠진 draw 호출, 잘못된 clip, 조기 return, 채움과 테두리의 혼동. 순수 geometry test가 잡지 못하는 결함을 창과 GPU 없이 잡는다.</p>
+        </header>
+        <div class="cols two">
+          <div class="panel">
+            <h3>어떻게 그리나</h3>
+            <ul>
+              <li>색 공간 없는 <code>SkBitmap</code>에 그린다 — 변환을 한 번 지나면 팔레트 값과 정확히 같지 않다.</li>
+              <li><b>기본 배율 2</b> — 배율 1의 1px 선은 두 픽셀에 나뉘어 어떤 팔레트 색과도 같지 않다. 배율 2면 선 가운데에 완전히 덮인 픽셀이 생긴다.</li>
+              <li>글꼴을 싣지 않고 시각을 손으로 준다 — OS 글꼴과 시계에서 자유롭다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h3>무엇을 단언하나</h3>
+            <ul>
+              <li>채움과 테두리는 가운데 픽셀로 가른다.</li>
+              <li>같은 색끼리는 덮은 넓이를 센다(<code>count_color</code>).</li>
+              <li>clipping은 안과 밖을 함께 본다.</li>
+              <li>전체 이미지 golden file은 쓰지 않는다 — 관련 없는 antialiasing·팔레트·글꼴 변경에도 깨진다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="prose">
+          <p>예를 들어 기본 버튼 test는 가운데 픽셀이 <code>palette.accent</code>이고 accent 픽셀이 상자 넓이의 절반을 넘는지, 초점 테의 획 중심이 몸 밖 2×배율 자리에 있고 몸 안쪽에는 accent가 없는지, <code>focus_visible=false</code>면 테 영역의 accent가 0인지 본다. <code>[raster]</code> 태그 test만 50개다. 렌더러 정책과 timer 계획도 가짜 렌더러와 순수 함수로 창 없이 test한다(12강).</p>
+        </div>
+      </section>
+
+      <section class="slide" id="s10" data-num="7.10">
+        <header class="slide-head">
+          <span class="num">7.10</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>UI thread는 frame·interaction·표면 상태를 <code>frame_state</code>로 모으고, 모든 백엔드가 같은 <code>draw_frame</code>을 부른다.</li>
+          <li>층 순서는 배경 → tree(→ 초점 테 → 끌기 → tooltip) → popup 층 → 테두리 → 웹뷰 구멍이다. 덮이는 frame은 구멍을 뺀다.</li>
+          <li><code>renderer_host</code>는 automatic에서 GPU 실패 시 CPU를 먼저 만들고, 옛 렌더러를 놓고, 같은 frame을 다시 그린다. 그 뒤로 그 표면은 GPU를 다시 시도하지 않는다.</li>
+          <li>메모리는 렌더러 모드가(161MB 대 7MB), 실행 파일 크기와 DLL은 빌드 옵션이 정한다.</li>
+          <li>다시 그리기는 사건 때만, 시간 그림은 예고를 모은 timer 하나로 한다. 미래 + 15ms, 지금 이하 33ms(Apple 16ms).</li>
+          <li>색은 역할로만 말하고, 파생 역할은 tone 알파로 만든다. 그림은 배율 2의 raster test로 픽셀까지 확인한다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s11" data-num="7.11">
+        <header class="slide-head">
+          <span class="num">7.11</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="3">
+            <p class="q">automatic 모드에서 둘째 frame을 그리다 GPU 장치를 잃었다. 그 뒤 일어나는 일의 순서는?</p>
+            <ol class="choices">
+              <li>GPU 소멸 → CPU 생성 → CPU로 같은 frame</li>
+              <li>오류를 돌려주고 다음 frame부터 CPU</li>
+              <li>CPU 생성 → GPU 소멸 → CPU로 같은 frame (성공, error에는 GPU 실패 글)</li>
+              <li>GPU를 다시 만들어 같은 frame을 다시 시도</li>
+            </ol>
+            <div class="explain">test가 고정한 순서는 "gpu created, gpu rendered, cpu created, gpu destroyed, cpu rendered after fallback"이다. CPU를 만들 수 있는지 먼저 확인하고, 옛 렌더러를 놓은 뒤 같은 frame을 그린다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q">주 창이 500ms 뒤를, 보조 창이 "지금"을 예고했다. Win32 timer의 지연과 깨우는 표면은?</p>
+            <ol class="choices">
+              <li>515ms, 둘 다</li>
+              <li>33ms, 보조 창만</li>
+              <li>33ms, 둘 다</li>
+              <li>0ms, 보조 창만</li>
+            </ol>
+            <div class="explain">가장 이른 예고가 지금 이하라 연속 주기 33ms다. 그 tick(지금 + 33ms)까지 시각이 되는 것은 보조 창뿐이다. 주 창이 +20ms였다면 둘 다 깨어났다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">웹뷰 구멍을 frame의 맨 마지막에 비우는 이유는?</p>
+            <ol class="choices">
+              <li>GPU가 마지막 명령을 가장 빨리 처리해서</li>
+              <li>구멍을 비우는 비용이 가장 크기 때문에</li>
+              <li>웹뷰가 tree보다 위에 있어야 해서</li>
+              <li>도중에 비우면 뒤에 그려지는 것이 그 자리를 도로 덮기 때문에</li>
+            </ol>
+            <div class="explain">대신 끝에 비우면 그 자리에 그린 것이 모두 지워진다. 그래서 무언가가 웹뷰 위를 덮어야 하는 frame에서는 그 사각형을 구멍 목록에서 아예 뺀다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">기본 빌드를 <code>cpu</code> 모드로 돌리면 Private 메모리는 대략 얼마였나?</p>
+            <ol class="choices">
+              <li>약 7MB — CPU 전용 빌드와 같다</li>
+              <li>약 161MB — 빌드에 D3D가 들어 있으므로</li>
+              <li>약 80MB — 둘의 중간</li>
+              <li>약 5MB — 실행 파일 크기와 같다</li>
+            </ol>
+            <div class="explain">메모리 차이는 렌더러 모드에서 나고 빌드 옵션에서 나지 않는다. 빌드 옵션이 줄이는 것은 실행 파일 크기(8.07 → 5.17MB)와 올라오는 DLL이다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/course.js"></script>
+<script>
+(function () {
+  const { el } = window.LU;
+  function seg(id, onChange) {
+    const g = document.getElementById(id);
+    g.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-v]");
+      if (!b) return;
+      g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+      onChange(b.dataset.v);
+    });
+  }
+  function log(box, cls, text) {
+    box.append(el("div", { class: "row " + cls }, el("span", { class: "t", text: "" }), el("span", { class: "m", text })));
+    while (box.childNodes.length > 60) box.firstChild.remove();
+    box.scrollTop = box.scrollHeight;
+  }
+
+  /* ---------- 7.2 층 ---------- */
+  const LAYERS = [
+    { id: "bg", name: "배경", d: "canvas.clear(window_background)", on: true },
+    { id: "tree", name: "element tree", d: "root와 자식 (caption·목록·버튼·웹뷰 자리)", on: true },
+    { id: "ring", name: "초점 테", d: "키보드로 옮긴 초점에만, 몸 밖 2×scale", on: true },
+    { id: "ghost", name: "끌기 표시", d: "끄는 중일 때만 (이때 tooltip은 서지 않는다)", on: false },
+    { id: "tip", name: "tooltip", d: "맨 위", on: true },
+    { id: "hole", name: "웹뷰 구멍", d: "kClear — 알파 0으로 비운다", on: true },
+  ];
+  const stage = document.getElementById("ly-stage");
+  const list = document.getElementById("ly-list");
+  const note = document.getElementById("ly-note");
+  const tipOver = document.getElementById("ly-tipover");
+  const plan = document.getElementById("ly-plan");
+  function drawLayers() {
+    const on = Object.fromEntries(LAYERS.map((l) => [l.id, l.on]));
+    if (on.ghost && on.tip) on.tip = false; // 끄는 동안 tooltip 대상이 없다 (ui_tree.cpp 762)
+    const covered = on.tip && tipOver.checked;
+    const holeActive = on.hole && !(covered && plan.checked);
+    stage.textContent = "";
+    stage.style.setProperty("--lbg", on.bg ? "var(--bg)" : "transparent");
+    stage.style.setProperty("--lcap", "var(--panel-2)");
+    stage.style.background = "repeating-conic-gradient(var(--line) 0 25%, transparent 0 50%) 0 0 / 16px 16px";
+    // 합성 아래층: 웹 페이지 (스왑체인 visual 아래 underlay에 붙는다)
+    stage.append(el("div", { class: "web", text: "웹 페이지 (WebView2 — 합성 아래층)" }));
+    if (on.bg) stage.append(el("div", { class: "bg" }));
+    if (on.tree) {
+      stage.append(el("div", { class: "cap", text: "luil 창 — caption" }));
+      stage.append(el("div", { class: "list" }, el("i"), el("i"), el("i"), el("i")));
+      stage.append(el("div", { class: "btn1", text: "저장" }));
+      stage.append(el("div", { class: "webslot", text: "webview_element 자리표" }));
+    }
+    if (on.ring) stage.append(el("div", { class: "ring" }));
+    if (on.ghost) stage.append(el("div", { class: "ghost", text: "행 1 끄는 중" }));
+    const tip = on.tip ? el("div", { class: "tip", text: "저장하고 목록으로 돌아갑니다" }) : null;
+    if (tip) { if (!tipOver.checked) { tip.style.left = "3%"; tip.style.top = "64%"; tip.style.width = "36%"; } stage.append(tip); }
+    // 구멍: 마지막에 그 사각형을 지운다 — 그 자리에 그린 것(tooltip 포함)도 지워진다
+    if (holeActive) {
+      const hole = el("div", { class: "hole" });
+      hole.style.background = "transparent";
+      // 지움을 흉내: 구멍 영역의 위층을 가리는 대신, 위층을 clip-path로 구멍 밖만 남긴다
+      stage.querySelectorAll(".bg, .cap, .list, .btn1, .webslot, .ring, .ghost, .tip").forEach((n) => {
+        n.style.clipPath = "polygon(evenodd, -10% -10%, 110% -10%, 110% 110%, -10% 110%, -10% -10%, " + holePolygon(n) + ")";
+      });
+    }
+    list.textContent = "";
+    LAYERS.forEach((l, i) => {
+      const cb = el("input", { type: "checkbox", checked: l.on ? true : null, "aria-label": l.name });
+      cb.addEventListener("change", () => { l.on = cb.checked; drawLayers(); });
+      list.append(el("li", null, el("span", { class: "n", text: String(i + 1) }), cb, el("span", null, el("b", { text: l.name }), el("div", { class: "d", text: l.d }))));
+    });
+    if (on.ghost && LAYERS.find((l) => l.id === "tip").on) note.textContent = "끄는 동안에는 tooltip 대상이 없어 둘이 한 frame에 함께 서지 않는다.";
+    else if (covered && on.hole && !plan.checked) note.textContent = "구멍을 그대로 두면 웹뷰 위로 걸친 tooltip의 그 부분이 지워진다 — 버그다.";
+    else if (covered && on.hole && plan.checked) note.textContent = "이번 frame은 tooltip이 웹뷰를 덮으므로 구멍을 빼고 그린다. 그동안 웹 페이지는 자리표에 가려진다 (전부 아니면 전무).";
+    else if (on.hole) note.textContent = "구멍으로 합성 아래층의 웹 페이지가 드러난다.";
+    else note.textContent = "구멍이 없으면 tree의 자리표가 웹 페이지를 가린다.";
+  }
+  // 요소 n의 좌표계에서 구멍 사각형(스테이지의 52%,26%,44%,66%)을 다각형으로
+  function holePolygon(n) {
+    const S = stage.getBoundingClientRect();
+    const r = n.getBoundingClientRect();
+    if (!r.width || !r.height) return "0% 0%, 0% 0%, 0% 0%";
+    const hx = S.left + S.width * 0.52, hy = S.top + S.height * 0.26, hw = S.width * 0.44, hh = S.height * 0.66;
+    const px = (x) => ((x - r.left) / r.width) * 100 + "%";
+    const py = (y) => ((y - r.top) / r.height) * 100 + "%";
+    return [px(hx) + " " + py(hy), px(hx + hw) + " " + py(hy), px(hx + hw) + " " + py(hy + hh), px(hx) + " " + py(hy + hh), px(hx) + " " + py(hy)].join(", ");
+  }
+  tipOver.addEventListener("change", drawLayers);
+  plan.addEventListener("change", drawLayers);
+  document.getElementById("ly-lab").addEventListener("lw-reset", () => { LAYERS.forEach((l) => (l.on = l.id !== "ghost")); tipOver.checked = true; plan.checked = true; drawLayers(); });
+  new ResizeObserver(() => drawLayers()).observe(stage);
+  drawLayers();
+
+  /* ---------- 7.3 renderer_host (skia_renderer.cpp 규칙 재현) ---------- */
+  const R = { mode: "automatic", gpuName: "Direct3D", host: null };
+  const badge = document.getElementById("rh-badge");
+  const fb = document.getElementById("rh-fb");
+  const framesEl = document.getElementById("rh-frames");
+  const errEl = document.getElementById("rh-err");
+  const rlog = document.getElementById("rh-log");
+  const F = () => ({ gpu: document.getElementById("rh-fgpu").checked, cpu: document.getElementById("rh-fcpu").checked, loss: Number(document.getElementById("rh-loss").value), resize: document.getElementById("rh-fresize").checked });
+  function show() {
+    const h = R.host;
+    badge.className = "badge-big" + (h ? (h.backend === "cpu" ? " cpu" : " gpu") : R.dead ? " dead" : "");
+    badge.textContent = h ? (h.backend === "cpu" ? "CPU 렌더러" : R.gpuName + " (GPU)") : R.dead ? "렌더러 없음 — 실패" : "아직 없음";
+    fb.textContent = "used_fallback = " + (h ? h.usedFallback : false);
+    framesEl.textContent = "frame " + (h ? h.frames : 0);
+  }
+  function setErr(t) { errEl.textContent = t ? "error: " + t : ""; }
+  function create() {
+    rlog.textContent = "";
+    R.dead = false;
+    const f = F();
+    const requiresGpu = R.mode !== "automatic" && R.mode !== "cpu";
+    let err = "";
+    if (R.mode === "cpu") {
+      if (f.cpu) { R.host = null; R.dead = true; setErr("CPU rendering failed: no cpu."); log(rlog, "bad", "create(cpu): CPU 생성 실패 → nullptr"); show(); return; }
+      R.host = { backend: "cpu", usedFallback: false, frames: 0, loss: 0, drawn: 0 };
+      log(rlog, "lg", "cpu created"); setErr(""); show(); return;
+    }
+    if (!f.gpu) {
+      R.host = { backend: "gpu", usedFallback: false, frames: 0, loss: f.loss, drawn: 0 };
+      log(rlog, "ui", "gpu created" + (f.loss ? " (손실 주입: " + f.loss + " frame 뒤)" : "")); setErr(""); show(); return;
+    }
+    err = R.gpuName + " rendering failed: device unavailable.";
+    log(rlog, "bad", "GPU 생성 실패");
+    if (requiresGpu) { R.host = null; R.dead = true; setErr(err); log(rlog, "bad", "모드가 GPU를 요구한다 → nullptr, 오류를 돌려준다"); show(); return; }
+    if (f.cpu) { R.host = null; R.dead = true; setErr("Both " + R.gpuName + " and CPU renderer initialization failed. no cpu."); log(rlog, "bad", "CPU까지 실패 → nullptr (오류 글에 GPU 오류는 들어가지 않는다)"); show(); return; }
+    R.host = { backend: "cpu", usedFallback: true, frames: 0, loss: 0, drawn: 0 };
+    log(rlog, "lg", "cpu created — 처음부터 CPU로 시작 (used_fallback = true)"); setErr(""); show();
+  }
+  function switchToCpu(errPrefix) {
+    const f = F();
+    if (f.cpu) { setErr(errPrefix + " CPU fallback initialization also failed: no cpu."); log(rlog, "bad", "CPU 생성 실패 — GPU 렌더러는 그대로 남고 false"); return false; }
+    log(rlog, "lg", "cpu created");
+    log(rlog, "bad", "gpu destroyed  ← 옛 렌더러를 먼저 놓는다");
+    R.host.backend = "cpu"; R.host.usedFallback = true;
+    return true;
+  }
+  function render() {
+    const h = R.host;
+    if (!h) { log(rlog, "", "표면이 없다 — 먼저 만들어라"); return; }
+    let failed = false, err = "";
+    if (h.backend === "gpu" && h.loss > 0) {
+      if (h.drawn < h.loss) h.drawn++;
+      else { failed = true; err = R.gpuName + " device lost (injected after " + h.loss + " frame)."; }
+    }
+    if (!failed) { h.frames++; log(rlog, h.backend === "cpu" ? "lg" : "ui", (h.backend === "cpu" ? "cpu" : "gpu") + " rendered (frame " + h.frames + ")"); setErr(""); show(); return; }
+    log(rlog, "bad", "render 실패: " + err);
+    if (R.mode !== "automatic" || h.backend === "cpu") { setErr(err); log(rlog, "bad", "automatic이 아니므로 false를 돌려준다 — 물러서지 않는다"); show(); return; }
+    if (!switchToCpu(err)) { show(); return; }
+    h.frames++;
+    log(rlog, "good", "cpu rendered after fallback (frame " + h.frames + ") — 같은 frame, 반환값 true");
+    setErr(err + "  ← 성공했지만 error에 남는다");
+    show();
+  }
+  function resize() {
+    const h = R.host;
+    if (!h) { log(rlog, "", "표면이 없다"); return; }
+    if (h.backend === "gpu" && F().resize) {
+      const err = R.gpuName + " resize failed.";
+      log(rlog, "bad", "GPU resize 실패");
+      if (R.mode !== "automatic") { setErr(err); log(rlog, "bad", "false를 돌려준다"); return; }
+      if (!switchToCpu(err)) return;
+      log(rlog, "good", "CPU 렌더러로 resize — 창 크기는 CPU 렌더러가 스스로 잡는다");
+      setErr(err); show(); return;
+    }
+    log(rlog, h.backend === "cpu" ? "lg" : "ui", "resize ok (" + (h.backend === "cpu" ? "cpu" : "gpu") + ")");
+  }
+  seg("rh-mode", (v) => { R.mode = v; });
+  seg("rh-plat", (v) => { R.gpuName = v; show(); });
+  document.getElementById("rh-create").addEventListener("click", create);
+  document.getElementById("rh-render").addEventListener("click", render);
+  document.getElementById("rh-resize").addEventListener("click", resize);
+  document.getElementById("rh-lab").addEventListener("lw-reset", () => { R.host = null; R.dead = false; rlog.textContent = ""; setErr(""); show(); });
+  show();
+  log(rlog, "", "모드와 고장을 고르고 '표면 만들기'부터.");
+
+  /* ---------- 7.6 수치 ---------- */
+  function hbars(id, rows, unit, max) {
+    const box = document.getElementById(id);
+    for (const [lab, v, alt] of rows) box.append(el("div", { class: "r", title: lab + ": " + v + unit }, el("span", { class: "lab", text: lab }), el("span", { class: "track" }, el("span", { class: "b" + (alt ? " alt" : ""), style: { width: "calc((100% - 5em) * " + (v / max).toFixed(4) + ")" } }), el("span", { class: "v", text: v + unit }))));
+  }
+  hbars("mem-bars", [["기본 빌드 · automatic (Direct3D)", 161, 1], ["기본 빌드 · cpu", 7], ["CPU 전용 빌드 · automatic", 7]], "MB", 161);
+  hbars("exe-bars", [["기본 빌드", 8.07, 1], ["CPU 전용 빌드", 5.17]], "MB", 8.07);
+
+  /* ---------- 7.7 timer 계획기 (surface_invalidate.cpp 23-52, test 값과 대조) ---------- */
+  const OPTS = [["none", "예고 없음 (nullopt)"], ["16", "+16ms (spinner)"], ["20", "+20ms"], ["500", "+500ms (tooltip 지연)"], ["530", "+530ms (caret)"], ["now", "지금 이하 (계속 움직임)"], ["-200", "−200ms (지난 예고)"], ["year", "+1년"]];
+  const SURF = [["main", "주 창", "500"], ["tool", "보조 창", "now"], ["popup", "popup", "none"]];
+  const rowsBox = document.getElementById("tm-rows");
+  const sels = {};
+  for (const [id, name, init] of SURF) {
+    const s = el("select", { id: "tm-" + id, "aria-label": name + "의 예고" });
+    for (const [v, t] of OPTS) s.append(el("option", { value: v, text: t, selected: v === init ? true : null }));
+    s.addEventListener("change", plan2);
+    sels[id] = s;
+    rowsBox.append(el("div", { class: "tr" }, el("label", { for: "tm-" + id, text: name }), s));
+  }
+  const MAX = 0x7fffffff;
+  function plan2() {
+    const now = 0;
+    const deadlines = SURF.map(([id, name]) => {
+      const v = sels[id].value;
+      const next = v === "none" ? null : v === "now" ? 0 : v === "year" ? 365 * 24 * 3600 * 1000 : Number(v);
+      return { id, name, next };
+    });
+    let earliest = null;
+    for (const d of deadlines) if (d.next != null && (earliest == null || d.next < earliest)) earliest = d.next;
+    const stats = document.getElementById("tm-stats");
+    const noteEl = document.getElementById("tm-note");
+    stats.textContent = "";
+    if (earliest == null) {
+      stats.append(el("div", null, el("span", { class: "k", text: "timer" }), el("span", { class: "v", text: "끔 (KillTimer)" })));
+      noteEl.textContent = "아무도 예고하지 않았다 — 사건이 올 때까지 다시 그리지 않는다.";
+      return;
+    }
+    const delay = earliest > now ? earliest - now + 15 : 33;
+    const capped = Math.min(delay, MAX);
+    const wake = deadlines.filter((d) => d.next != null && (d.next <= now + capped || d.next === earliest));
+    stats.append(
+      el("div", null, el("span", { class: "k", text: "가장 이른 예고" }), el("span", { class: "v", text: earliest <= now ? (earliest === 0 ? "지금" : earliest + "ms") : "+" + earliest + "ms" })),
+      el("div", null, el("span", { class: "k", text: "timer 지연" }), el("span", { class: "v", text: capped === MAX ? "0x7FFFFFFF" : capped + "ms" })),
+      el("div", null, el("span", { class: "k", text: "깨우는 표면" }), el("span", { class: "v", text: wake.map((d) => d.name).join(", ") }))
+    );
+    noteEl.textContent = earliest > now ? "미래 예고라 남은 " + earliest + "ms에 여유 15ms를 더했다." + (capped === MAX ? " Win32 timer의 상한으로 잘렸다." : "") : "지금 이하의 예고라 연속 주기 33ms로 잇는다.";
+    noteEl.textContent += " 그 tick(+" + (capped === MAX ? "상한" : capped + "ms") + ")까지 시각이 되는 표면이 함께 깨어난다.";
+  }
+  document.getElementById("tm-lab").addEventListener("lw-reset", () => { for (const [id, , init] of SURF) sels[id].value = init; plan2(); });
+  plan2();
+
+  /* ---------- 7.8 팔레트 (assets/style.json · accents.json 값) ---------- */
+  const NEUTRAL = {
+    dark: { window_background: "#1e1e1e", surface_background: "#2d2d30", primary_foreground: "#ffffff", secondary_foreground: "#ffffffbf", divider: "#ffffff1f", input_background: "#ffffff14", input_border: "#ffffff59", caption_background: "#252526", tooltip_background: "#252526" },
+    light: { window_background: "#f8f8f8", surface_background: "#ffffff", primary_foreground: "#1f1f1f", secondary_foreground: "#1f1f1fbf", divider: "#1f1f1f1f", input_background: "#1f1f1f14", input_border: "#1f1f1f59", caption_background: "#f0f0f0", tooltip_background: "#ffffff" },
+  };
+  const ACCENT = {
+    mint: { dark: ["#009070", "#2ca483", "#91ddc2", "#b7ecd8"], light: ["#007258", "#00604a", "#005440", "#005440"] },
+    blue: { dark: ["#3f7ebb", "#5392d1", "#a2cfff", "#c6e1ff"], light: ["#0062ab", "#005391", "#00487f", "#00487f"] },
+    violet: { dark: ["#786eba", "#8a82cf", "#c7c2ff", "#dcd9ff"], light: ["#5f4faa", "#503f98", "#453687", "#453687"] },
+    coral: { dark: ["#b2623e", "#c77551", "#fbb99e", "#ffd3c1"], light: ["#9e3f05", "#873300", "#762c00", "#762c00"] },
+    amber: { dark: ["#9e7112", "#b2852e", "#e8c58b", "#f3dab2"], light: ["#7e5900", "#6b4a00", "#5d4000", "#5d4000"] },
+  };
+  const TONE = { pressed: 0.7, soft_button: 0.25, selection: 0.35, row_selection: 0.18 };
+  const P = { theme: "dark", accent: "mint" };
+  const hex2 = (a) => Math.round(Math.min(1, Math.max(0, a)) * 255).toString(16).padStart(2, "0");
+  const withAlpha = (hex, a) => hex.slice(0, 7) + hex2(a); // with_alpha: 알파를 바꿔 끼운다
+  function luminance(hex) {
+    const c = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)));
+    return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+  }
+  const foregroundOn = (hex) => (luminance(hex) <= 0.179 ? "#ffffff" : "#000000");
+  function compose() {
+    if (P.theme === "hc") {
+      return { theme: "hc", window_background: "#000000", surface_background: "#000000", primary_foreground: "#ffffff", secondary_foreground: "#ffffff", divider: "#ffffff", input_background: "#000000", input_border: "#ffffff", caption_background: "#000000", accent: "#ffffff", accent_hover: "#ffffff", accent_soft: "#ffffff", accent_foreground: "#000000", selection_background: "#ffffff", selection_foreground: "#000000", row_selection_background: "#ffffff00", soft_button_background: "#000000", accent_pressed: "#ffffff" };
+    }
+    const n = NEUTRAL[P.theme];
+    const [accent, hover, soft, emph] = ACCENT[P.accent][P.theme];
+    return Object.assign({ theme: P.theme }, n, {
+      accent, accent_hover: hover, accent_soft: soft, accent_emphasis_foreground: emph,
+      accent_foreground: foregroundOn(accent),
+      accent_pressed: withAlpha(accent, TONE.pressed),
+      soft_button_background: withAlpha(soft, TONE.soft_button),
+      selection_background: withAlpha(soft, TONE.selection),
+      selection_foreground: n.primary_foreground,
+      row_selection_background: withAlpha(soft, TONE.row_selection),
+    });
+  }
+  const css = (h) => (h.length === 9 ? "rgba(" + [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16)).join(",") + "," + (parseInt(h.slice(7, 9), 16) / 255).toFixed(3) + ")" : h);
+  function drawPalette() {
+    const c = compose();
+    const mini = document.getElementById("pl-mini");
+    mini.textContent = "";
+    mini.style.background = css(c.window_background);
+    mini.style.color = css(c.primary_foreground);
+    mini.append(
+      el("div", { class: "mc", style: { background: css(c.caption_background), borderBottom: "1px solid " + css(c.divider) } }, "설정"),
+      el("div", { class: "mb" },
+        el("div", { class: "mp", style: { background: css(c.surface_background) } },
+          el("div", { style: { color: css(c.secondary_foreground), fontSize: "11px" } }, "최근 문서"),
+          el("div", { class: "row", style: { background: css(c.row_selection_background) } }, el("span", { class: "mark", style: { background: css(c.accent) } }), "보고서.md — 고른 행"),
+          el("div", { class: "row" }, "그림.png"),
+          el("div", { class: "row" }, "고른 ", el("span", { style: { background: css(c.selection_background), color: css(c.selection_foreground) } }, "글자"), " 영역")),
+        el("div", { class: "inp", style: { background: css(c.input_background), border: "1px solid " + css(c.input_border), color: css(c.secondary_foreground) } }, "검색어를 입력"),
+        el("div", { class: "btns" },
+          el("span", { class: "b", style: { background: css(c.accent), color: css(c.accent_foreground), outline: "2px solid " + css(c.accent), outlineOffset: "2px" } }, "저장 (기본·초점)"),
+          el("span", { class: "b", style: { background: css(c.soft_button_background), color: css(c.accent_emphasis_foreground || c.primary_foreground) } }, "옅은 강조"),
+          el("span", { class: "b", style: { background: css(c.accent_pressed), color: css(c.accent_foreground) } }, "눌림"))));
+    const roles = [
+      ["window_background", "바탕"], ["surface_background", "패널"], ["primary_foreground", "글자"], ["secondary_foreground", "흐린 글자"],
+      ["accent", "키 컬러"], ["accent_foreground", "채운 바탕 위 글자 (휘도로 결정)"], ["accent_pressed", "accent @ 0.70"], ["soft_button_background", "soft @ 0.25"],
+      ["selection_background", "soft @ 0.35"], ["row_selection_background", P.theme === "hc" ? "고대비: 알파 0으로 접음" : "soft @ 0.18"],
+    ];
+    const t = document.getElementById("pl-roles");
+    t.innerHTML = "<thead><tr><th>역할</th><th>값</th><th>설명</th></tr></thead>";
+    const tb = el("tbody");
+    for (const [k, d] of roles) {
+      const v = c[k] || "—";
+      tb.append(el("tr", null, el("td", { text: k }), el("td", null, el("span", { class: "sw" }, el("i", { style: { background: css(v) } })), el("code", { text: v })), el("td", { class: "small", text: d })));
+    }
+    if (P.theme !== "hc") tb.append(el("tr", null, el("td", { colspan: "3", class: "small muted", text: "accent의 상대 휘도 " + luminance(c.accent).toFixed(3) + (luminance(c.accent) <= 0.179 ? " ≤ 0.179 → 흰 글자" : " > 0.179 → 검은 글자") })));
+    t.append(tb);
+  }
+  seg("pl-theme", (v) => { P.theme = v; drawPalette(); });
+  seg("pl-accent", (v) => { P.accent = v; drawPalette(); });
+  drawPalette();
+})();
+</script>
+</body>
+</html>

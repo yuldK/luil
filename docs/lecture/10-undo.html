@@ -1,0 +1,1061 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>10 되돌리기의 설계 · luil 해부학</title>
+<meta name="description" content="luil 해부학 10강. 앱 메시지 쌍으로 만드는 앱 수준 실행 취소 stack. 칸 기록과의 분리, 절대 값 메시지와 병합 키, 재생 중 재진입 막기, 묶음과 저장 지점, 걸음 수와 무게의 상한, 명령표와 키 경로.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .lab-stack { display: grid; gap: 14px; }
+  .ue-grid { display: grid; gap: 16px; }
+  @media (min-width: 1000px) { .ue-grid { grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); align-items: start; } }
+  .app-card { border: 1px solid var(--line-2); border-radius: var(--r-window); background: var(--panel); padding: 14px; display: grid; gap: 12px; }
+  .app-preview { display: flex; align-items: center; gap: 16px; padding: 10px; border-radius: var(--r-row); background: var(--bg); border: 1px solid var(--line); }
+  .app-preview .shape { width: 64px; height: 64px; border-radius: 14px; flex: none; transition: background-color .08s linear; box-shadow: inset 0 0 0 1px #00000014; }
+  .app-preview .word { font-size: 28px; font-family: var(--font-display); }
+  .app-preview .word.bold { font-weight: 700; }
+  .app-preview .meta { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--fg-3); }
+  .app-row { display: grid; grid-template-columns: 5.5em minmax(0, 1fr); gap: 10px; align-items: center; font-size: var(--fs-sm); }
+  .app-row input[type="range"] { width: 100%; }
+  .app-row input[type="text"] { width: 100%; }
+  .hue-range { accent-color: var(--accent); }
+  .tb { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .badge { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 999px; font-size: var(--fs-xs); font-weight: 600; }
+  .badge.clean { background: var(--accent-wash); color: var(--accent-ink); }
+  .badge.dirty { background: var(--warn-wash); color: var(--warn); }
+  .badge.macro { background: var(--warn-wash); color: var(--warn); }
+
+  /* stack 그림 */
+  .stk-wrap { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); min-width: 0; overflow: hidden; }
+  #ue-log .row { grid-template-columns: 6.5em minmax(0, 1fr); }
+  .wbar output { overflow-wrap: anywhere; }
+  .stk { display: flex; align-items: stretch; overflow-x: auto; padding: 26px 10px 30px; min-height: 150px; }
+  .stk .gap { width: 16px; flex: none; position: relative; }
+  .stk .gap.cur::before { content: ""; position: absolute; left: 7px; top: -12px; bottom: -12px; width: 2px; border-radius: 1px; background: var(--accent); }
+  .stk .gap.cur::after { content: "커서"; position: absolute; top: -24px; left: 8px; transform: translateX(-50%); font-size: 10.5px; font-weight: 600; color: var(--accent-ink); white-space: nowrap; }
+  .stk .gap .sv { position: absolute; bottom: -27px; left: 8px; transform: translateX(-50%); font-size: 10.5px; color: var(--warn); white-space: nowrap; display: flex; flex-direction: column; align-items: center; }
+  .stk .gap .sv::before { content: ""; width: 8px; height: 8px; transform: rotate(45deg); background: var(--warn); margin-bottom: 2px; }
+  .stk .st { flex: none; width: 158px; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--panel); padding: 7px 9px; display: grid; gap: 3px; align-content: start; position: relative; }
+  .stk .st.redo { opacity: .6; border-style: dashed; }
+  .stk .st.armed { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash); }
+  .stk .st.fresh { animation: stfresh .6s ease-out; }
+  @keyframes stfresh { from { box-shadow: 0 0 0 6px var(--accent-wash-2); } }
+  @media (prefers-reduced-motion: reduce) { .stk .st.fresh { animation: none; } }
+  .stk .st .nm { font-weight: 600; font-size: 12.5px; }
+  .stk .st .msg { font-family: var(--font-code); font-size: 10.5px; color: var(--fg-2); overflow-wrap: anywhere; }
+  .stk .st .msg b { color: var(--fg-3); font-weight: 400; }
+  .stk .st .meta { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+  .stk .st .meta span { font-family: var(--font-code); font-size: 10px; padding: 0 5px; border-radius: 3px; background: var(--sunk); color: var(--fg-2); }
+  .stk .st .meta span.key { background: var(--accent-wash); color: var(--accent-ink); }
+  .stk .st .arm { position: absolute; top: -10px; right: 6px; font-size: 10px; padding: 0 6px; border-radius: 999px; background: var(--accent); color: var(--on-accent); }
+  .stk .macro { flex: none; width: 158px; border: 1px dashed var(--warn); background: var(--warn-wash); border-radius: var(--r-row); padding: 7px 9px; font-size: 11.5px; display: grid; gap: 3px; align-content: start; }
+  .stk .macro .nm { font-weight: 600; color: var(--warn); }
+  .stk .none { align-self: center; color: var(--fg-3); font-size: var(--fs-sm); padding: 0 6px; }
+  .wbar { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); padding: 8px 10px; border-top: 1px solid var(--line); }
+  .wbar .track { height: 10px; border-radius: 5px; background: var(--sunk); overflow: hidden; position: relative; }
+  .wbar .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 5px; }
+  .wbar .fill.over { background: var(--warn); }
+  .wbar output { font-family: var(--font-code); }
+  .warnline { color: var(--error); font-size: var(--fs-sm); min-height: 1.3em; }
+
+  /* 시나리오 재생 */
+  .sc-head { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: space-between; }
+  .sc-dots { display: flex; flex-wrap: wrap; gap: 4px; }
+  .sc-dots button { width: 26px; height: 22px; padding: 0; border-radius: 4px; border: 1px solid var(--line-2); background: var(--panel); font-family: var(--font-code); font-size: 10.5px; color: var(--fg-2); cursor: pointer; }
+  .sc-dots button[aria-current="step"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .sc-text { font-size: var(--fs-sm); line-height: 1.6; }
+  .sc-text .act { font-weight: 600; }
+  .sc-text .note { color: var(--fg-2); }
+  .sc-state { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; font-size: var(--fs-sm); }
+  .sc-state .sw { width: 22px; height: 22px; border-radius: 5px; box-shadow: inset 0 0 0 1px #0000001f; }
+</style>
+</head>
+<body data-lecture="10">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="10">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 10</span><span>4부 · 앱다운 앱</span></div>
+      <h1>되돌리기의 설계</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">되돌리기의 한 걸음은 앱이 정의한 메시지 두 개의 쌍이다. stack은 메시지를 열어 보지도, 앱 상태를 건드리지도 않는다. 그래서 되돌림도 앱의 <code>handle</code> 길을 탄다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>50분</dd></div>
+            <div><dt>선수 지식</dt><dd>3강(<code>app_message</code>), 8강(<code>text_edit_state</code>)</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>undo_stack.h</code>·<code>undo_stack.cpp</code>·<code>undo_commands.cpp</code>·<code>workbench_page.cpp</code></dd></div>
+            <div><dt>실험</dt><dd>색 편집기, 시나리오 재생 둘</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li>칸 기록과 앱 stack이 맡는 범위를 가를 수 있다.</li>
+            <li>걸음을 메시지 쌍으로 표현한 이유와 거절한 두 길을 말한다.</li>
+            <li>합치기의 조건과 "절대 값 메시지"가 필요한 이유를 설명한다.</li>
+            <li>묶음·저장 지점·용량의 규칙을 시나리오로 예측한다.</li>
+            <li>Ctrl+Z가 칸과 앱 가운데 어디로 가는지 판단한다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="10.1">
+        <header class="slide-head">
+          <span class="num">10.1</span>
+          <h2>두 개의 되돌리기</h2>
+          <p class="lede">luil에는 텍스트 칸 하나의 글을 시점마다 복사해 두는 기록이 이미 있었다. 하지만 항목 삭제, 체크, 순서 바꿈처럼 칸 밖에서 바뀌는 앱 상태는 되돌릴 길이 없었다.</p>
+        </header>
+        <div class="cols two">
+          <div class="prose">
+            <p>설계 문서가 꼽은 문제는 넷이다.</p>
+            <ol>
+              <li>되돌리기가 칸 하나의 글 스냅숏뿐이다. 데모 변경 작업대의 체크, 스테이지, 버리기는 되돌릴 수 없다.</li>
+              <li>앱마다 같은 규칙을 다시 짠다. 되돌릴 정보를 어떻게 들지, 끌기 같은 연속 동작을 한 걸음으로 합칠지, 용량을 어떻게 막을지, 저장 시점을 어떻게 기억할지, 메뉴 글과 켜짐을 어떻게 맞출지.</li>
+              <li>키가 어디로 가는지 앱이 알아야 한다. 초점이 텍스트 칸이면 칸이 Ctrl+Z를 먼저 먹는다.</li>
+              <li>명령표의 실행 취소·다시 실행 두 항목의 id와 단축키를 앱마다 다시 적는다.</li>
+            </ol>
+            <p>문서의 첫 문장이 방향을 정한다. "Qt의 <code>QUndoStack</code>이 하는 일 가운데 불변 상태와 메시지 구조에 맞는 것만 가져온다."</p>
+          </div>
+          <div class="table-wrap">
+            <table class="t">
+              <thead><tr><th></th><th>칸 기록 <code>text_edit_state</code></th><th>앱 stack <code>undo_stack</code></th></tr></thead>
+              <tbody>
+                <tr><td>대상</td><td>칸 하나의 글(과 서식)</td><td>칸 밖의 앱 상태</td></tr>
+                <tr><td>한 걸음</td><td>글 전체 스냅숏</td><td>앱 메시지 쌍</td></tr>
+                <tr><td>합치기 기준</td><td>편집 종류와 caret 연속</td><td>앱이 준 병합 키 + 바로 앞 push</td></tr>
+                <tr><td>걸음 수 상한</td><td class="num">100</td><td class="num">1000</td></tr>
+                <tr><td>바이트 상한</td><td class="num">32MiB</td><td class="num">32MiB (같은 값)</td></tr>
+                <tr><td>키</td><td>칸에 초점이 있으면 칸이 먼저 받는다</td><td>초점이 칸 밖일 때만 앱 <code>on_key</code>에 닿는다</td></tr>
+                <tr><td>서로의 관계</td><td colspan="2">따로 간다. 칸을 다 되돌린 뒤 한 번 더 눌러도 앱 stack으로 넘어가지 않는다</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s2" data-num="10.2">
+        <header class="slide-head">
+          <span class="num">10.2</span>
+          <h2>한 걸음은 메시지 쌍이다</h2>
+          <p class="lede">걸음에는 실행 코드가 들어 있지 않다. 앱이 정의한 메시지 두 개, 곧 되돌림 메시지와 다시 실행 메시지가 들어 있다. 여기에 메뉴에 보일 이름, 병합 키, 무게가 붙는다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="include/luil/ui/undo_stack.h:19-47" data-path="include/luil/ui/undo_stack.h" data-start="19"><script type="text/plain">
+    inline constexpr std::size_t undo_stack_default_steps { 1000 };
+    // 칸 기록의 상한(`text_edit_history_byte_limit`)과 같다.
+    inline constexpr std::size_t undo_stack_default_bytes { std::size_t { 32 } * 1024 * 1024 };
+
+    struct undo_step
+    {
+        // 메뉴에 보일 걸음의 이름이다 ("항목 삭제"). 글은 앱의 말이다.
+        std::u8string label {};
+        // 되돌릴 때와 다시 실행할 때 앱이 적용할 메시지다. 둘 다 비어 있지 않아야 쌓인다.
+        //  - 메시지는 절대 값을 담는다. 합친 걸음은 앞 걸음의 undo와 뒤 걸음의 redo만 남기므로, "다음 값으로 토글"이 아니라
+        //    "이 값으로 정함"이라야 중간 걸음이 없어도 맞다.
+        app_message undo {};
+        app_message redo {};
+        // 비어 있지 않고 바로 앞에 쌓은 걸음의 키와 같으면 한 걸음으로 합친다. 같은 대상을 절대 값으로 바꾸는 걸음끼리만 같은 키를 쓴다.
+        std::u8string merge_key {};
+        // 걸음이 쥔 바이트의 어림이다. 메시지 안을 볼 수 없어 앱이 알린다. 0이면 걸음 수만 센다.
+        std::size_t weight { 0 };
+    };
+
+    struct undo_stack_limits
+    {
+        // 0이면 제한이 없다.
+        std::size_t steps { undo_stack_default_steps };
+        // 0이면 제한이 없다.
+        std::size_t bytes { undo_stack_default_bytes };
+    };
+
+    // 되돌리거나 다시 실행하는 메시지를 받아 적용하는 앱의 함수다. 앱의 `handle`을 그대로 부르면 된다.
+    using undo_apply = std::function<void(const app_message& message)>;
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="19-21" data-title="기본 상한">1000걸음, 32MiB. 바이트 상한은 칸 기록과 같은 값이다. 걸음 수를 칸(100)보다 크게 잡은 것은 문서 단위로 더 깊이 되돌리기 때문이다.</li>
+            <li data-lines="23-31" data-title="이름과 메시지 쌍">이름은 앱의 말이다("항목 삭제"). 두 메시지는 모두 비어 있지 않아야 쌓인다. 주석이 "절대 값" 원칙의 이유를 합치기와 묶어 적는다.</li>
+            <li data-lines="32-35" data-title="병합 키와 무게">키가 비어 있지 않고 바로 앞 걸음의 키와 같으면 합친다. 무게는 걸음이 쥔 바이트의 어림이다. stack은 메시지 안을 볼 수 없어 앱이 알린다.</li>
+            <li data-lines="38-44" data-title="상한 둘">걸음 수와 무게 합. 둘 다 0이면 제한이 없다.</li>
+            <li data-lines="46-47" data-title="적용 함수">stack이 메시지를 건네는 앱의 함수다. 보통 앱의 <code>handle</code>이다. 그래서 되돌림이 앱의 보통 메시지 길을 탄다.</li>
+          </ol>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>걸음의 표현</th><th>판정</th><th>까닭</th></tr></thead>
+            <tbody>
+              <tr><td><b><code>app_message</code> 쌍</b></td><td>채택</td><td>stack이 값이라 복사와 시험이 싸고, 앱 상태를 가리키는 참조를 쥐지 않는다. 되돌림이 앱 <code>handle</code>의 길을 타므로 로직이 두 벌이 되지 않는다. 대가: 되돌림마다 메시지 타입을 앱이 정의하고, 역 메시지가 맞는지 라이브러리가 검증하지 못한다</td></tr>
+              <tr><td><code>std::function</code> do/undo 쌍 (<code>QUndoCommand</code>식)</td><td>거절</td><td>람다가 앱 상태의 참조를 쥔다. 문서를 닫거나 컨테이너가 다시 잡히면 허공을 가리킨다. 걸음을 시험이나 기록으로 들여다볼 수도 없다</td></tr>
+              <tr><td>상태 스냅숏 전용 stack</td><td>거절</td><td>걸음마다 상태 전체를 쥔다(칸 기록이 32MiB 상한을 둔 까닭). 일부만 바꾸는 걸음에 맞지 않는다. 메시지 쌍 위에서 앱이 <code>restore { before }</code>/<code>{ after }</code>로 쓸 수 있으므로 따로 만들지 않는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cols three">
+          <div class="panel">
+            <h4>약속 ① 메시지는 절대 값이다</h4>
+            <p class="small">연속 동작을 합치면 앞 걸음의 되돌림과 뒤 걸음의 다시 실행만 남는다. 메시지가 "다음 값으로 토글"이 아니라 "이 값으로 정함"을 담아야 중간 걸음이 없어도 맞다.</p>
+          </div>
+          <div class="panel">
+            <h4>약속 ② 처음 실행과 다시 실행이 한 길이다</h4>
+            <p class="small">사용자 동작은 걸음을 쌓은 뒤, 다시 실행 메시지와 같은 것을 적용한다. 재생 중에는 stack이 쌓지 않으므로 기록하는 <code>handle</code>에 그대로 흘려도 걸음이 두 번 쌓이지 않는다.</p>
+          </div>
+          <div class="panel">
+            <h4>약속 ③ 역 메시지는 앱의 test가 잠근다</h4>
+            <p class="small">라이브러리는 되돌림이 맞는지 검증할 수 없다. 데모는 "동작, 되돌림, 처음 상태"를 test로 잠근다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="10.3">
+        <header class="slide-head">
+          <span class="num">10.3</span>
+          <h2>실험: 색 편집기</h2>
+          <p class="lede">앱 상태는 채우기 색과 굵게, 둘이다. 아래 stack은 <code>undo_stack.cpp</code>를 그대로 옮긴 것이다. 컴파일한 원본과 무작위 연산열 4,000개에서 같은 결과를 냈다.</p>
+        </header>
+        <div class="lw" data-title="색 편집기" data-surface="undo_stack" data-reset id="ue-lab">
+          <div class="lw-body lab-stack" id="ue-keys" data-keys>
+            <div class="ue-grid">
+              <div class="app-card">
+                <div class="app-preview"><div class="shape" id="ue-shape"></div><div><div class="word" id="ue-word">luil</div><div class="meta" id="ue-meta"></div></div></div>
+                <div class="app-row"><span>채우기 색</span><input type="range" class="hue-range" id="ue-hue" min="0" max="359" step="1" aria-label="채우기 색 (색상각)"></div>
+                <div class="app-row"><span>굵게</span><label class="field"><input type="checkbox" id="ue-bold"> 굵게</label></div>
+                <div class="app-row"><span>메모 칸</span><input type="text" id="ue-memo" placeholder="여기서 Ctrl+Z는 칸의 것이다" aria-label="편집할 수 있는 칸"></div>
+                <div class="app-row"><span>경로 칸</span><input type="text" id="ue-path" value="docs/undo-stack-design.md" readonly aria-label="읽기 전용 칸"></div>
+                <div class="tb">
+                  <button type="button" class="btn sm" id="ue-reset">모두 초기화 (묶음)</button>
+                  <button type="button" class="btn sm" id="ue-save">저장 (set_clean)</button>
+                </div>
+                <div class="tb">
+                  <button type="button" class="btn sm ghost" id="ue-begin">begin("여러 변경")</button>
+                  <button type="button" class="btn sm ghost" id="ue-end">end()</button>
+                  <button type="button" class="btn sm ghost" id="ue-clear">clear()</button>
+                </div>
+                <label class="field"><input type="checkbox" id="ue-delta"> 토글·델타 메시지로 쌓기 (약속을 어긴 앱)</label>
+              </div>
+              <div style="display:grid;gap:10px;min-width:0;grid-template-columns:minmax(0,1fr)">
+                <div class="tb">
+                  <button type="button" class="btn primary sm" id="ue-undo">실행 취소</button>
+                  <button type="button" class="btn sm" id="ue-redo">다시 실행</button>
+                  <span id="ue-badges" class="tb"></span>
+                </div>
+                <div class="stk-wrap">
+                  <div class="stk" id="ue-stack" aria-live="polite"></div>
+                  <div class="wbar"><span>무게 <code>bytes()</code></span><div class="track"><div class="fill" id="ue-wfill"></div></div><output id="ue-wout"></output></div>
+                </div>
+                <div class="controls">
+                  <span class="small">상한</span>
+                  <div class="seg" id="ue-limits" role="group" aria-label="상한">
+                    <button type="button" data-v="default" aria-pressed="true">기본 1000걸음·32MiB</button>
+                    <button type="button" data-v="steps3" aria-pressed="false">3걸음</button>
+                    <button type="button" data-v="bytes100" aria-pressed="false">무게 100</button>
+                  </div>
+                </div>
+                <div class="warnline" id="ue-warn" aria-live="polite"></div>
+                <div class="log" id="ue-log" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+          <div class="lw-foot">색 막대를 끌면 같은 키(<code>color:fill</code>)의 걸음이 하나로 합쳐진다. 손을 떼면 앱이 <code>break_merge()</code>를 부른다. 걸음의 무게는 색 40, 굵게 10이다. 이 실험 안에서 Ctrl+Z·Ctrl+Y·Ctrl+Shift+Z(macOS는 ⌘)를 쓸 수 있다. 단 메모 칸에 초점이 있으면 키는 칸의 것이고, 읽기 전용 경로 칸에서는 앱 stack에 넘어간다. 마지막 칸을 켜고 색을 끌다 되돌려 보라. 처음 색으로 돌아가지 못한다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s4" data-num="10.4">
+        <header class="slide-head">
+          <span class="num">10.4</span>
+          <h2><code>push</code>의 네 갈래</h2>
+          <p class="lede">막힘, 묶음에 담기, 합치기, 새 걸음. 합치기는 시계가 아니라 앱이 붙인 병합 키로 한다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/undo_stack.cpp:36-75" data-path="src/ui/undo_stack.cpp" data-start="36"><script type="text/plain">
+    bool undo_stack::push(undo_step step)
+    {
+        if (replaying_ || step.undo.empty() || step.redo.empty())
+            return false;
+        if (macro_depth_ > 0)
+        {
+            // 묶음 안의 걸음은 합치지 않는다. 키도 무시한다.
+            macro_.undo.push_back(std::move(step.undo));
+            macro_.redo.push_back(std::move(step.redo));
+            macro_.weight += step.weight;
+            return true;
+        }
+
+        // 저장 지점에 서 있을 때 합치면 저장한 상태로 돌아갈 수 없다.
+        if (merge_armed_
+            && step.merge_key.empty() == false
+            && undo_.empty() == false
+            && undo_.back().merge_key == step.merge_key
+            && clean() == false)
+        {
+            // 앞 걸음의 되돌림과 뒤 걸음의 다시 실행이 남는다. 합친 걸음은 메시지가 하나씩이다.
+            record& last { undo_.back() };
+            const std::size_t weight { std::max(last.weight, step.weight) };
+            bytes_ = bytes_ - last.weight + weight;
+            last.weight = weight;
+            last.label = std::move(step.label);
+            last.redo.clear();
+            last.redo.push_back(std::move(step.redo));
+            trim();
+            return true;
+        }
+
+        const bool armed { step.merge_key.empty() == false };
+        record entry { std::move(step.label), {}, {}, std::move(step.merge_key), step.weight };
+        entry.undo.push_back(std::move(step.undo));
+        entry.redo.push_back(std::move(step.redo));
+        append(std::move(entry));
+        merge_armed_ = armed;
+        return true;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="38-39" data-title="막힘">재생 중이거나 두 메시지 가운데 하나라도 비었으면 거짓이다. 아무것도 바뀌지 않는다.</li>
+            <li data-lines="40-47" data-title="묶음에 담기">묶음이 열렸으면 메시지를 묶음 목록 끝에 붙이고 무게를 더한다. 키와 이름은 무시하고 합치지 않는다.</li>
+            <li data-lines="49-54" data-title="합치는 다섯 조건">무장되어 있고, 새 키가 비어 있지 않고, 되돌릴 걸음이 있고, 맨 위 걸음의 키가 같고, 저장 지점에 서 있지 않을 때. 저장 지점에서 합치면 저장한 상태로 돌아갈 수 없다.</li>
+            <li data-lines="56-65" data-title="무엇이 남나">앞 걸음의 되돌림은 그대로, 다시 실행과 이름은 뒤 걸음의 것으로 바꾼다. 무게는 합이 아니라 <b>큰 쪽</b>이다. 그 뒤의 <code>trim()</code>이 "병합 뒤 용량 제한"을 지키는 줄이다(10.7).</li>
+            <li data-lines="68-74" data-title="새 걸음과 무장">새 걸음으로 쌓고(redo를 자르고 상한을 맞춘다), 키가 있으면 무장한다. 그래서 다음 같은 키 push부터 합쳐진다.</li>
+          </ol>
+        </div>
+        <div class="cols two">
+          <div class="table-wrap">
+            <table class="t">
+              <thead><tr><th></th><th>합친 걸음</th><th>묶음</th></tr></thead>
+              <tbody>
+                <tr><td>만드는 법</td><td>같은 키의 push가 바로 이어짐</td><td><code>begin</code> … <code>end</code> (<code>undo_macro</code>)</td></tr>
+                <tr><td>남는 메시지</td><td>앞 걸음의 되돌림 하나, 뒤 걸음의 다시 실행 하나</td><td>모두. 되돌림은 거꾸로, 다시 실행은 쌓은 차례로</td></tr>
+                <tr><td>무게</td><td>큰 쪽</td><td>합</td></tr>
+                <tr><td>이름</td><td>뒤 걸음의 것</td><td>가장 바깥 <code>begin</code>의 것</td></tr>
+                <tr><td>중첩</td><td>—</td><td>된다. 깊이 숫자 하나로 센다</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="prose">
+            <p><b>무장을 켜는 것</b>은 묶음 밖에서 키 있는 걸음을 새 걸음으로 쌓은 push뿐이다. <b>끄는 것</b>은 <code>undo</code>, <code>redo</code>, <code>begin</code>, <code>set_clean</code>, <code>clear</code>, <code>break_merge</code>, 키 없는 push, 묶음 확정이다.</p>
+            <p><b>시간 창은 없다.</b> stack이 순수 값이라 test가 시각 없이 돌아야 하고, 사용자가 천천히 두 번 한 일과 빠르게 두 번 한 일을 시간이 가르면 체감이 우연에 달린다. 한 번의 끌기가 끝나면 앱이 <code>break_merge()</code>를 부른다. 데모는 표가 낸 <code>resize_column_end</code> 메시지에서 부른다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s5" data-num="10.5">
+        <header class="slide-head">
+          <span class="num">10.5</span>
+          <h2>먼저 옮기고, 재생 표시 아래에서 넘긴다</h2>
+          <p class="lede"><code>undo</code>와 <code>redo</code>는 대칭이다. 막힘 조건 넷을 본 뒤 걸음을 반대쪽으로 옮기고, 그다음에야 재생 표시를 세우고 메시지를 넘긴다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/undo_stack.cpp:102-135" data-path="src/ui/undo_stack.cpp" data-start="102"><script type="text/plain">
+    bool undo_stack::undo(const undo_apply& apply)
+    {
+        if (replaying_ || macro_depth_ > 0 || apply == nullptr || undo_.empty())
+            return false;
+        // 위치를 먼저 옮긴다. 재생 중에 stack을 보는 질의가 이미 옮긴 자리를 본다.
+        bytes_ -= undo_.back().weight;
+        redo_.push_back(std::move(undo_.back()));
+        undo_.pop_back();
+        merge_armed_ = false;
+
+        const record& step { redo_.back() };
+        const replay_guard guard { replaying_ };
+        for (std::size_t index { step.undo.size() }; index > 0; --index)
+            apply(step.undo[index - 1]);
+        return true;
+    }
+
+    bool undo_stack::redo(const undo_apply& apply)
+    {
+        if (replaying_ || macro_depth_ > 0 || apply == nullptr || redo_.empty())
+            return false;
+        bytes_ += redo_.back().weight;
+        undo_.push_back(std::move(redo_.back()));
+        redo_.pop_back();
+        merge_armed_ = false;
+        // 상한을 줄인 뒤에 돌아온 걸음도 되돌릴 쪽의 상한을 지킨다.
+        trim();
+
+        const record& step { undo_.back() };
+        const replay_guard guard { replaying_ };
+        for (const app_message& message : step.redo)
+            apply(message);
+        return true;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="104-105" data-title="막힘 넷">재생 중, 묶음 열림, <code>apply</code>가 빔, 걸음이 없음. 하나라도 걸리면 거짓이고 아무것도 바뀌지 않는다. 빈 stack에서 Ctrl+Z가 맞아도 여기서 조용히 끝난다.</li>
+            <li data-lines="106-110" data-title="위치를 먼저">걸음을 redo 쪽으로 옮기고 무게를 빼고 합치기를 끊는다. <code>apply</code> 안에서 질의하면 이미 옮긴 자리가 보인다.</li>
+            <li data-lines="112-116" data-title="재생 표시 아래, 거꾸로">재생 표시를 세운 채 되돌림 메시지를 쌓은 반대 차례로 넘긴다. 그래서 <code>apply</code>가 기록하는 <code>handle</code>을 다시 타도 그 안의 <code>push</code>는 거짓이 된다. 메시지 목록을 돌려주는 길은 앱이 재생하는 동안 stack이 그 사실을 몰라 이 재진입을 막을 수 없어서 거절했다.</li>
+            <li data-lines="123-128" data-title="redo만 trim">되돌릴 쪽으로 돌아온 걸음 때문에 상한을 넘을 수 있어서 <code>redo</code>만 <code>trim()</code>을 부른다. <code>undo</code>는 되돌릴 쪽을 줄이기만 한다.</li>
+            <li data-lines="130-134" data-title="쌓은 차례로">다시 실행 메시지는 쌓은 차례로 넘긴다. <code>apply</code>가 예외를 던져도 <code>replay_guard</code>가 재생 표시를 푼다. 위치는 옮긴 채로 남는다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s6" data-num="10.6">
+        <header class="slide-head">
+          <span class="num">10.6</span>
+          <h2>묶음과 저장 지점</h2>
+          <p class="lede">저장 지점은 어느 걸음에 붙은 표시가 아니다. "되돌릴 수 있는 걸음 수"라는 숫자다. 그래서 커서가 그 수에 오면 "저장됨"이고, 그 수로 돌아갈 길이 끊기면 사라진다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/undo_stack.cpp:77-100,187-191" data-path="src/ui/undo_stack.cpp" data-start="77"><script type="text/plain">
+    void undo_stack::begin(std::u8string label)
+    {
+        if (replaying_)
+            return;
+        merge_armed_ = false;
+        if (macro_depth_++ == 0)
+        {
+            macro_ = {};
+            macro_.label = std::move(label);
+        }
+    }
+
+    bool undo_stack::end()
+    {
+        if (replaying_ || macro_depth_ == 0)
+            return false;
+        if (--macro_depth_ > 0)
+            return true;
+        record entry { std::exchange(macro_, record {}) };
+        if (entry.undo.empty())
+            return true;
+        append(std::move(entry));
+        return true;
+    }
+⋯@187
+    bool undo_stack::clean() const noexcept
+    {
+        // 열린 묶음에 담긴 메시지는 앱이 이미 적용했으므로 상태가 저장한 자리를 떠났다.
+        return macro_.undo.empty() && clean_.has_value() && *clean_ == undo_.size();
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="77-87" data-title="가장 바깥만 연다">중첩은 깊이 숫자 하나로 센다. 가장 바깥 <code>begin</code>만 이름을 적고, <code>begin</code>은 언제나 합치기를 끊는다. 한 동작이 다른 동작의 helper를 부르는 앱을 위해 중첩을 허용했다.</li>
+            <li data-lines="89-100" data-title="가장 바깥만 확정">가장 바깥 <code>end</code>만 확정한다. 빈 묶음은 걸음을 만들지 않고 redo도 그대로 둔다.</li>
+            <li data-lines="187-191" data-title="저장됨의 정의">열린 묶음에 메시지가 없고, 저장 지점이 있고, 그 수가 되돌릴 걸음 수와 같을 때다. 첫 조건: 열린 묶음의 메시지는 앱이 이미 적용했으므로 상태가 저장한 것과 다르다.</li>
+          </ol>
+        </div>
+        <div class="lw" data-title="시나리오 재생: 색 바꾸기" data-surface="undo_stack" data-reset id="sc1">
+          <div class="lw-body lab-stack">
+            <div class="sc-head"><div class="sc-dots" data-dots></div><div class="tb"><button type="button" class="btn sm" data-prev>이전</button><button type="button" class="btn primary sm" data-next>다음</button></div></div>
+            <div class="sc-text" data-text></div>
+            <div class="sc-state" data-state></div>
+            <div class="stk-wrap"><div class="stk" data-stack></div><div class="wbar"><span>무게</span><div class="track"><div class="fill" data-wfill></div></div><output data-wout></output></div></div>
+          </div>
+          <div class="lw-foot">설계 문서의 규칙을 따라 이어 붙인 열다섯 걸음이다. 8번에서 커서가 저장 지점에 오자 "저장됨"이 된다. 10번에서 새 걸음이 redo 쪽을 자를 때 그쪽에 있던 저장 지점도 함께 사라진다. 그 뒤로는 <code>set_clean</code>이나 <code>clear</code> 전까지 어떤 되돌리기로도 "저장됨"에 돌아가지 못한다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s7" data-num="10.7">
+        <header class="slide-head">
+          <span class="num">10.7</span>
+          <h2>용량, 그리고 커지는 합친 걸음</h2>
+          <p class="lede">상한은 걸음 수와 무게의 합이고, 되돌릴 쪽만 센다. 넘치면 가장 오래된 걸음부터 버리되 가장 새 걸음 하나는 남긴다. "한 번은 되돌린다."</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/undo_stack.cpp:214-248" data-path="src/ui/undo_stack.cpp" data-start="214"><script type="text/plain">
+    void undo_stack::append(record entry)
+    {
+        discard_redo();
+        bytes_ += entry.weight;
+        undo_.push_back(std::move(entry));
+        merge_armed_ = false;
+        trim();
+    }
+
+    void undo_stack::discard_redo() noexcept
+    {
+        // 저장 지점이 버려질 redo 쪽에 있었으면 그 상태로는 돌아갈 길이 없다.
+        if (clean_.has_value() && *clean_ > undo_.size())
+            clean_.reset();
+        redo_.clear();
+    }
+
+    void undo_stack::trim()
+    {
+        while (undo_.size() > 1
+            && ((limits_.steps != 0 && undo_.size() > limits_.steps)
+                || (limits_.bytes != 0 && bytes_ > limits_.bytes)))
+        {
+            bytes_ -= undo_.front().weight;
+            undo_.pop_front();
+            if (clean_.has_value())
+            {
+                // 맨 아래 걸음이 버려지면 걸음 없는 자리가 사라진다.
+                if (*clean_ == 0)
+                    clean_.reset();
+                else
+                    --*clean_;
+            }
+        }
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="214-221" data-title="새 걸음이 redo를 자른다">모두 버리는 <code>clear()</code>를 빼면 redo 가지를 자르는 유일한 자리다. 새 걸음과 묶음 확정 때 불린다.</li>
+            <li data-lines="223-229" data-title="잘린 가지의 저장 지점">저장 지점이 잘려 나갈 redo 쪽에 있었으면 지운다. 같은 걸음 수라도 상태가 다르기 때문이다.</li>
+            <li data-lines="231-236" data-title="가장 새 걸음은 남긴다">걸음이 하나보다 많은 동안만 버린다. 상한 0은 <code>!= 0</code> 검사로 제한 없음이 된다. 상한보다 무거운 걸음 하나도 홀로 남는다.</li>
+            <li data-lines="237-246" data-title="저장 지점이 한 칸 내려간다">맨 아래 걸음을 버리면 "되돌릴 수 있는 걸음 수"가 하나 준다. 0이었으면 갈 곳이 없어 사라진다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>합친 걸음은 걸음 수를 늘리지 않지만 무게는 커질 수 있다. 합치기 갈래가 무게를 바꾼 뒤 그 자리에서 <code>trim()</code>을 부르는 까닭이다. 이것을 빠뜨렸던 버그를 고칠 때 아래 회귀 test가 함께 들어왔다. 고치기 전 코드는 이 저장소에 남아 있지 않다.</p>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="tests/undo_stack_tests.cpp:456-476" data-path="tests/undo_stack_tests.cpp" data-start="456"><script type="text/plain">
+TEST_CASE("A growing merged step trims older records and keeps its original undo", "[ui][undo]")
+{
+    luil::undo_stack stack { { .steps = 0, .bytes = 100 } };
+    REQUIRE(stack.push(make_step(u8"old", 1, 2, {}, 40)));
+    const bool saved_after_old { GENERATE(false, true) };
+    if (saved_after_old)
+        stack.set_clean();
+    REQUIRE(stack.push(make_step(u8"drag", 3, 4, u8"drag", 40)));
+    const std::size_t weight { GENERATE(std::size_t { 90 }, std::size_t { 150 }) };
+    REQUIRE(stack.push(make_step(u8"drag end", 5, 6, u8"drag", weight)));
+    REQUIRE(stack.undo_count() == 1u);
+    REQUIRE(stack.bytes() == weight);
+    REQUIRE(stack.undo_label() == u8"drag end");
+    REQUIRE(undone(stack) == values { 3 });
+    REQUIRE(stack.can_undo() == false);
+    REQUIRE(stack.bytes() == 0u);
+    REQUIRE(stack.clean() == saved_after_old);
+    REQUIRE(redone(stack) == values { 6 });
+    REQUIRE(stack.bytes() == weight);
+    REQUIRE(stack.clean() == false);
+}
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="458-465" data-title="네 경우">상한은 무게 100. old(40) 뒤에 저장 지점을 찍을지, 합칠 걸음의 무게가 90인지 150인지로 네 경우를 돌린다. 합치면 무게가 max(40, 90)=90으로 커져 합이 130이 된다.</li>
+            <li data-lines="466-469" data-title="old가 버려진다">그 자리에서 old가 버려져 걸음은 하나, <code>bytes()</code>는 합친 무게다. 되돌림은 여전히 첫 drag의 것(3)이다.</li>
+            <li data-lines="470-475" data-title="저장 지점의 운명">old 뒤에 찍었으면 1에서 0으로 내려가 되돌린 빈 자리와 맞는다. 찍지 않았으면 처음 자리 0이 버려지며 사라진다. 다시 실행하면 어느 쪽이든 저장됨이 아니다.</li>
+          </ol>
+        </div>
+        <div class="lw" data-title="시나리오 재생: 커지는 합친 걸음" data-surface="undo_stack · limits { steps 0, bytes 100 }" data-reset id="sc2">
+          <div class="lw-body lab-stack">
+            <div class="controls">
+              <label class="field"><input type="checkbox" data-opt="saved"> old 뒤에 <code>set_clean()</code></label>
+              <div class="seg" data-optseg role="group" aria-label="합칠 걸음의 무게">
+                <button type="button" data-v="90" aria-pressed="true">drag end 무게 90</button>
+                <button type="button" data-v="150" aria-pressed="false">150</button>
+              </div>
+            </div>
+            <div class="sc-head"><div class="sc-dots" data-dots></div><div class="tb"><button type="button" class="btn sm" data-prev>이전</button><button type="button" class="btn primary sm" data-next>다음</button></div></div>
+            <div class="sc-text" data-text></div>
+            <div class="stk-wrap"><div class="stk" data-stack></div><div class="wbar"><span>무게</span><div class="track"><div class="fill" data-wfill></div></div><output data-wout></output></div></div>
+          </div>
+          <div class="lw-foot">회귀 test의 네 조합을 그대로 돈다. 무게 150이면 old를 버려도 상한 100을 넘지만, 하나 남은 가장 새 걸음이라 남는다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s8" data-num="10.8">
+        <header class="slide-head">
+          <span class="num">10.8</span>
+          <h2>명령표와 키 경로</h2>
+          <p class="lede">실행 취소·다시 실행 두 명령은 <code>make_undo_commands</code>가 짓는다. 키 판정에 쓰는 표는 정적이고, 메뉴에 그리는 표는 stack 상태를 따른다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>자리</th><th>id</th><th>label</th><th>단축키</th><th>추가 단축키</th><th>켜짐</th></tr></thead>
+            <tbody>
+              <tr><td class="num">0</td><td><code>edit.undo</code></td><td>앱이 준 글. 비면 "실행 취소"</td><td>Ctrl+Z</td><td>—</td><td><code>can_undo</code></td></tr>
+              <tr><td class="num">1</td><td><code>edit.redo</code></td><td>앱이 준 글. 비면 "다시 실행"</td><td>Ctrl+Y</td><td>Ctrl+Shift+Z</td><td><code>can_redo</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cols two">
+          <div class="prose">
+            <p><b>판정용 표는 정적이다.</b> 단축키 판정은 input thread의 정책이 하는데, stack은 logic thread의 것이라 정책이 stack 상태를 읽을 수 없다. 게다가 <code>match_command</code>는 꺼진 명령을 건너뛴다. 그래서 판정용 표는 두 명령을 늘 켠다. 빈 stack에서 Ctrl+Z가 맞으면 앱 handler가 부른 <code>undo</code>가 거짓을 받고 끝난다.</p>
+            <p><b>보이는 표</b>는 logic thread가 stack 상태로 짓는다. "실행 취소: 체크" 같은 문장은 앱이 잇는다. 할 일이 없으면 끄는 까닭도 데모 test에 있다. 켜 둔 채 빈 동작을 내면 보조 기술의 Invoke가 오류로 끝난다. macOS에서 주 수정자는 Command이고 단축키 글은 ⌘Z, ⇧⌘Z가 된다.</p>
+          </div>
+          <div class="table-wrap">
+            <table class="t">
+              <thead><tr><th>초점이 있는 곳</th><th>Ctrl+Z · Ctrl+Y · Ctrl+Shift+Z</th></tr></thead>
+              <tbody>
+                <tr><td>편집할 수 있는 텍스트 칸</td><td>칸의 <code>undo</code>·<code>redo</code>. 앱 <code>on_key</code>에 닿지 않고, 칸 기록이 비어도 넘어가지 않는다</td></tr>
+                <tr><td>읽기 전용 칸</td><td>삼키지 않고 넘긴다 → 앱 <code>on_key</code>가 받는다 (설계 뒤의 수정)</td></tr>
+                <tr><td>단추처럼 칸이 아닌 곳</td><td>앱 <code>on_key</code>가 받는다</td></tr>
+                <tr><td>메뉴·팔레트가 열림</td><td>메뉴가 갖지 않은 키는 앱 <code>on_key</code>에 닿지 않는다. modal 범위에서는 window 명령으로 물러서지 않는다</td></tr>
+                <tr><td>메뉴·팔레트의 클릭</td><td>키 경로를 타지 않으므로 초점과 상관없이 앱 stack의 것</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:546-552,678-706" data-path="examples/demo/workbench_page.cpp" data-start="546"><script type="text/plain">
+    void workbench_page::commit_step(luil::undo_step step)
+    {
+        // 처음 실행도 다시 실행과 같은 메시지를 적용한다. 재생 메시지는 기록하지 않으므로 걸음이 두 번 쌓이지 않는다.
+        const luil::app_message redo { step.redo };
+        history_.push(std::move(step));
+        static_cast<void>(handle(redo));
+    }
+⋯@678
+        if (const auto* const resize { message.get<workbench_resize_intent>() }; resize != nullptr)
+        {
+            for (luil::table_column& column : columns_)
+            {
+                if (column.key != resize->column)
+                    continue;
+                const float width { column.width };
+                const float next { width + luil::table_resize_delta(column, resize->delta) };
+                // 같은 열을 이어서 조절하면 한 걸음이다. 한 번의 끌기가 끝나면 `workbench_resize_end_intent`가 끊는다.
+                if (next != width)
+                {
+                    luil::undo_step step {
+                        .label = u8"열 폭 조절",
+                        .undo = luil::app_message { workbench_set_width_intent { column.key, width } },
+                        .redo = luil::app_message { workbench_set_width_intent { column.key, next } },
+                        .merge_key = u8"resize:" + column.key,
+                        .weight = 2u * (sizeof(workbench_set_width_intent) + column.key.size()),
+                    };
+                    commit_step(std::move(step));
+                }
+                break;
+            }
+            return true;
+        }
+        if (message.get<workbench_resize_end_intent>() != nullptr)
+        {
+            history_.break_merge();
+            return true;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="546-552" data-title="쌓고, 같은 메시지로 적용">앱 쪽의 모양이다. 걸음을 쌓은 뒤 다시 실행과 같은 메시지를 <code>handle</code>에 흘린다. "처음 실행과 다시 실행이 한 길"이라는 약속이다.</li>
+            <li data-lines="678-685" data-title="델타 입력">사용자 메시지 <code>workbench_resize_intent</code>는 델타를 싣는다. 끌기는 본래 "이만큼 더"다.</li>
+            <li data-lines="686-697" data-title="절대 값 걸음">걸음은 절대 폭 둘(<code>width</code>, <code>next</code>)을 담는다. 같은 열의 조절은 키 <code>resize:열</code>로 합쳐져도 "처음 폭 / 마지막 폭"이 남아 맞다. 바뀌는 것이 없으면 걸음을 만들지 않는다.</li>
+            <li data-lines="702-706" data-title="끌기의 끝">열 경계를 놓으면 <code>break_merge()</code>를 부른다. 그래서 끌기 하나가 걸음 하나다.</li>
+          </ol>
+        </div>
+        <div class="callout warn">
+          <i class="ci" aria-hidden="true">&#xEA6C;</i>
+          <div>
+            <p class="ttl">데모에서 확인한 것 둘</p>
+            <p>데스크톱 데모의 메뉴 막대 "편집 &gt; 실행 취소"는 <code>make_undo_commands</code>를 쓰지 않고 직접 짓는다. 고르면 "마지막 메뉴 명령" 글만 바뀌고 작업대 stack에는 닿지 않는다. 작업대를 되돌리는 길은 키, 팔레트, 단추다. 또 작업대의 주석 두 곳(<code>workbench_page.h</code> 253행, <code>workbench_page.cpp</code> 1097행)은 읽기 전용 칸이 키를 삼키던 수정 전 상황을 아직 적고 있다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s9" data-num="10.9">
+        <header class="slide-head">
+          <span class="num">10.9</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>칸 기록(<code>text_edit_state</code>)은 칸 하나의 글을, 앱 stack(<code>undo_stack</code>)은 칸 밖의 앱 상태를 되돌린다. 둘은 따로 가고, 키는 칸이 먼저다.</li>
+          <li>한 걸음은 앱 메시지 쌍이다. stack은 메시지를 열지 않고 <code>apply</code>에 넘길 뿐이라 되돌림도 앱의 <code>handle</code> 길을 탄다.</li>
+          <li>같은 키의 연속 push는 앞 걸음의 되돌림과 뒤 걸음의 다시 실행만 남기고 합친다. 그래서 메시지는 "이 값으로 정함"이어야 한다. 시계는 없고, 끌기의 끝은 앱이 <code>break_merge()</code>로 알린다.</li>
+          <li><code>undo</code>·<code>redo</code>는 위치를 먼저 옮기고 재생 표시 아래에서 메시지를 넘긴다. 재생 중의 <code>push</code>는 거짓이라 기록하는 <code>handle</code>을 그대로 넘겨도 안전하다.</li>
+          <li>저장 지점은 "되돌릴 수 있는 걸음 수"다. 그 자리가 redo 쪽에 있다가 새 걸음이 쌓이면 사라진다. 맨 아래 걸음이 버려질 때는 한 칸 내려가고, 0이었으면 사라진다.</li>
+          <li>상한은 걸음 수와 무게 합(기본 1000걸음·32MiB)이고 되돌릴 쪽만 센다. 합친 걸음이 무거워지면 그 자리에서 오래된 걸음을 버린다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s10" data-num="10.10">
+        <header class="slide-head">
+          <span class="num">10.10</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="2">
+            <p class="q">같은 키로 걸음 셋을 쌓는다. 되돌림/다시 실행 값과 무게는 (1→2, 10), (2→3, 30), (3→4, 20)이다. <code>undo_count()</code>, <code>bytes()</code>, 되돌릴 때 적용되는 값, 다시 실행할 때 적용되는 값은?</p>
+            <ol class="choices">
+              <li>3 / 60 / {3} / {4}</li>
+              <li>1 / 30 / {1} / {4}</li>
+              <li>1 / 60 / {1} / {4}</li>
+              <li>1 / 30 / {3} / {2}</li>
+            </ol>
+            <div class="explain">무장된 같은 키의 연속 push는 맨 위 걸음에 합쳐진다. 첫 걸음의 되돌림과 마지막 걸음의 다시 실행만 남고, 무게는 합(60)이 아니라 큰 쪽(30)이다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q"><code>begin("바깥")</code> → push(1→2) → <code>begin("안쪽")</code> → push(3→4) → <code>end()</code> → push(5→6) → <code>end()</code>. 안쪽 <code>end()</code> 직후의 <code>undo_count()</code>, 확정된 걸음의 이름, 되돌림 차례, 다시 실행 차례는?</p>
+            <ol class="choices">
+              <li>0 / "바깥" / {5, 3, 1} / {2, 4, 6}</li>
+              <li>1 / "안쪽" / {1, 3, 5} / {2, 4, 6}</li>
+              <li>1 / "바깥" / {5, 3, 1} / {6, 4, 2}</li>
+              <li>0 / "안쪽" / {5, 3, 1} / {2, 4, 6}</li>
+            </ol>
+            <div class="explain">확정은 가장 바깥 <code>end</code>에서만 일어나고 이름도 바깥 <code>begin</code>의 것이다. 걸음 안에서 되돌림은 쌓은 반대 차례, 다시 실행은 쌓은 차례다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">push a → push b → <code>set_clean()</code> → undo → push c → undo → undo. 마지막의 <code>clean()</code>과, "저장됨"으로 돌아가는 방법은?</p>
+            <ol class="choices">
+              <li>참 — 걸음 수가 저장 때와 같아졌다</li>
+              <li>참 — 되돌리기 두 번이면 처음으로 돌아간다</li>
+              <li>거짓 — 다시 실행을 두 번 부르면 돌아간다</li>
+              <li>거짓 — <code>set_clean()</code>이나 <code>clear()</code>를 다시 불러야 한다</li>
+            </ol>
+            <div class="explain">저장 지점 2가 redo 쪽에 있는 채로 새 걸음 c가 쌓여, <code>discard_redo</code>가 저장 지점을 지웠다. 걸음 수가 다시 같아져도 상태가 다르므로 저장 지점이 아니다.</div>
+          </div>
+          <div class="quiz" data-answer="3">
+            <p class="q">되돌리는 도중, <code>apply</code> 안에서 앱이 <code>push</code>, <code>undo</code>, <code>clear</code>를 부르면?</p>
+            <ol class="choices">
+              <li>셋 다 평소처럼 동작한다</li>
+              <li><code>push</code>만 거짓이고 나머지는 동작한다</li>
+              <li><code>push</code>·<code>undo</code>는 거짓, <code>clear</code>는 아무 일도 하지 않는다</li>
+              <li>예외를 던진다</li>
+            </ol>
+            <div class="explain">위치를 먼저 옮기고 <code>replay_guard</code>가 재생 표시를 세운 뒤 <code>apply</code>를 부른다. 질의는 옮긴 자리를 보고, 바꾸는 호출은 모두 막힌다. 그래서 기록하는 <code>handle</code>을 <code>apply</code>로 넘겨도 걸음이 두 번 쌓이거나 redo가 지워지지 않는다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q">상한 <code>{ steps: 0, bytes: 100 }</code>에서 old(1→2, 무게 40, 키 없음) → drag(3→4, 40, 키 drag) → drag end(5→6, 90, 키 drag)를 쌓았다. <code>undo_count()</code>, <code>bytes()</code>, 되돌릴 때 적용되는 값은?</p>
+            <ol class="choices">
+              <li>2 / 130 / {5}</li>
+              <li>1 / 90 / {3}</li>
+              <li>2 / 90 / {3}</li>
+              <li>1 / 130 / {1}</li>
+            </ol>
+            <div class="explain">합치면 무게가 max(40, 90)=90으로 커져 합계가 130이 된다. 합치기 갈래의 <code>trim()</code>이 그 자리에서 old를 버린다. 되돌림은 첫 drag의 것(3)이 남는다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">편집할 수 있는 텍스트 칸에 초점이 있고 칸의 기록은 비었다. Ctrl+Z를 누르면?</p>
+            <ol class="choices">
+              <li>칸이 받고 끝난다. 앱 stack으로 넘어가지 않는다</li>
+              <li>칸 기록이 비었으므로 앱 stack이 되돌린다</li>
+              <li>칸과 앱 stack이 함께 되돌린다</li>
+              <li>판정용 표가 꺼져 있어 아무 일도 없다</li>
+            </ol>
+            <div class="explain">키는 칸이 먼저이고, 칸 기록이 비어도 넘어가지 않는다. 읽기 전용 칸만 이 키를 앱에 넘긴다. 판정용 표는 정적이라 꺼지지 않는다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/course.js"></script>
+<script src="assets/undo.js"></script>
+<script>
+(function () {
+  "use strict";
+  const { el } = window.LU;
+  const U = window.LuilUndo;
+  const $ = (id) => document.getElementById(id);
+  const MiB32 = 32 * 1024 * 1024;
+
+  function log(box, cls, kind, text) {
+    box.append(el("div", { class: "row " + cls }, el("span", { class: "t", text: kind }), el("span", { class: "m", text })));
+    while (box.childNodes.length > 80) box.firstChild.remove();
+    box.scrollTop = box.scrollHeight;
+  }
+  // 메시지를 글로 (앱이 정의한 메시지라 stack은 이 모양을 모른다)
+  function fmt(m) {
+    if (m == null) return "(빈 메시지)";
+    if (typeof m === "number") return `set_value(${m})`;
+    switch (m.k) {
+      case "fill": return `set_fill(${m.hue}°)`;
+      case "hex": return `set_fill(${m.c})`;
+      case "bold": return `set_bold(${m.v})`;
+      case "dhue": return `hue ${m.d >= 0 ? "+" : "−"}= ${Math.abs(m.d)}°`;
+      case "tbold": return "toggle_bold()";
+      default: return "?";
+    }
+  }
+  // stack 그림: 왼쪽이 가장 오래된 걸음, 커서 오른쪽은 다시 실행 쪽
+  function renderStack(host, stack, wfill, wout, fresh) {
+    const v = U.viewOf(stack);
+    host.textContent = "";
+    const gap = (g) => {
+      const d = el("div", { class: "gap" + (g === v.cursor ? " cur" : "") });
+      if (v.savePoint === g) d.append(el("span", { class: "sv", text: "저장 지점" }));
+      return d;
+    };
+    const macroBox = (m) => el("div", { class: "macro" }, el("div", { class: "nm", text: `열린 묶음 (깊이 ${m.depth})` }), el("div", { text: `"${m.label}"` }), el("div", { class: "small", text: `메시지 ${m.messages} · 무게 ${m.weight}` }));
+    host.append(gap(0));
+    if (!v.steps.length && !v.macro) host.append(el("span", { class: "none", text: "걸음이 없다" }));
+    v.steps.forEach((s, i) => {
+      if (v.macro && i === v.cursor) host.append(macroBox(v.macro), el("div", { class: "gap" }));
+      const top = v.mergeArmed && i === v.cursor - 1;
+      const box = el("div", { class: "st " + s.side + (top ? " armed" : "") + (fresh && i === v.cursor - 1 ? " fresh" : "") },
+        el("div", { class: "nm", text: s.label || "(이름 없음)" }),
+        el("div", { class: "msg" }, el("b", { text: "되돌림 " }), s.undo.slice().reverse().map(fmt).join(" → ")),
+        el("div", { class: "msg" }, el("b", { text: "다시 " }), s.redo.map(fmt).join(" → ")),
+        el("div", { class: "meta" }, s.mergeKey ? el("span", { class: "key", text: "키 " + s.mergeKey }) : null, el("span", { text: "무게 " + s.weight })));
+      if (top) box.append(el("span", { class: "arm", text: "합치기 무장" }));
+      host.append(box, gap(i + 1));
+    });
+    if (v.macro && v.cursor === v.steps.length) host.append(macroBox(v.macro));
+    if (wfill) {
+      const lim = v.limits.bytes;
+      const frac = lim ? Math.min(1, v.bytes / lim) : 0;
+      wfill.style.width = frac * 100 + "%";
+      wfill.classList.toggle("over", lim !== 0 && v.bytes > lim);
+      wout.textContent = `${v.bytes.toLocaleString()} / ${lim ? lim.toLocaleString() : "제한 없음"}` + (v.limits.steps ? ` · 걸음 ${v.cursor}/${v.limits.steps}` : ` · 걸음 ${v.cursor}`);
+    }
+    // 커서를 보이는 곳으로
+    const cur = host.querySelector(".gap.cur");
+    if (cur) { const x = cur.offsetLeft; if (x < host.scrollLeft || x > host.scrollLeft + host.clientWidth - 40) host.scrollLeft = Math.max(0, x - host.clientWidth / 2); }
+    return v;
+  }
+
+  /* ---------- 10.3 색 편집기 ---------- */
+  const ue = { app: { hue: 0, bold: false }, stack: new U.UndoStack(), dragStart: null };
+  const ueLog = $("ue-log");
+  const LIMITS = { default: { steps: U.DEFAULT_STEPS, bytes: U.DEFAULT_BYTES }, steps3: { steps: 3, bytes: 0 }, bytes100: { steps: 0, bytes: 100 } };
+  function handle(m) {
+    const a = ue.app;
+    if (m.k === "fill") a.hue = m.hue;
+    else if (m.k === "bold") a.bold = m.v;
+    else if (m.k === "dhue") a.hue = (((a.hue + m.d) % 360) + 360) % 360;
+    else if (m.k === "tbold") a.bold = !a.bold;
+  }
+  // stack이 부르는 적용 함수: 앱의 handle을 그대로 탄다
+  function apply(m) {
+    handle(m);
+    log(ueLog, "lg", "apply", "stack → " + fmt(m));
+    if (m.k === "dhue" && m.before != null && ue.app.hue !== m.before)
+      $("ue-warn").textContent = `끌기 전 색 ${m.before}°로 돌아가야 하는데 ${ue.app.hue}°에 섰다. 합친 걸음에는 첫 델타 하나만 남았기 때문이다.`;
+  }
+  // 사용자 동작: 쌓고, 같은 다시 실행 메시지를 앱이 적용한다 (처음 실행과 다시 실행이 한 길)
+  function commit(step) {
+    const ok = ue.stack.push(step);
+    log(ueLog, ok ? "good" : "bad", "push", `${step.label} → ${ue.stack.lastEvent}`);
+    handle(step.redo);
+    return ok;
+  }
+  function ueRender(fresh) {
+    const a = ue.app, s = ue.stack;
+    $("ue-shape").style.backgroundColor = `hsl(${a.hue} 72% 52%)`;
+    $("ue-word").classList.toggle("bold", a.bold);
+    $("ue-meta").textContent = `hue ${a.hue}° · bold ${a.bold}`;
+    $("ue-hue").value = String(a.hue);
+    $("ue-bold").checked = a.bold;
+    const undoB = $("ue-undo"), redoB = $("ue-redo");
+    undoB.disabled = !s.canUndo();
+    redoB.disabled = !s.canRedo();
+    undoB.textContent = s.canUndo() ? "실행 취소: " + s.undoLabel() : "실행 취소";
+    redoB.textContent = s.canRedo() ? "다시 실행: " + s.redoLabel() : "다시 실행";
+    const badges = $("ue-badges");
+    badges.textContent = "";
+    badges.append(el("span", { class: "badge " + (s.isClean() ? "clean" : "dirty"), text: s.isClean() ? "저장됨" : "수정됨" }));
+    if (s.macroDepth > 0) badges.append(el("span", { class: "badge macro", text: "묶음 열림 " + s.macroDepth }));
+    renderStack($("ue-stack"), s, $("ue-wfill"), $("ue-wout"), fresh);
+  }
+  const hue = $("ue-hue");
+  hue.addEventListener("input", () => {
+    const next = +hue.value, prev = ue.app.hue;
+    if (next === prev) return;
+    if (ue.dragStart == null) ue.dragStart = prev;
+    $("ue-warn").textContent = "";
+    if ($("ue-delta").checked) {
+      let d = next - prev;
+      commit({ label: "채우기 색", undo: { k: "dhue", d: -d, before: ue.dragStart }, redo: { k: "dhue", d }, mergeKey: "color:fill", weight: 40 });
+    } else commit({ label: "채우기 색", undo: { k: "fill", hue: prev }, redo: { k: "fill", hue: next }, mergeKey: "color:fill", weight: 40 });
+    ueRender(true);
+  });
+  hue.addEventListener("change", () => {
+    ue.stack.breakMerge();
+    ue.dragStart = null;
+    log(ueLog, "", "놓음", "손을 뗐다 → break_merge()");
+    ueRender();
+  });
+  $("ue-bold").addEventListener("change", (e) => {
+    const v = e.target.checked;
+    $("ue-warn").textContent = "";
+    if ($("ue-delta").checked) commit({ label: "굵게", undo: { k: "tbold" }, redo: { k: "tbold" }, weight: 10 });
+    else commit({ label: "굵게", undo: { k: "bold", v: !v }, redo: { k: "bold", v }, weight: 10 });
+    ueRender(true);
+  });
+  $("ue-reset").addEventListener("click", () => {
+    const a = ue.app;
+    if (a.hue === 0 && !a.bold) { log(ueLog, "", "—", "바뀌는 것이 없으면 걸음을 만들지 않는다"); return; }
+    ue.stack.begin("모두 초기화");
+    log(ueLog, "", "begin", '"모두 초기화"');
+    if (a.hue !== 0) commit({ label: "채우기 색", undo: { k: "fill", hue: a.hue }, redo: { k: "fill", hue: 0 }, mergeKey: "color:fill", weight: 40 });
+    if (a.bold) commit({ label: "굵게", undo: { k: "bold", v: true }, redo: { k: "bold", v: false }, weight: 10 });
+    const ok = ue.stack.end();
+    log(ueLog, ok ? "good" : "bad", "end", ok ? (ue.stack.macroDepth > 0 ? "안쪽 묶음을 닫았다 — 바깥이 아직 열려 있다" : "묶음을 한 걸음으로 확정했다") : "열린 묶음이 없다");
+    ueRender(true);
+  });
+  $("ue-save").addEventListener("click", () => {
+    const before = ue.stack.clean;
+    ue.stack.setClean();
+    log(ueLog, "", "set_clean", ue.stack.macroDepth > 0 ? "묶음이 열려 있어 무시된다" : `저장 지점 ${before ?? "없음"} → ${ue.stack.clean}`);
+    ueRender();
+  });
+  $("ue-begin").addEventListener("click", () => { ue.stack.begin("여러 변경"); log(ueLog, "", "begin", `깊이 ${ue.stack.macroDepth}`); ueRender(); });
+  $("ue-end").addEventListener("click", () => {
+    const ok = ue.stack.end();
+    log(ueLog, ok ? "good" : "bad", "end", ok ? (ue.stack.macroDepth > 0 ? `깊이 ${ue.stack.macroDepth}로` : "확정 (빈 묶음이면 걸음 없음)") : "거짓 — 열린 묶음이 없다");
+    ueRender(true);
+  });
+  $("ue-clear").addEventListener("click", () => { ue.stack.clear(); log(ueLog, "", "clear", "두 쪽과 묶음을 비우고 저장 지점을 0으로"); ueRender(); });
+  function doUndo() {
+    const ok = ue.stack.undo(apply);
+    if (!ok) log(ueLog, "bad", "undo", ue.stack.macroDepth > 0 ? "거짓 — 묶음이 열려 있다" : "거짓 — 되돌릴 걸음이 없다");
+    else log(ueLog, "", "undo", "참 — 걸음을 redo 쪽으로 옮긴 뒤 넘겼다");
+    ueRender();
+  }
+  function doRedo() {
+    const ok = ue.stack.redo(apply);
+    if (!ok) log(ueLog, "bad", "redo", ue.stack.macroDepth > 0 ? "거짓 — 묶음이 열려 있다" : "거짓 — 다시 실행할 걸음이 없다");
+    else log(ueLog, "", "redo", "참");
+    ueRender();
+  }
+  $("ue-undo").addEventListener("click", doUndo);
+  $("ue-redo").addEventListener("click", doRedo);
+  const mac = /Mac|iPhone|iPad/.test(navigator.platform || "");
+  $("ue-keys").addEventListener("keydown", (e) => {
+    const primary = mac ? e.metaKey : e.ctrlKey;
+    if (!primary || e.altKey) return;
+    const k = e.key.toLowerCase();
+    const isUndo = k === "z" && !e.shiftKey;
+    const isRedo = (k === "y" && !e.shiftKey) || (k === "z" && e.shiftKey);
+    if (!isUndo && !isRedo) return;
+    const t = e.target;
+    if (t.matches && t.matches('input[type="text"]:not([readonly]), textarea')) { log(ueLog, "", "키", "편집 칸에 초점 → 키는 칸의 것이다. 앱 stack에 넘기지 않는다"); return; }
+    e.preventDefault();
+    if (t.matches && t.matches("input[readonly]")) log(ueLog, "", "키", "읽기 전용 칸 → 키를 앱에 넘긴다");
+    if (isUndo) doUndo(); else doRedo();
+  });
+  const setLimits = (function () {
+    const g = $("ue-limits");
+    g.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-v]");
+      if (!b) return;
+      g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+      ue.stack.setLimits(LIMITS[b.dataset.v]);
+      log(ueLog, "", "set_limits", `{ steps: ${LIMITS[b.dataset.v].steps}, bytes: ${LIMITS[b.dataset.v].bytes} } — 되돌릴 쪽만 줄인다`);
+      ueRender();
+    });
+    return (v) => g.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x.dataset.v === v ? "true" : "false"));
+  })();
+  function ueReset() {
+    ue.app = { hue: 0, bold: false };
+    ue.stack = new U.UndoStack();
+    ue.dragStart = null;
+    $("ue-delta").checked = false;
+    $("ue-warn").textContent = "";
+    $("ue-memo").value = "";
+    setLimits("default");
+    ueLog.textContent = "";
+    log(ueLog, "", "준비", "앱 상태 { hue 0°, bold false }, 빈 stack");
+    ueRender();
+  }
+  $("ue-lab").addEventListener("lw-reset", ueReset);
+  ueReset();
+
+  /* ---------- 시나리오 재생 ---------- */
+  function player(root, def) {
+    const q = (s) => root.querySelector(s);
+    let k = 0;
+    let model = def.build();
+    function draw() {
+      const ctx = def.init();
+      for (let i = 0; i <= k; ++i) { ctx.applied = []; model.steps[i].run(ctx); }
+      const st = model.steps[k];
+      const dots = q("[data-dots]");
+      dots.textContent = "";
+      model.steps.forEach((s, i) => {
+        const b = el("button", { type: "button", text: String(s.n ?? i + 1), "aria-label": `${i + 1}단계: ${s.act}` });
+        if (i === k) b.setAttribute("aria-current", "step");
+        b.addEventListener("click", () => { k = i; draw(); });
+        dots.append(b);
+      });
+      const text = q("[data-text]");
+      text.textContent = "";
+      text.append(el("span", { class: "act", text: `${st.n ?? k + 1}. ${st.act}` }), el("br"), el("span", { class: "note", text: typeof st.note === "function" ? st.note(ctx) : st.note }));
+      if (ctx.applied.length) text.append(el("br"), el("span", { class: "small", text: "적용: " + ctx.applied.join(" · ") }));
+      if (def.state) def.state(ctx, q("[data-state]"));
+      renderStack(q("[data-stack]"), ctx.stack, q("[data-wfill]"), q("[data-wout]"), false);
+      q("[data-prev]").disabled = k === 0;
+      q("[data-next]").disabled = k === model.steps.length - 1;
+    }
+    q("[data-prev]").addEventListener("click", () => { if (k > 0) { --k; draw(); } });
+    q("[data-next]").addEventListener("click", () => { if (k < model.steps.length - 1) { ++k; draw(); } });
+    root.addEventListener("lw-reset", () => { if (def.reset) def.reset(); model = def.build(); k = 0; draw(); });
+    return { redraw() { model = def.build(); k = 0; draw(); }, draw };
+  }
+
+  // 시나리오 1: 색 바꾸기 (설계 문서의 규칙으로 이어 붙인 열다섯 걸음)
+  const hexStep = (label, from, to, key) => ({ label, undo: { k: "hex", c: from }, redo: { k: "hex", c: to }, mergeKey: key || "", weight: 40 });
+  const boldStep = (from, to) => ({ label: "굵게", undo: { k: "bold", v: from }, redo: { k: "bold", v: to }, weight: 10 });
+  const sc1 = player($("sc1"), {
+    init() {
+      const ctx = { stack: new U.UndoStack(), app: { fill: "#ff0000", bold: false }, applied: [] };
+      ctx.handle = (m) => { if (m.k === "hex") ctx.app.fill = m.c; else if (m.k === "bold") ctx.app.bold = m.v; };
+      ctx.apply = (m) => { ctx.handle(m); ctx.applied.push("stack→apply " + fmt(m)); };
+      ctx.commit = (s) => { ctx.stack.push(s); ctx.handle(s.redo); ctx.applied.push("앱 " + fmt(s.redo)); };
+      return ctx;
+    },
+    build() {
+      return { steps: [
+        { act: "시작", note: "빈 stack은 저장된 상태다. 저장 지점은 0, 곧 '되돌릴 걸음이 하나도 없는 자리'다.", run() {} },
+        { act: "색 끌기 1: push(A) 뒤 앱이 다시 실행 메시지를 적용", note: "키 있는 새 걸음이라 합치기가 무장된다.", run: (c) => c.commit(hexStep("채우기 색", "#ff0000", "#ff8000", "color:fill")) },
+        { act: "색 끌기 2: 같은 키로 push", note: "무장된 같은 키라 A에 합쳐진다. 되돌림은 #ff0000 그대로, 다시 실행만 #ffff00이 된다.", run: (c) => c.commit(hexStep("채우기 색", "#ff8000", "#ffff00", "color:fill")) },
+        { act: "손을 뗌: break_merge()", note: "무장이 꺼진다. 걸음은 그대로다.", run: (c) => c.stack.breakMerge() },
+        { act: "새 끌기: push(B, 같은 키)", note: "무장이 꺼져 있었으므로 같은 키라도 새 걸음이다.", run: (c) => c.commit(hexStep("채우기 색", "#ffff00", "#00ff00", "color:fill")) },
+        { act: "저장: set_clean()", note: "저장 지점이 2(되돌릴 걸음 수)에 찍힌다. 무장도 꺼진다.", run: (c) => c.stack.setClean() },
+        { act: "굵게 켬: push(C)", note: "키 없는 새 걸음.", run: (c) => c.commit(boldStep(false, true)) },
+        { act: "undo", note: "커서가 저장 지점(2)에 오자 저장됨이 된다. undo는 저장 지점을 옮기지 않는다.", run: (c) => c.stack.undo(c.apply) },
+        { act: "undo", note: "커서가 1로 간다. 저장 지점 2는 이제 다시 실행 쪽에 있다.", run: (c) => c.stack.undo(c.apply) },
+        { act: "새 색: push(D, 같은 키)", note: "undo가 무장을 껐으므로 A′와 합치지 않는다. 새 걸음이 redo 쪽 B·C를 자르고, 그쪽에 있던 저장 지점도 함께 사라진다.", run: (c) => c.commit(hexStep("채우기 색", "#ffff00", "#0000ff", "color:fill")) },
+        { act: "굵게 켬: push(E)", note: "저장 지점이 없으니 이제 어떤 되돌리기로도 저장됨에 돌아가지 못한다.", run: (c) => c.commit(boldStep(false, true)) },
+        { act: 'begin("모두 초기화") 뒤 push 둘', note: "묶음이 열린 동안 can_undo는 거짓이고 걸음 수는 3 그대로다. 앱은 메시지를 이미 적용했다.", run: (c) => { c.stack.begin("모두 초기화"); c.commit(hexStep("채우기 색", "#0000ff", "#000000", "color:fill")); c.commit(boldStep(true, false)); } },
+        { act: "end()", note: "묶음이 걸음 F로 확정된다. 메시지 둘, 무게는 합(50)이다.", run: (c) => c.stack.end() },
+        { act: "undo", note: "묶음은 거꾸로 되돌린다: set_bold(true) → set_fill(#0000ff).", run: (c) => c.stack.undo(c.apply) },
+        { act: "redo", note: "다시 실행은 쌓은 차례로: set_fill(#000000) → set_bold(false).", run: (c) => c.stack.redo(c.apply) },
+      ] };
+    },
+    state(ctx, host) {
+      const s = ctx.stack;
+      host.textContent = "";
+      host.append(el("span", { class: "sw", style: `background:${ctx.app.fill}` }), el("code", { text: ctx.app.fill }), el("span", { text: "굵게 " + ctx.app.bold }),
+        el("span", { class: "badge " + (s.isClean() ? "clean" : "dirty"), text: s.isClean() ? "저장됨" : "수정됨" }),
+        el("span", { class: "small muted", text: `되돌릴 ${s.undoCount()} · 다시 ${s.redoCount()} · 저장 지점 ${s.clean ?? "없음"} · 무장 ${s.mergeArmed ? "켜짐" : "꺼짐"}` }));
+      if (s.macroDepth > 0) host.append(el("span", { class: "badge macro", text: "묶음 열림" }));
+    },
+  });
+  sc1.redraw();
+
+  // 시나리오 2: 커지는 합친 걸음 (tests/undo_stack_tests.cpp 456–476)
+  const sc2root = $("sc2");
+  const sc2opt = { saved: false, weight: 90 };
+  const sc2 = player(sc2root, {
+    init() {
+      const ctx = { stack: new U.UndoStack({ steps: 0, bytes: 100 }), applied: [] };
+      ctx.apply = (m) => ctx.applied.push("stack→apply " + fmt(m));
+      return ctx;
+    },
+    reset() { sc2opt.saved = false; sc2opt.weight = 90; sc2root.querySelector("[data-opt=saved]").checked = false; sc2root.querySelectorAll("[data-optseg] button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === "90" ? "true" : "false")); },
+    build() {
+      const w = sc2opt.weight;
+      const steps = [{ n: 1, act: "push old (1→2, 무게 40, 키 없음)", note: "합 40.", run: (c) => c.stack.push({ label: "old", undo: 1, redo: 2, weight: 40 }) }];
+      if (sc2opt.saved) steps.push({ n: "1′", act: "set_clean()", note: "저장 지점이 1에 찍힌다.", run: (c) => c.stack.setClean() });
+      steps.push(
+        { n: 2, act: "push drag (3→4, 무게 40, 키 drag)", note: "합 80. 키가 있어 무장된다.", run: (c) => c.stack.push({ label: "drag", undo: 3, redo: 4, mergeKey: "drag", weight: 40 }) },
+        { n: 3, act: `push "drag end" (5→6, 무게 ${w}, 키 drag)`, note: `drag에 합쳐 무게가 max(40, ${w}) = ${w}로 커진다. 합 ${40 + w} > 100이라 그 자리의 trim()이 old를 버린다.` + (w > 100 ? " old를 버려도 150 > 100이지만, 하나 남은 가장 새 걸음이라 남는다." : "") + (sc2opt.saved ? " 저장 지점은 1에서 0으로 내려간다." : " 처음 자리 0이었던 저장 지점은 갈 곳이 없어 사라진다."), run: (c) => c.stack.push({ label: "drag end", undo: 5, redo: 6, mergeKey: "drag", weight: w }) },
+        { n: 4, act: "undo", note: (c) => "되돌림은 첫 drag의 것(3)이다. clean() = " + c.stack.isClean() + (sc2opt.saved ? " — 내려간 저장 지점 0과 맞는다." : " — 저장 지점이 없다."), run: (c) => c.stack.undo(c.apply) },
+        { n: 5, act: "redo", note: (c) => "다시 실행은 마지막 걸음의 것(6)이다. clean() = " + c.stack.isClean() + ".", run: (c) => c.stack.redo(c.apply) },
+      );
+      return { steps };
+    },
+  });
+  sc2root.querySelector("[data-opt=saved]").addEventListener("change", (e) => { sc2opt.saved = e.target.checked; sc2.redraw(); });
+  sc2root.querySelector("[data-optseg]").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-v]");
+    if (!b) return;
+    sc2root.querySelectorAll("[data-optseg] button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    sc2opt.weight = +b.dataset.v;
+    sc2.redraw();
+  });
+  sc2.redraw();
+})();
+</script>
+</body>
+</html>

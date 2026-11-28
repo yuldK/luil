@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>12 품질과 빌드 · luil 해부학</title>
+<meta name="description" content="luil 해부학 12강. 창 없이 도는 core 중심의 10만 줄 테스트, 픽셀 넓이로 판정을 잠그는 raster test, Release 전용 ASan, 핀과 체크섬으로 고정한 의존성과 네트워크를 쓰지 않는 configure, 설치본을 실제로 빌드하는 소비자 계약, 컴파일러가 잡지 못하는 것을 막는 정적 검사.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .lab-stack { display: grid; gap: 14px; }
+  .figs { display: grid; gap: 1px; grid-template-columns: repeat(3, minmax(0, 1fr)); background: var(--line); border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  @media (min-width: 900px) { .figs { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+  .figs > div { background: var(--panel); padding: 12px 14px; display: grid; gap: 2px; }
+  .figs .v { font-family: var(--font-display); font-size: 1.6rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .figs .k { font-size: var(--fs-xs); color: var(--fg-2); line-height: 1.35; }
+  /* 막대 */
+  .hb { display: grid; gap: 6px; }
+  .hb .r { display: grid; grid-template-columns: minmax(0, 15em) minmax(0, 1fr); gap: 10px; align-items: center; font-size: var(--fs-xs); }
+  .hb .r .lab { color: var(--fg-2); line-height: 1.35; }
+  .hb .r .track { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .hb .r .b { height: 16px; border-radius: 0 4px 4px 0; background: var(--accent); min-width: 2px; flex: none; }
+  .hb .r .v { font-family: var(--font-code); white-space: nowrap; }
+  @media (max-width: 560px) { .hb .r { grid-template-columns: 1fr; gap: 2px; } }
+  /* 피라미드 */
+  .pyr { display: grid; gap: 4px; justify-items: center; }
+  .pyr .lv { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 8px 14px; border-radius: var(--r-row); border: 1px solid var(--line-2); background: var(--panel); font-size: var(--fs-sm); box-sizing: border-box; min-width: 0; max-width: 100%; }
+  .pyr .lv .n { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--fg-3); }
+  .pyr .lv .c { font-family: var(--font-code); font-weight: 600; white-space: nowrap; }
+  .pyr .lv .c small { font-weight: 400; color: var(--fg-3); }
+  .pyr .lv.base { background: var(--accent-wash); border-color: var(--accent); }
+  .pyr .lv .d { display: block; font-size: var(--fs-xs); color: var(--fg-2); }
+  /* raster 탐침 */
+  .rp-grid { display: grid; gap: 16px; }
+  @media (min-width: 1000px) { .rp-grid { grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr); align-items: start; } }
+  .rp-canvas { width: 100%; max-width: 520px; height: auto; display: block; border: 1px solid var(--line-2); border-radius: var(--r-row); image-rendering: pixelated; background: #1e1e1e; }
+  .asserts { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .asserts li { display: grid; grid-template-columns: 3.2em minmax(0, 1fr); gap: 10px; align-items: start; font-size: var(--fs-sm); padding: 7px 10px; border-radius: var(--r-row); border: 1px solid var(--line); background: var(--panel); }
+  .asserts li .r { font-family: var(--font-code); font-size: var(--fs-xs); font-weight: 600; text-align: center; border-radius: 3px; padding: 1px 0; }
+  .asserts li.ok .r { background: var(--accent-wash); color: var(--accent-ink); }
+  .asserts li.fail .r { background: var(--error-wash); color: var(--error); }
+  .asserts li code { font-size: var(--fs-xs); }
+  .asserts li .why { display: block; font-size: var(--fs-xs); color: var(--fg-2); margin-top: 2px; }
+  /* 파이프라인 */
+  .steps { display: grid; gap: 6px; grid-template-columns: repeat(6, minmax(0, 1fr)); }
+  @media (max-width: 900px) { .steps { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .steps button { all: unset; box-sizing: border-box; cursor: pointer; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--panel); padding: 8px 10px; display: grid; gap: 2px; min-width: 0; }
+  .steps button .n { font-family: var(--font-code); font-size: 10.5px; color: var(--fg-3); }
+  .steps button .t { font-weight: 600; font-size: var(--fs-sm); }
+  .steps button .net { font-size: 10.5px; color: var(--warn); }
+  .steps button .nonet { font-size: 10.5px; color: var(--accent-ink); }
+  .steps button[aria-pressed="true"] { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-wash-2); }
+  .steps button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .step-detail { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); padding: 12px 14px; display: grid; gap: 8px; font-size: var(--fs-sm); }
+  .step-detail pre { margin: 0; font-family: var(--font-code); font-size: var(--fs-xs); background: var(--sunk); padding: 8px 10px; border-radius: var(--r-row); white-space: pre-wrap; overflow-wrap: anywhere; }
+  .step-detail .k { font-size: var(--fs-xs); color: var(--fg-3); }
+  /* json 함정 */
+  .jt-row { display: grid; gap: 8px; grid-template-columns: minmax(0, 1fr); }
+  .jt-table td { font-family: var(--font-code); font-size: var(--fs-xs); overflow-wrap: anywhere; }
+  .jt-table td.bad { color: var(--error); font-weight: 600; }
+  .jt-table td.ok { color: var(--accent-ink); }
+</style>
+</head>
+<body data-lecture="12">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="12">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 12</span><span>5부 · 바깥 세계</span></div>
+      <h1>품질과 빌드</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">회귀는 창 없이 도는 core test에서 먼저 잡는다. 의존성은 핀과 체크섬으로 고정하고 configure는 네트워크를 쓰지 않는다. 소비자와의 약속은 설치본을 실제로 빌드하는 test가 지킨다. 컴파일러가 잡지 못하는 것은 따로 정적 검사로 막는다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>50분</dd></div>
+            <div><dt>선수 지식</dt><dd>2강(<code>app_host</code>), 3강(메시징), 7강(raster test)</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>tests/CMakeLists.txt</code>·<code>raster_draw_tests.cpp</code>·<code>skia-prep.json</code>·<code>install_consumer.cmake</code>·<code>check_source_style.ps1</code></dd></div>
+            <div><dt>실험</dt><dd>raster 탐침, 빌드 파이프라인, json 중괄호 함정</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li>테스트를 "창 없이 도는 core" 중심으로 나누는 이유와 층을 설명한다.</li>
+            <li>raster test가 배율 2와 픽셀 넓이 단언을 쓰는 이유를 안다.</li>
+            <li>"configure는 네트워크를 쓰지 않는다"와 핀·체크섬의 역할을 말할 수 있다.</li>
+            <li>소비자 통합 계약을 test로 잠그는 방법을 안다.</li>
+            <li>컴파일러가 잡지 못하는 종류를 정적 검사로 막는 이유를 예로 든다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="12.1">
+        <header class="slide-head">
+          <span class="num">12.1</span>
+          <h2>10만 줄의 테스트</h2>
+          <p class="lede">플랫폼 넷, Skia 같은 무거운 바이너리 의존성, 소스로도 설치본으로도 들이는 라이브러리. 이 조건에서 회귀를 어디서 잡고, 빌드를 어떻게 재현하며, 소비자에게 무엇을 약속하느냐가 이 강의의 주제다.</p>
+        </header>
+        <div class="figs" role="list">
+          <div role="listitem"><span class="v">264</span><span class="k"><code>tests/</code>의 파일</span></div>
+          <div role="listitem"><span class="v">103,912</span><span class="k">그 줄 수 (C++ 계열만 102,044)</span></div>
+          <div role="listitem"><span class="v">2,852</span><span class="k">Catch2 <code>TEST_CASE</code></span></div>
+          <div role="listitem"><span class="v">615</span><span class="k"><code>SECTION</code></span></div>
+          <div role="listitem"><span class="v">20,056</span><span class="k"><code>REQUIRE</code>·<code>CHECK</code> 계열 매크로</span></div>
+          <div role="listitem"><span class="v">318</span><span class="k">서로 다른 태그</span></div>
+        </div>
+        <div class="callout think">
+          <i class="ci" aria-hidden="true">&#xEA61;</i>
+          <div>
+            <p class="ttl">이 숫자를 세는 법</p>
+            <p>모두 이 강의의 기준 커밋을 정적으로 센 값이다. 줄 수는 <code>tests/</code>의 모든 파일(CMake·JSON·대본 포함)을 <code>wc -l</code>로 셌다. <code>TEST_CASE</code> 2,852는 모든 플랫폼의 파일을 합친 grep 수다(<code>.cpp</code> 2,843 + <code>.mm</code> 9). 실제 CTest 등록 수는 플랫폼마다 다른 target 구성, ctest가 돌리지 않는 숨김 태그(정적 25개), 조건부 컴파일 때문에 이와 다르다. 이 강의를 쓰며 시험을 돌려 보지는 않았다. 실행 기록은 12.2의 표처럼 문서에 남은 것을 옮겼다.</p>
+          </div>
+        </div>
+        <div class="lw" data-title="테스트 지도" data-surface="tests/ · 정적 집계" id="tm-lab">
+          <div class="lw-body lab-stack">
+            <div class="controls">
+              <div class="seg" id="tm-metric" role="group" aria-label="잴 값">
+                <button type="button" data-v="test_cases" aria-pressed="true">TEST_CASE</button>
+                <button type="button" data-v="lines" aria-pressed="false">줄</button>
+                <button type="button" data-v="files" aria-pressed="false">파일</button>
+              </div>
+              <div class="seg" id="tm-view" role="group" aria-label="묶음">
+                <button type="button" data-v="scope" aria-pressed="true">실행 범위별</button>
+                <button type="button" data-v="big" aria-pressed="false">가장 큰 파일 15</button>
+                <button type="button" data-v="tags" aria-pressed="false">태그 상위 15</button>
+              </div>
+            </div>
+            <div class="hb" id="tm-bars" role="img" aria-label="테스트 분포 막대"></div>
+            <p class="small muted" id="tm-note"></p>
+          </div>
+          <div class="lw-foot">실행 범위는 파일마다 주 소속 하나로 배정했다. 여러 플랫폼 target이 함께 쓰는 파일은 "플랫폼 공유"다. core 공통 하나가 TEST_CASE의 70%를 차지한다 — 창도 GPU도 없이, 모든 플랫폼에서 같은 실행 파일로 도는 부분이다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s2" data-num="12.2">
+        <header class="slide-head">
+          <span class="num">12.2</span>
+          <h2>창 없이 도는 core가 중심이다</h2>
+          <p class="lede"><code>luil_core_tests</code>는 플랫폼을 모르는 층만 링크한다. 그래서 Windows, Android 기기, macOS에서 같은 실행 파일이 선다. 그 아래에 컴파일 없이 도는 정적 검사가, 위에 플랫폼 통합·메모리 검사·실행 파일 smoke·설치본 소비자·합성 화면·대화형 입력이 층으로 쌓인다.</p>
+        </header>
+        <div class="pyr" id="pyramid" role="list" aria-label="테스트 피라미드 (Windows vs2026-tests 구성, 위가 꼭대기)"></div>
+        <p class="small muted">층마다 단위가 다르다. 수는 정적 집계다. macOS에는 이와 나란한 층이 있다: core 2,057(공통 2,002 + AppKit 없는 순수 층 55), <code>luil_net_tests</code> 128, 플랫폼 48, smoke 8, 실제 창 대본 8.</p>
+        <div class="cols two">
+          <div class="prose">
+            <p><b>core는 core만 링크한다.</b> 플랫폼 계층이 없으니 core가 링크로 부르는 hook 둘(글꼴 자원, 즉시 종료)은 빈 글꼴 관리자와 <code>abort()</code>를 정의한 stub이 채운다(11강). "그래야 어느 플랫폼에서든 같은 실행 파일이 선다."</p>
+            <p><b>창 없는 조립.</b> 세 thread를 조립하는 <code>app_host</code>도 창 없이 core test에서 선다. 데모 페이지 코드까지 소스로 넣어 창 없이 검증한다.</p>
+            <p><b>따로 세우는 실행 파일</b>에는 이유가 있다. ICU가 없는 환경은 초기화 캐시를 공유하지 않게 별도 프로세스에서 재현한다. Android의 HTTP 시험은 JNI로 <code>java.net</code>을 부르므로 JVM 안에서만 돈다.</p>
+            <p><b>hang은 실패로.</b> 모든 Catch2 test에 timeout 120초를 준다. "hang 유형의 회귀가 무기한 대기 대신 실패로 드러나도록."</p>
+            <p><b>테스트 수는 줄면 안 된다.</b> Android 이식의 단계 판정 기준이었다. "줄어든다면 테스트를 다른 실행 파일로 옮긴 것이어야 하고, 합계가 같아야 한다."</p>
+          </div>
+          <div class="walk">
+            <div class="code" data-lang="cpp" data-src="tests/app_host_tests.cpp:36-55,184-208" data-path="tests/app_host_tests.cpp" data-start="36"><script type="text/plain">
+    // 처리 횟수를 세고 그 수를 frame에 싣는 최소 driver다.
+    // 창 없는 조립 test라 tree는 싣지 않는다.
+    class counting_driver final : public luil::win32::logic_driver
+    {
+    public:
+        void start() override
+        {
+            started.store(true);
+        }
+
+        void handle(luil::app_message message) override
+        {
+            if (message.get<close_intent>() != nullptr)
+            {
+                closed.store(true);
+                return;
+            }
+            if (message.get<ping_intent>() != nullptr)
+                pings.fetch_add(1);
+        }
+⋯@184
+TEST_CASE("The app host runs the driver on the logic thread and publishes frames", "[win32][host]")
+{
+    counting_driver driver {};
+    key_policy policy {};
+    {
+        luil::win32::app_host host { luil::win32::app_host::config {}, driver, &policy };
+        REQUIRE(wait_until([&] { return driver.started.load(); }));
+
+        // 직접 게시한 앱 메시지가 driver에 닿는다.
+        host.post_app_message(luil::app_message { ping_intent { u8"direct" } });
+        REQUIRE(wait_until([&] { return driver.pings.load() >= 1; }));
+
+        // raw input은 input thread의 pump가 정책을 거쳐 app inbox로 나른다.
+        host.post_raw_input(luil::key_pressed_event { luil::key_code::f5 });
+        REQUIRE(wait_until([&] { return driver.pings.load() >= 2; }));
+
+        // frame은 처리 후 게시된다.
+        // 최신 frame이 처리 횟수를 반영할 때까지 기다린다.
+        REQUIRE(wait_until([&] {
+            const std::shared_ptr<const luil::win32::ui_frame> frame { host.acquire_frame() };
+            return frame != nullptr && frame->window_placement_revision >= 2u;
+        }));
+
+        host.shutdown();
+        REQUIRE(driver.closed.load());
+</script></div>
+            <ol class="walk-steps-src">
+              <li data-lines="36-55" data-title="최소 driver">처리 횟수를 세어 frame에 싣는 driver다. 창 없는 조립 test라 tree는 싣지 않는다.</li>
+              <li data-lines="184-194" data-title="앱 메시지가 닿는다">창 없이 host를 세우고, 직접 게시한 앱 메시지가 logic thread의 driver에 닿는지 본다. 기다림은 3초 상한이라 hang이 무한 대기가 되지 않는다.</li>
+              <li data-lines="196-198" data-title="입력의 길">raw input은 input thread의 pump가 정책을 거쳐 app inbox로 나른다. F5 키가 앱 메시지가 되어 같은 driver에 닿는다.</li>
+              <li data-lines="200-208" data-title="frame과 종료">처리 뒤 게시된 frame이 횟수를 반영하는지 보고, 종료 신호가 driver에 닿는지 본다. 3강의 채널과 2강의 종료 순서가 창 없이 검증되는 자리다.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>남은 기록 (문서)</th><th class="num">Windows Release</th><th class="num">Windows Debug</th><th class="num">Android 기기</th><th>비고</th></tr></thead>
+            <tbody>
+              <tr><td>기준선 2026-10-02</td><td class="num">799</td><td class="num">780</td><td class="num">—</td><td>Debug는 asan 19개 제외. Release 58초, Debug 70초</td></tr>
+              <tr><td>Android 이식 2단계</td><td class="num">811</td><td class="num">792</td><td class="num">509</td><td>기기 core 509 = Windows core 509</td></tr>
+              <tr><td>6단계</td><td class="num">848</td><td class="num">829</td><td class="num">559</td><td></td></tr>
+              <tr><td>입력·설정 보강 2026-10-05</td><td class="num">969</td><td class="num">969</td><td class="num">806</td><td>Android는 공통 C++ 689 + JVM 117</td></tr>
+              <tr><td>선택 기능 이식 2026-11-05</td><td class="num">2,496</td><td class="num">2,496</td><td class="num">2,000</td><td>Windows는 core 1,924 + 플랫폼·데모 572 (건너뜀 1)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">기록마다 세는 범위와 시점이 다르다. 숫자 사이의 흐름만 읽고, 위 정적 집계와 맞추려 하지 말라.</p>
+      </section>
+
+      <section class="slide" id="s3" data-num="12.3">
+        <header class="slide-head">
+          <span class="num">12.3</span>
+          <h2>raster test: 픽셀 넓이로 판정을 잠근다</h2>
+          <p class="lede">순수 geometry test는 빠진 draw 호출, 잘못된 clip, 조기 return, 채움과 테의 혼동을 잡지 못한다. raster test는 tree를 비트맵에 그려 픽셀 색과 넓이를 단언한다. 창도 GPU도 필요 없다.</p>
+        </header>
+        <div class="lw" data-title="raster 탐침" data-surface="raster_frame · pixel_at · count_color" data-reset id="rp-lab">
+          <div class="lw-body lab-stack">
+            <div class="controls">
+              <div class="seg" id="rp-scale" role="group" aria-label="배율">
+                <button type="button" data-v="1" aria-pressed="false">배율 1</button>
+                <button type="button" data-v="2" aria-pressed="true">배율 2</button>
+              </div>
+              <div class="seg" id="rp-shape" role="group" aria-label="그릴 것">
+                <button type="button" data-v="fill" aria-pressed="true">채움 (기본 버튼)</button>
+                <button type="button" data-v="ring" aria-pressed="false">1px 테</button>
+              </div>
+              <label class="field"><input type="checkbox" id="rp-skip"> 버그: 자식을 그리지 않는 컨테이너</label>
+              <label class="field"><input type="checkbox" id="rp-mixed" checked> 섞인 픽셀 표시</label>
+            </div>
+            <div class="rp-grid">
+              <canvas class="rp-canvas" id="rp-canvas" width="520" height="280" aria-label="물리 픽셀을 확대한 그림"></canvas>
+              <div style="display:grid;gap:10px;min-width:0">
+                <ul class="asserts" id="rp-asserts"></ul>
+                <div class="stat-row" id="rp-stats"></div>
+              </div>
+            </div>
+          </div>
+          <div class="lw-foot">브라우저 캔버스로 같은 원리를 재현한 것이다. 1 논리 픽셀 테는 경계를 가운데 두고 그어진다. 배율 1이면 획이 물리 픽셀 둘에 반씩 걸쳐 어느 팔레트 색과도 정확히 같지 않다(빨간 점). 배율 2면 같은 획의 가운데에 완전히 덮인 픽셀이 생겨 정확한 색 비교가 된다. 버그 칸을 켜면 "무엇인가 그려졌다"는 단언이 왜 필요한지 보인다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="tests/raster_draw_tests.cpp:181-190,200-217,223-224,240-245" data-path="tests/raster_draw_tests.cpp" data-start="181"><script type="text/plain">
+TEST_CASE("The default button is painted as a fill and the focus ring as a ring", "[ui][raster][draw]")
+{
+    // 기본 버튼이 강조색 채움으로 표시되는지 픽셀 면적을 검사한다.
+    // 같은 색의 테만 그리는 결과는 키보드 초점 표시와 구별되지 않으므로 실패해야 한다.
+    const luil::ui_color_palette palette { luil::color_palette_for(luil::color_theme::dark) };
+    const luil::ui_element_id primary { luil::application_element_kind(1), u8"primary" };
+    const luil::ui_element_id secondary { luil::application_element_kind(1), u8"secondary" };
+    // 자리는 전부 물리 픽셀이다 (raster_probe.h의 규약).
+    const luil::rect_f primary_box { 20.0f, 20.0f, 160.0f, 40.0f };
+    const luil::rect_f secondary_box { 220.0f, 20.0f, 160.0f, 40.0f };
+⋯@200
+    SECTION("기본 버튼은 상자를 채우고 보통 버튼은 채우지 않는다")
+    {
+        const luil::ui_tree tree { build() };
+        luil::testing::raster_frame frame { 400, 120, palette, raster_scale };
+        frame.draw(tree, luil::interaction_snapshot {});
+
+        // 한가운데가 강조색이면 테가 아니라 채움이다.
+        REQUIRE(frame.pixel_at(100, 40) == palette.accent);
+        // 보통 버튼은 강조색으로 채우지 않는다.
+        //  - 옅은 바탕(`input_background`)은 반투명이라 배경과 섞인 값이 나온다.
+        //    그 합성값을 적어 두면 팔레트를 손볼 때마다 test가 깨지므로, 여기서는
+        //    "강조색이 아니다"와 "그래도 무엇인가 그려졌다"만 묻는다. 뒤엣것이
+        //    없으면 자식이 아예 그려지지 않는 test도 초록으로 지나간다.
+        REQUIRE(frame.pixel_at(300, 40) != palette.accent);
+        REQUIRE(frame.pixel_at(300, 40) != palette.window_background);
+        // 상자의 절반을 훨씬 넘게 덮는다 — 테는 결코 그럴 수 없다.
+        REQUIRE(frame.count_color(primary_box, palette.accent) > 160 * 40 / 2);
+    }
+⋯@223
+    SECTION("초점 테는 두를 뿐 채우지 않는다")
+    {
+⋯@240
+        // 넓이로도 갈린다. 같은 색이어도 덮는 양이 다르다.
+        const int filled { frame.count_color(primary_box, palette.accent) };
+        const int ringed { frame.count_color(secondary_ring_box, palette.accent) };
+        REQUIRE(ringed > 0);
+        REQUIRE(filled > ringed * 3);
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="181-190" data-title="물을 것">기본 버튼은 강조색 채움이고, 같은 색의 테만 그리는 결과는 키보드 초점 표시와 구별되지 않으므로 실패해야 한다. 자리는 모두 물리 픽셀이다.</li>
+            <li data-lines="200-207" data-title="가운데 픽셀">한가운데가 강조색이면 테가 아니라 채움이다. fill·border는 가운데 픽셀로 묻는다.</li>
+            <li data-lines="208-214" data-title="무엇인가 그려졌나">보통 버튼은 강조색이 아니어야 하지만, 배경색이어도 안 된다. 뒤엣것이 없으면 자식을 아예 그리지 않는 test도 초록으로 지나간다. 반투명 합성값을 적어 두지 않는 까닭도 주석에 있다 — 팔레트를 손볼 때마다 test가 깨진다.</li>
+            <li data-lines="215-216" data-title="넓이">같은 색이면 덮은 넓이로 묻는다. 상자의 절반을 훨씬 넘게 덮는 것은 테가 결코 할 수 없다.</li>
+            <li data-lines="223-224,240-245" data-title="테는 채움보다 작다">초점 테가 있을 때도 넓이로 갈린다. 같은 색이어도 덮는 양이 다르다.</li>
+          </ol>
+        </div>
+        <div class="cols two">
+          <div class="prose">
+            <p><b>결정적 픽셀을 만드는 규칙.</b> 색 공간을 주지 않는다 — 주면 그린 색과 읽은 색이 변환을 한 번 지나 팔레트 값과 정확히 같지 않게 된다. 기본 시각은 시계의 처음으로 고정한다(tooltip 지연, caret 깜빡임, 회전 표시가 시각의 함수라서, 9강). 글꼴을 싣지 않고 글을 비운다(OS 글꼴과 rasterizer 판본의 영향을 없앤다).</p>
+          </div>
+          <div class="prose">
+            <p><b>거절한 대안: 전체 이미지 golden file.</b> "전체 snapshot은 관련 없는 antialiasing, palette, 글꼴 변경에도 깨진다." 그래서 작은 component 계약에는 집중된 픽셀과 넓이 단언을 쓴다. raster test는 <code>[raster]</code> 태그로 134개다. GPU 경로는 창 없는 Direct3D 12 문맥에서, 합성 화면은 DWM이 합성한 화면 DC를 캡처해서 따로 본다(사람의 데스크톱에 창을 띄우므로 환경 변수로만 켠다).</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s4" data-num="12.4">
+        <header class="slide-head">
+          <span class="num">12.4</span>
+          <h2>Release에서만 도는 ASan</h2>
+          <p class="lede">메시징(<code>channel</code>·<code>latest_slot</code>)은 header-only라 이 실행 파일 하나만 AddressSanitizer로 컴파일해도 component 전체가 검사된다. 그런데 Debug에서는 켤 수 없다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cmake" data-src="tests/CMakeLists.txt:831-839,846-852,866-869" data-path="tests/CMakeLists.txt" data-start="831"><script type="text/plain">
+# messaging의 ASan 검증이다.
+# messaging은 header-only라 이 실행 파일만
+# /fsanitize=address로 컴파일해도 component 전체가 검사된다.
+# Debug 구성의 /RTC1과 ASan이 충돌하므로 Debug가 아닌 구성에서만 ASan을 켠다.
+# 검증은 Release로 실행한다.
+add_executable(luil_messaging_asan_tests
+    asan_guard_tests.cpp
+    messaging_channel_tests.cpp
+    messaging_latest_slot_tests.cpp)
+⋯@846
+# ASAN 보고에 기호가 필요해 이 target만 Release에서도 debug 정보를 켠다 (C5072).
+# Catch2는 ASan 없이 빌드되어 STL 주석이 꺼져 있으므로(LNK2038)
+# 이 target도 주석을 끄고 heap 검사만 사용한다.
+# `optional`은 나중에 MSVC STL이 더한 세 번째 주석이라 최신 toolset에서 새로 어긋난다.
+target_compile_options(luil_messaging_asan_tests PRIVATE "$<$<NOT:$<CONFIG:Debug>>:/fsanitize=address;/Zi>")
+target_compile_definitions(luil_messaging_asan_tests PRIVATE "$<$<NOT:$<CONFIG:Debug>>:_DISABLE_STRING_ANNOTATION;_DISABLE_VECTOR_ANNOTATION;_DISABLE_OPTIONAL_ANNOTATION>")
+target_link_options(luil_messaging_asan_tests PRIVATE "$<$<NOT:$<CONFIG:Debug>>:/INCREMENTAL:NO;/DEBUG>")
+⋯@866
+# Debug는 ASan이 꺼진 채 빌드되므로 같은 이름의 test가 sanitizer 없이 도는
+# 허위 신호가 된다 — Debug 구성에서는 DISABLED로 등록해 아예 돌리지 않는다.
+# (POST_BUILD 발견이 구성별로 실행되어 $<CONFIG:...>가 빌드 시점에 풀린다.)
+catch_discover_tests(luil_messaging_asan_tests TEST_PREFIX "asan: " PROPERTIES TIMEOUT 120 LABELS "asan" DISABLED "$<CONFIG:Debug>")
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="831-839" data-title="세 파일만">ASan 관문과 메시징 test 둘. 이 두 파일은 core test에도 컴파일된다. Debug의 <code>/RTC1</code>과 ASan이 충돌하므로 Debug가 아닌 구성에서만 켠다.</li>
+            <li data-lines="846-852" data-title="MSVC ASan의 현실">보고에 기호가 필요해 Release에서도 debug 정보를 켠다. Catch2는 ASan 없이 빌드되어 STL 주석이 꺼져 있으므로 이 target도 주석을 끈다. 그렇지 않으면 링크가 어긋난다(LNK2038).</li>
+            <li data-lines="866-869" data-title="허위 신호 막기">Debug에서는 같은 이름의 test가 sanitizer 없이 도는 허위 신호가 되므로 아예 DISABLED로 등록한다. 이름 앞에 <code>asan: </code>을 붙이고 label <code>asan</code>을 단다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="tests/asan_guard_tests.cpp:1-14" data-path="tests/asan_guard_tests.cpp" data-start="1"><script type="text/plain">
+#include <catch2/catch_test_macros.hpp>
+
+// "asan: " 이름을 단 test가 sanitizer 없는 바이너리로 통과하는 일을 막는
+// 관문이다. ASan은 /RTC1과 충돌해 Debug가 아닌 구성에만 켜지므로
+// (tests/CMakeLists.txt), Debug에서는 이 target의 test가 DISABLED로 등록된다.
+// 그 배선이 어긋나 ASan 없는 실행이 여기까지 오면 이 test가 즉시 실패한다.
+TEST_CASE("The asan test binary is instrumented with AddressSanitizer", "[asan]")
+{
+#if defined(__SANITIZE_ADDRESS__)
+    SUCCEED();
+#else
+    FAIL("이 실행 파일은 /fsanitize=address 없이 빌드되었다");
+#endif
+}
+</script></div>
+        <p class="small">두 번째 겹이다. 배선이 어긋나 ASan 없는 바이너리가 <code>asan:</code> 이름으로 돌면, 이 test가 <code>__SANITIZE_ADDRESS__</code>가 없음을 보고 즉시 실패한다. 2026-10-02 기준선의 asan test는 19개였고, 지금 정적 수는 20개다.</p>
+      </section>
+
+      <section class="slide" id="s5" data-num="12.5">
+        <header class="slide-head">
+          <span class="num">12.5</span>
+          <h2>고정된 의존성, 네트워크 없는 configure</h2>
+          <p class="lede">"취득을 자동화하지 않으므로 configure는 네트워크를 전혀 쓰지 않는다." 받는 일은 사람이 실행하는 스크립트가, 검사는 configure가 맡는다.</p>
+        </header>
+        <div class="cols two">
+          <div class="walk">
+            <div class="code" data-lang="json" data-src="third_party/skia-prep.json:1-17" data-path="third_party/skia-prep.json" data-start="1"><script type="text/plain">
+{
+    "schema": 2,
+    "source": "https://github.com/yuldK/skia-prep",
+    "tag": "skia-157-b94213a11b3a-r1",
+    "asset_base_url": "https://github.com/yuldK/skia-prep/releases/download/skia-157-b94213a11b3a-r1",
+    "target": "win-x64",
+    "png_codec": "rust",
+    "skia_commit": "b94213a11b3a2edadfae89f0c57a7f4ab72772c9",
+    "skia_milestone": "157",
+    "package_revision": 1,
+    "toolchain": "clang-cl",
+    "assets": {
+        "Release": {
+            "file": "skia-prep-b94213a11b3a-r1-win-x64-release.zip",
+            "size": 22127677,
+            "sha256": "cb0c0b91e9ae427c0f3fed84a0e81d44202a1fc77240c44f037eed72cf172291"
+        },
+</script></div>
+            <ol class="walk-steps-src">
+              <li data-lines="2-11" data-title="고정의 단위">Skia commit만이 아니라 commit + 패키지 판번 + 도구사슬 + 대상 + PNG 코덱이다. 같은 소스 commit을 다시 패키징한 판이 있기 때문이다. commit만 보면 r1이 설치된 기계에서 재설치가 생략되어 낡은 라이브러리가 남는다.</li>
+              <li data-lines="12-17" data-title="자산마다 크기와 SHA-256">구성(Release·Debug, 선택으로 기호)마다 파일 이름, 크기, 해시가 함께 적힌다.</li>
+            </ol>
+          </div>
+          <div class="walk">
+            <div class="code" data-lang="powershell" data-src="scripts/fetch_skia.ps1:301-311" data-path="scripts/fetch_skia.ps1" data-start="301"><script type="text/plain">
+    $actual = Get-FileHashText -path $path
+    if ($actual -ne $asset.sha256.ToLowerInvariant()) {
+        Remove-Item -LiteralPath $path -Force
+        throw @"
+The $name archive does not match the pinned hash, so it was discarded.
+  expected: $($asset.sha256)
+  actual  : $actual
+  url     : $url
+"@
+    }
+    return $path
+</script></div>
+            <ol class="walk-steps-src">
+              <li data-lines="301-311" data-title="다르면 버린다">받은 아카이브의 해시가 핀과 다르면 지우고 실패한다. 그래서 같은 핀이면 어느 기계에서든 같은 바이트가 설치된다. 캐시된 아카이브 폴더와 오프라인 모드도 있다.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="cols two">
+          <div class="prose">
+            <p><b>configure가 잡는 "링크는 되는데 틀리는" 셋.</b> Skia는 clang-cl로, luil과 소비자는 MSVC로 빌드한다. configure는 패키지가 옆에 적어 둔 <code>args.gn</code>과 <code>toolchain.json</code>을 읽어 세 가지를 확인한다.</p>
+            <ul>
+              <li>컴파일러가 clang-cl인가. MSVC로 세운 Skia는 CPU 래스터를 픽셀 하나씩 처리한다(4000×7000 축소 799.8ms → 13.6ms).</li>
+              <li><code>is_trivial_abi = false</code>인가. 아니면 <code>sk_sp</code>의 호출 규약이 갈려 실행 중에 깨진다.</li>
+              <li>CRT가 Debug <code>/MTd</code>, 그 밖 <code>/MT</code>인가. 아니면 링커가 원인 없이 실패한다.</li>
+            </ul>
+            <p>configure는 컴파일러를 찾지도 부르지도 않으므로 소비자에게 clang 설치가 필요 없다.</p>
+          </div>
+          <div class="prose">
+            <p><b>기능별 아카이브.</b> SVG, 텍스트 모양 잡기(+fallback), Lottie, AVIF는 모두 기본 끔이다. "끈 기능은 그 아카이브를 링크하지도, 그 고지를 싣지도 않고, 공개 API는 그대로 남아 '지원 안 함'으로 답한다." 테스트·예제 preset은 다섯 기능을 모두 켜서 검증한다.</p>
+            <p><b>upstream CMake를 들이지 않는다.</b> nlohmann/json의 target·install 규칙은 소비자의 솔루션에 끼어든다. 필요한 것은 include 경로 하나다. 공개 헤더는 <code>json_fwd.hpp</code>만 들인다 — "umbrella 헤더 하나가 2만 줄을 끌고 오지 않는 길이다."</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>의존성</th><th>고정 방식</th><th>판</th></tr></thead>
+            <tbody>
+              <tr><td>Skia (win-x64, android-arm64, mac-arm64, ios-arm64, ios 시뮬레이터)</td><td>핀 JSON 다섯 — URL·크기·SHA-256</td><td>M157 <code>b94213a11b3a</code> r1</td></tr>
+              <tr><td>WebView2 SDK · GameActivity</td><td>핀 JSON (NuGet nupkg · AAR)</td><td>1.0.4191.47 · 4.4.2</td></tr>
+              <tr><td>Codicons</td><td>저장소에 두고 파일 4개 SHA-256을 빌드 전과 test에서 확인</td><td>0.0.46-24</td></tr>
+              <tr><td>MD4C</td><td>파일로 들고 <code>version.json</code>의 파일별 SHA-256을 configure가 확인</td><td>0.5.2</td></tr>
+              <tr><td>Catch2 · nlohmann/json · libsmb2</td><td>submodule commit</td><td>—</td></tr>
+              <tr><td>Unicode 데이터</td><td>생성 스크립트가 판을 확인하고 다르면 멈춘다 (8강)</td><td>UCD 16.0.0</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="slide" id="s6" data-num="12.6">
+        <header class="slide-head">
+          <span class="num">12.6</span>
+          <h2>빌드 파이프라인</h2>
+          <p class="lede">네트워크는 첫 단계에서만 쓴다. 그 뒤로는 검사하고, 생성하고, 빌드하고, 시험하고, 설치하고, 설치본을 다른 프로젝트처럼 들여 다시 빌드한다.</p>
+        </header>
+        <div class="lw" data-title="빌드 파이프라인" data-surface="Windows · vs2026-tests" data-reset id="bp-lab">
+          <div class="lw-body lab-stack">
+            <div class="steps" id="bp-steps" role="group" aria-label="단계"></div>
+            <div class="step-detail" id="bp-detail" aria-live="polite"></div>
+            <div class="controls">
+              <span class="small">다른 플랫폼</span>
+              <div class="seg" id="bp-plat" role="group" aria-label="플랫폼 변형">
+                <button type="button" data-v="android" aria-pressed="false">Android</button>
+                <button type="button" data-v="macos" aria-pressed="false">macOS</button>
+                <button type="button" data-v="ios" aria-pressed="false">iOS</button>
+                <button type="button" data-v="json" aria-pressed="false">json 점검 (clang)</button>
+              </div>
+            </div>
+            <div class="step-detail" id="bp-plat-detail" aria-live="polite"></div>
+          </div>
+          <div class="lw-foot">명령은 저장소 문서에 적힌 그대로다. Windows 이외 구성은 test 정의가 플랫폼 블록 끝에서 돌아가므로, 정적 검사·설치본 소비자·합성 화면은 Windows 구성에만 등록된다.</div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>원본</th><th>생성기 (<code>cmake -P</code>)</th><th>생성물</th><th>틀린 원본은</th></tr></thead>
+            <tbody>
+              <tr><td><code>assets/codicons/mapping.json</code> (코드포인트 639, 별칭 746)</td><td><code>generate_codicons.cmake</code></td><td><code>codicons.h</code></td><td>이름을 C++ 식별자로 바꿔 겹치면 실패</td></tr>
+              <tr><td><code>assets/accents.json</code> (25개, 기본 mint)</td><td><code>generate_accents.cmake</code></td><td><code>accents.h</code></td><td><code>system</code>은 예약 id</td></tr>
+              <tr><td><code>assets/style.json</code></td><td><code>generate_style.cmake</code></td><td><code>ui_style.h</code></td><td>키가 빠지거나 낯선 키면 실패 — "조용히 지나가면 '바꿨는데 안 바뀐다'가 된다"</td></tr>
+              <tr><td><code>assets/strings/{ko,en}.json</code> (각 123키)</td><td><code>generate_strings.cmake</code></td><td><code>library_text.h</code> (설치하지 않음)</td><td>키 집합·자리 값·복수 범주가 맞지 않으면 실패</td></tr>
+              <tr><td>라이선스 원문들</td><td><code>luil_generate_third_party_notices</code></td><td><code>third_party_notices.txt</code></td><td>원문 파일이 없으면 configure 실패</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small">실행 중에 JSON을 읽지 않고 빌드 때 내장한다. 주석의 말이다. "틀린 원본은 여기서 빌드를 세운다. 잘못된 글이 조용히 화면에 나가는 것보다 낫다."</p>
+      </section>
+
+      <section class="slide" id="s7" data-num="12.7">
+        <header class="slide-head">
+          <span class="num">12.7</span>
+          <h2>소비자 통합 계약을 test로</h2>
+          <p class="lede">소비자는 <code>luil::luil</code> 하나만 링크한다. 그 약속은 문서가 아니라 test가 지킨다. 설치하고, 공백이 든 다른 경로로 옮기고, 별도 프로젝트에서 <code>find_package</code>로 들여 빌드하고 실행한다.</p>
+        </header>
+        <div class="cols two">
+          <div class="walk">
+            <div class="code" data-lang="cmake" data-src="tests/package_consumer/CMakeLists.txt:1-13" data-path="tests/package_consumer/CMakeLists.txt" data-start="1"><script type="text/plain">
+cmake_minimum_required(VERSION 3.25)
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+project(luil_package_consumer LANGUAGES CXX RC)
+find_package(luil CONFIG REQUIRED)
+luil_generate_third_party_notices("${CMAKE_CURRENT_BINARY_DIR}/notices.txt")
+luil_configure_resource_script("${CMAKE_CURRENT_BINARY_DIR}/resources.rc"
+    "${CMAKE_CURRENT_BINARY_DIR}/notices.txt")
+add_executable(package_consumer main.cpp "${CMAKE_CURRENT_BINARY_DIR}/resources.rc")
+target_link_libraries(package_consumer PRIVATE luil::luil)
+target_compile_definitions(package_consumer PRIVATE UNICODE _UNICODE
+    "LUIL_CONSUMER_SVG=$<BOOL:${LUIL_ENABLE_SVG}>"
+    "LUIL_CONSUMER_LOTTIE=$<BOOL:${LUIL_ENABLE_LOTTIE}>")
+luil_add_string_table(package_consumer NAME consumer_strings DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/strings" BASE ko)
+</script></div>
+            <ol class="walk-steps-src">
+              <li data-lines="1-4" data-title="같은 CRT, find_package">소비자는 Skia와 같은 정적 CRT를 쓰고 <code>find_package</code>로 들인다. 설치본의 package config는 빌드 트리와 같은 Skia 검사를 다시 한다.</li>
+              <li data-lines="5-8" data-title="고지와 .rc 조각">설치본이 실어 준 함수로 제3자 고지를 만들고 <code>.rc</code> 조각에 넣는다. resource ID 101~104는 라이브러리 몫이라 앱은 비워 둔다.</li>
+              <li data-lines="9-13" data-title="이름 하나와 문자열 표">링크는 <code>luil::luil</code> 하나다. 설치본의 CMake 함수로 앱 문자열 표도 짓는다. 실행 파일은 resource, 고지 원문, Codicons glyph, 인코더, HTTP client, 문자열 표 서식을 차례로 단언하고 실패마다 다른 종료 코드를 낸다.</li>
+            </ol>
+          </div>
+          <div class="walk">
+            <div class="code" data-lang="cmake" data-src="tests/install_consumer.cmake:8-23" data-path="tests/install_consumer.cmake" data-start="8"><script type="text/plain">
+set(work "${BINARY_DIR}/package-consumer-${CONFIG}")
+run_checked("${CMAKE_COMMAND}" --install "${BINARY_DIR}" --config "${CONFIG}" --prefix "${work}/installed")
+# 설치 위치를 바꾸고 공백이 있는 경로에서도 resource가 풀리는지 확인한다.
+file(COPY "${work}/installed/" DESTINATION "${work}/relocated package")
+set(generator_options -G "${GENERATOR}")
+if(PLATFORM)
+    list(APPEND generator_options -A "${PLATFORM}")
+endif()
+run_checked("${CMAKE_COMMAND}" -S "${SOURCE_DIR}/package_consumer" -B "${work}/consumer"
+    ${generator_options} "-DCMAKE_PREFIX_PATH=${work}/relocated package" "-DCMAKE_CONFIGURATION_TYPES=${CONFIG}" "-DCMAKE_BUILD_TYPE=${CONFIG}")
+run_checked("${CMAKE_COMMAND}" --build "${work}/consumer" --config "${CONFIG}")
+if(EXISTS "${work}/consumer/${CONFIG}/package_consumer.exe")
+    run_checked("${work}/consumer/${CONFIG}/package_consumer.exe")
+else()
+    run_checked("${work}/consumer/package_consumer.exe")
+endif()
+</script></div>
+            <ol class="walk-steps-src">
+              <li data-lines="8-11" data-title="설치하고 옮긴다">설치한 뒤 <b>공백이 든 다른 경로</b>로 복사한다. 설치본이 빌드 트리의 절대 경로에 매이지 않는지, resource 경로가 공백에서도 풀리는지 본다.</li>
+              <li data-lines="12-18" data-title="별도 프로젝트로">옮긴 자리를 <code>CMAKE_PREFIX_PATH</code>로 주어 소비자 프로젝트를 configure하고 빌드한다.</li>
+              <li data-lines="19-23" data-title="실행">만든 실행 파일을 돌린다. 종료 코드 0이어야 통과다.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="cols two">
+          <div class="code" data-lang="cpp" data-src="src/win32/resources/luil_resources.rc.in:1-8" data-path="src/win32/resources/luil_resources.rc.in" data-start="1"><script type="text/plain">
+#include <windows.h>
+
+#include "@LUIL_RESOURCE_IDS_PATH@"
+
+IDR_CODICONS_FONT RCDATA "@LUIL_CODICONS_FONT_PATH@"
+IDR_CODICONS_LICENSE RCDATA "@LUIL_CODICONS_LICENSE_PATH@"
+IDR_CODICONS_LICENSE_CODE RCDATA "@LUIL_CODICONS_LICENSE_CODE_PATH@"
+IDR_THIRD_PARTY_NOTICES RCDATA "@LUIL_THIRD_PARTY_NOTICES_PATH@"
+</script></div>
+          <div class="prose">
+            <p><b>전파하는 것과 하지 않는 것.</b> 공개 헤더 컴파일에 필요한 C++20과 MSVC <code>/utf-8</code>만 전파한다. 경고 수준과 <code>/WX</code>는 PRIVATE다. "라이브러리의 경고 정책이 소비자 앱의 빌드를 깨면 안 된다." 새 toolset이 핀으로 박힌 luil 소스를 경고할 때 소비자가 소스를 고칠 수 없으므로, 경고를 오류로 다루는 옵션은 끌 수 있게 두었다.</p>
+            <p>실행 파일 resource가 없는 플랫폼(Android·macOS·iOS)은 Codicons 글꼴을 라이브러리에 바이트 배열로 싣는다. "소비자가 APK assets 같은 자리에 파일을 따로 넣는 단계가 생기지 않는다."</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s8" data-num="12.8">
+        <header class="slide-head">
+          <span class="num">12.8</span>
+          <h2>컴파일러가 잡지 못하는 것</h2>
+          <p class="lede">formatter로 줄을 다시 채우지는 않는다. 대신 문자 규칙(인코딩, CRLF, 닫는 중괄호)과 "컴파일러가 잡지 못하는 종류"를 따로 정적 검사로 막는다.</p>
+        </header>
+        <div class="cols two">
+          <div class="prose">
+            <p><b>clang-format을 검사하지 않는 이유.</b> "손으로 고른 줄바꿈(뜻 단위로 묶은 조건, 제 줄에 닫는 중괄호)을 formatter가 다시 채워 버린다." <code>.clang-format</code>은 편집기에서 고른 범위에 쓰는 선택 도구로만 남긴다. 검사기는 UTF-8 무 BOM, CRLF, 탭·줄 끝 공백 같은 문자 규칙과 기계적으로 판정되는 규칙만 본다.</p>
+            <p><b>정적 검사 다섯.</b></p>
+            <ul>
+              <li>우산 헤더 누락 — 실제로 헤더 둘이 빠져 있었다</li>
+              <li>core의 플랫폼 include (11강)</li>
+              <li>라이브러리 코드 줄의 한글 — 글은 문자열 표에 산다. 그 검사기 자체의 test도 있다</li>
+              <li>JNI 실패 검사가 <code>||</code>·<code>&amp;&amp;</code> 체인 맨 앞에 있는가</li>
+              <li>nlohmann/json 중괄호 함정 (아래)</li>
+            </ul>
+          </div>
+          <div class="lw" data-title="json 중괄호 함정" data-surface="MSVC 대 clang·gcc" data-reset id="jt-lab">
+            <div class="lw-body lab-stack">
+              <label class="field" style="display:flex"><span>y =</span><input type="text" id="jt-input" spellcheck="false" autocomplete="off" style="flex:1;min-width:0;font-family:var(--font-code)" aria-label="y의 JSON 값"></label>
+              <div class="chips" id="jt-presets" aria-label="견본 값"></div>
+              <div class="table-wrap"><table class="t jt-table" id="jt-table"></table></div>
+              <p class="small" id="jt-note"></p>
+            </div>
+            <div class="lw-foot">값 하나를 담은 중괄호는 MSVC에서는 복사다. clang·gcc에서는 initializer_list 생성자가 이겨 원소 하나짜리 배열이 된다. Windows에서 통과한 코드가 macOS·iOS·Android에서 조용히 틀린다. 규칙은 <code>json x = y;</code>, 배열이 뜻이면 <code>json::array({ y })</code>다.</div>
+          </div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="powershell" data-src="scripts/check_source_style.ps1:161-175" data-path="scripts/check_source_style.ps1" data-start="161"><script type="text/plain">
+# nlohmann/json을 값 하나로 중괄호 초기화하는 자리를 찾는다.
+# `json x { y }`·`auto x { j }`는 MSVC에서 복사지만 clang·gcc에서는 initializer_list 생성자가
+# 이겨 원소 하나짜리 배열 `[y]`가 된다. 형이 글자로 보이는 자리만 잡는다 — 함수가 돌려준
+# json을 `auto`로 받는 자리는 못 보므로 scripts/make_json_brace_trap.ps1의 진단 헤더가 맡는다.
+#  - `json o { { "k", v } }`(객체)와 `json x {}`는 걸리지 않는다. 원소 하나짜리 배열은 `json::array({ v })`로 쓴다.
+#  - `//` 뒤의 글은 보지 않는다.
+$json_brace_patterns = @(
+    # `json x { y }`·`nlohmann::json member_ { other }`
+    '(?<![\w:])(?:nlohmann::)?(?:ordered_)?json\s+[A-Za-z_]\w*\s*\{\s*[^\s{}]',
+    # `auto v { json::array() }`·`auto p { nlohmann::json::parse(text) }`
+    '\bauto\s+[A-Za-z_]\w*\s*\{\s*(?:nlohmann::)?(?:ordered_)?json\s*(?:::|\{|\()',
+    # `auto v { *body.json }`·`auto v { (*body.json)["a"] }`·`auto v { body.json->at("a") }`
+    '\bauto\s+[A-Za-z_]\w*\s*\{\s*(?:\(\s*)?\*\s*[\w.>-]*\bjson\b',
+    '\bauto\s+[A-Za-z_]\w*\s*\{\s*[\w.>-]*\.json\s*->'
+)
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="161-166" data-title="형이 보이는 자리만">정규식은 형이 글자로 보이는 자리만 잡는다. 함수가 돌려준 json을 <code>auto</code>로 받는 자리는 못 본다. 객체 <code>json o { { "k", v } }</code>와 빈 <code>json x {}</code>는 걸리지 않는다.</li>
+            <li data-lines="167-175" data-title="패턴 넷">형이 적힌 선언, <code>auto</code>에 json을 만드는 식, 역참조한 json, <code>-&gt;</code>로 닿는 json. <code>auto</code>로 형이 숨은 나머지 자리는 진단용 <code>json.hpp</code> 사본이 맡는다. 그 사본을 앞세운 clang 빌드로 시험을 돌리면 그런 자리마다 backtrace를 찍고 멈춘다.</li>
+          </ol>
+        </div>
+        <p class="small">도입 커밋의 기록: Windows 전용 UIA 시험의 53곳을 <code>=</code>로 바꿨다 — "clang이었다면 <code>before["left"]</code>가 배열에 글자 키로 가서 던지고, fixture는 웹 상태를 늘 버렸다." 진단 헤더로 macOS 시험 전체(2,213개)와 예제 smoke를 돌려 걸린 자리는 없었다.</p>
+      </section>
+
+      <section class="slide" id="s9" data-num="12.9">
+        <header class="slide-head">
+          <span class="num">12.9</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>테스트의 밑변은 플랫폼을 모르는 층만 링크한 <code>luil_core_tests</code>다. 창도 GPU도 없이, 모든 플랫폼에서 같은 실행 파일로 돈다. 그 위에 플랫폼 통합·ASan·smoke·설치본 소비자·합성 화면이 쌓인다.</li>
+          <li>raster test는 배율 2에서 가운데 픽셀과 덮은 넓이로 판정을 잠근다. "무엇인가 그려졌다"도 함께 묻는다. 전체 이미지 golden file은 거절했다.</li>
+          <li>메시징 ASan은 Release에서만 돌고, Debug에서는 DISABLED로 등록하며, 계측 없는 바이너리는 관문 test가 막는다.</li>
+          <li>의존성은 핀 JSON(URL·크기·SHA-256)과 submodule로 고정한다. configure는 네트워크를 쓰지 않고, 패키지가 계약(컴파일러·ABI·CRT)에 맞는지만 검사한다.</li>
+          <li>소비자 계약은 설치 → 공백 경로로 옮김 → 별도 프로젝트 빌드·실행 test가 지킨다. 경고 정책은 전파하지 않는다.</li>
+          <li>formatter 대신 문자 규칙과, 컴파일러가 잡지 못하는 종류(우산 헤더, 플랫폼 include, 코드 속 한글, JNI 순서, json 중괄호)를 정적 검사로 막는다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s10" data-num="12.10">
+        <header class="slide-head">
+          <span class="num">12.10</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="3">
+            <p class="q"><code>cmake --preset vs2026</code>을 처음 실행하면 무슨 일이 일어나나? (Skia를 아직 받지 않았다)</p>
+            <ol class="choices">
+              <li>CMake가 핀 JSON의 URL에서 Skia를 내려받는다</li>
+              <li>Skia 없이 CPU 전용으로 구성한다</li>
+              <li><code>fetch_skia.ps1</code>을 쓰라는 오류로 멈춘다</li>
+              <li>소스에서 Skia를 빌드한다</li>
+            </ol>
+            <div class="explain">"취득을 자동화하지 않으므로 configure는 네트워크를 전혀 쓰지 않는다." Skia는 스크립트가 핀의 SHA-256으로 받아 둬야 하고, 없으면 configure가 원인과 함께 멈춘다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q">Debug 구성에서 <code>asan:</code>으로 시작하는 test가 보이지만 돌지 않는다. 왜인가?</p>
+            <ol class="choices">
+              <li>ASan이 Debug에서 너무 느려서</li>
+              <li>Debug의 <code>/RTC1</code>이 ASan과 충돌해 Debug에서는 계측이 없고, 계측 없이 도는 허위 신호를 막으려고 DISABLED로 등록해서</li>
+              <li>Catch2가 Debug에서 ASan을 지원하지 않아서</li>
+              <li>설정 실수다</li>
+            </ol>
+            <div class="explain">그래도 배선이 어긋나 계측 없는 바이너리가 돌면, 관문 test가 <code>__SANITIZE_ADDRESS__</code>가 없음을 보고 실패한다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q">raster test가 기본 배율 2.0을 쓰는 까닭은?</p>
+            <ol class="choices">
+              <li>고해상도 화면을 흉내 내려고</li>
+              <li>1 논리 픽셀 선의 가운데에 완전히 덮인 물리 픽셀이 생겨 정확한 색 비교가 되므로</li>
+              <li>빨리 그리려고</li>
+              <li>GPU 경로와 같게 하려고</li>
+            </ol>
+            <div class="explain">배율 1에서는 antialias된 1 논리 픽셀 선이 물리 픽셀 둘에 일부씩 섞여 어느 팔레트 색과도 정확히 같지 않을 수 있다. 같은 이유로 색 공간을 주지 않고, 글꼴을 싣지 않고, 시각을 고정한다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">Skia 패키지가 clang-cl로 컴파일되어 있다. luil을 쓰는 앱도 clang-cl을 설치해야 하나?</p>
+            <ol class="choices">
+              <li>그렇다. ABI를 맞추려면 같은 컴파일러여야 한다</li>
+              <li>그렇다. configure가 clang-cl을 찾는다</li>
+              <li>아니다. 하지만 Skia를 MSVC로 다시 빌드해야 한다</li>
+              <li>아니다. configure는 패키지의 <code>toolchain.json</code>을 읽을 뿐 컴파일러를 찾지도 부르지도 않는다</li>
+            </ol>
+            <div class="explain">luil과 소비자는 MSVC 그대로다. Skia에 clang-cl을 요구하는 이유는 CPU 래스터 성능(799.8ms → 13.6ms)이다. ABI는 <code>is_trivial_abi = false</code>로 맞춘다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q">Windows CI가 초록이어도 macOS·iOS·Android에서 조용히 틀릴 수 있는 코드는?</p>
+            <ol class="choices">
+              <li><code>json x = y;</code></li>
+              <li><code>json x { y };</code></li>
+              <li><code>json o { { "k", v } };</code></li>
+              <li><code>json::array({ v })</code></li>
+            </ol>
+            <div class="explain">값 하나를 담은 중괄호는 MSVC에서는 복사지만 clang·gcc에서는 initializer_list 생성자가 이겨 원소 하나짜리 배열이 된다. ③은 객체, ④는 의도한 배열이라 괜찮다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">luil이 CI에서 clang-format 적합성을 검사하지 않는 이유는?</p>
+            <ol class="choices">
+              <li>formatter가 손으로 고른 줄바꿈을 다시 채워 버리기 때문에</li>
+              <li>clang-format이 Windows에서 돌지 않아서</li>
+              <li>코드 스타일 규칙이 없어서</li>
+              <li>속도가 느려서</li>
+            </ol>
+            <div class="explain">뜻 단위로 묶은 조건, 제 줄에 닫는 중괄호 같은 손 배치를 지킨다. 대신 문자 규칙과 기계적으로 판정되는 규칙만 검사기가 본다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
+<script src="assets/course.js"></script>
+<script>
+(function () {
+  "use strict";
+  const { el } = window.LU;
+  const $ = (id) => document.getElementById(id);
+  function segBind(id, onChange) {
+    const g = $(id);
+    const set = (v) => g.querySelectorAll("button[data-v]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.v === v ? "true" : "false"));
+    g.addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if (!b) return; set(b.dataset.v); onChange(b.dataset.v); });
+    return set;
+  }
+  function stats(box, items) {
+    box.textContent = "";
+    for (const [k, v] of items) box.append(el("div", null, el("span", { class: "k", text: k }), el("span", { class: "v", text: String(v) })));
+  }
+
+  /* ---------- 12.1 테스트 지도 ---------- */
+  const SCOPE = [
+    ["core 공통 (luil_core_tests)", 160, 64674, 2002], ["Windows 플랫폼 (luil_tests)", 42, 21561, 524], ["플랫폼 공유 (HTTP·파일 감시·비밀 저장소 등)", 9, 5114, 141],
+    ["macOS·iOS 전용", 20, 3381, 90], ["Android 전용", 8, 2711, 67], ["SMB (Android·iOS)", 3, 1119, 26], ["텍스트 모양 잡기", 1, 58, 1], ["ASan 관문", 1, 14, 1],
+    ["화면·대화형 (opt-in)", 4, 2886, 0], ["빌드·패키지 계약", 8, 738, 0], ["공용 헤더", 7, 658, 0], ["tests/CMakeLists.txt", 1, 998, 0],
+  ];
+  const BIG = [["ui_interaction_tests.cpp", 4401], ["uia_provider_tests.cpp", 3878], ["mobile_demo_page_tests.cpp", 2981], ["raster_draw_tests.cpp", 2418], ["demo_gallery_tests.cpp", 2149],
+    ["http_client_tests.cpp", 2110], ["accessibility_tests.cpp", 1999], ["image_decode_tests.cpp", 1711], ["touch_input_tests.cpp", 1625], ["win32_window_tests.cpp", 1495],
+    ["selected_nodes_tests.cpp", 1478], ["table_element_tests.cpp", 1430], ["android_jni_order_tests.cpp", 1370], ["zoom_view_tests.cpp", 1363], ["virtual_list_element_tests.cpp", 1244]];
+  const TAGS = [["[ui]", 1359], ["[win32]", 383], ["[interaction]", 232], ["[net]", 188], ["[raster]", 134], ["[android]", 120], ["[image]", 117], ["[focus]", 90],
+    ["[demo]", 86], ["[mobile-demo]", 79], ["[uia]", 78], ["[access]", 75], ["[list]", 74], ["[zoom]", 70], ["[touch]", 69]];
+  let tmMetric = "test_cases", tmView = "scope";
+  function tmRender() {
+    let rows, unit, note;
+    if (tmView === "scope") {
+      const idx = { files: 1, lines: 2, test_cases: 3 }[tmMetric];
+      unit = { files: "개", lines: "줄", test_cases: "개" }[tmMetric];
+      rows = SCOPE.map((r) => [r[0], r[idx]]).sort((a, b) => b[1] - a[1]);
+      const total = SCOPE.reduce((s, r) => s + r[idx], 0);
+      note = `합계 ${total.toLocaleString()}${unit}. ` + (tmMetric === "test_cases" ? "TEST_CASE가 0인 범위는 Catch2가 아닌 실행 파일·CMake 시험·헤더다." : "");
+    } else if (tmView === "big") { rows = BIG; unit = "줄"; note = "가장 큰 test 파일 15개 (줄). 이 묶음은 줄로만 센다."; }
+    else { rows = TAGS; unit = "개"; note = "태그별 TEST_CASE 수. TEST_CASE 하나가 태그를 여럿 가질 수 있다."; }
+    const max = Math.max(1, ...rows.map((r) => r[1]));
+    const box = $("tm-bars");
+    box.textContent = "";
+    for (const [name, v] of rows)
+      box.append(el("div", { class: "r" }, el("span", { class: "lab" }, tmView === "scope" ? name : el("code", { text: name })), el("span", { class: "track" }, el("span", { class: "b", style: `width: ${(v / max) * 76}%` }), el("span", { class: "v", text: v.toLocaleString() + unit }))));
+    $("tm-note").textContent = note;
+    $("tm-metric").querySelectorAll("button").forEach((b) => (b.disabled = tmView !== "scope"));
+  }
+  segBind("tm-metric", (v) => { tmMetric = v; tmRender(); });
+  segBind("tm-view", (v) => { tmView = v; tmRender(); });
+  tmRender();
+
+  /* ---------- 12.2 피라미드 ---------- */
+  (function pyramid() {
+    const L = [
+      ["6", "대화형 입력", "실제 터치·펜 입력 주입. ctest에 오르지 않는다", "0", "등록"],
+      ["5", "합성 화면", "DWM이 합성한 화면 DC 캡처. 환경 변수로만 켠다", "2", "CTest"],
+      ["4", "설치본 소비자", "설치 → 공백 경로로 옮김 → 별도 프로젝트 빌드·실행", "1", "CTest"],
+      ["3", "실행 파일 smoke", "렌더러 생성·물러섬 경로를 한 frame으로", "5", "CTest"],
+      ["2′", "메모리 검사", "메시징 ASan, Release만", "20", "TEST_CASE"],
+      ["2", "플랫폼 통합", "실제 OS — 창·UIA·TSF·클립보드·WinHTTP", "665", "TEST_CASE"],
+      ["1", "core 단위·계약", "창·GPU 없이 모든 플랫폼에서 (raster 111 포함)", "2,002", "TEST_CASE"],
+      ["0", "정적 검사", "생성기 계약·체크섬·우산 헤더·이식성·한글·JNI 순서·소스 스타일", "10", "CTest"],
+    ];
+    const box = $("pyramid");
+    L.forEach(([n, t, d, c, u], i) => {
+      const w = 46 + i * 7.7;
+      box.append(el("div", { class: "lv" + (n === "1" ? " base" : ""), role: "listitem", style: `width: min(100%, ${w}%)` },
+        el("span", { class: "n", text: n }), el("span", null, el("b", { text: t }), el("span", { class: "d", text: d })), el("span", { class: "c" }, c + " ", el("small", { text: u }))));
+    });
+  })();
+
+  /* ---------- 12.3 raster 탐침 ---------- */
+  const BG = [0x1e, 0x1e, 0x1e], ACC = [0x00, 0x90, 0x70];
+  const rp = { scale: 2, shape: "fill" };
+  const disp = $("rp-canvas");
+  function rpRender() {
+    const s = rp.scale, LW = 52, LH = 28;
+    const W = LW * s, H = LH * s;
+    const off = document.createElement("canvas");
+    off.width = W; off.height = H;
+    const c = off.getContext("2d");
+    c.fillStyle = "#1e1e1e";
+    c.fillRect(0, 0, W, H);
+    const box = { x: 8 * s, y: 7 * s, w: 36 * s, h: 14 * s };
+    if (!$("rp-skip").checked) {
+      if (rp.shape === "fill") { c.fillStyle = "#009070"; c.fillRect(box.x, box.y, box.w, box.h); }
+      else { c.strokeStyle = "#009070"; c.lineWidth = 1 * s; c.strokeRect(box.x, box.y, box.w, box.h); }
+    }
+    const img = c.getImageData(0, 0, W, H).data;
+    const px = (x, y) => { const i = (y * W + x) * 4; return [img[i], img[i + 1], img[i + 2]]; };
+    const eq = (a, b) => a[0] === b[0] && a[1] === b[1] && a[2] === b[2];
+    let exact = 0, mixed = 0, nonbg = 0;
+    const mixedAt = new Set();
+    for (let y = 0; y < H; ++y) for (let x = 0; x < W; ++x) {
+      const p = px(x, y);
+      if (!eq(p, BG)) ++nonbg;
+      if (eq(p, ACC)) ++exact;
+      else if (!eq(p, BG)) { ++mixed; mixedAt.add(y * W + x); }
+    }
+    const center = [26 * s, 14 * s], edge = [8 * s, 14 * s];
+    const cp = px(...center), ep = px(...edge);
+    // 확대해 그린다
+    const z = 10 / s;
+    const g = disp.getContext("2d");
+    disp.width = LW * 10; disp.height = LH * 10;
+    for (let y = 0; y < H; ++y) for (let x = 0; x < W; ++x) {
+      const p = px(x, y);
+      g.fillStyle = `rgb(${p[0]},${p[1]},${p[2]})`;
+      g.fillRect(x * z, y * z, z, z);
+    }
+    g.strokeStyle = "rgba(255,255,255,0.07)";
+    g.lineWidth = 1;
+    for (let x = 0; x <= W; ++x) { g.beginPath(); g.moveTo(x * z + 0.5, 0); g.lineTo(x * z + 0.5, H * z); g.stroke(); }
+    for (let y = 0; y <= H; ++y) { g.beginPath(); g.moveTo(0, y * z + 0.5); g.lineTo(W * z, y * z + 0.5); g.stroke(); }
+    if ($("rp-mixed").checked) {
+      g.fillStyle = "#ff5a5f";
+      for (const k of mixedAt) { const x = k % W, y = (k / W) | 0; g.beginPath(); g.arc(x * z + z / 2, y * z + z / 2, Math.max(1.2, z * 0.22), 0, Math.PI * 2); g.fill(); }
+    }
+    for (const [p, col] of [[center, "#ffd166"], [edge, "#7cc4ff"]]) { g.strokeStyle = col; g.lineWidth = 2; g.strokeRect(p[0] * z + 1, p[1] * z + 1, z - 2, z - 2); }
+    // 단언
+    const area = box.w * box.h;
+    const hex = (p) => "#" + p.map((v) => v.toString(16).padStart(2, "0")).join("");
+    const A = [
+      { ok: eq(cp, ACC), code: "pixel_at(가운데) == accent", why: `노란 칸 ${hex(cp)}. 한가운데가 강조색이면 테가 아니라 채움이다.` },
+      { ok: nonbg > 0, code: "그려진 픽셀이 있다 (!= window_background)", why: nonbg > 0 ? `배경이 아닌 픽셀 ${nonbg}개.` : "아무것도 그려지지 않았다. 이 단언이 없으면 '강조색이 아니다' 같은 단언이 초록으로 지나간다." },
+      { ok: exact > area / 2, code: "count_color(상자, accent) > 넓이 / 2", why: `정확한 강조색 ${exact}개, 상자 넓이의 절반은 ${area / 2}개. 테는 결코 절반을 덮지 못한다.` },
+      { ok: eq(ep, ACC), code: "pixel_at(왼쪽 가장자리) == accent", why: `파란 칸 ${hex(ep)}. ` + (rp.shape === "ring" && s === 1 ? "배율 1에서는 1px 획이 두 픽셀에 반씩 걸쳐 어느 색과도 정확히 같지 않다." : rp.shape === "ring" ? "배율 2에서는 획 가운데에 완전히 덮인 픽셀이 생긴다." : "채움의 가장자리 안쪽 픽셀이다.") },
+    ];
+    const ul = $("rp-asserts");
+    ul.textContent = "";
+    for (const a of A) ul.append(el("li", { class: a.ok ? "ok" : "fail" }, el("span", { class: "r", text: a.ok ? "통과" : "실패" }), el("span", null, el("code", { text: a.code }), el("span", { class: "why", text: a.why }))));
+    stats($("rp-stats"), [["물리 픽셀", `${W}×${H}`], ["정확한 강조색", exact], ["섞인 픽셀", mixed], ["배경 아님", nonbg]]);
+  }
+  const rpScale = segBind("rp-scale", (v) => { rp.scale = +v; rpRender(); });
+  const rpShape = segBind("rp-shape", (v) => { rp.shape = v; rpRender(); });
+  $("rp-skip").addEventListener("change", rpRender);
+  $("rp-mixed").addEventListener("change", rpRender);
+  $("rp-lab").addEventListener("lw-reset", () => { rp.scale = 2; rp.shape = "fill"; rpScale("2"); rpShape("fill"); $("rp-skip").checked = false; $("rp-mixed").checked = true; rpRender(); });
+  rpRender();
+
+  /* ---------- 12.6 빌드 파이프라인 ---------- */
+  const STEPS = [
+    { t: "의존성 준비", net: true, cmd: "git submodule update --init third_party/nlohmann_json\ngit submodule update --init third_party/catch2\nscripts\\fetch_skia.ps1 -Configuration Debug,Release\nscripts\\fetch_webview2.ps1", what: "submodule을 체크아웃하고, 핀 JSON의 URL·크기·SHA-256으로 받아 검사한 뒤 설치한다. 네트워크는 여기서만 쓴다 (-Offline, -ArchiveDirectory도 된다).", out: "third_party/skia-prep/ (헤더, 정적 라이브러리, args.gn, toolchain.json, NOTICE, VERSION.json), third_party/webview2-prep/" },
+    { t: "configure", net: false, cmd: "cmake --preset vs2026-tests", what: "플랫폼·generator·MSVC·SDK를 검사하고, Skia·WebView2·nlohmann·Catch2가 있는지와 계약(컴파일러·ABI·CRT)을 본다. MD4C 체크섬, 고지·.rc 생성, test 등록. 네트워크 없음.", out: "build/vs2026-tests/ (VS 솔루션), version.h·accent_defaults.h, third_party_notices.txt, .rc 조각" },
+    { t: "build", net: false, cmd: "cmake --build --preset vs2026-tests-release", what: "생성기가 헤더를 만들고(codicons·accents·style·strings), luil_core 빌드 전에 Codicons SHA-256을 확인한다. 라이브러리·test·예제를 컴파일·링크하고, 빌드 뒤 Catch2 test를 발견하고, ASan DLL을 복사한다.", out: "luil_core·luil 정적 라이브러리, luil_core_tests·luil_tests·luil_messaging_asan_tests 등, luil_demo 등 예제" },
+    { t: "test", net: false, cmd: "ctest --preset vs2026-tests-release\nctest --preset vs2026-tests-release -L asan\nctest --preset vs2026-tests-release -L smoke", what: "Catch2 발견분과 add_test 항목을 돈다. preset은 실패 때 출력을 보이고, test가 없으면 오류다. label로 묶음을 고른다: smoke, package, asan, screen, window.", out: "통과·실패·건너뜀 보고 (종료 코드 77은 '이 구성에서는 돌 수 없음')" },
+    { t: "install", net: false, cmd: "cmake --install build/vs2026-tests --config Release --prefix <dir>", what: "공개·생성 헤더, nlohmann 헤더 사본, 라이브러리(Debug는 접미사 d), package config, resource 원본을 설치한다. luil_installed_consumer test가 자동으로 한다.", out: "<prefix>/include, lib, lib/cmake/luil, share/luil" },
+    { t: "소비자 빌드", net: false, cmd: "(자동) 설치본을 'relocated package'로 복사\ncmake -S tests/package_consumer -B …/consumer -DCMAKE_PREFIX_PATH=…\ncmake --build …\npackage_consumer.exe", what: "find_package가 Skia 검사를 다시 하고, 설치된 구성의 완결성을 확인한다. 소비자가 고지·.rc·문자열 표를 만들고, 실행 파일이 resource와 API를 단언한다.", out: "종료 코드 0" },
+  ];
+  const PLAT = {
+    android: ["scripts\\fetch_skia.ps1 -Target android-arm64 -Configuration Debug,Release\nscripts\\fetch_game_activity.ps1\ncmake --preset android-arm64 -DCMAKE_MAKE_PROGRAM=\"<ninja.exe>\"\ncmake --build --preset android-arm64-release\nctest --preset android-arm64-release", "test는 adb로 꽂은 기기에서 돈다. 발견을 test 시점으로 미뤄 빌드할 때 기기가 없어도 된다. APK는 Gradle로 싼다."],
+    macos: ["pwsh -Command \"& ./scripts/fetch_skia.ps1 -Target mac-arm64 -Configuration Debug,Release\"\ncmake --preset macos-arm64\ncmake --build --preset macos-arm64-debug\nctest --preset macos-arm64-debug", "실제 창을 띄우는 대본 test는 label window다. 빼려면 ctest -LE window."],
+    ios: ["pwsh -Command \"& ./scripts/fetch_skia.ps1 -Target ios-arm64-simulator -Configuration Debug,Release\"\ncmake --preset ios-arm64-simulator\ncmake --build --preset ios-arm64-simulator-debug", "test preset이 없다. iOS의 순수 층(HID 키 변환)은 macOS core test가 돌린다."],
+    json: ["pwsh -NoProfile -File scripts/make_json_brace_trap.ps1\ncmake --preset macos-arm64-core -B build/json-audit -DCMAKE_CXX_FLAGS=\"-I$PWD/build/json-brace-trap/include\"\ncmake --build build/json-audit --config Debug\nctest --test-dir build/json-audit -C Debug", "진단용 json.hpp 사본을 -I로 앞세운 clang 빌드다. 값 하나를 담은 중괄호 초기화가 일어나는 자리마다 backtrace를 찍고 멈춘다 (12.8)."],
+  };
+  let bpSel = 1;
+  const stepsBox = $("bp-steps");
+  STEPS.forEach((st, i) => {
+    const b = el("button", { type: "button", "aria-pressed": i === bpSel ? "true" : "false" }, el("span", { class: "n", text: String(i + 1) }), el("span", { class: "t", text: st.t }), el("span", { class: st.net ? "net" : "nonet", text: st.net ? "네트워크 씀" : "네트워크 없음" }));
+    b.addEventListener("click", () => { bpSel = i; stepsBox.querySelectorAll("button").forEach((x, k) => x.setAttribute("aria-pressed", k === i ? "true" : "false")); bpDetail(); });
+    stepsBox.append(b);
+  });
+  function bpDetail() {
+    const st = STEPS[bpSel];
+    const d = $("bp-detail");
+    d.textContent = "";
+    d.append(el("div", null, el("b", { text: `${bpSel + 1}. ${st.t}` })), el("pre", { text: st.cmd }), el("div", { text: st.what }), el("div", null, el("span", { class: "k", text: "산출물 " }), st.out));
+  }
+  const bpPlat = segBind("bp-plat", (v) => bpPlatDetail(v));
+  function bpPlatDetail(v) {
+    const d = $("bp-plat-detail");
+    d.textContent = "";
+    if (!v || !PLAT[v]) { d.append(el("span", { class: "small muted", text: "위 단추로 Android·macOS·iOS 변형과 json 점검 절차를 볼 수 있다." })); return; }
+    d.append(el("pre", { text: PLAT[v][0] }), el("div", { text: PLAT[v][1] }));
+  }
+  $("bp-lab").addEventListener("lw-reset", () => { bpSel = 1; stepsBox.querySelectorAll("button").forEach((x, k) => x.setAttribute("aria-pressed", k === 1 ? "true" : "false")); bpDetail(); $("bp-plat").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", "false")); bpPlatDetail(null); });
+  bpDetail();
+  bpPlatDetail(null);
+
+  /* ---------- 12.8 json 중괄호 함정 ---------- */
+  const JP = [
+    { label: '{"a":1}', v: '{"a":1}' },
+    { label: "42", v: "42" },
+    { label: '"text"', v: '"text"' },
+    { label: "[1,2]", v: "[1,2]" },
+    { label: '["k",1]', v: '["k",1]' },
+  ];
+  const jtIn = $("jt-input");
+  const show = (v) => JSON.stringify(v);
+  function jtRender() {
+    let y;
+    const tb = $("jt-table");
+    tb.textContent = "";
+    try { y = JSON.parse(jtIn.value); }
+    catch (e) { $("jt-note").textContent = "JSON 값으로 읽을 수 없다."; return; }
+    // initializer_list 생성자: 원소가 모두 [문자열, 값] 꼴이면 객체로, 아니면 배열로 짓는다 (nlohmann/json)
+    const pair = Array.isArray(y) && y.length === 2 && typeof y[0] === "string";
+    const clangBrace = pair ? { [y[0]]: y[1] } : [y];
+    const rows = [
+      ["json x { y };", show(y), show(clangBrace)],
+      ["json x = y;", show(y), show(y)],
+      ["json::array({ y })", show([y]), show([y])],
+    ];
+    tb.append(el("thead", null, el("tr", null, el("th", { text: "코드" }), el("th", { text: "MSVC" }), el("th", { text: "clang·gcc" }))));
+    const body = el("tbody");
+    for (const [code, a, b] of rows) body.append(el("tr", null, el("td", { text: code }), el("td", { text: a }), el("td", { class: a === b ? "ok" : "bad", text: b })));
+    tb.append(body);
+    $("jt-note").textContent = pair ? "원소 하나가 [문자열, 값] 꼴이라 clang·gcc에서는 initializer_list 생성자가 그것을 키·값 쌍으로 읽어 객체를 만든다 — 진단 헤더가 덫을 놓는 자리가 바로 이 판정이다." : "clang·gcc에서 첫 줄만 원소 하나짜리 배열이 된다. Windows CI에서는 보이지 않는다.";
+  }
+  const jtChips = $("jt-presets");
+  const jtSel = (i) => jtChips.querySelectorAll(".chip").forEach((x, k) => x.setAttribute("aria-pressed", k === i ? "true" : "false"));
+  JP.forEach((p, i) => {
+    const b = el("button", { type: "button", class: "chip", "aria-pressed": "false" }, el("code", { text: p.label }));
+    b.addEventListener("click", () => { jtIn.value = p.v; jtSel(i); jtRender(); });
+    jtChips.append(b);
+  });
+  jtIn.addEventListener("input", () => { jtSel(-1); jtRender(); });
+  $("jt-lab").addEventListener("lw-reset", () => { jtIn.value = JP[0].v; jtSel(0); jtRender(); });
+  jtIn.value = JP[0].v;
+  jtSel(0);
+  jtRender();
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,829 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>01 luil이라는 프레임워크 · luil 해부학</title>
+<meta name="description" content="luil 해부학 1강. Skia로 직접 그리고, 화면을 frame마다 새로 짓고, 상태는 스레드 하나가 쥐는 C++20 UI 프레임워크 luil의 큰 그림.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .bars { display: grid; gap: 4px; }
+  .bar-row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
+  .bar-row:last-child { border-bottom: 0; }
+  .bar-row .dir { font-family: var(--font-code); font-size: var(--fs-xs); }
+  .bar-row .track { display: flex; align-items: center; gap: 10px; min-width: 0; }
+  .bar-row .bar { height: 14px; border-radius: 0 4px 4px 0; background: var(--bar, var(--accent)); flex: none; min-width: 2px; }
+  .bar-row .bar.host { --bar: var(--t-ui); }
+  .bar-row .bar.mixed { --bar: var(--t-lg); }
+  .bar-row .bar.other { --bar: var(--line-3); }
+  .bar-row .val { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--fg-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  .bar-row .role { grid-column: 2; font-size: var(--fs-xs); color: var(--fg-2); line-height: 1.5; margin-top: -2px; }
+  .bar-row:hover { background: var(--sunk); }
+  .hello-grid { display: grid; gap: 16px; }
+  @media (min-width: 980px) { .hello-grid { grid-template-columns: 300px minmax(0, 1fr); align-items: start; } }
+  .hello-side { display: grid; gap: 12px; align-content: start; }
+  .cmp td:first-child, .cmp th:first-child { white-space: nowrap; font-weight: 600; }
+  .cmp tr.luil td { background: var(--accent-wash); }
+</style>
+</head>
+<body data-lecture="1">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="01">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 01</span><span>1부 · 큰 그림</span></div>
+      <h1>luil이라는 프레임워크</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">Skia로 직접 그리고, 화면을 frame마다 새로 짓고, 앱 상태는 스레드 하나가 쥔다. 이 세 가지 결정이 luil의 나머지를 거의 다 설명한다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>40분</dd></div>
+            <div><dt>선수 지식</dt><dd>C++ 클래스·람다, 스레드의 기본</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>examples/hello</code></dd></div>
+            <div><dt>실험</dt><dd>클릭 한 번이 지나가는 길</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li>luil이 무엇을 하는 프레임워크인지 한 문단으로 설명할 수 있다.</li>
+            <li>세 가지 설계 결정과 각각이 얻는 것·치르는 것을 말할 수 있다.</li>
+            <li>앱이 꽂는 세 조각(logic_driver·interaction_policy·window_delegate)이 어느 스레드에서 무엇을 하는지 안다.</li>
+            <li>저장소가 플랫폼을 모르는 core와 네 플랫폼 host로 나뉘는 모양을 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="1.1">
+        <header class="slide-head">
+          <span class="num">1.1</span>
+          <h2>luil은 무엇인가</h2>
+          <p class="lede">창을 열고, 그 안의 모든 것을 직접 그리고, 입력을 받아 앱 상태를 바꾸는 C++20 애플리케이션 프레임워크다.</p>
+        </header>
+        <div class="prose">
+          <p>저장소의 README는 luil을 이렇게 소개한다.</p>
+          <blockquote class="quote">luil은 Windows용 C++20 애플리케이션 프레임워크다. Skia로 UI를 그리고, 불변 element tree와 메시지 전달로 앱 상태·입력·렌더링을 연결한다. CPU·Direct3D 렌더링, 여러 창과 팝업, 텍스트 입력, 접근성, 이미지, 비동기 HTTP와 WebView2 웹 콘텐츠를 제공한다.<cite>README.md</cite></blockquote>
+          <p>처음에는 Windows용으로 시작했고, 지금은 같은 앱 코드가 <strong>Windows·Android·macOS·iOS</strong> 네 플랫폼에서 돈다. 버튼·목록·표·텍스트 칸 같은 컨트롤을 OS에서 빌려 쓰지 않고, 모두 <span class="term" data-term="Skia" data-tip="Google이 만든 2D 그래픽 라이브러리. Chrome·Android·Flutter가 화면을 그릴 때 쓴다. CPU(raster)와 GPU(Ganesh) 경로를 모두 가진다.">Skia</span>로 직접 그린다. 그래서 플랫폼마다 다른 것은 창을 여는 일, 입력을 받는 일, 그린 픽셀을 화면에 내는 일, 그리고 OS 기능(클립보드·알림·접근성)을 잇는 일로 좁혀진다.</p>
+        </div>
+        <div class="figures" role="list" aria-label="저장소 규모">
+          <div role="listitem"><span class="v">120,776</span><span class="k">구현 소스 줄 수 (src/)</span></div>
+          <div role="listitem"><span class="v">149</span><span class="k">공개 헤더 (include/luil/)</span></div>
+          <div role="listitem"><span class="v">2,852</span><span class="k">테스트 케이스 (tests/ 264개 파일, 103,912줄)</span></div>
+          <div role="listitem"><span class="v">4</span><span class="k">플랫폼 host — Win32·Android·macOS·iOS</span></div>
+          <div role="listitem"><span class="v">138</span><span class="k">설계·사용 문서 (docs/)</span></div>
+        </div>
+        <p class="small muted">수치는 이 강의가 기준으로 삼은 main <code>563a855</code>(2026-11-25)에서 센 값이다. 테스트 케이스는 <code>TEST_CASE</code> 선언의 수다.</p>
+      </section>
+
+      <section class="slide" id="s2" data-num="1.2">
+        <header class="slide-head">
+          <span class="num">1.2</span>
+          <h2>클릭 한 번이 지나가는 길</h2>
+          <p class="lede">luil의 가장 작은 예제 hello를 눌러 보자. 숫자 하나가 바뀌기까지 세 스레드를 건넌다.</p>
+        </header>
+        <div class="lw" data-title="hello 앱과 세 스레드" data-surface="examples/hello" data-reset id="hello-lab">
+          <div class="lw-body">
+            <div class="hello-grid">
+              <div class="hello-side">
+                <div class="mock" aria-label="흉내 낸 hello 앱 창">
+                  <div class="mock-cap"><span class="t">hello luil</span><span class="badge" id="hello-frame">frame 1</span><span class="cb" aria-hidden="true"><i class="ci">&#xEB3B;</i></span><span class="cb" aria-hidden="true"><i class="ci">&#xEB7F;</i></span><span class="cb" aria-hidden="true"><i class="ci">&#xEA76;</i></span></div>
+                  <div class="mock-body">
+                    <div class="mock-label" id="hello-label">버튼을 누른 횟수: 0</div>
+                    <button class="mock-btn" type="button" id="hello-btn">하나 더</button>
+                  </div>
+                </div>
+                <div class="controls">
+                  <span class="field">속도</span>
+                  <div class="seg" role="group" aria-label="재생 속도" id="hello-speed">
+                    <button type="button" data-speed="0.5">천천히</button>
+                    <button type="button" data-speed="1" aria-pressed="true">보통</button>
+                    <button type="button" data-speed="2.5">빠르게</button>
+                  </div>
+                </div>
+                <div class="log" id="hello-log" aria-live="polite"></div>
+              </div>
+              <div class="flow" id="hello-flow"></div>
+            </div>
+          </div>
+          <div class="lw-foot">왼쪽 창의 <b>하나 더</b>를 눌러 보라. 버튼이 눌린 모양은 input thread가 바로 그리게 하지만, 숫자는 logic thread가 <em>새 tree를 게시한 뒤에야</em> 바뀐다. 점의 움직임은 보이도록 늦춘 것이다. 실제로는 한 frame 안팎에 끝난다.</div>
+        </div>
+        <div class="prose">
+          <p>이 실험에서 읽어 낼 것은 셋이다.</p>
+          <ul>
+            <li><strong>버튼의 액션은 상태를 바꾸지 않는다.</strong> input thread에서 실행된 액션은 <code>increment_intent</code>라는 메시지를 만들어 logic thread로 보낼 뿐이다.</li>
+            <li><strong>상태를 바꾸는 곳은 한 곳뿐이다.</strong> logic thread의 <code>handle()</code>이 <code>clicks_</code>를 1 늘린다.</li>
+            <li><strong>화면은 고치지 않고 새로 짓는다.</strong> <code>make_frame()</code>이 라벨과 버튼을 새로 만들어 통째로 게시하면 UI thread가 그것을 그린다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="1.3">
+        <header class="slide-head">
+          <span class="num">1.3</span>
+          <h2>세 가지 큰 결정</h2>
+          <p class="lede">luil의 구조는 세 결정에서 나온다. 각각이 무엇을 얻고 무엇을 치르는지가 이 강의 전체의 줄기다.</p>
+        </header>
+        <div class="cols three">
+          <div class="panel">
+            <span class="tag accent"><i class="ci" aria-hidden="true">&#xEB2A;</i>결정 1</span>
+            <h3>모든 것을 Skia로 직접 그린다</h3>
+            <p><b>얻는 것</b> — 네 플랫폼에서 같은 모양, custom caption·배경 효과 같은 자유, OS 위젯 툴킷에 기대지 않는 코드.</p>
+            <p><b>치르는 것</b> — OS 컨트롤이 공짜로 주던 것을 직접 이어야 한다. 접근성(UIA·VoiceOver), 텍스트 입력과 IME, 클립보드가 그렇다. luil은 이것들을 플랫폼마다 다리로 잇는다(6·8·11강).</p>
+          </div>
+          <div class="panel">
+            <span class="tag accent"><i class="ci" aria-hidden="true">&#xEB86;</i>결정 2</span>
+            <h3>화면은 frame마다 새로 짓는 불변 tree다</h3>
+            <p><b>얻는 것</b> — 게시한 tree를 아무도 고치지 않으므로 세 스레드가 잠금 없이 함께 읽는다. 부분 갱신 경로가 없어 화면 구조와 앱 상태가 섞이지 않는다.</p>
+            <p><b>치르는 것</b> — 매 frame 다시 짓는 비용. 그래서 긴 목록은 보이는 행만 tree에 넣고(가상화, 5강), element는 주소가 아닌 값인 id로 frame을 넘어 이어진다(4강).</p>
+          </div>
+          <div class="panel">
+            <span class="tag accent"><i class="ci" aria-hidden="true">&#xEB09;</i>결정 3</span>
+            <h3>앱 상태는 logic thread 하나가 쥔다</h3>
+            <p><b>얻는 것</b> — 앱 상태에 경쟁 조건이 없다. 앱 코드가 오래 걸려도 창과 입력은 멎지 않는다. 메시지만 넣으면 창 없이도 테스트할 수 있다(12강).</p>
+            <p><b>치르는 것</b> — 모든 동작이 메시지를 거친다. 상태에서 나오는 화면 변화는 다음 frame에 보인다(2·3강).</p>
+          </div>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">한 줄로 줄이면</span>입력 → element 액션 → 앱 메시지 → logic의 상태 변경 → 새 frame과 불변 tree 게시 → UI의 그리기. 데이터는 이 한 방향으로만 흐른다.</div></div>
+      </section>
+
+      <section class="slide" id="s4" data-num="1.4">
+        <header class="slide-head">
+          <span class="num">1.4</span>
+          <h2>익숙한 프레임워크와 견주기</h2>
+          <p class="lede">상태가 어디 살고, 화면을 어떻게 바꾸는지로 나란히 놓으면 luil의 자리가 보인다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t cmp">
+            <thead><tr><th>프레임워크</th><th>상태가 사는 곳</th><th>화면을 바꾸는 법</th><th>스레드</th><th>그리는 주체</th></tr></thead>
+            <tbody>
+              <tr><td>Win32 공용 컨트롤</td><td>컨트롤(HWND) 안</td><td>메시지로 그 자리를 고친다 (<code>SetWindowText</code> 등)</td><td>창을 만든 스레드</td><td>OS·컨트롤 자신</td></tr>
+              <tr><td>Qt Widgets</td><td>QWidget 객체</td><td>setter로 고친다, 시그널·슬롯</td><td>GUI 스레드</td><td>QPainter</td></tr>
+              <tr><td>React</td><td>컴포넌트 state·store</td><td>다시 렌더 → 가상 DOM 비교 → DOM 고침</td><td>메인 스레드</td><td>브라우저</td></tr>
+              <tr><td>Flutter</td><td>State 객체</td><td>build()로 위젯을 새로 짓고 element tree와 대조</td><td>UI·raster 스레드</td><td>Skia·Impeller</td></tr>
+              <tr class="luil"><td>luil</td><td>logic thread의 driver</td><td>make_frame()이 tree 전체를 새로 지어 <b>갈아 끼운다</b> (비교 없음)</td><td>UI·input·logic 셋</td><td>Skia (CPU·GPU)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>luil은 Elm·React 계열의 <strong>단방향 데이터 흐름</strong>을 따르지만 두 곳에서 갈린다. 첫째, 새 tree를 이전 tree와 비교(diff)하지 않는다. 게시본을 통째로 바꾸고, 표면 전체를 다시 그린다. 둘째, hover·눌림·초점 같은 <strong>상호작용 상태는 앱 상태가 아니다.</strong> input thread가 따로 쥐고 값(<code>interaction_snapshot</code>)으로 게시하며, element는 그 안의 id를 자기 id와 비교할 뿐이다. 그래서 1.2의 실험에서 눌린 모양은 logic을 거치지 않고 먼저 보였다.</p>
+        </div>
+      </section>
+
+      <section class="slide" id="s5" data-num="1.5">
+        <header class="slide-head">
+          <span class="num">1.5</span>
+          <h2>앱과 라이브러리의 경계</h2>
+          <p class="lede">앱은 세 조각을 꽂는다. 셋 모두 상태를 직접 바꾸지 않고 메시지만 만든다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>앱이 구현하는 것</th><th>도는 스레드</th><th>책임</th></tr></thead>
+            <tbody>
+              <tr><td><code>luil::logic_driver</code></td><td><span class="thread-chip lg">logic</span></td><td>앱 상태를 소유한다. 메시지를 처리하고(<code>handle</code>), 불변 tree를 담은 frame을 만든다(<code>make_frame</code>). 시간 갱신과 종료 처리도 여기다.</td></tr>
+              <tr><td><code>luil::interaction_policy</code></td><td><span class="thread-chip in">input</span></td><td>앱 element 종류와 텍스트 대상을 잇고, 휠·키·편집 요청을 해석한다. 텍스트 입력이 없는 hello는 꽂지 않는다(<code>nullptr</code>).</td></tr>
+              <tr><td><code>luil::win32::window_delegate</code></td><td><span class="thread-chip ui">UI</span></td><td>창 크기·DPI 변화, 파일 드롭 같은 UI thread의 사건을 앱 메시지로 바꾼다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <figure class="fig">
+          <div class="canvas">
+            <svg viewBox="0 0 860 210" role="img" aria-label="세 조각이 만든 메시지는 모두 logic thread의 app inbox로 모이고, logic이 게시한 frame을 UI와 input이 읽는다">
+              <defs><marker id="a15" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="d-arrowhead"/></marker></defs>
+              <rect x="10" y="20" width="230" height="56" rx="4" class="d-box"/>
+              <circle cx="30" cy="48" r="5" class="d-dot ui"/><text x="44" y="44" class="d-text b">window_delegate</text><text x="44" y="62" class="d-text sm dim">창 사건 → 메시지</text>
+              <rect x="10" y="134" width="230" height="56" rx="4" class="d-box"/>
+              <circle cx="30" cy="162" r="5" class="d-dot in"/><text x="44" y="158" class="d-text b">interaction_policy · element 액션</text><text x="44" y="176" class="d-text sm dim">입력 → 메시지</text>
+              <rect x="330" y="77" width="170" height="56" rx="4" class="d-box accent"/>
+              <text x="415" y="101" text-anchor="middle" class="d-text b">app inbox</text><text x="415" y="119" text-anchor="middle" class="d-text mono dim">channel&lt;app_message&gt;</text>
+              <rect x="590" y="77" width="260" height="56" rx="4" class="d-box"/>
+              <circle cx="610" cy="105" r="5" class="d-dot lg"/><text x="624" y="101" class="d-text b">logic_driver</text><text x="624" y="119" class="d-text sm dim">handle → 상태 변경 → make_frame</text>
+              <line x1="240" y1="48" x2="328" y2="92" class="d-line" marker-end="url(#a15)"/>
+              <line x1="240" y1="162" x2="328" y2="118" class="d-line" marker-end="url(#a15)"/>
+              <line x1="500" y1="105" x2="588" y2="105" class="d-line" marker-end="url(#a15)"/>
+              <text x="284" y="60" class="d-text mono faint">post</text>
+              <text x="284" y="160" class="d-text mono faint">post</text>
+              <text x="544" y="97" text-anchor="middle" class="d-text mono faint">handle</text>
+              <path d="M720,77 C720,30 560,14 400,14" class="d-line dash" marker-end="url(#a15)"/>
+              <text x="560" y="30" text-anchor="middle" class="d-text sm dim">게시한 frame·tree를 UI·input이 읽는다</text>
+            </svg>
+          </div>
+          <figcaption><b>메시지는 한 곳으로 모인다.</b> UI와 input에서 생긴 일은 모두 app inbox를 거쳐 logic_driver에 닿는다. 되돌아오는 길은 메시지가 아니라 게시된 불변 frame이다.</figcaption>
+        </figure>
+      </section>
+
+      <section class="slide" id="s6" data-num="1.6">
+        <header class="slide-head">
+          <span class="num">1.6</span>
+          <h2>hello 읽기 ① 조립하는 main</h2>
+          <p class="lede">Windows 진입점은 창의 겉모습을 정하고 앱의 조각을 꽂은 뒤, 메시지 루프에 들어간다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/hello/main.cpp:26-61" data-path="examples/hello/main.cpp" data-start="26"><script type="text/plain">
+int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
+{
+    // DPI 인지는 창을 만들기 전에 한 번 켠다.
+    luil::win32::enable_per_monitor_dpi_awareness();
+    // COM STA는 TSF(텍스트 입력)·파일 dialog가 요구한다.
+    // 이 예제는 텍스트 입력이 없지만 켜 두는 것이 관례다.
+    const luil::win32::com_sta_scope com {};
+
+    // 창의 겉모습과 정책이다. 길이는 전부 논리 96 DPI 기준 px다.
+    luil::win32::window_config config {};
+    config.class_name = L"Luil.Hello.Window";
+    config.caption.title = u8"hello luil";
+    config.caption.minimize_tooltip = u8"Minimize";
+    config.caption.maximize_tooltip = u8"Maximize or restore";
+    config.caption.close_tooltip = u8"Close";
+    config.initial_width = 800;
+    config.initial_height = 500;
+
+    // --position=x,y 로 창이 뜰 자리를 정한다 (물리 픽셀, 음수도 된다).
+    // 읽지 못하면 그냥 두어 OS가 정한다.
+    if (const auto arguments { luil::win32::command_line_arguments() }; arguments.has_value())
+        for (const std::u8string& argument : *arguments)
+            if (argument.starts_with(u8"--position="))
+                config.initial_position = luil::win32::parse_window_position(std::u8string_view { argument }.substr(11));
+
+    // 앱의 세 조각을 꽂는다.
+    // policy는 텍스트 입력·휠·단축키가 생길 때 구현한다 — 없으면 nullptr로 둔다.
+    hello::hello_driver driver {};
+    hello::hello_delegate delegate {};
+    luil::win32::window_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+
+    // 메시지 루프가 끝날 때까지 여기서 돈다. 반환값이 프로세스 종료 코드다.
+    return luil::win32::run_application_window(config, environment);
+}
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="28-29" data-title="DPI 인지를 먼저 켠다">모니터마다 배율이 다를 수 있다(100%·150%·200%). 창을 만들기 전에 <em>모니터별 DPI 인지</em>를 켜야 OS가 그림을 늘려 흐리게 만들지 않고, luil이 물리 픽셀로 또렷하게 그린다. 이 배율이 뒤에서 <code>scale</code>로 내려온다.</li>
+            <li data-lines="30-32" data-title="COM 단일 스레드 아파트">Windows의 텍스트 서비스(TSF, IME 조합 입력)와 파일 대화 상자는 COM STA를 요구한다. <code>com_sta_scope</code>는 RAII로 이 함수가 끝날 때 정리된다.</li>
+            <li data-lines="34-42" data-title="창의 겉모습 — 논리 픽셀">luil 창은 OS 제목 표시줄 대신 직접 그리는 custom caption을 쓴다. 여기 적는 길이(800×500)는 96 DPI 기준의 <em>논리 픽셀</em>이다. 150% 모니터라면 실제로는 1200×750 물리 픽셀이 된다.</li>
+            <li data-lines="51-57" data-title="세 조각을 꽂는다">앱 쪽 절반인 <code>hello_driver</code>(logic)와 <code>hello_delegate</code>(UI)를 환경에 넣는다. 텍스트 입력·휠·단축키가 없으니 <code>interaction_policy</code>는 비워 둔다. 라이브러리는 이 객체들의 수명을 빌려 쓸 뿐 소유하지 않는다.</li>
+            <li data-lines="59-60" data-title="이 스레드가 UI thread가 된다"><code>run_application_window</code>는 창을 만들고 logic·input 스레드를 세운 뒤, 호출한 이 스레드에서 메시지 루프를 돈다. 창이 닫히고 종료 절차가 끝나면 돌아오며, 반환값이 프로세스 종료 코드다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s7" data-num="1.7">
+        <header class="slide-head">
+          <span class="num">1.7</span>
+          <h2>hello 읽기 ② 상태와 화면</h2>
+          <p class="lede">앱의 전부는 두 함수다. 메시지로 상태를 바꾸는 <code>handle</code>, 상태로 화면을 짓는 <code>make_frame</code>.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="examples/hello/hello_app.cpp:29-114" data-path="examples/hello/hello_app.cpp" data-start="29"><script type="text/plain">
+    void hello_driver::handle(luil::app_message message)
+    {
+        // 메시지 타입별로 상태를 바꾼다.
+        // get<T>()는 타입이 맞을 때만 값을 돌려주므로 순서대로 물어보면 된다.
+        if (message.get<close_intent>() != nullptr)
+        {
+            // 종료 저장이 있다면 여기서 제출한다. 이 예제는 저장할 것이 없다.
+            closed_.store(true);
+            return;
+        }
+        if (const auto* const metrics { message.get<metrics_intent>() }; metrics != nullptr)
+        {
+            metrics_ = *metrics;
+            return;
+        }
+        if (message.get<increment_intent>() != nullptr)
+        {
+            ++clicks_;
+            return;
+        }
+    }
+
+    std::shared_ptr<const luil::win32::ui_frame> hello_driver::make_frame()
+    {
+        // 배치 단위 규칙: 설정·길이는 논리 픽셀(96 DPI 기준)이고,
+        // arrange의 slot 좌표는 물리 픽셀이다. scale이 그 사이를 잇는다.
+        const float scale { metrics_.scale > 0.0f ? metrics_.scale : 1.0f };
+        const float width { metrics_.width > 0.0f ? metrics_.width : 800.0f };
+        const float height { metrics_.height > 0.0f ? metrics_.height : 500.0f };
+
+        // 1) 최상위 컨테이너. 창 배경은 렌더러가 팔레트로 칠하므로 담기만 한다.
+        auto root { std::make_unique<luil::root_element>() };
+        root->arrange({ { 0.0f, 0.0f, width, height }, scale });
+
+        // 2) 맨 위 막대. 데스크톱은 custom caption, 모바일은 앱 바다.
+        //    어느 쪽인지는 플랫폼이 알려 준다. 높이는 height_for가 알려 준다 (논리 픽셀 → 배율 곱).
+        const luil::caption_config caption_config { make_caption() };
+        float caption_height { 0.0f };
+        if (luil::current_ui_platform().window_caption)
+        {
+            caption_height = luil::caption_element::height_for(caption_config) * scale;
+            auto caption { std::make_unique<luil::caption_element>(caption_config) };
+            caption->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+            root->add(std::move(caption));
+        }
+        else
+        {
+            const luil::app_bar_config app_bar_config { .title = caption_config.title };
+            caption_height = luil::app_bar_element::height_for(app_bar_config) * scale;
+            auto app_bar { std::make_unique<luil::app_bar_element>(app_bar_config) };
+            app_bar->arrange({ { 0.0f, 0.0f, width, caption_height }, scale });
+            root->add(std::move(app_bar));
+        }
+
+        // 3) 내용: 세로 stack에 라벨과 버튼을 쌓는다.
+        //    stack의 길이 인자는 논리 픽셀이고 배율은 stack의 arrange가 곱한다.
+        luil::stack_config column_config {};
+        column_config.padding = luil::edge_insets::all(24.0f);
+        column_config.spacing = 12.0f;
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_label, u8"layout" }, column_config) };
+
+        luil::label_config label_config {};
+        label_config.text = count_text(clicks_);
+        label_config.font_size = 14.0f;
+        label_config.color = luil::label_color_role::primary;
+        auto label { std::make_unique<luil::label_element>(luil::ui_element_id { kind_label }, label_config) };
+        column->add(std::move(label), luil::label_element::height_for(label_config));
+
+        // 버튼의 액션은 상태를 바꾸지 않는다.
+        // increment_intent 메시지를 만들 뿐이고, 실제 증가는 handle이 한다.
+        // 이 규칙 덕에 tree가 불변이어도 안전하다.
+        auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_button }, luil::text_button_config { .text = u8"하나 더" }) };
+        button->set_cursor(luil::ui_cursor::hand);
+        button->set_action(luil::ui_trigger::left_click, luil::make_message_action(increment_intent {}));
+        column->add(std::move(button), { .length = 30.0f, .cross_length = 120.0f });
+
+        // caption 아래 나머지 영역이 내용의 slot이다.
+        column->arrange({ { 0.0f, caption_height, width, height - caption_height }, scale });
+        root->add(std::move(column));
+
+        // 4) frame으로 묶어 게시한다.
+        //    frame은 화면의 전부다: tree, (있다면) popup·보조 창, 외양 선호.
+        auto frame { std::make_shared<luil::win32::ui_frame>() };
+        frame->tree = std::make_shared<const luil::ui_tree>(std::move(root));
+        return frame;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="29-49" data-title="상태를 바꾸는 유일한 자리">메시지는 앱이 정의한 평범한 구조체(<code>close_intent</code>, <code>metrics_intent</code>, <code>increment_intent</code>)다. 라이브러리는 이 타입을 모른 채 불투명 상자 <code>app_message</code>에 담아 나르고, 앱은 <code>get&lt;T&gt;()</code>로 꺼낸다. 타입이 다르면 <code>nullptr</code>라 순서대로 물으면 된다(3강).</li>
+            <li data-lines="33-38" data-title="종료 신호도 메시지다">창을 닫으면 라이브러리가 <code>make_close_message()</code>가 준 메시지를 inbox에 넣는다. 앱은 여기서 종료 저장을 제출하고, <code>closed_</code>를 세워 "처리했다"고 답한다. 이 값은 UI thread도 읽으므로 <code>std::atomic</code>이다(2강).</li>
+            <li data-lines="53-57" data-title="논리 픽셀과 물리 픽셀">delegate가 보내 온 창 크기·배율을 쓴다. 설정 길이(24px 여백, 14px 글자)는 논리 픽셀이고, <code>arrange</code>에 넘기는 slot은 물리 픽셀이다. <code>scale</code>이 둘을 잇는다(5강).</li>
+            <li data-lines="59-81" data-title="tree를 위에서부터 짓는다">root를 창 전체에 배치하고, 그 위에 caption(데스크톱) 또는 앱 바(모바일)를 얹는다. 어느 쪽인지는 <code>current_ui_platform()</code>이 알려 주므로 같은 코드가 네 플랫폼에서 돈다.</li>
+            <li data-lines="83-95" data-title="stack에 라벨을 쌓는다">세로 <code>stack_element</code>가 자식의 자리를 나눠 준다. 라벨의 글은 <code>clicks_</code>에서 나온다. 상태가 바뀌면 이 함수가 다시 불려 새 글을 가진 새 라벨이 생긴다.</li>
+            <li data-lines="97-103" data-title="액션은 메시지를 돌려줄 뿐">버튼의 왼쪽 클릭에 <code>make_message_action(increment_intent {})</code>를 단다. 클릭되면 input thread에서 이 액션이 실행되어 메시지 하나를 돌려준다. 앱 상태를 건드리는 캡처가 없으니, 여러 스레드가 이 tree를 동시에 읽어도 안전하다.</li>
+            <li data-lines="105-113" data-title="frame으로 묶어 내보낸다">내용을 caption 아래 자리에 배치하고, root를 <code>ui_tree</code>로 감싸 <code>shared_ptr&lt;const …&gt;</code>로 게시한다. <code>const</code>가 곧 계약이다. 게시한 뒤에는 아무도 고치지 않는다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s8" data-num="1.8">
+        <header class="slide-head">
+          <span class="num">1.8</span>
+          <h2>같은 앱, 네 진입점</h2>
+          <p class="lede">hello_app.h·.cpp는 네 플랫폼이 같은 파일이다. 다른 것은 진입점 몇 줄뿐이다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="Windows">
+            <div class="code" data-lang="cpp" data-src="examples/hello/main.cpp:51-60" data-path="examples/hello/main.cpp" data-start="51"><script type="text/plain">
+    // 앱의 세 조각을 꽂는다.
+    // policy는 텍스트 입력·휠·단축키가 생길 때 구현한다 — 없으면 nullptr로 둔다.
+    hello::hello_driver driver {};
+    hello::hello_delegate delegate {};
+    luil::win32::window_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+
+    // 메시지 루프가 끝날 때까지 여기서 돈다. 반환값이 프로세스 종료 코드다.
+    return luil::win32::run_application_window(config, environment);
+</script></div>
+          </section>
+          <section data-tab="Android">
+            <div class="code" data-lang="cpp" data-src="examples/hello/android_main.cpp:1-24" data-path="examples/hello/android_main.cpp" data-start="1"><script type="text/plain">
+// luil hello의 Android 진입점이다. 앱 쪽 절반(hello_app)은 Windows와 같은 파일이다.
+//
+// GameActivity가 네이티브 라이브러리를 열고 별도 thread에서 android_main을 부른다.
+// 그 thread가 luil의 UI thread가 되고, run_application이 Activity가 끝날 때까지 돈다.
+
+#include "hello/hello_app.h"
+
+#include "luil/android/android_app.h"
+
+extern "C" void android_main(android_app* app)
+{
+    hello::hello_driver driver {};
+    // Windows용 delegate지만 플랫폼 중립 부분(app_delegate)만 Android host가 부른다.
+    hello::hello_delegate delegate {};
+
+    luil::android::application_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+    // 렌더러는 Vulkan이 먼저다. `adb shell setprop debug.luil.renderer cpu`처럼 시스템 속성으로
+    // 바꿔 띄울 수 있다 (apply_debug_properties).
+    luil::android::application_config config {};
+    luil::android::apply_debug_properties(config);
+    static_cast<void>(luil::android::run_application(app, config, environment));
+}
+</script></div>
+          </section>
+          <section data-tab="macOS">
+            <div class="code" data-lang="cpp" data-src="examples/hello/macos_main.cpp:1-26" data-path="examples/hello/macos_main.cpp" data-start="1"><script type="text/plain">
+// luil hello의 macOS 진입점이다. 앱 쪽 절반(hello_app)은 Windows·Android와 같은 파일이다.
+//
+// main thread가 luil의 UI thread다. run_application이 창이 닫혀 종료가 끝날 때까지 돈다.
+
+#include "hello/hello_app.h"
+
+#include "luil/macos/macos_app.h"
+
+int main(const int argc, const char* const* const argv)
+{
+    luil::macos::application_config config {};
+    config.title = u8"hello luil";
+    config.initial_width = 800;
+    config.initial_height = 500;
+    for (const std::u8string& argument : luil::macos::command_line_arguments(argc, argv))
+        if (argument == u8"--smoke-test")
+            config.smoke_test = true;
+
+    hello::hello_driver driver {};
+    // Windows용 delegate지만 플랫폼 중립 부분(app_delegate)만 macOS host가 부른다.
+    hello::hello_delegate delegate {};
+    luil::macos::application_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+    return luil::macos::run_application(config, environment);
+}
+</script></div>
+          </section>
+          <section data-tab="iOS">
+            <div class="code" data-lang="cpp" data-src="examples/hello/ios_main.cpp:1-23" data-path="examples/hello/ios_main.cpp" data-start="1"><script type="text/plain">
+// luil hello의 iOS 진입점이다. 앱 쪽 절반(hello_app)은 Windows·Android·macOS와 같은 파일이다.
+//
+// main thread가 luil의 UI thread다. run_application은 UIApplicationMain을 불러 돌아오지 않는다. 그래서 driver와
+// delegate는 프로세스가 끝날 때까지 사는 정적 객체다.
+
+#include "hello/hello_app.h"
+
+#include "luil/ios/ios_app.h"
+
+int main(const int argc, char** const argv)
+{
+    static hello::hello_driver driver {};
+    // Windows용 delegate지만 플랫폼 중립 부분(app_delegate)만 iOS host가 부른다.
+    static hello::hello_delegate delegate {};
+
+    luil::ios::application_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+    // 렌더러는 Metal이 먼저다. `xcrun simctl launch <기기> <번들 id> --renderer=cpu`처럼 인자로 바꿔 띄울 수 있다.
+    luil::ios::application_config config {};
+    luil::ios::apply_debug_arguments(config, argc, argv);
+    return luil::ios::run_application(argc, argv, config, environment);
+}
+</script></div>
+          </section>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>플랫폼</th><th>UI thread가 되는 스레드</th><th>진입 함수</th><th>먼저 쓰는 렌더러</th></tr></thead>
+            <tbody>
+              <tr><td>Windows</td><td><code>wWinMain</code>을 부른 스레드</td><td><code>run_application_window</code> — 창이 닫히면 돌아온다</td><td>Direct3D 12</td></tr>
+              <tr><td>Android</td><td>GameActivity가 만든 별도 스레드</td><td><code>run_application</code> — Activity가 끝날 때까지</td><td>Vulkan</td></tr>
+              <tr><td>macOS</td><td>main thread</td><td><code>run_application</code> — 종료가 끝나면 돌아온다</td><td>Metal</td></tr>
+              <tr><td>iOS</td><td>main thread</td><td><code>run_application</code> — 돌아오지 않는다 (그래서 <code>static</code>)</td><td>Metal</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">네 플랫폼 모두 GPU를 먼저 쓰고, 만들거나 그리다 실패하면 CPU 렌더러로 물러선다(7강).</p>
+      </section>
+
+      <section class="slide" id="s9" data-num="1.9">
+        <header class="slide-head">
+          <span class="num">1.9</span>
+          <h2>저장소 지도</h2>
+          <p class="lede">구현의 절반쯤은 플랫폼을 모르는 core이고, 나머지 절반이 네 플랫폼에 OS를 잇는 host다.</p>
+        </header>
+        <div class="legend" aria-hidden="true"><span><i style="background:var(--accent)"></i>플랫폼을 모르는 core</span><span><i style="background:var(--t-ui)"></i>플랫폼 host</span><span><i style="background:var(--t-lg)"></i>공통 + 플랫폼별</span><span><i style="background:var(--line-3)"></i>구현 밖</span></div>
+        <div class="bars" id="repo-bars" role="table" aria-label="디렉터리별 줄 수"></div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">core와 host의 경계</span>core(<code>src/ui</code>·<code>src/host</code>·<code>src/text</code>·<code>src/theme</code>)는 50,351줄, 네 플랫폼 host(<code>src/win32</code>·<code>src/macos</code>·<code>src/android</code>·<code>src/ios</code>)는 합쳐 58,043줄이다. host는 창·입력·렌더러 표면·OS 기능을 잇고, 화면에 무엇을 어떻게 그릴지는 core가 정한다. 경계의 계약은 11강에서 읽는다.</div></div>
+      </section>
+
+      <section class="slide" id="s10" data-num="1.10">
+        <header class="slide-head">
+          <span class="num">1.10</span>
+          <h2>빌드하고 실행하기</h2>
+          <p class="lede">의존성의 버전과 체크섬은 저장소에 고정되어 있고, CMake configure는 네트워크를 쓰지 않는다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="Windows">
+            <div class="prose small"><p>Windows 11 x64, Visual Studio 2022 또는 2026(MSVC 19.40 이상), Windows SDK 10.0.22621.0 이상, CMake 4.2 이상과 PowerShell이 필요하다. 저장소 루트에서 실행한다.</p></div>
+            <div class="code" data-lang="powershell" data-label="저장소 루트 · PowerShell"><script type="text/plain">
+git submodule update --init third_party/nlohmann_json
+scripts\fetch_skia.ps1 -Configuration Debug,Release
+scripts\fetch_webview2.ps1
+cmake --preset vs2026-examples
+cmake --build --preset vs2026-examples-debug
+build\vs2026-examples\examples\Debug\luil_hello.exe
+</script></div>
+          </section>
+          <section data-tab="macOS">
+            <div class="prose small"><p>Apple Silicon, macOS 11 이상. Xcode와 Ninja가 필요하다.</p></div>
+            <div class="code" data-lang="bash" data-label="저장소 루트 · zsh"><script type="text/plain">
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target mac-arm64 -Configuration Debug,Release"
+cmake --preset macos-arm64
+cmake --build --preset macos-arm64-debug
+ctest --preset macos-arm64-debug
+</script></div>
+          </section>
+          <section data-tab="Android">
+            <div class="prose small"><p>Android arm64. Android Studio(SDK·JBR), NDK r27d, Ninja가 필요하다. core test는 adb로 연결한 기기에서 돌고, 예제는 Gradle이 APK로 싼다.</p></div>
+            <div class="code" data-lang="powershell" data-label="저장소 루트 · PowerShell"><script type="text/plain">
+scripts\fetch_skia.ps1 -Target android-arm64 -Configuration Debug,Release
+scripts\fetch_game_activity.ps1
+$env:ANDROID_NDK_HOME = "$env:LOCALAPPDATA\Android\Sdk\ndk\27.3.13750724"
+cmake --preset android-arm64 -DCMAKE_MAKE_PROGRAM="<ninja.exe 경로>"
+cmake --build --preset android-arm64-release
+ctest --preset android-arm64-release
+</script></div>
+          </section>
+          <section data-tab="iOS">
+            <div class="prose small"><p>iPhone·iPad(iOS 15 이상), 기기와 Apple Silicon 시뮬레이터.</p></div>
+            <div class="code" data-lang="bash" data-label="저장소 루트 · zsh"><script type="text/plain">
+pwsh -Command "& ./scripts/fetch_skia.ps1 -Target ios-arm64-simulator -Configuration Debug,Release"
+cmake --preset ios-arm64-simulator
+cmake --build --preset ios-arm64-simulator-debug
+</script></div>
+          </section>
+        </div>
+        <div class="prose">
+          <h3>내 프로젝트에 연결하기</h3>
+          <p>소스 트리로 넣든 설치 패키지를 쓰든 링크하는 타깃은 <code>luil::luil</code> 하나다. C++20과 UTF-8 컴파일 요건은 타깃이 전파한다. 공개 헤더는 모두 <code>luil/</code>로 시작하고, <code>#include &lt;luil/luil.h&gt;</code>가 공개 API 전체다.</p>
+        </div>
+        <div class="code" data-lang="cmake" data-label="CMakeLists.txt"><script type="text/plain">
+# 소스 트리로 넣을 때
+add_subdirectory(third_party/luil)
+target_link_libraries(my_app PRIVATE luil::luil)
+
+# 설치 패키지를 쓸 때
+find_package(luil 0.1 REQUIRED)
+target_link_libraries(my_app PRIVATE luil::luil)
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">실행 파일에 필요한 것</span>앱과 Skia의 CRT 설정이 같아야 하고, 실행 파일에는 Codicons 글꼴과 제3자 고지를 담은 리소스 스크립트가 들어가야 한다. <code>luil_generate_third_party_notices</code>와 <code>luil_configure_resource_script</code>로 만든다(12강).</div></div>
+      </section>
+
+      <section class="slide" id="s11" data-num="1.11">
+        <header class="slide-head">
+          <span class="num">1.11</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>luil은 Skia로 모든 것을 직접 그리는 C++20 애플리케이션 프레임워크다. 같은 앱 코드가 Windows·Android·macOS·iOS에서 돈다.</li>
+          <li>세 결정 — 직접 그리기, frame마다 새로 짓는 불변 tree, logic thread 하나가 쥐는 상태 — 이 구조를 정한다.</li>
+          <li>데이터는 한 방향으로 흐른다. 입력은 메시지가 되어 logic에 닿고, logic은 불변 frame을 게시하며, UI가 그것을 그린다.</li>
+          <li>hover·눌림·초점은 앱 상태가 아니다. input thread가 snapshot으로 따로 게시하므로 logic을 기다리지 않고 보인다.</li>
+          <li>앱은 세 조각을 꽂는다. logic_driver(logic), interaction_policy(input), window_delegate(UI).</li>
+          <li>구현의 절반은 플랫폼을 모르는 core, 나머지 절반은 OS를 잇는 네 host다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s12" data-num="1.12">
+        <header class="slide-head">
+          <span class="num">1.12</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="3">
+            <p class="q">hello에서 "하나 더"를 누르면 <code>clicks_</code>를 실제로 늘리는 코드는 어느 스레드에서 실행되는가?</p>
+            <ol class="choices">
+              <li>UI thread — 버튼을 그리는 스레드이므로</li>
+              <li>input thread — 클릭을 판정하고 액션을 실행하는 스레드이므로</li>
+              <li>logic thread — <code>handle()</code>이 메시지를 받아 바꾼다</li>
+              <li>정해져 있지 않다 — 먼저 잡은 스레드가 바꾼다</li>
+            </ol>
+            <div class="explain">액션은 input thread에서 실행되지만 상태를 바꾸지 않고 <code>increment_intent</code> 메시지를 돌려줄 뿐이다. 상태를 바꾸는 곳은 logic thread의 <code>handle()</code> 하나다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q">상태가 바뀐 뒤 luil이 화면을 갱신하는 방법으로 맞는 것은?</p>
+            <ol class="choices">
+              <li>바뀐 element의 setter를 불러 그 자리를 고친다</li>
+              <li>새 tree를 통째로 지어 게시하고, 이전 tree와 비교하지 않는다</li>
+              <li>새 tree를 이전 tree와 비교해 다른 부분만 다시 그린다</li>
+              <li>UI thread가 앱 상태를 직접 읽어 다시 그린다</li>
+            </ol>
+            <div class="explain">게시된 element는 수정하지 않는다. <code>make_frame()</code>이 새 tree를 지어 latest_slot에 게시하고, 부분 갱신 경로는 없다. 지금은 표면 전체를 다시 그린다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">1.2의 실험에서 버튼의 눌린 모양이 숫자보다 먼저 보인 까닭은?</p>
+            <ol class="choices">
+              <li>UI thread가 버튼을 미리 그려 두기 때문에</li>
+              <li>logic thread가 눌림 메시지를 먼저 처리하기 때문에</li>
+              <li>버튼 element가 스스로 눌림 상태를 저장하기 때문에</li>
+              <li>눌림은 input thread가 게시하는 interaction snapshot이고, 앱 상태를 거치지 않기 때문에</li>
+            </ol>
+            <div class="explain">hover·press·focus는 input thread의 <code>interaction_snapshot</code>에 값으로 들어 있다. element는 그 안의 id와 자기 id를 비교해 그린다. 그래서 logic을 기다리지 않는다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">iOS 진입점에서 driver와 delegate를 <code>static</code>으로 만든 이유는?</p>
+            <ol class="choices">
+              <li><code>run_application</code>이 UIApplicationMain을 불러 돌아오지 않으므로, 프로세스가 끝날 때까지 살아야 해서</li>
+              <li>iOS는 스택에 큰 객체를 둘 수 없어서</li>
+              <li>static이어야 다른 스레드가 읽을 수 있어서</li>
+              <li>iOS에서는 driver가 여러 개 생기기 때문에</li>
+            </ol>
+            <div class="explain">다른 플랫폼은 종료 절차가 끝나면 진입 함수가 돌아오지만, iOS의 <code>UIApplicationMain</code>은 돌아오지 않는다. 지역 변수의 수명에 기대면 안 되므로 정적 수명을 준다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
+<script src="assets/course.js"></script>
+<script>
+(function () {
+  const { el, flow } = window.LU;
+
+  /* ---------- 1.2 hello와 세 스레드 ---------- */
+  const lab = document.getElementById("hello-lab");
+  const f = flow(document.getElementById("hello-flow"), {
+    label: "hello 앱의 클릭이 UI, input, logic 세 스레드를 지나는 길",
+    cols: 8,
+    lanes: [
+      { id: "ui", name: "UI thread", short: "UI", sub: "창·메시지 루프", sub2: "그리기" },
+      { id: "in", name: "input thread", short: "input", sub: "hit test", sub2: "상호작용 상태 기계" },
+      { id: "lg", name: "logic thread", short: "logic", sub: "앱 상태", sub2: "frame 만들기" },
+    ],
+    stations: [
+      { id: "os", lane: "ui", col: 0, title: "OS 입력", sub: "raw_input_event" },
+      { id: "inbox", lane: "in", col: 1, title: "input_inbox", sub: "drop_oldest" },
+      { id: "ctl", lane: "in", col: 2, title: "controller", sub: "누름·뗌 → 클릭" },
+      { id: "press", lane: "ui", col: 2, title: "눌림 그리기", sub: "snapshot" },
+      { id: "act", lane: "in", col: 3, title: "액션 실행", sub: "app_message" },
+      { id: "appin", lane: "lg", col: 4, title: "app_inbox", sub: "reject_newest" },
+      { id: "handle", lane: "lg", col: 5, title: "handle()", sub: "++clicks_" },
+      { id: "frame", lane: "lg", col: 6, title: "make_frame()", sub: "새 불변 tree" },
+      { id: "slot", lane: "lg", col: 7, title: "게시", sub: "tree → frame" },
+      { id: "paint", lane: "ui", col: 7, title: "다시 그리기", sub: "WM_PAINT" },
+    ],
+    edges: [
+      { from: "os", to: "inbox", label: "post" },
+      { from: "inbox", to: "ctl", label: "receive" },
+      { from: "ctl", to: "press", label: "interaction", dash: true },
+      { from: "ctl", to: "act", label: "left_click" },
+      { from: "act", to: "appin", label: "post" },
+      { from: "appin", to: "handle", label: "receive" },
+      { from: "handle", to: "frame" },
+      { from: "frame", to: "slot", label: "publish" },
+      { from: "slot", to: "paint", label: "wake" },
+    ],
+  });
+
+  const logEl = document.getElementById("hello-log");
+  const label = document.getElementById("hello-label");
+  const btn = document.getElementById("hello-btn");
+  const frameBadge = document.getElementById("hello-frame");
+  let clicks = 0;
+  let frameNo = 1;
+  let pending = 0;
+  let busy = false;
+  let t0 = 0;
+
+  function log(cls, text) {
+    const t = t0 ? ((performance.now() - t0) / 1000).toFixed(1) + "s" : "";
+    logEl.append(el("div", { class: "row " + cls }, el("span", { class: "t", text: t }), el("span", { class: "m", text })));
+    logEl.scrollTop = logEl.scrollHeight;
+  }
+
+  function intro() {
+    logEl.textContent = "";
+    log("", "‘하나 더’를 누르면 기록이 여기에 쌓인다.");
+  }
+
+  async function clickOnce() {
+    busy = true;
+    const gen = f.gen;
+    f.clear();
+    t0 = performance.now();
+    logEl.textContent = "";
+    const ok = () => gen === f.gen;
+
+    log("ui", "[UI] 누름: OS 이벤트를 raw_input_event로 바꿔 input_inbox에 넣는다");
+    f.mark("os");
+    if (!(await f.hop("os", "inbox"))) return;
+    log("in", "[input] input pump가 깨어나 이벤트를 꺼낸다");
+    if (!(await f.hop("inbox", "ctl"))) return;
+    log("in", "[input] 버튼 위의 누름 — 눌림 상태를 interaction_snapshot에 담아 게시한다");
+    if (!(await f.hop("ctl", "press", { kind: "in" }))) return;
+    btn.classList.add("pressed");
+    log("ui", "[UI] 새 snapshot으로 다시 그린다 — 버튼이 눌린 모양. logic은 아직 모른다");
+    if (!(await f.wait(500))) return;
+
+    f.clear();
+    log("ui", "[UI] 뗌: 두 번째 raw_input_event");
+    f.mark("os");
+    if (!(await f.hop("os", "inbox"))) return;
+    btn.classList.remove("pressed");
+    if (!(await f.hop("inbox", "ctl"))) return;
+    log("in", "[input] 같은 대상에서 누르고 뗐다 → 클릭. left_click 액션을 실행한다");
+    if (!(await f.hop("ctl", "act"))) return;
+    log("in", "[input] 액션은 상태를 바꾸지 않고 app_message{increment_intent}를 돌려준다");
+    if (!(await f.hop("act", "appin"))) return;
+    log("lg", "[logic] logic thread가 깨어나 메시지를 꺼낸다");
+    if (!(await f.hop("appin", "handle"))) return;
+    clicks++;
+    log("lg", "[logic] handle(): clicks_ " + (clicks - 1) + " → " + clicks);
+    if (!(await f.hop("handle", "frame"))) return;
+    log("lg", "[logic] make_frame(): 새 라벨·새 버튼으로 tree를 새로 짓는다. 이전 tree는 그대로다");
+    if (!(await f.hop("frame", "slot", { kind: "lg" }))) return;
+    frameNo++;
+    log("lg", "[logic] tree_slot, frame_slot 순서로 게시한다. frame 게시가 UI를 깨운다");
+    if (!(await f.hop("slot", "paint", { kind: "lg" }))) return;
+    if (!ok()) return;
+    label.textContent = "버튼을 누른 횟수: " + clicks;
+    frameBadge.textContent = "frame " + frameNo;
+    log("good", "[UI] 새 frame을 Skia로 그린다 — “버튼을 누른 횟수: " + clicks + "”");
+    busy = false;
+    if (pending > 0) {
+      pending--;
+      setTimeout(() => ok() && clickOnce(), 300);
+    }
+  }
+
+  btn.addEventListener("click", () => {
+    if (busy) {
+      pending++;
+      log("", "app_inbox에서 대기하는 클릭: " + pending + "건 (차례대로 처리한다)");
+      return;
+    }
+    clickOnce();
+  });
+
+  document.getElementById("hello-speed").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-speed]");
+    if (!b) return;
+    f.speed = Number(b.dataset.speed);
+    b.parentElement.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+  });
+
+  lab.addEventListener("lw-reset", () => {
+    f.reset();
+    busy = false;
+    pending = 0;
+    clicks = 0;
+    frameNo = 1;
+    t0 = 0;
+    btn.classList.remove("pressed");
+    label.textContent = "버튼을 누른 횟수: 0";
+    frameBadge.textContent = "frame 1";
+    intro();
+  });
+  intro();
+
+  /* ---------- 1.9 저장소 지도 ---------- */
+  const rows = [
+    { dir: "src/ui", lines: 37415, files: 142, kind: "core", role: "element·tree·상호작용·텍스트 배치 — 화면의 거의 전부" },
+    { dir: "src/win32", lines: 26137, files: 90, kind: "host", role: "Windows host — HWND, Direct3D 12, UI Automation, TSF" },
+    { dir: "src/macos", lines: 15326, files: 53, kind: "host", role: "macOS host — AppKit, Metal, VoiceOver" },
+    { dir: "src/net", lines: 11082, files: 37, kind: "mixed", role: "HTTP·WebSocket·SMB·DNS — 공통 규칙과 플랫폼별 전송" },
+    { dir: "src/android", lines: 8785, files: 43, kind: "host", role: "Android host — GameActivity, Vulkan, JNI" },
+    { dir: "src/ios", lines: 7795, files: 13, kind: "host", role: "iOS host — UIKit, Metal" },
+    { dir: "src/host", lines: 7094, files: 57, kind: "core", role: "app_host·렌더러 물러섬·글꼴 — host들이 함께 쓰는 층" },
+    { dir: "src/text", lines: 5269, files: 15, kind: "core", role: "UTF-8·자소 묶음·줄 나눔·텍스트 편집" },
+    { dir: "src/theme", lines: 573, files: 3, kind: "core", role: "테마·팔레트·앱 스타일" },
+    { dir: "include/luil", lines: 21383, files: 149, kind: "other", role: "공개 헤더 — 주석이 곧 계약서다" },
+    { dir: "tests", lines: 103912, files: 264, kind: "other", role: "Catch2 TEST_CASE 2,852개 — 12강" },
+    { dir: "examples", lines: 28669, files: null, kind: "other", role: "hello·widgets·demo·mobile_demo 등 (C++ 소스만 셈)" },
+  ];
+  const max = Math.max(...rows.map((r) => r.lines));
+  const box = document.getElementById("repo-bars");
+  for (const r of rows) {
+    const pct = Math.max(0.4, (r.lines / max) * 100);
+    const row = el("div", { class: "bar-row", role: "row", title: r.dir + " — " + r.lines.toLocaleString("ko-KR") + "줄" + (r.files ? ", " + r.files + "개 파일" : "") });
+    row.append(
+      el("span", { class: "dir", role: "rowheader", text: r.dir }),
+      el("span", { class: "track", role: "cell" },
+        el("span", { class: "bar " + (r.kind === "core" ? "" : r.kind), style: { width: "calc((100% - 7em) * " + (pct / 100).toFixed(4) + ")" } }),
+        el("span", { class: "val", text: r.lines.toLocaleString("ko-KR") + "줄" + (r.files ? " · " + r.files + "개" : "") })),
+      el("span", { class: "role", role: "cell", text: r.role })
+    );
+    box.append(row);
+  }
+})();
+</script>
+</body>
+</html>

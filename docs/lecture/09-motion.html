@@ -1,0 +1,1537 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>09 움직임의 물리 · luil 해부학</title>
+<meta name="description" content="luil 해부학 9강. 움직임은 앱이 든 값이고 시각만의 함수다. 길이 곡선과 연타의 멈칫, 감쇠 조화 진동자의 닫힌 해인 스프링, 재목표와 놓기, 시계 없는 라이브러리와 두 시계, 화면 전환의 덮개, 움직임 줄이기.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .lab-stack { display: grid; gap: 14px; }
+  .math { font-family: var(--font-code); font-size: 0.95em; white-space: nowrap; }
+  .eq { font-family: var(--font-code); font-size: 1.05rem; text-align: center; padding: 14px 12px; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); overflow-x: auto; }
+
+  /* 선 그래프 */
+  .chart-wrap { position: relative; min-width: 0; }
+  .chart-cap { display: flex; flex-wrap: wrap; gap: 4px 14px; align-items: baseline; font-size: var(--fs-xs); color: var(--fg-2); margin-bottom: 4px; }
+  .chart-cap b { color: var(--fg); font-weight: 600; }
+  svg.chart { display: block; width: 100%; height: auto; touch-action: pan-y; }
+  svg.chart text { font-family: var(--font-code); font-size: 10.5px; fill: var(--fg-3); }
+  svg.chart text.lab { fill: var(--fg-2); }
+  svg.chart .ax { stroke: var(--line-2); stroke-width: 1; }
+  svg.chart .gr { stroke: var(--line); stroke-width: 1; }
+  svg.chart .s1 { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
+  svg.chart .s2 { fill: none; stroke: var(--t-in); stroke-width: 2; stroke-linejoin: round; }
+  svg.chart .s3 { fill: none; stroke: var(--fg-3); stroke-width: 1.5; stroke-dasharray: 4 3; }
+  svg.chart .tgt { stroke: var(--fg-3); stroke-dasharray: 2 3; }
+  svg.chart .thr { stroke: var(--error); stroke-dasharray: 5 3; }
+  svg.chart .mk { stroke: var(--warn); stroke-dasharray: 3 3; }
+  svg.chart .mk2 { stroke: var(--t-ui); stroke-dasharray: 3 3; }
+  svg.chart .cur { stroke: var(--fg-2); stroke-width: 1; }
+  svg.chart .hov { stroke: var(--fg-3); stroke-width: 1; }
+  .chart-tip { position: absolute; top: 4px; pointer-events: none; font-family: var(--font-code); font-size: 11px; line-height: 1.5; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-row); padding: 4px 8px; white-space: nowrap; box-shadow: 0 2px 8px #0000001a; z-index: 2; }
+  .legend-line { display: inline-flex; align-items: center; gap: 6px; }
+  .legend-line i { display: inline-block; width: 18px; height: 0; border-top: 2px solid; }
+  .legend-line i.s1 { border-color: var(--accent); }
+  .legend-line i.s2 { border-color: var(--t-in); }
+  .legend-line i.s3 { border-top-style: dashed; border-color: var(--fg-3); }
+  .legend-line i.thr { border-top-style: dashed; border-color: var(--error); }
+
+  /* 연타 실험 */
+  .bars { display: grid; gap: 10px; }
+  .bar-row { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) 5.5em; gap: 10px; align-items: center; font-size: var(--fs-sm); }
+  .bar-row .lbl { color: var(--fg-2); }
+  .bar-row .lbl code { font-size: var(--fs-xs); }
+  .bar-track { height: 30px; position: relative; border-radius: var(--r-row); background: var(--sunk); overflow: hidden; }
+  .bar-fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: var(--r-row); background: var(--panel-2); border: 1px solid var(--line-2); }
+  .bar-fill.tr { border-color: var(--t-in); background: var(--t-in-wash); }
+  .bar-fill.sp { border-color: var(--accent); background: var(--accent-wash); }
+  .bar-row .val { font-family: var(--font-code); font-size: var(--fs-xs); text-align: right; font-variant-numeric: tabular-nums; }
+  @media (max-width: 560px) { .bar-row { grid-template-columns: 1fr 4.5em; } .bar-row .lbl { grid-column: 1 / -1; } }
+
+  /* 스프링 실험실 */
+  .sp-grid { display: grid; gap: 16px; }
+  @media (min-width: 1000px) { .sp-grid { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: start; } }
+  .knobs { display: grid; gap: 10px; }
+  .knob { display: grid; grid-template-columns: minmax(0, 11.5em) minmax(0, 1fr) 4.8em; gap: 10px; align-items: center; font-size: var(--fs-sm); }
+  .knob .k code { white-space: nowrap; }
+  .knob input[type="range"] { width: 100%; }
+  .knob output { font-family: var(--font-code); font-size: var(--fs-xs); text-align: right; }
+  .knob .k { color: var(--fg-2); }
+  .knob .k code { font-size: var(--fs-xs); }
+  .ball-track { position: relative; height: 34px; border-radius: 17px; background: var(--sunk); margin: 4px 0; }
+  .ball-track .tick { position: absolute; top: 6px; bottom: 6px; width: 1px; background: var(--line-2); }
+  .ball-track .tick.goal { background: var(--accent); width: 2px; }
+  .ball-track .tick span { position: absolute; top: 22px; left: 50%; transform: translateX(-50%); font-family: var(--font-code); font-size: 10px; color: var(--fg-3); white-space: nowrap; }
+  .ball { position: absolute; top: 5px; width: 24px; height: 24px; margin-left: -12px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 3px var(--accent-wash-2); }
+  .phys { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: var(--fs-sm); }
+  .phys input[type="number"] { width: 5.5em; }
+
+  /* 끌어 놓기 */
+  .rel-track { position: relative; height: 72px; border-radius: var(--r-window); background: var(--sunk); border: 1px solid var(--line); touch-action: none; user-select: none; }
+  .rel-track .stop { position: absolute; top: 8px; bottom: 8px; width: 2px; background: var(--line-2); }
+  .rel-track .stop span { position: absolute; bottom: -2px; left: 6px; font-size: 10.5px; color: var(--fg-3); white-space: nowrap; }
+  .rel-knob { position: absolute; top: 10px; width: 56px; height: 50px; border-radius: var(--r-row); background: var(--panel); border: 1px solid var(--accent); box-shadow: 0 1px 4px #0000001f; cursor: grab; display: grid; place-items: center; font-size: 11px; color: var(--accent-ink); }
+  .rel-knob:active { cursor: grabbing; }
+  .rel-knob:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* 두 시계 */
+  .clock-svg text.lane { fill: var(--fg-2); font-family: var(--font-body); font-size: 11.5px; }
+  .clock-svg .ev-l { stroke: var(--t-lg); stroke-width: 2; }
+  .clock-svg .ev-u { stroke: var(--t-ui); stroke-width: 2; }
+  .clock-svg .cover { fill: var(--warn-wash); stroke: var(--warn); stroke-width: 1; }
+  .clock-svg .lane-bg { fill: var(--sunk); }
+  .clock-svg text.cnt { fill: var(--fg); font-family: var(--font-code); font-size: 11px; }
+  .clock-svg text.cover-t { fill: var(--warn); font-family: var(--font-body); font-size: 10.5px; }
+
+  /* 화면 전환 */
+  .pt-grid { display: grid; gap: 16px; }
+  @media (min-width: 1000px) { .pt-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .stage { position: relative; width: 100%; max-width: 380px; aspect-ratio: 380 / 260; margin: 0 auto; border: 1px solid var(--line-2); border-radius: var(--r-window); overflow: hidden; background: var(--bg); }
+  .screen { position: absolute; inset: 0; background: var(--panel); transform-origin: 50% 50%; display: grid; grid-template-rows: 38px minmax(0, 1fr); will-change: transform, opacity; }
+  .screen .hd { display: flex; align-items: center; gap: 8px; padding: 0 12px; border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 600; background: var(--panel-2); }
+  .screen .bd { padding: 8px 12px; display: grid; gap: 6px; align-content: start; font-size: 12.5px; }
+  .screen .row { display: flex; justify-content: space-between; align-items: center; height: 28px; padding: 0 10px; border-radius: var(--r-row); border: 1px solid var(--line); cursor: pointer; background: var(--panel); }
+  .screen .row:hover { background: var(--accent-wash); }
+  .screen .row small { color: var(--fg-3); }
+  .screen .ln { height: 9px; border-radius: 3px; background: var(--line); }
+  .screen .bt { justify-self: start; margin-top: 6px; height: 28px; padding: 0 14px; border-radius: var(--r-control); background: var(--accent); color: var(--on-accent); display: inline-flex; align-items: center; cursor: pointer; font-size: 12px; }
+  .cover { position: absolute; inset: 0; z-index: 5; background: repeating-linear-gradient(135deg, transparent 0 10px, var(--warn-wash) 10px 20px); outline: 2px dashed var(--warn); outline-offset: -2px; cursor: not-allowed; }
+  .cover.hidden-look { background: transparent; outline: none; }
+  .scrub { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; font-size: var(--fs-sm); }
+  .scrub input[type="range"] { width: 100%; }
+  .scrub output { font-family: var(--font-code); font-size: var(--fs-xs); min-width: 6em; text-align: right; }
+  .pose-table td, .pose-table th { font-family: var(--font-code); font-size: var(--fs-xs); }
+</style>
+</head>
+<body data-lecture="9">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="09">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 09</span><span>4부 · 앱다운 앱</span></div>
+      <h1>움직임의 물리</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">움직임은 앱이 든 값이고, 그 값은 시각만의 함수다. 라이브러리에는 시계가 없다. "이 시각에 다시 물어라"만 답한다. 시간은 logic thread와 UI thread의 두 시계가 흘린다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>55분</dd></div>
+            <div><dt>선수 지식</dt><dd>2강(세 스레드), 7강(timer 하나로 다시 그리기), 미분방정식이라는 말</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>transition.h</code>·<code>spring.h</code>·<code>page_transition.cpp</code>·<code>page_transition_element.cpp</code></dd></div>
+            <div><dt>실험</dt><dd>연타, 스프링 실험실, 끌어 놓기, 두 시계, 화면 전환</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li>움직임 값이 element가 아니라 앱 상태인 이유를 설명한다.</li>
+            <li>"시각만의 함수"가 frame 건너뛰기와 늦은 timer에 강한 이유를 안다.</li>
+            <li>감쇠 조화 진동자의 닫힌 해와 <code>response</code>·ζ·허용치의 뜻을 말할 수 있다.</li>
+            <li><code>spring_to</code>와 <code>spring_release</code>의 차이, 끝이 한 번만 오는 이유를 안다.</li>
+            <li>화면 전환에서 두 시계가 나누는 일과 덮개가 입력을 막는 기간을 예측한다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="9.1">
+        <header class="slide-head">
+          <span class="num">9.1</span>
+          <h2>움직임의 세 질문</h2>
+          <p class="lede">UI가 움직이면 세 가지를 풀어야 한다. 값이 시간에 따라 어떤 곡선을 그리는가. 그 시간을 누가 흘려 화면을 다시 그리게 하는가. 사람이 움직임을 원하지 않으면 어떻게 멈추는가.</p>
+        </header>
+        <div class="cols three">
+          <div class="panel">
+            <h4>① 움직임 값은 앱 상태다</h4>
+            <p class="small">"element는 전환의 소유자가 아니다." 앱이 값을 들고 지금 값을 물어 element config에 넣는다. 접힘·선택·스크롤 값이 앱 상태인 것과 같은 규칙이다. 사이드바의 <code>collapsed</code>는 목표, <code>width</code>는 지금 이 순간의 폭이고, 중간 폭은 전환하는 앱만 안다.</p>
+          </div>
+          <div class="panel">
+            <h4>② 시각만의 함수다</h4>
+            <p class="small">시각 하나를 넣으면 값이 정해지고 그 사이 상태가 없다. 어느 frame에 물어도 같고, frame을 건너뛰어도 어긋나지 않으며, test가 시각을 손으로 정할 수 있다. Win32는 16ms 뒤 예고에 여유 15ms를 더해 31ms마다 그리지만, 늦게 깬 frame도 그 시각의 값을 그린다.</p>
+          </div>
+          <div class="panel">
+            <h4>③ 시간은 두 시계가 흘린다</h4>
+            <p class="small">"라이브러리는 시계도 frame 루프도 갖지 않으므로 '이만큼 뒤에 다시 물어라'만 답한다." 배치를 바꾸는 움직임은 logic thread가 <code>next_tick</code>으로 깨어 tree를 다시 짓는다. 그림만 바뀌는 움직임은 UI thread가 <code>next_update</code>로 같은 tree를 다시 그린다.</p>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>움직이는 것</th><th>값의 주인</th><th>다시 그리게 하는 시계</th><th>도는 동안 tree 재구성</th></tr></thead>
+            <tbody>
+              <tr><td>사이드바 접힘 폭 (데스크톱 데모)</td><td>앱의 <code>spring</code></td><td>logic: <code>next_tick</code> ← <code>spring_next_update</code></td><td>16ms마다 — 폭이 배치를 바꾼다</td></tr>
+              <tr><td>시트 놓기 (모바일 데모)</td><td>앱의 <code>spring</code> (끄는 양을 0으로)</td><td>logic: <code>next_tick</code></td><td>16ms마다</td></tr>
+              <tr><td>화면 전환</td><td>앱의 <code>page_transition</code></td><td>UI: 요소의 <code>next_update</code> 16ms · logic: 끝 시각 한 번</td><td>시작과 끝, 두 번</td></tr>
+              <tr><td>안내 풍선 나타남</td><td>앱이 준 시각 <code>opened_at</code> 하나</td><td>UI: <code>transition_next_update</code></td><td>없음</td></tr>
+              <tr><td>회전 표시 (spinner)</td><td>없음 — 절대 시각의 위상</td><td>UI: <code>now + 16ms</code></td><td>없음</td></tr>
+              <tr><td>토스트 만료</td><td>앱</td><td>logic: <code>next_expiry()</code></td><td>만료 때</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="slide" id="s2" data-num="9.2">
+        <header class="slide-head">
+          <span class="num">9.2</span>
+          <h2>길이 곡선과 연타의 멈칫</h2>
+          <p class="lede">가장 단순한 움직임은 길이를 정한 곡선이다. 기본 140ms, 2차식 <code>ease_in_out</code>. 그런데 도는 중에 목표를 바꾸면 값은 이어지지만 속도는 이어지지 않는다.</p>
+        </header>
+        <div class="cols two">
+          <div class="prose">
+            <p><code>transition</code>은 <code>{ from, to, started, duration }</code> 네 칸짜리 값이다. 길이가 0이면 언제 물어도 <code>to</code>다. 곡선이 2차식인 까닭을 주석이 적었다. "3차 이상이 더 부드럽지만 눈으로 갈리지 않고, 식이 짧아야 test가 손으로 검산할 수 있다."</p>
+            <p><code>transition_to</code>는 도는 중이면 <b>지금 값에서</b> 새로 출발한다. 끝값으로 튀지는 않는다. 하지만 <code>ease_in_out</code>의 시작 기울기가 0이라서, 움직이던 값이 멈칫했다가 다시 출발한다. 사이드바 접힘을 연타하면 이것이 보였다. 스프링 설계의 출발점이 이 문제다.</p>
+          </div>
+          <div class="walk">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/transition.h:44-58,67-77,92-98" data-path="include/luil/ui/transition.h" data-start="44"><script type="text/plain">
+    // 완만하게 시작하고 완만하게 멈춘다. [0, 1] → [0, 1].
+    // 범위 밖 입력은 끝값으로 잘린다.
+    //  - 2차식이다. 3차 이상이 더 부드럽지만 눈으로 갈리지 않고, 식이 짧아야
+    //    test가 손으로 검산할 수 있다.
+    [[nodiscard]] constexpr float ease_in_out(const float t) noexcept
+    {
+        if (t <= 0.0f)
+            return 0.0f;
+        if (t >= 1.0f)
+            return 1.0f;
+        if (t < 0.5f)
+            return 2.0f * t * t;
+        const float back { -2.0f * t + 2.0f };
+        return 1.0f - back * back / 2.0f;
+    }
+⋯@67
+    // `now` 시점의 값이다.
+    [[nodiscard]] constexpr float transition_value(const transition& value, const std::chrono::steady_clock::time_point now) noexcept
+    {
+        if (transition_finished(value, now))
+            return value.to;
+        if (now <= value.started)
+            return value.from;
+        const auto elapsed { std::chrono::duration_cast<std::chrono::milliseconds>(now - value.started) };
+        const float t { static_cast<float>(elapsed.count()) / static_cast<float>(value.duration.count()) };
+        return value.from + (value.to - value.from) * ease_in_out(t);
+    }
+⋯@92
+    // `now`에서 `target`으로 새로 출발하는 전환이다.
+    // 도는 중이면 **지금 값에서** 이어 출발한다 — 끝값으로 튀지 않는다.
+    [[nodiscard]] constexpr transition transition_to(
+        const transition& value, const float target, const std::chrono::steady_clock::time_point now, const std::chrono::milliseconds duration = transition_duration) noexcept
+    {
+        return transition { transition_value(value, now), target, now, duration };
+    }
+</script></div>
+            <ol class="walk-steps-src">
+              <li data-lines="44-58" data-title="2차식 ease_in_out">앞 절반은 <code>2t²</code>, 뒤 절반은 그 거울이다. t = 0에서 기울기가 0이다.</li>
+              <li data-lines="67-77" data-title="지금 값">경과를 <b>정수 밀리초로 잘라</b> 길이로 나눈다. 스프링과 화면 전환 진행은 자르지 않는다는 점이 다르다.</li>
+              <li data-lines="92-98" data-title="값만 잇는다">새 전환의 <code>from</code>은 지금 값이다. 속도를 담을 칸은 없다.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="lw" data-title="연타 실험" data-surface="transition_to · spring_to" data-reset id="tg-lab">
+          <div class="lw-body lab-stack">
+            <div class="controls">
+              <button type="button" class="btn primary sm" id="tg-toggle">토글</button>
+              <button type="button" class="btn sm" id="tg-burst">120ms 간격으로 세 번</button>
+              <span class="sep"></span>
+              <label class="field"><input type="checkbox" id="tg-reduce"> 움직임 줄이기</label>
+            </div>
+            <div class="bars">
+              <div class="bar-row"><span class="lbl"><code>transition_to</code> 140ms</span><div class="bar-track"><div class="bar-fill tr" id="tg-bar-tr"></div></div><span class="val" id="tg-val-tr"></span></div>
+              <div class="bar-row"><span class="lbl"><code>spring_to</code> smooth</span><div class="bar-track"><div class="bar-fill sp" id="tg-bar-sp"></div></div><span class="val" id="tg-val-sp"></span></div>
+            </div>
+            <div class="chart-wrap" id="tg-chart"></div>
+          </div>
+          <div class="lw-foot">사이드바 폭(44 ↔ 200)을 두 방식으로 움직인다. 세 번 연타를 눌러 보라. 길이 곡선은 목표가 바뀔 때마다 기울기 0에서 다시 출발해 그래프에 모서리가 생긴다. 스프링은 속도를 이어받아 매끄럽다. 그래프는 앞날까지 미리 그려져 있다 — 시각만의 함수이므로 아직 오지 않은 시각도 물을 수 있다. 그래프 위를 가리키면 그 시각의 값과 속도가 나온다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="9.3">
+        <header class="slide-head">
+          <span class="num">9.3</span>
+          <h2>스프링: 손잡이 둘과 허용치 하나</h2>
+          <p class="lede">스프링의 성질은 "얼마나 빠르게"(<code>response</code>)와 "얼마나 튕기게"(<code>damping_fraction</code>), 그리고 끝 허용치 하나뿐이다. 값 자체는 다섯 칸짜리 평범한 값이라 앱이 들고 다닌다.</p>
+        </header>
+        <div class="eq" aria-label="감쇠 조화 진동자 방정식">y″ + 2ζω·y′ + ω²·y = 0  &nbsp;·&nbsp; y = 값 − to &nbsp;·&nbsp; ω = 2π / response &nbsp;·&nbsp; ζ = damping_fraction</div>
+        <div class="lw" data-title="스프링 실험실" data-surface="spring_value · spring_finished · spring_rest_time" data-reset id="sp-lab">
+          <div class="lw-body lab-stack">
+            <div class="chips" id="sp-presets" aria-label="프리셋"></div>
+            <div class="sp-grid">
+              <div class="knobs">
+                <div class="knob"><span class="k"><code>response</code></span><input type="range" id="sp-resp" min="50" max="1000" step="10" aria-label="response (ms)"><output id="sp-resp-o"></output></div>
+                <div class="knob"><span class="k">ζ <code>damping_fraction</code></span><input type="range" id="sp-zeta" min="0.1" max="2.5" step="0.01" aria-label="damping fraction"><output id="sp-zeta-o"></output></div>
+                <div class="knob"><span class="k"><code>rest_threshold</code></span><input type="range" id="sp-thr" min="0" max="3" step="1" aria-label="rest threshold"><output id="sp-thr-o"></output></div>
+                <div class="knob"><span class="k">출발 속도</span><input type="range" id="sp-vel" min="-3000" max="3000" step="50" aria-label="출발 속도"><output id="sp-vel-o"></output></div>
+                <div class="ball-track" id="sp-track" aria-hidden="true"></div>
+                <div class="controls">
+                  <button type="button" class="btn primary sm" id="sp-play">0 → 100 재생</button>
+                  <span class="small muted">이동 100 (논리 픽셀)</span>
+                </div>
+                <div class="stat-row" id="sp-stats"></div>
+                <div class="phys">
+                  <span class="small">물리 값으로:</span>
+                  <label class="field">m <input type="number" id="sp-m" value="1" min="0.01" step="0.1" aria-label="질량"></label>
+                  <label class="field">k <input type="number" id="sp-k" value="100" min="0.01" step="1" aria-label="강성"></label>
+                  <label class="field">c <input type="number" id="sp-c" value="20" min="0.01" step="0.5" aria-label="감쇠"></label>
+                  <button type="button" class="btn sm" id="sp-phys">spring_from_physics</button>
+                </div>
+              </div>
+              <div style="display:grid;gap:12px;min-width:0">
+                <div class="chart-wrap" id="sp-chart-v"></div>
+                <div class="chart-wrap" id="sp-chart-s"></div>
+              </div>
+            </div>
+          </div>
+          <div class="lw-foot">위 그래프는 값, 아래 그래프는 끝 판정의 척도 <span class="math">s = √(y² + (y′/ω)²)</span>를 로그 눈금으로 그린 것이다. 값 <span class="math">|y|</span>는 ζ &lt; 1이면 목표를 지나며 0이 되지만, 그 순간은 끝이 아니다. 속도가 크기 때문이다. s는 줄기만 하므로 허용치 선을 한 번만 건넌다. 주황 점선이 <code>spring_rest_time</code>(16ms 격자 위의 첫 끝)이다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="include/luil/ui/spring.h:13-44" data-path="include/luil/ui/spring.h" data-start="13"><script type="text/plain">
+    // 스프링의 성질이다. 값의 단위와 무관하다 (질량은 1로 둔다).
+    struct spring_config
+    {
+        // 감쇠가 없을 때 한 번 진동하는 시간이다. 짧을수록 빠르다. 0 이하면 전환이 없다.
+        std::chrono::milliseconds response { 350 };
+        // 감쇠 비율이다. 1이면 넘치지 않고 가장 빨리 선다. 작을수록 목표를 넘었다 돌아온다. 0 이하면 전환이 없다.
+        float damping_fraction { 1.0f };
+        // 이만큼 가까워지면 끝이다 (값의 단위, 값과 속도를 합친 척도다). 0 이하면 기본값으로 본다.
+        //  - 기본 0.01은 논리 픽셀 값에 맞췄다. 불투명도나 배율처럼 0~1 쪽 값은 0.001쯤으로 낮춘다.
+        float rest_threshold { 0.01f };
+    };
+
+    // 넘치지 않고 가장 빨리 선다.
+    inline constexpr spring_config spring_smooth { std::chrono::milliseconds { 350 }, 1.0f };
+    // 살짝 넘었다 돌아온다.
+    inline constexpr spring_config spring_snappy { std::chrono::milliseconds { 300 }, 0.75f };
+    // 눈에 띄게 튕긴다.
+    inline constexpr spring_config spring_bouncy { std::chrono::milliseconds { 500 }, 0.5f };
+
+    // 값 하나가 목표로 가는 중이다. 앱이 들고, 지금 값을 물어 element에 넘긴다 (`transition`과 같다).
+    //  - 어느 시각에 물어도 같은 값이 나오는 시각만의 함수다 (닫힌 해라서 단계 적분의 상태가 없다).
+    //  - 끝은 길이가 아니라 허용치로 정해진다 (`spring_config::rest_threshold`).
+    struct spring
+    {
+        float from { 0.0f };
+        float to { 0.0f };
+        // 시작 시각이다. `now`가 이보다 이르면 아직 `from`이다.
+        std::chrono::steady_clock::time_point started {};
+        spring_config config {};
+        // 출발할 때의 속도다 (값의 단위 / 초, 값이 커지는 쪽이 양수).
+        float velocity { 0.0f };
+    };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="14-17" data-title="response는 주기다">감쇠가 없을 때 한 번 진동하는 시간이다. 지속 시간이 아니다 — smooth(350ms)도 100px을 옮기면 약 0.67초 돈다. 0 이하면 전환이 없다.</li>
+            <li data-lines="18-19" data-title="감쇠 비율 ζ">1이면 넘치지 않고 가장 빨리 선다(임계 감쇠). 작을수록 목표를 넘었다 돌아온다. 폭처럼 배치에 닿는 값은 1 이상이어야 이웃이 따라 흔들리지 않는다.</li>
+            <li data-lines="20-22" data-title="허용치는 값의 단위">기본 0.01은 논리 픽셀에 맞췄다. 불투명도·배율처럼 0~1 값은 0.001쯤으로 낮춘다. 화면 전환은 알아서 낮춘다(9.7).</li>
+            <li data-lines="25-30" data-title="프리셋 셋">SwiftUI의 <code>response</code>·<code>dampingFraction</code> 어휘를 빌렸다. (질량, 강성, 감쇠) 셋은 서로 영향을 줘 시간 감각을 잡기 어려워 변환 함수 <code>spring_from_physics</code>로만 연다.</li>
+            <li data-lines="32-44" data-title="다섯 칸짜리 값">from, to, 시작 시각, config, 출발 속도. 단계 적분의 상태가 없으니 이것으로 충분하다. 속도는 값의 단위/초, 값이 커지는 쪽이 양수다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s4" data-num="9.4">
+        <header class="slide-head">
+          <span class="num">9.4</span>
+          <h2>닫힌 해, 그리고 끝은 한 번만 온다</h2>
+          <p class="lede">미분방정식을 frame마다 한 걸음씩 적분하지 않는다. 시각 t를 넣으면 값과 속도가 바로 나오는 해를 쓴다. 단계 적분은 상태가 있어서 frame을 건너뛰면 값이 달라지기 때문이다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="include/luil/ui/spring.h:94-140" data-path="include/luil/ui/spring.h" data-start="94"><script type="text/plain">
+        // `usable`인 스프링의 값과 속도를 닫힌 해로 구한다. 목표와의 차 y가 y'' + 2ζω·y' + ω²·y = 0을 따른다.
+        [[nodiscard]] inline sample evaluate(const spring& value, const double seconds) noexcept
+        {
+            const double omega { 2.0 * std::numbers::pi / (static_cast<double>(value.config.response.count()) / 1000.0) };
+            const double zeta { value.config.damping_fraction };
+            const double y0 { static_cast<double>(value.from) - static_cast<double>(value.to) };
+            const double v0 { value.velocity };
+            double y { 0.0 };
+            double dy { 0.0 };
+            if (std::abs(zeta - 1.0) < critical_band)
+            {
+                const double decay { std::exp(-omega * seconds) };
+                const double slope { v0 + omega * y0 };
+                y = decay * (y0 + slope * seconds);
+                dy = decay * (v0 - omega * slope * seconds);
+            }
+            else if (zeta < 1.0)
+            {
+                const double rate { zeta * omega };
+                const double damped { omega * std::sqrt((1.0 - zeta) * (1.0 + zeta)) };
+                const double sine_part { (v0 + rate * y0) / damped };
+                const double decay { std::exp(-rate * seconds) };
+                const double cosine { std::cos(damped * seconds) };
+                const double sine { std::sin(damped * seconds) };
+                y = decay * (y0 * cosine + sine_part * sine);
+                dy = decay * ((sine_part * damped - rate * y0) * cosine - (y0 * damped + rate * sine_part) * sine);
+            }
+            else
+            {
+                // 느린 뿌리는 큰 ζ에서 두 수의 차가 0으로 뭉개지지 않게 곱의 역수(1 / (ζ + q))로 구한다.
+                const double root { std::sqrt((zeta - 1.0) * (zeta + 1.0)) };
+                const double fast { -omega * (zeta + root) };
+                const double slow { -omega / (zeta + root) };
+                const double fast_weight { (v0 - slow * y0) / (fast - slow) };
+                const double slow_weight { y0 - fast_weight };
+                const double fast_decay { std::exp(fast * seconds) };
+                const double slow_decay { std::exp(slow * seconds) };
+                y = slow_weight * slow_decay + fast_weight * fast_decay;
+                dy = slow_weight * slow * slow_decay + fast_weight * fast * fast_decay;
+            }
+
+            const float configured { value.config.rest_threshold };
+            const double threshold { std::isfinite(configured) && configured > 0.0f ? configured : default_rest_threshold };
+            // 값과 속도를 한 척도로 합친다. 에너지에 비례하고 감쇠로는 줄기만 해서, 한 번 끝난 스프링은 다시 움직이지 않는다.
+            const double scale { std::hypot(y, dy / omega) };
+            return sample { static_cast<double>(value.to) + y, dy, scale <= threshold };
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="94-100" data-title="출발 조건">인자는 시작부터 흐른 초(<code>double</code>, 밀리초로 자르지 않음) 하나뿐이다. ω는 <code>response</code>에서, 출발 조건은 <span class="math">y0 = from − to</span>와 <span class="math">v0 = velocity</span>에서 온다.</li>
+            <li data-lines="101-107" data-title="임계 감쇠 (ζ ≈ 1)">|ζ − 1| &lt; 1e-6이면 <span class="math">y = e^(−ωt)·(y0 + (v0 + ω·y0)·t)</span>다. 띠를 둔 까닭: 두 쪽 식이 나눗셈에서 불안정해지는 띠이고, 띠 안의 오차는 띠의 폭과 같은 비율이다.</li>
+            <li data-lines="108-119" data-title="부족 감쇠 (ζ < 1)">감쇠하는 진동이다. <span class="math">ω_d = ω·√(1 − ζ²)</span>로 돌며 <span class="math">e^(−ζωt)</span>로 줄어든다. ζ 0.5의 첫 마루는 이동 거리의 약 16.3%다.</li>
+            <li data-lines="120-133" data-title="과감쇠 (ζ > 1)">두 지수의 합이다. 느린 뿌리를 <span class="math">−ω / (ζ + √(ζ²−1))</span>로 구한다. <span class="math">ζ − √(ζ²−1)</span>을 그대로 빼면 큰 ζ에서 두 수가 같아져 0으로 뭉개진다.</li>
+            <li data-lines="135-139" data-title="값과 속도를 한 척도로">끝은 <span class="math">hypot(y, y′/ω) ≤ 허용치</span>다. 에너지 <span class="math">E = ½(y′² + ω²y²)</span>는 <span class="math">dE/dt = −2ζω·y′² ≤ 0</span>이라 줄기만 하고, 척도의 제곱은 E에 비례한다. 그래서 한 번 끝난 스프링은 다시 움직이지 않는다.</li>
+          </ol>
+        </div>
+        <div class="table-wrap">
+          <table class="t" id="sp-table">
+            <thead><tr><th>프리셋</th><th class="num">response</th><th class="num">ζ</th><th class="num">ω (1/초)</th><th class="num">첫 마루 넘침</th><th class="num">100 → 0 첫 끝 (1ms 훑기)</th><th class="num"><code>spring_rest_time</code></th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+        <p class="small muted">이 페이지의 이식본이 계산했다. 이식본은 컴파일한 <code>spring.h</code>와 무작위 6,000건에서 같은 값을 냈다(float 정밀도 안). 시험은 smooth 660~690ms, snappy 600~620ms, bouncy 1500~1540ms를 요구한다.</p>
+        <div class="callout think">
+          <i class="ci" aria-hidden="true">&#xEA61;</i>
+          <div>
+            <p class="ttl">왜 두 허용치(값·속도)가 아닌가</p>
+            <p>값과 속도에 허용치를 따로 두면 "상자 모서리"에서 끝났다가 다시 나가는 일이 생긴다. 이동 거리에 비례하는 허용치는 같은 값에서 속도만 주는 놓기(<code>from == to</code>)에서 0이 된다. 한 척도 s는 둘 다 피한다. 속도 허용치는 따로 없고 <span class="math">ω·허용치</span>로 따라온다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s5" data-num="9.5">
+        <header class="slide-head">
+          <span class="num">9.5</span>
+          <h2>재목표와 놓기</h2>
+          <p class="lede">도는 중에 목표만 바꾸는 것(<code>spring_to</code>)과 손을 뗀 값·속도에서 새로 출발하는 것(<code>spring_release</code>)은 다른 함수다. 이어받은 속도에 더하는지 덮는지 헷갈리지 않게 하려는 것이다.</p>
+        </header>
+        <div class="lw" data-title="끌어 놓기" data-surface="spring_release · spring_snappy" data-reset id="rl-lab">
+          <div class="lw-body lab-stack">
+            <div class="rel-track" id="rl-track">
+              <div class="stop" id="rl-stop-a"><span>닫힘</span></div>
+              <div class="stop" id="rl-stop-b"><span>열림</span></div>
+              <div class="rel-knob" id="rl-knob" tabindex="0" role="slider" aria-label="끄는 손잡이. 좌우로 끌다 놓거나 화살표 키를 누르라" aria-valuemin="0" aria-valuemax="100">끌기</div>
+            </div>
+            <div class="controls">
+              <button type="button" class="btn sm" id="rl-fling-l">← 튕기기 1800/초</button>
+              <button type="button" class="btn sm" id="rl-fling-r">튕기기 1800/초 →</button>
+              <span class="sep"></span>
+              <label class="field"><input type="checkbox" id="rl-reduce"> 움직임 줄이기</label>
+            </div>
+            <div class="readout" id="rl-read" aria-live="polite" style="white-space:pre-line"></div>
+            <div class="chart-wrap" id="rl-chart"></div>
+          </div>
+          <div class="lw-foot">손잡이를 끌다 놓으라. 놓기 전 100ms 동안의 이동으로 속도를 잰다(그 사이 이동이 둘보다 적으면 0). 속도가 초당 300 논리 픽셀 이상이면 그 쪽으로, 아니면 가까운 쪽으로 간다 — 시트의 튕김 기준과 같다. 도는 중 다시 잡으면 지금 값에서 끌기 시작하고 스프링은 <code>spring_at_rest</code>로 거둔다. 모바일 데모의 시트가 이렇게 짜여 있다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="include/luil/ui/spring.h:180-199,218-233" data-path="include/luil/ui/spring.h" data-start="180"><script type="text/plain">
+    // 도는 중이면 지금 값과 속도에서 `target`으로 이어 출발한다.
+    // 이어받는 속도를 쓰므로 속도 인자가 없다. 같은 목표로 매 frame 불러도 궤적이 같다.
+    // `reduce_motion`(`window_metrics::reduce_motion`)이 참이면 목표에 정지한 스프링이다.
+    [[nodiscard]] inline spring spring_to(const spring& value, const float target, const std::chrono::steady_clock::time_point now, const spring_config& config, const bool reduce_motion) noexcept
+    {
+        if (reduce_motion)
+            return spring_at_rest(target);
+        return spring { spring_value(value, now), target, now, config, spring_velocity(value, now) };
+    }
+
+    // 손을 뗀 값과 속도에서 `target`으로 출발한다 (`velocity`는 값의 단위 / 초, 값이 커지는 쪽이 양수).
+    // 이어받는 속도를 실수로 덮지 않도록 `spring_to`와 따로 둔다.
+    // `reduce_motion`이 참이면 놓은 속도도 쓰지 않고 목표에 정지한 스프링이다.
+    [[nodiscard]] inline spring spring_release(
+        const float value, const float velocity, const float target, const std::chrono::steady_clock::time_point now, const spring_config& config, const bool reduce_motion) noexcept
+    {
+        if (reduce_motion)
+            return spring_at_rest(target);
+        return spring { value, target, now, config, velocity };
+    }
+⋯@218
+    // 처음 끝난 시각이다. `started`부터 `transition_frame` 간격으로 재어 `spring_finished`가 처음 참인 시각을 답한다.
+    //  - 앱이 끝을 시각 하나로 예고하려고 쓴다 (`next_tick`). 끝 판정의 척도는 줄기만 하므로 처음 끝난 frame이 하나로 정해진다.
+    //  - `limit` 안에 끝나지 않으면 `started + limit`이다. 기본 10초면 평가는 많아야 625번이다.
+    //  - 잘못된 값이면 시작한 적도 없이 끝난 것이라 `started`다.
+    [[nodiscard]] inline std::chrono::steady_clock::time_point spring_rest_time(const spring& value, const std::chrono::milliseconds limit = std::chrono::seconds { 10 }) noexcept
+    {
+        if (spring_detail::usable(value) == false)
+            return value.started;
+        const std::chrono::steady_clock::time_point last { value.started + std::max(limit, std::chrono::milliseconds { 0 }) };
+        for (std::chrono::steady_clock::time_point at { value.started }; at < last; at += transition_frame)
+        {
+            if (spring_detail::evaluate(value, spring_detail::elapsed_seconds(value, at)).finished)
+                return at;
+        }
+        return last;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="180-188" data-title="이어받기">그 시각의 값과 속도를 새 스프링의 <code>from</code>·<code>velocity</code>로 그대로 옮긴다. 2계 방정식이라 같은 값·속도에서 다시 출발하면 같은 미래가 나온다. 그래서 같은 목표로 매 frame 불러도 궤적이 변하지 않는다.</li>
+            <li data-lines="190-199" data-title="놓기">손을 뗀 속도는 이 함수로만 넣는다. 이전 스프링은 보지 않는다. <code>from == to</code>여도 속도만으로 움직인다.</li>
+            <li data-lines="185-186,196-197" data-title="움직임 줄이기는 필수 인자">두 함수 모두 <code>reduce_motion</code>이 필수 인자라 잊을 수 없다. 참이면 목표에 정지한 스프링이다. 놓은 속도도 쓰지 않는다. helper 함수로 감싸는 길은 "앱이 거치는 것을 잊을 수 있다"며 거절했다.</li>
+            <li data-lines="218-233" data-title="끝 시각 하나">정확한 정지 순간이 아니라 <code>started</code>부터 16ms 격자 위에서 처음 끝난 frame이다. 척도가 줄기만 하므로 그 frame이 하나로 정해진다. 10초 안에 끝나지 않으면 <code>started + 10s</code>다. 이 시각 하나 덕분에 앱은 frame마다 깨지 않아도 된다(9.7).</li>
+          </ol>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>속도가 나오는 곳</th><th>단위</th><th>논리 픽셀 값에 넣을 때</th></tr></thead>
+            <tbody>
+              <tr><td><code>pointer_drag_target::on_release</code>의 <code>drag_velocity</code></td><td>초당 <b>물리</b> 픽셀 (아래·오른쪽 양수)</td><td><code>/ scale</code></td></tr>
+              <tr><td><code>pan_handoff_target::release</code></td><td>초당 논리 픽셀 (손가락 방향 양수)</td><td>그대로</td></tr>
+              <tr><td><code>sheet_release::velocity</code></td><td>초당 논리 픽셀 (높아지는 쪽 양수)</td><td>그대로</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">값이 줄어드는 쪽이 손가락 방향이면 부호를 뒤집는다. 모바일 데모의 시트는 높이가 아니라 끄는 양을 0으로 보내는 스프링이라 <code>-velocity</code>를 넘긴다.</p>
+      </section>
+
+      <section class="slide" id="s6" data-num="9.6">
+        <header class="slide-head">
+          <span class="num">9.6</span>
+          <h2>시간은 누가 흘리나: 두 시계</h2>
+          <p class="lede">라이브러리가 시간에 대해 아는 것은 기본 길이 140ms, 다시 물어볼 간격 16ms, 움직임 줄이기면 길이를 0으로 접는 함수 하나뿐이다. 실제로 깨어나는 것은 앱의 두 시계다.</p>
+        </header>
+        <div class="cols two">
+          <div class="code" data-lang="cpp" data-src="include/luil/ui/transition.h:27-42" data-path="include/luil/ui/transition.h" data-start="27"><script type="text/plain">
+    // 통상적인 전환 길이다.
+    // 더 길면 굼떠 보이고 더 짧으면 튀어 보인다 — 정하는 것은 소비자이고 이 값은
+    // 고를 것이 없을 때의 기본이다.
+    inline constexpr std::chrono::milliseconds transition_duration { 140 };
+    // 전환이 도는 동안 다음 frame을 물어볼 간격이다.
+    // 라이브러리는 시계도 frame 루프도 갖지 않으므로 "이만큼 뒤에 다시 물어라"만
+    // 답한다 (`next_tick`·`next_update`가 쓰는 그 계약이다).
+    inline constexpr std::chrono::milliseconds transition_frame { 16 };
+
+    // 새 전환을 시작할 때 거치는 길이다. 시스템의 움직임 줄이기(`window_metrics::reduce_motion`)면 0이다.
+    //  - 길이가 0인 `transition`은 언제 물어도 끝값이라 앱은 다른 분기를 두지 않는다.
+    //  - 전환뿐 아니라 스프링·화면 전환도 같은 말을 쓰도록 한 곳에 둔다.
+    [[nodiscard]] constexpr std::chrono::milliseconds motion_duration(const std::chrono::milliseconds duration, const bool reduce_motion) noexcept
+    {
+        return reduce_motion ? std::chrono::milliseconds { 0 } : duration;
+    }
+</script></div>
+          <div class="prose">
+            <p><b>logic thread의 시계 — 앱 상태의 시간.</b> <code>app_host::logic_loop</code>가 frame을 게시한 뒤 <code>next_tick()</code>을 묻는다. 예고 시각이 되면 메시지가 없어도 <code>tick(now)</code>를 부르고 frame을 다시 게시한다. "답이 없으면 시간 경로는 완전히 잠잔다."</p>
+            <p><b>UI thread의 시계 — 그림의 시간.</b> 그릴 때 <code>draw_context::now</code>를 채우고, 그린 뒤 보이는 element들의 <code>next_update</code>를 모아 가장 이른 시각에 timer 하나를 건다(7강). 헤더가 둘을 한 줄로 가른다. "그쪽은 그림만 다시 그리고 이쪽은 logic 상태가 실제로 바뀐다."</p>
+          </div>
+        </div>
+        <div class="lw" data-title="두 시계" data-surface="next_tick · next_update" data-reset id="ck-lab">
+          <div class="lw-body lab-stack">
+            <div class="controls">
+              <div class="seg" id="ck-plat" role="group" aria-label="플랫폼 timer">
+                <button type="button" data-v="win" aria-pressed="true">Win32 (예고 + 여유 15ms)</button>
+                <button type="button" data-v="exact" aria-pressed="false">예고 그대로 16ms</button>
+              </div>
+              <div class="seg" id="ck-curve" role="group" aria-label="화면 전환 곡선">
+                <button type="button" data-v="timing" aria-pressed="true">전환 250ms</button>
+                <button type="button" data-v="spring" aria-pressed="false">전환 스프링 smooth</button>
+              </div>
+            </div>
+            <div class="chart-wrap" id="ck-chart"></div>
+            <div class="legend">
+              <span><i style="background:var(--t-lg)"></i>logic thread가 깨어 tree를 짓는다</span>
+              <span><i style="background:var(--t-ui)"></i>UI thread가 그린다</span>
+              <span><i style="background:var(--warn-wash);outline:1px solid var(--warn)"></i>덮개가 포인터를 막는 동안</span>
+            </div>
+          </div>
+          <div class="lw-foot">위는 사이드바 폭 스프링(200 → 44, smooth), 아래는 화면 전환이다. 사이드바 폭은 배치를 바꾸므로 logic thread가 16ms마다 깨어 tree를 다시 짓는다. 화면 전환은 앱이 시작과 끝에만 깬다. 도는 동안은 UI thread가 같은 tree를 <code>now</code>만 바꿔 다시 그린다. 막대 위를 가리키면 그 사건의 시각이 나온다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1046-1069" data-path="examples/demo_main.cpp" data-start="1046"><script type="text/plain">
+            // 시간이 지나야 바뀌는 것 셋이다: 토스트 만료, 사이드바 접힘 전환, 변경 작업대의 흉내 낸 불러오기.
+            // 가장 이른 쪽을 예고하면 메시지가 없어도 그 시각에 tick이 온다.
+            //  - 전환이 끝나면 그쪽이 nullopt를 답해 시간 경로가 다시 잠잔다.
+            [[nodiscard]] std::optional<std::chrono::steady_clock::time_point> next_tick() override
+            {
+                std::optional<std::chrono::steady_clock::time_point> next { toasts_.next_expiry() };
+                // 접힘 스프링은 마지막으로 지은 frame의 시각에서 센다. 그 frame이 도는 중이었다면 한 frame 뒤에 하나를 더 지어
+                // 멈춘 모습으로 끝낸다 (지금 시각에서 세면 그 사이에 끝난 스프링이 "도는 중" 표시를 남긴 채 잠든다).
+                //  - 페이지 전환은 끝 시각 하나를 싣는다. 도는 동안의 frame은 요소의 예고가 다시 그리고, tree는 끝에 한 번 짓는다.
+                for (const std::optional<std::chrono::steady_clock::time_point> other :
+                    { luil::spring_next_update(sidebar_motion_, frame_time_), workbench_.next_due(), luil::page_transition_end(page_motion_) })
+                    if (other.has_value() && (next.has_value() == false || *other < *next))
+                        next = other;
+                return next;
+            }
+
+            void tick(const std::chrono::steady_clock::time_point now) override
+            {
+                toasts_.prune();
+                workbench_.tick(now);
+                // 끝난 전환은 놓는다. 다음 frame은 prior 없는 tree라 덮개가 걷혀 포인터가 풀린다.
+                if (page_motion_.prior != nullptr && luil::page_transition_finished(page_motion_, now))
+                    page_motion_ = {};
+            }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1046-1051" data-title="가장 이른 예고">시간이 지나야 바뀌는 것(토스트 만료, 사이드바 스프링, 페이지 전환)의 예고 가운데 가장 이른 것을 답한다. 모두 <code>nullopt</code>면 logic thread가 잠든다.</li>
+            <li data-lines="1052-1058" data-title="마지막 frame의 시각에서 센다">스프링 예고는 "지금"이 아니라 마지막으로 지은 frame의 시각(<code>frame_time_</code>)에서 센다. 지금 시각에서 세면 그 사이에 끝난 스프링이 "도는 중" 표시를 남긴 채 잠든다. 페이지 전환은 끝 시각 하나만 싣는다.</li>
+            <li data-lines="1062-1068" data-title="끝난 전환을 놓는다">끝 시각에 깨어난 <code>tick</code>이 prior를 놓는다. 다음 frame은 prior 없는 tree라서 덮개가 걷히고 포인터가 풀린다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s7" data-num="9.7">
+        <header class="slide-head">
+          <span class="num">9.7</span>
+          <h2>화면 전환: 떠나는 화면은 tree 밖에 있다</h2>
+          <p class="lede">앱은 떠나는 화면을 따로 지어 배치한 tree(prior)로 한 번 넘긴다. 전환 요소는 시각만으로 두 화면을 겹쳐 그리고, prior가 있는 동안 칠하지 않는 덮개로 포인터를 막는다.</p>
+        </header>
+        <div class="prose">
+          <p>이전 화면을 같은 tree에 넣으면 id가 겹치고 두 화면이 함께 눌리고 읽힌다. hit test, 놓을 자리, 초점 테, UIA 좌표가 모두 배치한 <code>bounds()</code>를 읽기 때문이다. 그래서 prior는 <code>shared_ptr&lt;const ui_tree&gt;</code>로 따로 든다. 요소가 설 자리와 같은 크기·같은 배율로 배치하고, hover·초점이 없는 빈 snapshot으로 그린다. 접근 tree에는 새 화면만 선다.</p>
+        </div>
+        <div class="lw" data-title="화면 전환" data-surface="page_transition_element" data-reset id="pt-lab">
+          <div class="lw-body lab-stack">
+            <div class="controls">
+              <div class="seg" id="pt-effect" role="group" aria-label="효과">
+                <button type="button" data-v="slide" aria-pressed="true">slide</button>
+                <button type="button" data-v="fade" aria-pressed="false">fade</button>
+                <button type="button" data-v="zoom" aria-pressed="false">zoom</button>
+              </div>
+              <div class="seg" id="pt-axis" role="group" aria-label="축">
+                <button type="button" data-v="horizontal" aria-pressed="true">가로</button>
+                <button type="button" data-v="vertical" aria-pressed="false">세로</button>
+              </div>
+              <div class="seg" id="pt-curve" role="group" aria-label="곡선">
+                <button type="button" data-v="timing" aria-pressed="true">250ms</button>
+                <button type="button" data-v="smooth" aria-pressed="false">smooth</button>
+                <button type="button" data-v="snappy" aria-pressed="false">snappy</button>
+                <button type="button" data-v="bouncy" aria-pressed="false">bouncy</button>
+              </div>
+            </div>
+            <div class="controls">
+              <label class="field"><input type="checkbox" id="pt-win" checked> Win32처럼 31ms마다 그리기</label>
+              <label class="field"><input type="checkbox" id="pt-reduce"> 움직임 줄이기</label>
+              <label class="field"><input type="checkbox" id="pt-slow"> 10배 느리게 보기</label>
+            </div>
+            <div class="pt-grid">
+              <div style="display:grid;gap:10px">
+                <div class="stage" id="pt-stage"></div>
+                <div class="controls" style="justify-content:center">
+                  <button type="button" class="btn primary sm" id="pt-go">상세로 (forward)</button>
+                </div>
+              </div>
+              <div style="display:grid;gap:10px;min-width:0">
+                <div class="scrub"><span class="small">시각</span><input type="range" id="pt-scrub" min="0" max="250" step="1" value="0" aria-label="전환 시각"><output id="pt-scrub-o">0ms</output></div>
+                <div class="table-wrap">
+                  <table class="t pose-table" id="pt-poses"></table>
+                </div>
+                <div class="stat-row" id="pt-stats"></div>
+                <div class="log" id="pt-log" aria-live="polite"></div>
+              </div>
+            </div>
+          </div>
+          <div class="lw-foot">"상세로"를 누르고 도는 중에 화면을 눌러 보라. 덮개(주황 빗금)가 막는다. 진행이 1이 되어도 덮개는 남아 있다가, 앱이 끝 시각에 깨어 prior를 놓은 다음 tree에서 사라진다. 시각 막대를 끌면 아무 시각이나 물을 수 있다. 10배 느리게 보기는 시계만 늦출 뿐 식은 그대로다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/page_transition.cpp:9-47" data-path="src/ui/page_transition.cpp" data-start="9"><script type="text/plain">
+        // 0~1 진행에 쓰는 스프링 허용치의 상한이다 (결정 6). `spring.h`가 0~1 값에 권하는 값이다.
+        constexpr float progress_rest_threshold { 0.001f };
+
+        // 진행 0에서 1로 가는 스프링이다. 허용치는 앱이 준 값과 상한 중 작은 쪽이다.
+        [[nodiscard]] spring progress_spring(const page_transition_spring& curve, const std::chrono::steady_clock::time_point started) noexcept
+        {
+            spring_config config { curve.config };
+            const float given { config.rest_threshold };
+            const bool valid { std::isfinite(given) && given > 0.0f };
+            config.rest_threshold = valid ? std::min(given, progress_rest_threshold) : progress_rest_threshold;
+            return spring { 0.0f, 1.0f, started, config, curve.velocity };
+        }
+
+        // 곡선이 움직이는가다. 길이 0 이하와 쓸 수 없는 스프링은 시작한 적도 없이 끝난 것이다.
+        [[nodiscard]] bool moves(const page_transition_curve& curve, const std::chrono::steady_clock::time_point started) noexcept
+        {
+            if (const auto* const timing { std::get_if<page_transition_timing>(&curve) }; timing != nullptr)
+                return timing->duration > std::chrono::milliseconds { 0 };
+            const auto& motion { std::get<page_transition_spring>(curve) };
+            return spring_finished(progress_spring(motion, started), started) == false;
+        }
+    }
+
+    page_transition start_page_transition(
+        std::shared_ptr<const ui_tree> prior, const page_transition_style& style, const std::chrono::steady_clock::time_point now, const bool reduce_motion)
+    {
+        if (reduce_motion || moves(style.curve, now) == false)
+            prior.reset();
+        return page_transition { std::move(prior), now, style };
+    }
+
+    std::optional<std::chrono::steady_clock::time_point> page_transition_end(const page_transition& value) noexcept
+    {
+        if (value.prior == nullptr)
+            return std::nullopt;
+        if (const auto* const timing { std::get_if<page_transition_timing>(&value.style.curve) }; timing != nullptr)
+            return value.started + std::max(timing->duration, std::chrono::milliseconds { 0 });
+        return spring_rest_time(progress_spring(std::get<page_transition_spring>(value.style.curve), value.started));
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="9-20" data-title="진행 0 → 1 스프링">스프링 곡선을 "진행 0→1 스프링"으로 바꿔 쓴다. 허용치는 앱 값과 0.001 중 작은 쪽이다. 기본 0.01이면 마지막 1%가 한 번에 붙는다 — 1280픽셀 밀기에서 13픽셀이다.</li>
+            <li data-lines="22-29" data-title="움직이는가">길이 0 이하이거나 쓸 수 없는 스프링이면 "시작한 적도 없이 끝난" 곡선이다.</li>
+            <li data-lines="32-38" data-title="시작: prior를 버리는 두 경우">움직임 줄이기이거나 곡선이 움직이지 않으면 prior를 버린다. 그러면 덮개도 서지 않는다. "언제 물어도 끝인 전환이 입력을 막는" 일이 없다.</li>
+            <li data-lines="40-47" data-title="끝 시각 하나">길이 곡선은 <code>started + duration</code>, 스프링은 <code>spring_rest_time</code>이다. 앱은 이 시각 하나를 <code>next_tick</code>에 싣는다. 앱이 frame마다 깨는 길은 "16ms마다 tree를 다시 짓는" 비용 때문에, 요소가 끝에 메시지를 내는 길은 "그리기에서 메시지를 낼 길이 없어서" 거절했다.</li>
+          </ol>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/page_transition_element.cpp:126-132,153-166,175-181,196-202" data-path="src/ui/page_transition_element.cpp" data-start="126"><script type="text/plain">
+        // 덮개는 마지막 자식이라 hit test가 새 화면보다 먼저 만난다.
+        if (transition_.prior != nullptr)
+        {
+            auto cover { std::make_unique<page_transition_cover>(std::move(config.owner)) };
+            cover_ = cover.get();
+            add_child(std::move(cover));
+        }
+⋯@153
+    void page_transition_element::draw(draw_context& context, const interaction_snapshot& interaction) const
+    {
+        // 움직임 줄이기면 진행을 묻기 전에 끝으로 본다. 크기가 다른 이전 root는 옛 크기 그림을 남기지 않으려고 그리지 않는다 (결정 5).
+        if (context.reduce_motion || prior_fits() == false)
+        {
+            draw_children(context, interaction);
+            return;
+        }
+        const float progress { page_transition_progress(transition_, context.now) };
+        if (progress >= 1.0f)
+        {
+            draw_children(context, interaction);
+            return;
+        }
+⋯@175
+            const SkAutoCanvasRestore restore_prior { &context.canvas, true };
+            apply_pose(context.canvas, poses.prior, box);
+            // 이전 root의 왼쪽 위를 요소의 왼쪽 위에 맞춘다. 같은 배율로 배치한 tree라 키우지 않는다.
+            const ui_element& prior { *transition_.prior->root() };
+            context.canvas.translate(box.x - prior.bounds().x, box.y - prior.bounds().y);
+            // 빈 snapshot이다. 떠나는 화면에는 hover·누름·caret·초점 테·tooltip이 없다.
+            prior.draw(context, interaction_snapshot {});
+⋯@196
+    std::optional<std::chrono::steady_clock::time_point> page_transition_element::next_update(const update_context& context, const interaction_snapshot& interaction) const
+    {
+        static_cast<void>(interaction);
+        if (context.reduce_motion || prior_fits() == false)
+            return std::nullopt;
+        return page_transition_next_update(transition_, context.now);
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="126-132" data-title="덮개는 마지막 자식">prior가 있을 때만 생성자에서 붙인다. 시각과 무관하게, 앱이 prior 없는 tree를 낼 때까지 포인터를 막는다. <code>hit_test</code>를 재정의하지 않고 자식으로 둔 까닭은 끌어 놓기(<code>drop_hit_test</code>)가 virtual이 아니고 자식부터 걷기 때문이다.</li>
+            <li data-lines="153-166" data-title="진행을 묻기 전에">움직임 줄이기이거나 prior 크기가 요소와 0.5 물리 픽셀 넘게 다르면 진행을 묻지도 않고 새 화면만 그린다. 아니면 <code>draw_context::now</code>로 진행을 구한다.</li>
+            <li data-lines="175-181" data-title="빈 snapshot">이전 root를 요소 자리로 옮겨 <code>interaction_snapshot {}</code>으로 그린다. 떠나는 화면에는 hover·누름·caret·초점 테·tooltip이 없다.</li>
+            <li data-lines="196-202" data-title="그림의 시간">도는 중이면 16ms 뒤를 예고한다. UI thread는 같은 tree를 다시 그린다. 그림의 시간은 이렇게 흐른다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s8" data-num="9.8">
+        <header class="slide-head">
+          <span class="num">9.8</span>
+          <h2>움직임 줄이기</h2>
+          <p class="lede">OS 접근성 설정 하나가 UI thread(<code>draw_context</code>·<code>update_context</code>)와 logic thread(<code>window_metrics</code>)로 함께 간다. 새 움직임은 "움직임 없이 끝값"이 된다. 다른 효과로 바꾸지는 않는다.</p>
+        </header>
+        <div class="cols two">
+          <div class="prose">
+            <p><b>문제.</b> 설정이 UI thread 안에서만 쓰였다. logic thread의 앱에는 닿는 길이 없어서 앱이 든 전환(사이드바 폭)은 설정을 지킬 방법이 없었다. Android는 값을 읽지도 않아 회전 표시가 계속 돌았다.</p>
+            <p><b>규칙.</b> 값의 주인은 시스템이다. 같은 값이 두 thread로 가되, logic thread에는 메시지로 늦게 닿아 바뀐 직후 한두 frame은 어긋날 수 있다. "어느 쪽도 틀린 그림은 아니다." 배율(느리게·빠르게)은 싣지 않는다 — 앱이 정할 것은 줄일지 여부이고, Windows에는 배율이 없다. 앱은 새 전환을 시작할 때 <code>motion_duration</code>을 거친다.</p>
+          </div>
+          <div class="table-wrap">
+            <table class="t">
+              <thead><tr><th>플랫폼</th><th>읽는 값</th><th>다시 읽는 때</th></tr></thead>
+              <tbody>
+                <tr><td>Windows</td><td><code>SPI_GETCLIENTAREAANIMATION</code>이 FALSE면 참</td><td><code>WM_SETTINGCHANGE</code> 등. 값이 달라졌을 때만 metrics를 다시 보낸다</td></tr>
+                <tr><td>Android</td><td><code>Settings.Global</code>의 <code>animator_duration_scale</code> ≤ 0</td><td>시작, 설정 변경, RESUME, GAINED_FOCUS (Java 코드 0줄 방침이라 변경 관찰자는 없다)</td></tr>
+                <tr><td>macOS</td><td><code>accessibilityDisplayShouldReduceMotion</code></td><td>알림 구독</td></tr>
+                <tr><td>iOS</td><td><code>UIAccessibilityIsReduceMotionEnabled()</code></td><td>알림 구독</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>대상</th><th>움직임 줄이기면</th></tr></thead>
+            <tbody>
+              <tr><td>앱이 든 <code>transition</code></td><td>새 전환의 길이가 0 → 언제 물어도 끝값, 예고 없음</td></tr>
+              <tr><td>앱이 든 <code>spring</code></td><td><code>spring_to</code>·<code>spring_release</code>가 <code>spring_at_rest(target)</code> — 값은 목표, 속도 0, 놓은 속도 무시</td></tr>
+              <tr><td>새 화면 전환</td><td><code>start_page_transition</code>이 prior를 버림 → 덮개도 전환도 없음</td></tr>
+              <tr><td>도는 중인 화면 전환</td><td>요소가 진행을 묻기 전에 새 화면만 그리고 예고하지 않는다. 데모 앱은 metrics에서 전환을 놓는다</td></tr>
+              <tr><td>도는 중인 스프링</td><td>데모 앱이 <code>spring_at_rest(target)</code>으로 붙인다</td></tr>
+              <tr><td>회전 표시·배지·탭 막대의 도는 표시</td><td>돌지 않는 글리프나 고정 각도의 호로 서고, 예고도 없다</td></tr>
+              <tr><td>바뀌지 않는 것</td><td>토스트 흐려짐, caret 깜빡임, 움직이는 이미지 재생 — "흐려짐은 움직임이 아니라는 견해도 있어 따로 정한다"</td></tr>
+              <tr><td>다른 효과로 대체?</td><td>하지 않는다. "옅어짐으로 바꾸지 않는다. <code>motion_duration</code>이 모든 전환을 0으로 두는 규칙과 같다."</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">이 강의의 실험 셋(연타, 끌어 놓기, 화면 전환)에 "움직임 줄이기" 칸이 있다. 켜고 다시 해 보라.</p>
+      </section>
+
+      <section class="slide" id="s9" data-num="9.9">
+        <header class="slide-head">
+          <span class="num">9.9</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>움직임 값(<code>transition</code>·<code>spring</code>·<code>page_transition</code>)은 앱 상태다. element는 그 값과 <code>draw_context::now</code>로 그릴 때마다 계산할 뿐, 전환을 소유하지 않는다.</li>
+          <li>모든 움직임은 시각만의 함수다. frame을 건너뛰거나 timer가 늦어도 값은 맞고, 덜 촘촘할 뿐이다.</li>
+          <li><code>transition_to</code>는 값만 잇고 속도를 잇지 못해 연타에서 멈칫한다. <code>spring</code>은 감쇠 조화 진동자의 닫힌 해이고, <code>spring_to</code>가 값과 속도를 함께 잇는다. 놓은 속도는 <code>spring_release</code>로만 넣는다.</li>
+          <li><code>response</code>는 지속 시간이 아니라 감쇠 없는 한 주기다. 끝은 <span class="math">√(y² + (y′/ω)²) ≤ 허용치</span>로 정하고, 이 척도가 줄기만 해서 끝은 한 번만 온다.</li>
+          <li>라이브러리에는 시계가 없다. logic thread는 <code>next_tick</code>·<code>tick</code>으로 앱 상태의 시간을, UI thread는 <code>next_update</code>와 <code>draw_context::now</code>로 그림의 시간을 흘린다. 화면 전환은 tree를 두 번만 짓는다.</li>
+          <li>움직임 줄이기는 새 움직임을 "움직임 없이 끝값"으로 만든다: 길이 0, <code>spring_at_rest</code>, prior 버림. 다른 효과로 바꾸지 않는다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s10" data-num="9.10">
+        <header class="slide-head">
+          <span class="num">9.10</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="2">
+            <p class="q">luil의 <code>spring</code>은 값을 어떻게 구하나?</p>
+            <ol class="choices">
+              <li>매 frame <code>v += a·dt; x += v·dt</code>로 적분해 갱신한다</li>
+              <li>감쇠 조화 진동자의 닫힌 해를 시각으로 바로 계산한다</li>
+              <li>미리 구운 표에서 보간한다</li>
+              <li>UI thread가 frame마다 받은 값을 이어 붙인다</li>
+            </ol>
+            <div class="explain">상태가 없는 닫힌 해라서 어느 시각에 물어도 같은 값이다. 단계 적분은 "상태가 있어 frame을 건너뛰면 값이 달라지고 계약이 깨진다"며 거절했다. test는 거꾸로 0.1ms RK4 적분을 기준 삼아 닫힌 해를 대조한다.</div>
+          </div>
+          <div class="quiz" data-answer="3">
+            <p class="q"><code>spring_smooth</code>(response 350ms)로 사이드바 폭을 100px 옮기면 언제 끝나나?</p>
+            <ol class="choices">
+              <li>350ms</li>
+              <li>140ms</li>
+              <li>약 670ms</li>
+              <li>250ms</li>
+            </ol>
+            <div class="explain"><code>response</code>는 감쇠 없는 한 주기이고, 끝은 허용치(0.01)가 정한다. 1ms씩 훑으면 674ms에 처음 끝난다. 그래서 "duration + bounce" 어휘는 "duration이 거짓 이름이 된다"며 거절했다. 140ms는 <code>transition_duration</code>, 250ms는 <code>page_transition_duration</code>이다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">사이드바가 접히는 도중에 다시 토글했다. <code>spring_to</code>가 만든 새 스프링의 출발 속도는?</p>
+            <ol class="choices">
+              <li>그 순간 이전 스프링의 속도</li>
+              <li>0</li>
+              <li>앱이 인자로 준 속도</li>
+              <li><code>response</code>로 정해지는 일정한 속도</li>
+            </ol>
+            <div class="explain"><code>spring_to</code>는 값과 속도를 모두 이어받으며 속도 인자가 없다. 손을 뗀 속도를 넣는 길은 <code>spring_release</code> 하나이고, 이것은 이전 스프링을 무시한다. 옛 <code>transition_to</code>가 연타에서 멈칫한 원인이 속도를 잇지 못한 것이다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">기본 밀기 전환(250ms)이 도는 동안 앱(logic thread)은 tree를 몇 번 짓나?</p>
+            <ol class="choices">
+              <li>16ms마다</li>
+              <li>31ms마다</li>
+              <li>한 번도 짓지 않는다</li>
+              <li>시작과 끝, 두 번</li>
+            </ol>
+            <div class="explain">도는 동안의 그림은 전환 요소의 <code>next_update</code>가 맡는다. UI thread가 같은 불변 tree를 <code>draw_context::now</code>만 바꿔 다시 그린다. 앱의 <code>next_tick</code>에는 끝 시각 하나만 실린다. 사이드바 폭 스프링은 폭이 배치를 바꾸므로 16ms마다 짓는다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q">밀기 그림의 진행이 1이 되면 그 frame부터 새 화면의 단추를 마우스로 누를 수 있나?</p>
+            <ol class="choices">
+              <li>그렇다. 진행이 1이면 덮개가 스스로 걷힌다</li>
+              <li>아니다. 앱의 <code>tick</code>이 prior를 놓은 다음 tree부터 누를 수 있다</li>
+              <li>아니다. 키 입력도 그때까지 함께 막힌다</li>
+              <li>그렇다. 덮개는 처음부터 투명해서 막지 않는다</li>
+            </ol>
+            <div class="explain">덮개는 prior가 있는 동안 시각과 무관하게 서 있다. <code>hit_test</code>는 시각을 받지 않아 요소가 끝을 스스로 알 수 없다. 앱이 끝 시각에 깨어 prior를 놓아야 풀린다. 키 입력과 UIA Invoke 같은 패턴은 처음부터 막히지 않는다.</div>
+          </div>
+          <div class="quiz" data-answer="3">
+            <p class="q">움직임 줄이기를 켜면 화면 전환은 어떻게 되나?</p>
+            <ol class="choices">
+              <li>밀기 대신 옅어짐으로 바뀐다</li>
+              <li>길이가 절반이 된다</li>
+              <li>전환 없이 새 화면이 바로 선다</li>
+              <li>그대로 돈다</li>
+            </ol>
+            <div class="explain"><code>start_page_transition</code>이 prior를 버리고, 문서는 "옅어짐으로 바꾸지 않는다"고 못 박았다. 같은 설정에서 <code>transition</code>은 길이 0, 스프링은 <code>spring_at_rest(target)</code>이다. 배율(느리게·빠르게)은 싣지 않으므로 ②는 없다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/course.js"></script>
+<script src="assets/motion.js"></script>
+<script>
+(function () {
+  "use strict";
+  const { el, svg } = window.LU;
+  const M = window.LuilMotion;
+  const $ = (id) => document.getElementById(id);
+  const fmt = (v, d = 1) => (Number.isFinite(v) ? v.toFixed(d) : "—");
+  const clamp = (v, a, b) => Math.min(Math.max(v, a), b);
+  const nowMs = () => performance.now();
+
+  function segBind(id, onChange) {
+    const g = $(id);
+    const set = (v) => g.querySelectorAll("button[data-v]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.v === v ? "true" : "false"));
+    g.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-v]");
+      if (!b) return;
+      set(b.dataset.v);
+      onChange(b.dataset.v);
+    });
+    return set;
+  }
+  function log(box, cls, kind, text) {
+    box.append(el("div", { class: "row " + cls }, el("span", { class: "t", text: kind }), el("span", { class: "m", text })));
+    while (box.childNodes.length > 60) box.firstChild.remove();
+    box.scrollTop = box.scrollHeight;
+  }
+  function stats(box, items) {
+    box.textContent = "";
+    for (const [k, v] of items) box.append(el("div", null, el("span", { class: "k", text: k }), el("span", { class: "v", text: String(v) })));
+  }
+  function niceStep(span, target) {
+    const raw = span / Math.max(1, target);
+    const p = Math.pow(10, Math.floor(Math.log10(raw)));
+    for (const m of [1, 2, 2.5, 5, 10]) if (m * p >= raw) return m * p;
+    return 10 * p;
+  }
+  // 다시 그릴 때 폭을 따라가게 한다
+  function onWidth(host, render) {
+    let last = 0;
+    new ResizeObserver(() => { const w = Math.round(host.clientWidth); if (w && Math.abs(w - last) > 4) { last = w; render(); } }).observe(host);
+  }
+
+  /* ---------- 선 그래프 (시각만의 함수를 픽셀마다 물어 그린다) ---------- */
+  function lineChart(host, opt) {
+    const W = Math.max(280, Math.round(host.clientWidth || 600));
+    const H = opt.height || 200;
+    const L = opt.left || 46, R = 12, T = 12, B = 26;
+    const iw = W - L - R, ih = H - T - B;
+    const [t0, t1] = opt.x, [y0, y1] = opt.y;
+    const X = (t) => L + ((t - t0) / (t1 - t0)) * iw;
+    const Y = opt.log
+      ? (v) => T + ((y1 - clamp(Math.log10(Math.max(v, 1e-300)), y0, y1)) / (y1 - y0)) * ih
+      : (v) => T + ((y1 - clamp(v, y0 - (y1 - y0) * 0.05, y1 + (y1 - y0) * 0.05)) / (y1 - y0)) * ih;
+    const root = svg("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opt.label || "" });
+    const xs = niceStep(t1 - t0, Math.floor(iw / 70));
+    for (let t = Math.ceil(t0 / xs) * xs; t <= t1 + 1e-9; t += xs) {
+      root.append(svg("line", { class: "gr", x1: X(t), x2: X(t), y1: T, y2: T + ih }));
+      root.append(svg("text", { x: X(t), y: H - 8, "text-anchor": "middle", text: Math.round(t) + (t + xs > t1 ? "ms" : "") }));
+    }
+    if (opt.log) {
+      for (let e = Math.ceil(y0); e <= y1; ++e) {
+        root.append(svg("line", { class: "gr", x1: L, x2: L + iw, y1: Y(Math.pow(10, e)), y2: Y(Math.pow(10, e)) }));
+        root.append(svg("text", { x: L - 6, y: Y(Math.pow(10, e)) + 3.5, "text-anchor": "end", text: e === 0 ? "1" : "1e" + e }));
+      }
+    } else {
+      const ys = niceStep(y1 - y0, Math.floor(ih / 34));
+      for (let v = Math.ceil(y0 / ys) * ys; v <= y1 + 1e-9; v += ys) {
+        root.append(svg("line", { class: "gr", x1: L, x2: L + iw, y1: Y(v), y2: Y(v) }));
+        root.append(svg("text", { x: L - 6, y: Y(v) + 3.5, "text-anchor": "end", text: String(Math.round(v * 100) / 100) }));
+      }
+    }
+    root.append(svg("line", { class: "ax", x1: L, x2: L, y1: T, y2: T + ih }), svg("line", { class: "ax", x1: L, x2: L + iw, y1: T + ih, y2: T + ih }));
+    for (const h of opt.hlines || []) {
+      root.append(svg("line", { class: h.cls, x1: L, x2: L + iw, y1: Y(h.y), y2: Y(h.y) }));
+      if (h.label) root.append(svg("text", { class: "lab", x: h.right ? L + iw - 2 : L + 4, y: Y(h.y) - 4, "text-anchor": h.right ? "end" : "start", text: h.label }));
+    }
+    let vi = 0;
+    for (const v of opt.vlines || []) {
+      if (v.t < t0 || v.t > t1) continue;
+      root.append(svg("line", { class: v.cls, x1: X(v.t), x2: X(v.t), y1: T, y2: T + ih }));
+      if (v.label) { const late = X(v.t) > L + iw * 0.62; root.append(svg("text", { class: "lab", x: X(v.t) + (late ? -4 : 4), y: T + 11 + 13 * (vi++ % 3), "text-anchor": late ? "end" : "start", text: v.label })); }
+    }
+    const n = Math.max(2, Math.round(iw));
+    for (const se of opt.series) {
+      const pts = [];
+      for (let i = 0; i <= n; ++i) {
+        const t = t0 + (i / n) * (t1 - t0);
+        const v = se.f(t);
+        if (Number.isFinite(v)) pts.push(X(t).toFixed(1) + "," + Y(v).toFixed(1));
+      }
+      root.append(svg("polyline", { class: se.cls, points: pts.join(" ") }));
+    }
+    const cursor = svg("line", { class: "cur", x1: -10, x2: -10, y1: T, y2: T + ih, visibility: "hidden" });
+    const hov = svg("line", { class: "hov", x1: -10, x2: -10, y1: T, y2: T + ih, visibility: "hidden" });
+    root.append(cursor, hov);
+    const tip = el("div", { class: "chart-tip", hidden: true });
+    host.textContent = "";
+    if (opt.caption) host.append(el("div", { class: "chart-cap" }, opt.caption));
+    host.append(root, tip);
+    if (opt.tip) {
+      const move = (e) => {
+        const r = root.getBoundingClientRect();
+        const x = ((e.clientX - r.left) / r.width) * W;
+        if (x < L || x > L + iw) { hov.setAttribute("visibility", "hidden"); tip.hidden = true; return; }
+        const t = t0 + ((x - L) / iw) * (t1 - t0);
+        hov.setAttribute("x1", x); hov.setAttribute("x2", x); hov.setAttribute("visibility", "visible");
+        tip.textContent = opt.tip(t);
+        tip.hidden = false;
+        const px = (x / W) * r.width;
+        const hostW = host.clientWidth;
+        tip.style.left = Math.min(Math.max(px + 10, 0), Math.max(0, hostW - tip.offsetWidth)) + "px";
+        tip.style.top = (opt.caption ? 26 : 4) + "px";
+      };
+      root.addEventListener("pointermove", move);
+      root.addEventListener("pointerdown", move);
+      root.addEventListener("pointerleave", () => { hov.setAttribute("visibility", "hidden"); tip.hidden = true; });
+    }
+    return {
+      setCursor(t) {
+        if (t == null || t < t0 || t > t1) { cursor.setAttribute("visibility", "hidden"); return; }
+        cursor.setAttribute("x1", X(t)); cursor.setAttribute("x2", X(t)); cursor.setAttribute("visibility", "visible");
+      },
+    };
+  }
+  const legend = (items) => items.map(([cls, text]) => el("span", { class: "legend-line" }, el("i", { class: cls }), text));
+
+  /* ---------- 9.2 연타 실험 ---------- */
+  const tg = { target: 200, trs: [], sps: [], toggles: [], origin: 0, raf: 0, chart: null, timers: [] };
+  const activeOf = (list, t) => { let a = list[0]; for (const s of list) if (s.startedMs <= t) a = s; return a; };
+  const trAt = (t) => M.transitionValue(activeOf(tg.trs, t), t);
+  const spAt = (t) => M.springValue(activeOf(tg.sps, t), t);
+  const spVelAt = (t) => M.springVelocity(activeOf(tg.sps, t), t);
+  const trSlopeAt = (t) => M.transitionSlope(activeOf(tg.trs, t), t);
+  function tgReset() {
+    tg.timers.forEach(clearTimeout); tg.timers = [];
+    cancelAnimationFrame(tg.raf);
+    tg.target = 200;
+    const t = nowMs();
+    tg.trs = [{ from: 200, to: 200, startedMs: t, durationMs: 0 }];
+    tg.sps = [M.atRest(200)];
+    tg.toggles = [];
+    tg.origin = t;
+    tgChart();
+    tgFrame();
+  }
+  function tgSettled(t) { return M.transitionFinished(activeOf(tg.trs, t), t) && M.springFinished(activeOf(tg.sps, t), t); }
+  function tgToggle() {
+    const t = nowMs();
+    if (!tg.toggles.length || (tgSettled(t) && t - tg.toggles[tg.toggles.length - 1] > 900)) {
+      tg.origin = t;
+      tg.toggles = [];
+      tg.trs = [activeOf(tg.trs, t)];
+      tg.sps = [activeOf(tg.sps, t)];
+    }
+    const reduce = $("tg-reduce").checked;
+    tg.target = tg.target === 200 ? 44 : 200;
+    tg.trs.push(M.transitionTo(activeOf(tg.trs, t), tg.target, t, M.motionDuration(M.TRANSITION_MS, reduce)));
+    tg.sps.push(M.springTo(activeOf(tg.sps, t), tg.target, t, M.SMOOTH, reduce));
+    tg.toggles.push(t);
+    tgChart();
+    cancelAnimationFrame(tg.raf);
+    tg.raf = requestAnimationFrame(tgLoop);
+  }
+  function tgChart() {
+    const o = tg.origin;
+    const lastT = tg.toggles.length ? tg.toggles[tg.toggles.length - 1] - o : 0;
+    const span = Math.max(900, lastT + 800);
+    tg.chart = lineChart($("tg-chart"), {
+      x: [-40, span], y: [20, 230], height: 210, label: "사이드바 폭의 시간 그래프",
+      caption: [el("b", { text: "폭 (논리 픽셀)" }), ...legend([["s2", "transition_to 140ms"], ["s1", "spring_to smooth"]])],
+      series: [{ cls: "s2", f: (t) => trAt(o + t) }, { cls: "s1", f: (t) => spAt(o + t) }],
+      hlines: [{ y: 44, cls: "tgt" }, { y: 200, cls: "tgt" }],
+      vlines: tg.toggles.map((t, i) => ({ t: t - o, cls: "mk", label: i === 0 ? "토글" : "" })),
+      tip: (t) => `${Math.round(t)}ms · 전환 ${fmt(trAt(o + t))} (기울기 ${fmt(trSlopeAt(o + t), 0)}/초) · 스프링 ${fmt(spAt(o + t))} (속도 ${fmt(spVelAt(o + t), 0)}/초)`,
+    });
+  }
+  function tgFrame() {
+    const t = nowMs();
+    const a = trAt(t), b = spAt(t);
+    $("tg-bar-tr").style.width = (a / 230) * 100 + "%";
+    $("tg-bar-sp").style.width = (b / 230) * 100 + "%";
+    $("tg-val-tr").textContent = fmt(a);
+    $("tg-val-sp").textContent = fmt(b);
+    if (tg.chart) tg.chart.setCursor(t - tg.origin);
+  }
+  function tgLoop() {
+    tgFrame();
+    const t = nowMs();
+    if (!tgSettled(t) || tg.timers.length) tg.raf = requestAnimationFrame(tgLoop);
+  }
+  $("tg-toggle").addEventListener("click", tgToggle);
+  $("tg-burst").addEventListener("click", () => {
+    tg.timers.forEach(clearTimeout);
+    tg.timers = [];
+    tgToggle();
+    tg.timers.push(setTimeout(tgToggle, 120), setTimeout(() => { tgToggle(); tg.timers = []; }, 240));
+  });
+  $("tg-lab").addEventListener("lw-reset", () => { $("tg-reduce").checked = false; tgReset(); });
+  onWidth($("tg-chart"), tgChart);
+  tgReset();
+
+  /* ---------- 9.3·9.4 스프링 실험실 ---------- */
+  const THR = [0.1, 0.01, 0.001, 0.0001];
+  const PRESETS = [
+    { label: "spring_smooth (350ms, 1.0)", c: M.SMOOTH },
+    { label: "spring_snappy (300ms, 0.75)", c: M.SNAPPY },
+    { label: "spring_bouncy (500ms, 0.5)", c: M.BOUNCY },
+  ];
+  const spIn = { resp: $("sp-resp"), zeta: $("sp-zeta"), thr: $("sp-thr"), vel: $("sp-vel") };
+  spIn.resp.max = "2000";
+  let spPlay = { raf: 0, start: 0 }, spCharts = [];
+  const spSelect = (function () {
+    const box = $("sp-presets");
+    const list = PRESETS.map((p, i) => {
+      const b = el("button", { type: "button", class: "chip", "aria-pressed": "false", text: p.label });
+      b.addEventListener("click", () => { spSet(p.c.responseMs, p.c.dampingFraction, 1, 0); sel(i); });
+      box.append(b);
+      return b;
+    });
+    function sel(i) { list.forEach((b, k) => b.setAttribute("aria-pressed", k === i ? "true" : "false")); }
+    return sel;
+  })();
+  function spSet(resp, zeta, thrIdx, vel) {
+    spIn.resp.value = resp; spIn.zeta.value = zeta; spIn.thr.value = thrIdx; spIn.vel.value = vel;
+    spRender();
+  }
+  function spSpring() {
+    return { from: 0, to: 100, startedMs: 0, config: M.config(+spIn.resp.value, +spIn.zeta.value, THR[+spIn.thr.value]), velocity: Math.fround(+spIn.vel.value) };
+  }
+  function firstFinish(s) { for (let t = 0; t <= 10000; ++t) if (M.springFinished(s, t)) return t; return 10000; }
+  function spRender() {
+    $("sp-resp-o").textContent = spIn.resp.value + "ms";
+    $("sp-zeta-o").textContent = (+spIn.zeta.value).toFixed(2);
+    $("sp-thr-o").textContent = String(THR[+spIn.thr.value]);
+    $("sp-vel-o").textContent = spIn.vel.value + "/초";
+    const s = spSpring();
+    const w = M.omegaOf(s), z = s.config.dampingFraction;
+    const first = firstFinish(s), rest = M.springRestTime(s);
+    let maxV = 100, minV = 0, peakT = 0;
+    for (let t = 0; t <= first; ++t) { const v = M.springValue(s, t); if (v > maxV) { maxV = v; peakT = t; } if (v < minV) minV = v; }
+    const regime = Math.abs(z - 1) < 1e-6 ? "임계 감쇠" : z < 1 ? "부족 감쇠 (진동)" : "과감쇠";
+    stats($("sp-stats"), [
+      ["구간", regime], ["ω (1/초)", fmt(w, 2)], ["첫 마루 넘침", maxV > 100 ? fmt(maxV - 100, 2) + "% · " + peakT + "ms" : "없음"],
+      ["첫 끝 (1ms 훑기)", first + "ms"], ["spring_rest_time", (rest - s.startedMs) + "ms"], ["속도 허용치 ω·허용치", fmt(w * s.config.restThreshold, 3) + "/초"],
+    ]);
+    const T = clamp(Math.ceil((first * 1.15) / 50) * 50, 300, 3000);
+    const yLo = Math.min(0, minV) - 8, yHi = Math.max(100, maxV) + 8;
+    const tip = (t) => {
+      const a = M.evaluate(s, Math.max(t, 0) / 1000);
+      return `${Math.round(t)}ms · 값 ${fmt(M.springValue(s, t), 2)} · 속도 ${fmt(M.springVelocity(s, t), 1)}/초 · s ${a.measure.toExponential(2)}${a.finished ? " · 끝" : ""}`;
+    };
+    spCharts = [
+      lineChart($("sp-chart-v"), {
+        x: [0, T], y: [yLo, yHi], height: 200, label: "스프링 값의 시간 그래프",
+        caption: [el("b", { text: "값" }), ...legend([["s1", "spring_value (0 → 100)"]])],
+        series: [{ cls: "s1", f: (t) => M.springValue(s, t) }],
+        hlines: [{ y: 100, cls: "tgt", label: "to = 100" }],
+        vlines: [{ t: first, cls: "mk2", label: "첫 끝 " + first + "ms" }, { t: rest, cls: "mk", label: "rest_time " + rest + "ms" }],
+        tip,
+      }),
+      lineChart($("sp-chart-s"), {
+        x: [0, T], y: [-5, 3], log: true, height: 180, label: "끝 판정 척도의 로그 그래프",
+        caption: [el("b", { text: "끝 판정의 척도 (로그)" }), ...legend([["s1", "s = √(y² + (y′/ω)²)"], ["s3", "|y|"], ["thr", "허용치"]])],
+        series: [{ cls: "s3", f: (t) => Math.abs(M.evaluate(s, t / 1000).y) }, { cls: "s1", f: (t) => M.evaluate(s, t / 1000).measure }],
+        hlines: [{ y: s.config.restThreshold, cls: "thr" }],
+        vlines: [{ t: first, cls: "mk2" }],
+        tip,
+      }),
+    ];
+    spBall(0, s);
+  }
+  function spBall(t, s) {
+    const track = $("sp-track");
+    if (!track.firstChild) {
+      for (const v of [0, 100]) track.append(el("div", { class: "tick" + (v === 100 ? " goal" : ""), style: `left: ${((v + 30) / 160) * 100}%` }, el("span", { text: String(v) })));
+      track.append(el("div", { class: "ball", id: "sp-ball" }));
+    }
+    $("sp-ball").style.left = clamp(((M.springValue(s, t) + 30) / 160) * 100, 0, 100) + "%";
+  }
+  $("sp-play").addEventListener("click", () => {
+    cancelAnimationFrame(spPlay.raf);
+    const s = spSpring();
+    const end = firstFinish(s) + 200;
+    spPlay.start = nowMs();
+    const step = () => {
+      const t = nowMs() - spPlay.start;
+      spBall(t, s);
+      spCharts.forEach((c) => c.setCursor(t));
+      if (t < end) spPlay.raf = requestAnimationFrame(step);
+      else spCharts.forEach((c) => c.setCursor(null));
+    };
+    spPlay.raf = requestAnimationFrame(step);
+  });
+  for (const k of Object.keys(spIn)) spIn[k].addEventListener("input", () => { spSelect(-1); spRender(); });
+  $("sp-phys").addEventListener("click", () => {
+    const c = M.springFromPhysics(+$("sp-m").value, +$("sp-k").value, +$("sp-c").value);
+    if (c.responseMs <= 0) return;
+    spSelect(-1);
+    spSet(clamp(c.responseMs, 50, 2000), clamp(c.dampingFraction, 0.1, 2.5), +spIn.thr.value, +spIn.vel.value);
+  });
+  $("sp-lab").addEventListener("lw-reset", () => { spSelect(0); spSet(350, 1, 1, 0); });
+  onWidth($("sp-chart-v"), spRender);
+  spSelect(0);
+  spSet(350, 1, 1, 0);
+
+  (function spTable() {
+    const tb = $("sp-table").querySelector("tbody");
+    for (const [name, c] of [["spring_smooth", M.SMOOTH], ["spring_snappy", M.SNAPPY], ["spring_bouncy", M.BOUNCY]]) {
+      const w = M.omegaOf({ config: c });
+      const up = { from: 0, to: 100, startedMs: 0, config: c, velocity: 0 };
+      let peak = 100;
+      for (let t = 0; t < 2000; ++t) peak = Math.max(peak, M.springValue(up, t));
+      const down = { from: 100, to: 0, startedMs: 0, config: c, velocity: 0 };
+      tb.append(el("tr", null, el("td", null, el("code", { text: name })), el("td", { class: "num", text: c.responseMs + "ms" }), el("td", { class: "num", text: String(c.dampingFraction) }),
+        el("td", { class: "num", text: fmt(w, 3) }), el("td", { class: "num", text: peak > 100 ? fmt(peak - 100, 2) + "%" : "없음" }),
+        el("td", { class: "num", text: firstFinish(down) + "ms" }), el("td", { class: "num", text: M.springRestTime(down) + "ms" })));
+    }
+  })();
+
+  /* ---------- 9.5 끌어 놓기 ---------- */
+  const rl = { s: M.atRest(0), drag: false, grab: 0, x: 0, samples: [], raf: 0, W: 0, releasedAt: 0, chart: null };
+  const rlTrack = $("rl-track"), rlKnob = $("rl-knob");
+  const KNOB = 56, PAD = 8;
+  function rlGeom() { rl.W = Math.max(60, rlTrack.clientWidth - KNOB - PAD * 2); $("rl-stop-a").style.left = PAD + KNOB / 2 + "px"; $("rl-stop-b").style.left = PAD + rl.W + KNOB / 2 + "px"; }
+  const rlValue = (t) => (rl.drag ? rl.x : M.springValue(rl.s, t));
+  function rlPlace(v) { rlKnob.style.left = PAD + v + "px"; rlKnob.setAttribute("aria-valuenow", String(Math.round((v / rl.W) * 100))); }
+  function rlRelease(x, v) {
+    const now = nowMs();
+    const reduce = $("rl-reduce").checked;
+    const target = Math.abs(v) >= 300 ? (v > 0 ? rl.W : 0) : x > rl.W / 2 ? rl.W : 0;
+    rl.s = M.springRelease(x, v, target, now, M.SNAPPY, reduce);
+    rl.releasedAt = now;
+    const rest = M.springRestTime(rl.s) - now;
+    const why = Math.abs(v) >= 300 ? "속도가 300/초 이상 → 그 쪽" : "속도가 작다 → 가까운 쪽";
+    $("rl-read").textContent = `놓은 자리 ${fmt(x)} · 놓은 속도 ${fmt(v, 0)}/초 (${why}) → 목표 ${target ? "열림" : "닫힘"} ${fmt(target, 0)}\nspring_release(${fmt(x)}, ${fmt(v, 0)}, ${fmt(target, 0)}, now, spring_snappy, ${reduce}) · 끝 +${Math.max(0, Math.round(rest))}ms`;
+    const s = rl.s;
+    const T = Math.max(300, Math.ceil((rest + 80) / 50) * 50);
+    let lo = Math.min(0, x), hi = Math.max(rl.W, x);
+    for (let t = 0; t <= T; t += 4) { const val = M.springValue(s, now + t); lo = Math.min(lo, val); hi = Math.max(hi, val); }
+    rl.chart = lineChart($("rl-chart"), {
+      x: [0, T], y: [lo - 10, hi + 10], height: 180, label: "놓은 뒤 손잡이 자리의 그래프",
+      caption: [el("b", { text: "놓은 뒤의 자리" }), ...legend([["s1", "spring_value"]])],
+      series: [{ cls: "s1", f: (t) => M.springValue(s, now + t) }],
+      hlines: [{ y: target, cls: "tgt", label: target ? "열림" : "닫힘" }],
+      vlines: [{ t: rest, cls: "mk", label: "rest_time" }],
+      tip: (t) => `+${Math.round(t)}ms · 자리 ${fmt(M.springValue(s, now + t))} · 속도 ${fmt(M.springVelocity(s, now + t), 0)}/초`,
+    });
+    cancelAnimationFrame(rl.raf);
+    const step = () => {
+      const t = nowMs();
+      rlPlace(rlValue(t));
+      if (rl.chart) rl.chart.setCursor(t - rl.releasedAt);
+      if (!rl.drag && !M.springFinished(rl.s, t)) rl.raf = requestAnimationFrame(step);
+    };
+    rl.raf = requestAnimationFrame(step);
+  }
+  rlKnob.addEventListener("pointerdown", (e) => {
+    rlGeom();
+    rl.x = M.springValue(rl.s, nowMs());
+    rl.s = M.atRest(rl.x);
+    rl.drag = true;
+    rl.grab = e.clientX - (rlTrack.getBoundingClientRect().left + PAD + rl.x);
+    rl.samples = [{ t: nowMs(), x: rl.x }];
+    rlKnob.setPointerCapture(e.pointerId);
+    cancelAnimationFrame(rl.raf);
+  });
+  rlKnob.addEventListener("pointermove", (e) => {
+    if (!rl.drag) return;
+    rl.x = clamp(e.clientX - rlTrack.getBoundingClientRect().left - PAD - rl.grab, 0, rl.W);
+    rl.samples.push({ t: nowMs(), x: rl.x });
+    if (rl.samples.length > 200) rl.samples.shift();
+    rlPlace(rl.x);
+  });
+  const rlUp = () => {
+    if (!rl.drag) return;
+    rl.drag = false;
+    const now = nowMs();
+    const win = rl.samples.filter((p) => p.t >= now - 100);
+    let v = 0;
+    if (win.length >= 3) { const a = win[0], b = win[win.length - 1]; if (b.t > a.t) v = ((b.x - a.x) / (b.t - a.t)) * 1000; }
+    rlRelease(rl.x, v);
+  };
+  rlKnob.addEventListener("pointerup", rlUp);
+  rlKnob.addEventListener("pointercancel", rlUp);
+  rlKnob.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    rlGeom();
+    rlRelease(M.springValue(rl.s, nowMs()), e.key === "ArrowRight" ? 1800 : -1800);
+  });
+  $("rl-fling-l").addEventListener("click", () => { rlGeom(); rlRelease(M.springValue(rl.s, nowMs()), -1800); });
+  $("rl-fling-r").addEventListener("click", () => { rlGeom(); rlRelease(M.springValue(rl.s, nowMs()), 1800); });
+  function rlReset() {
+    cancelAnimationFrame(rl.raf);
+    $("rl-reduce").checked = false;
+    rlGeom();
+    rl.s = M.atRest(0);
+    rl.drag = false;
+    rlPlace(0);
+    $("rl-read").textContent = "손잡이를 끌다 놓거나 튕기기 단추를 누르라.";
+    lineChart($("rl-chart"), { x: [0, 600], y: [-10, rl.W + 10], height: 180, label: "놓은 뒤 손잡이 자리의 그래프", caption: [el("b", { text: "놓은 뒤의 자리" })], series: [], hlines: [{ y: 0, cls: "tgt", label: "닫힘" }, { y: rl.W, cls: "tgt", label: "열림" }] });
+  }
+  $("rl-lab").addEventListener("lw-reset", rlReset);
+  new ResizeObserver(() => { rlGeom(); rlPlace(rlValue(nowMs())); }).observe(rlTrack);
+  rlReset();
+
+  /* ---------- 9.6 두 시계 ---------- */
+  let ckPlat = "win", ckCurve = "timing";
+  function ckEvents() {
+    const slack = ckPlat === "win" ? 15 : 0;
+    // 사이드바: logic이 frame을 지을 때마다 마지막 frame 시각에서 예고를 센다 (demo_main.cpp 1052-1056)
+    const sb = { from: 200, to: 44, startedMs: 0, config: M.SMOOTH, velocity: 0 };
+    const aLogic = [0];
+    for (let f = 0; ; ) { const nx = M.springNextUpdate(sb, f); if (nx == null) break; f = nx; aLogic.push(f); }
+    const aUi = aLogic.slice();
+    // 화면 전환: logic은 시작과 끝, UI는 next_update(+여유)로 같은 tree를 다시 그린다
+    const curve = ckCurve === "timing" ? { kind: "timing", durationMs: M.PAGE_MS } : { kind: "spring", config: M.SMOOTH, velocity: 0 };
+    const pt = M.startPage(true, curve, 0, false);
+    const end = M.pageEnd(pt);
+    const bLogic = [0, end];
+    const bUi = [];
+    for (let t = 0; t < end; ) { bUi.push(t); const nx = M.pageNextUpdate(pt, t); if (nx == null) break; t = nx + slack; }
+    bUi.push(end);
+    return { sb, pt, end, aLogic, aUi, bLogic, bUi };
+  }
+  function ckRender() {
+    const host = $("ck-chart");
+    const E = ckEvents();
+    const W = Math.max(300, Math.round(host.clientWidth || 600)), labW = Math.min(150, Math.round(W * 0.3)), R = 46;
+    const t1 = Math.ceil((Math.max(E.aLogic[E.aLogic.length - 1], E.end) + 40) / 100) * 100;
+    const X = (t) => labW + (t / t1) * (W - labW - R);
+    const rowH = 30, top = 8, gap = 14;
+    const rows = [
+      { name: "사이드바 · logic", ev: E.aLogic, cls: "ev-l", info: (t, i) => `${t}ms · tree 짓기 #${i + 1} · 폭 ${fmt(M.springValue(E.sb, t))}` },
+      { name: "사이드바 · UI", ev: E.aUi, cls: "ev-u", info: (t, i) => `${t}ms · 그리기 #${i + 1} (새 frame이 왔다)` },
+      { name: "화면 전환 · logic", ev: E.bLogic, cls: "ev-l", info: (t, i) => (i === 0 ? "0ms · tree 짓기 #1 (새 화면 + 덮개)" : `${t}ms · tick: prior를 놓고 tree 짓기 #2`) },
+      { name: "화면 전환 · UI", ev: E.bUi, cls: "ev-u", info: (t, i) => `${t}ms · 그리기 #${i + 1} · 진행 p = ${fmt(t >= E.end ? 1 : M.pageProgress(E.pt, t), 3)}${t >= E.end ? " (새 tree)" : ""}` },
+    ];
+    const H = top + rows.length * rowH + gap + 24;
+    const root = svg("svg", { class: "chart clock-svg", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": "두 시계의 사건 시간선" });
+    const yOf = (i) => top + i * rowH + (i >= 2 ? gap : 0);
+    root.append(svg("rect", { class: "cover", x: X(0), y: yOf(2) - 2, width: X(E.end) - X(0), height: rowH * 2 + 2, rx: 3 }));
+    root.append(svg("text", { class: "cover-t", x: X(E.end) - 4, y: yOf(2) + 9, "text-anchor": "end", text: "덮개" }));
+    const step = niceStep(t1, Math.floor((W - labW - R) / 60));
+    for (let t = 0; t <= t1; t += step) {
+      root.append(svg("line", { class: "gr", x1: X(t), x2: X(t), y1: top, y2: yOf(3) + rowH }));
+      root.append(svg("text", { x: X(t), y: H - 6, "text-anchor": "middle", text: t + (t + step > t1 ? "ms" : "") }));
+    }
+    const tip = el("div", { class: "chart-tip", hidden: true });
+    rows.forEach((r, i) => {
+      const y = yOf(i);
+      root.append(svg("rect", { class: "lane-bg", x: labW, y: y + 4, width: W - labW - R, height: rowH - 8, rx: 3 }));
+      root.append(svg("text", { class: "lane", x: labW - 8, y: y + rowH / 2 + 4, "text-anchor": "end", text: r.name }));
+      r.ev.forEach((t) => root.append(svg("line", { class: r.cls, x1: X(t), x2: X(t), y1: y + 7, y2: y + rowH - 7 })));
+      root.append(svg("text", { class: "cnt", x: W - R + 6, y: y + rowH / 2 + 4, text: r.ev.length + "번" }));
+      const hit = svg("rect", { x: labW, y: y + 2, width: W - labW - R, height: rowH - 4, fill: "transparent" });
+      const show = (e) => {
+        const rect = root.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * W;
+        const t = ((x - labW) / (W - labW - R)) * t1;
+        let best = 0;
+        r.ev.forEach((v, k) => { if (Math.abs(v - t) < Math.abs(r.ev[best] - t)) best = k; });
+        tip.textContent = r.info(r.ev[best], best);
+        tip.hidden = false;
+        const px = (X(r.ev[best]) / W) * rect.width;
+        tip.style.left = Math.min(Math.max(px + 8, 0), Math.max(0, host.clientWidth - tip.offsetWidth)) + "px";
+        tip.style.top = ((y + rowH) / H) * rect.height + "px";
+      };
+      hit.addEventListener("pointermove", show);
+      hit.addEventListener("pointerdown", show);
+      hit.addEventListener("pointerleave", () => { tip.hidden = true; });
+      root.append(hit);
+    });
+    host.textContent = "";
+    host.append(el("div", { class: "chart-cap" }, el("b", { text: `사이드바 스프링은 ${E.aLogic.length}번 짓고, 화면 전환은 ${E.bLogic.length}번 짓는다` }), el("span", { text: `전환 끝 ${E.end}ms · UI 그리기 ${E.bUi.length}번` })), root, tip);
+  }
+  segBind("ck-plat", (v) => { ckPlat = v; ckRender(); });
+  segBind("ck-curve", (v) => { ckCurve = v; ckRender(); });
+  $("ck-lab").addEventListener("lw-reset", () => { ckPlat = "win"; ckCurve = "timing"; $("ck-plat").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === "win" ? "true" : "false")); $("ck-curve").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === "timing" ? "true" : "false")); ckRender(); });
+  onWidth($("ck-chart"), ckRender);
+  ckRender();
+
+  /* ---------- 9.7 화면 전환 ---------- */
+  const ROWS = [["회의 일정", "09:12"], ["빌드 결과", "08:47"], ["디자인 검토", "어제"], ["주간 보고", "어제"], ["휴가 신청", "월"]];
+  const stage = $("pt-stage"), ptLog = $("pt-log");
+  const pt = { cur: "list", opened: 0, effect: "slide", axis: "horizontal", curve: "timing", state: null, raf: 0, endTimer: 0, draws: 0, builds: 0, realStart: 0, slow: 1, scrubbing: false };
+  function curveOf(v) {
+    if (v === "timing") return { kind: "timing", durationMs: M.PAGE_MS };
+    return { kind: "spring", config: v === "smooth" ? M.SMOOTH : v === "snappy" ? M.SNAPPY : M.BOUNCY, velocity: 0 };
+  }
+  function screenEl(kind, opened, prior) {
+    const s = el("div", { class: "screen" + (prior ? " prior" : "") });
+    if (kind === "list") {
+      s.append(el("div", { class: "hd", text: "받은 편지함" }));
+      const bd = el("div", { class: "bd" });
+      ROWS.forEach(([name, time], i) => {
+        const row = el("div", { class: "row" }, el("span", { text: name }), el("small", { text: time }));
+        if (!prior) row.addEventListener("click", () => { log(ptLog, "in", "누름", `"${name}" 행을 눌렀다 → 상세로`); navigate(i); });
+        bd.append(row);
+      });
+      s.append(bd);
+    } else {
+      const back = el("span", { text: "← " + ROWS[opened][0], style: "cursor:pointer" });
+      if (!prior) back.addEventListener("click", () => { log(ptLog, "in", "누름", "뒤로 단추를 눌렀다"); navigate(); });
+      s.append(el("div", { class: "hd" }, back));
+      const bd = el("div", { class: "bd" });
+      [92, 100, 84, 96, 60].forEach((w) => bd.append(el("div", { class: "ln", style: `width:${w}%` })));
+      const btn = el("span", { class: "bt", text: "답장" });
+      if (!prior) btn.addEventListener("click", () => log(ptLog, "in", "누름", "새 화면의 '답장' 단추가 눌렸다"));
+      bd.append(btn);
+      s.append(bd);
+    }
+    if (prior) s.style.pointerEvents = "none";
+    return s;
+  }
+  // 한 frame을 그린다: 이 시각(sim ms)의 진행으로 두 화면의 자세를 건다
+  function drawAt(simT) {
+    const st = pt.state;
+    const box = { width: stage.clientWidth, height: stage.clientHeight };
+    if (!st || !st.page.hasPrior || st.released) {
+      st && st.prior && (st.prior.style.display = "none");
+      if (st) Object.assign(st.next.style, { transform: "", opacity: "", display: "" });
+      return 1;
+    }
+    const p = M.pageProgress(st.page, simT);
+    if (p >= 1) {
+      st.prior.style.display = "none";
+      Object.assign(st.next.style, { transform: "", opacity: "", display: "" });
+    } else {
+      const poses = M.posesAt(pt.effect, pt.axis, st.forward, p, box);
+      for (const [node, pose] of [[st.prior, poses.prior], [st.next, poses.next]]) {
+        node.style.display = pose.alpha > 0 ? "" : "none";
+        node.style.transform = `translate(${pose.dx}px, ${pose.dy}px) scale(${pose.scale})`;
+        node.style.opacity = String(pose.alpha);
+      }
+      st.lastPoses = poses;
+    }
+    st.lastP = p;
+    return p;
+  }
+  function ptReadout(simT) {
+    const st = pt.state;
+    const p = st ? (st.page.hasPrior ? (st.released ? 1 : M.pageProgress(st.page, simT)) : 1) : 1;
+    const poses = st && st.page.hasPrior && !st.released && p < 1 ? M.posesAt(pt.effect, pt.axis, st.forward, p, { width: stage.clientWidth, height: stage.clientHeight }) : null;
+    const tb = $("pt-poses");
+    tb.textContent = "";
+    tb.append(el("thead", null, el("tr", null, el("th", { text: "화면" }), el("th", { text: "dx" }), el("th", { text: "dy" }), el("th", { text: "배율" }), el("th", { text: "알파" }))));
+    const body = el("tbody");
+    const row = (name, q) => el("tr", null, el("td", { text: name }), el("td", { text: q ? fmt(q.dx, 0) : "—" }), el("td", { text: q ? fmt(q.dy, 0) : "—" }), el("td", { text: q ? fmt(q.scale, 3) : "—" }), el("td", { text: q ? fmt(q.alpha, 2) : "—" }));
+    body.append(row("이전 (prior)", poses && poses.prior), row("새 화면", poses ? poses.next : { dx: 0, dy: 0, scale: 1, alpha: 1 }));
+    tb.append(body);
+    const covered = !!(st && st.page.hasPrior && !st.released);
+    stats($("pt-stats"), [["진행 p", fmt(p, 3)], ["덮개", covered ? "서 있다" : "없다"], ["UI 그리기", pt.draws + "번"], ["logic tree 짓기", pt.builds + "번"]]);
+  }
+  function ptRender() {
+    stage.textContent = "";
+    const st = pt.state;
+    if (st && st.page.hasPrior && !st.released) {
+      stage.append(st.prior, st.next);
+      const cover = el("div", { class: "cover", title: "덮개 — prior가 있는 동안 포인터를 막는다" });
+      cover.addEventListener("click", () => log(ptLog, "bad", "덮개", "누름을 덮개가 받았다 — prior가 있는 동안 막는다"));
+      stage.append(cover);
+    } else {
+      const s = screenEl(pt.cur, pt.opened, false);
+      stage.append(s);
+    }
+    $("pt-go").textContent = pt.cur === "list" ? "상세로 (forward)" : "목록으로 (backward)";
+  }
+  function stopLive() { cancelAnimationFrame(pt.raf); clearTimeout(pt.endTimer); }
+  function navigate(rowIndex) {
+    stopLive();
+    pt.scrubbing = false;
+    const forward = pt.cur === "list";
+    const priorEl = screenEl(pt.cur, pt.opened, true);
+    if (forward) pt.opened = rowIndex == null ? 0 : rowIndex;
+    pt.cur = forward ? "detail" : "list";
+    const nextEl = screenEl(pt.cur, pt.opened, false);
+    pt.slow = $("pt-slow").checked ? 10 : 1;
+    const reduce = $("pt-reduce").checked;
+    const page = M.startPage(true, curveOf(pt.curve), 0, reduce);
+    pt.state = { page, prior: priorEl, next: nextEl, forward, released: false, end: M.pageEnd(page) };
+    pt.draws = 0;
+    pt.builds = 1;
+    log(ptLog, "lg", "logic", `navigate → tree 짓기 #1 (${forward ? "forward" : "backward"})` + (page.hasPrior ? `, 끝 시각 ${pt.state.end}ms를 next_tick에` : reduce ? " — 움직임 줄이기라 prior를 버렸다" : " — 움직이지 않는 곡선이라 prior를 버렸다"));
+    ptRender();
+    const scrub = $("pt-scrub");
+    scrub.max = String(page.hasPrior ? pt.state.end : 250);
+    scrub.value = "0";
+    if (!page.hasPrior) { pt.draws = 1; drawAt(0); ptReadout(0); $("pt-scrub-o").textContent = "0ms"; return; }
+    pt.realStart = nowMs();
+    let nextDraw = 0;
+    const live = () => {
+      const sim = (nowMs() - pt.realStart) / pt.slow;
+      if (sim >= nextDraw && !pt.state.released) {
+        ++pt.draws;
+        drawAt(sim);
+        const nu = M.pageNextUpdate(pt.state.page, sim);
+        nextDraw = nu == null ? Infinity : nu + ($("pt-win").checked ? 15 : 0);
+        scrub.value = String(Math.min(sim, +scrub.max));
+        $("pt-scrub-o").textContent = Math.round(Math.min(sim, pt.state.end)) + "ms";
+        ptReadout(sim);
+      }
+      if (!pt.state.released) pt.raf = requestAnimationFrame(live);
+    };
+    pt.raf = requestAnimationFrame(live);
+    pt.endTimer = setTimeout(endTick, pt.state.end * pt.slow);
+  }
+  function endTick() {
+    const st = pt.state;
+    if (!st || st.released) return;
+    st.released = true;
+    cancelAnimationFrame(pt.raf);
+    pt.builds = 2;
+    ++pt.draws;
+    log(ptLog, "lg", "logic", `tick(${st.end}ms): prior를 놓고 tree 짓기 #2 — 덮개가 걷힌다`);
+    ptRender();
+    ptReadout(st.end);
+    $("pt-scrub").value = $("pt-scrub").max;
+    $("pt-scrub-o").textContent = st.end + "ms";
+  }
+  $("pt-scrub").addEventListener("input", () => {
+    const st = pt.state;
+    if (!st || !st.page.hasPrior) return;
+    const t = +$("pt-scrub").value;
+    if (!pt.scrubbing) { stopLive(); pt.scrubbing = true; log(ptLog, "", "멈춤", "시각을 손으로 정한다 — 시각만의 함수라 아무 시각이나 물을 수 있다"); }
+    if (t < st.end) { if (st.released) { st.released = false; ptRender(); } drawAt(t); }
+    else if (!st.released) { st.released = true; ptRender(); }
+    $("pt-scrub-o").textContent = t + "ms";
+    ptReadout(t);
+  });
+  $("pt-go").addEventListener("click", () => navigate(pt.cur === "list" ? 0 : undefined));
+  // 도는 중에 움직임 줄이기가 켜지면: 요소는 진행을 묻기 전에 새 화면만 그리고, 데모 앱은 metrics 메시지에서 전환을 놓는다
+  $("pt-reduce").addEventListener("change", () => {
+    const st = pt.state;
+    if (!$("pt-reduce").checked || !st || !st.page.hasPrior || st.released) return;
+    stopLive();
+    st.released = true;
+    pt.builds += 1;
+    log(ptLog, "lg", "metrics", "움직임 줄이기가 켜졌다 → 요소는 새 화면만 그리고, 앱은 page_motion_ = {}로 전환을 놓는다");
+    ptRender();
+    ptReadout(0);
+  });
+  segBind("pt-effect", (v) => { pt.effect = v; });
+  segBind("pt-axis", (v) => { pt.axis = v; });
+  segBind("pt-curve", (v) => { pt.curve = v; });
+  function ptReset() {
+    stopLive();
+    pt.cur = "list"; pt.opened = 0; pt.state = null; pt.draws = 0; pt.builds = 0; pt.scrubbing = false;
+    pt.effect = "slide"; pt.axis = "horizontal"; pt.curve = "timing";
+    for (const [id, v] of [["pt-effect", "slide"], ["pt-axis", "horizontal"], ["pt-curve", "timing"]]) $(id).querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", b.dataset.v === v ? "true" : "false"));
+    $("pt-win").checked = true; $("pt-reduce").checked = false; $("pt-slow").checked = false;
+    ptLog.textContent = "";
+    log(ptLog, "", "준비", "목록 화면이다. 행을 누르거나 '상세로'를 누르라.");
+    ptRender();
+    $("pt-scrub").max = "250"; $("pt-scrub").value = "0"; $("pt-scrub-o").textContent = "0ms";
+    ptReadout(0);
+  }
+  $("pt-lab").addEventListener("lw-reset", ptReset);
+  ptReset();
+})();
+</script>
+</body>
+</html>

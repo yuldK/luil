@@ -1,0 +1,1065 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>11 하나의 앱, 네 플랫폼 · luil 해부학</title>
+<meta name="description" content="luil 해부학 11강. 플랫폼을 모르는 luil_core와 플랫폼마다 얇은 host. host가 하는 다섯 가지, 링크로 묶는 hook, 같은 hello의 네 진입점, 28개 기능의 플랫폼 매트릭스, 접근성 어휘의 번역과 Android가 빠진 이유.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .lab-stack { display: grid; gap: 14px; }
+  /* 층 그림 */
+  .stack3 { display: grid; gap: 8px; }
+  .ly { border: 1px solid var(--line-2); border-radius: var(--r-row); padding: 10px 14px; background: var(--panel); }
+  .ly h4 { margin: 0 0 4px; font-size: var(--fs-sm); display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+  .ly h4 code { font-size: var(--fs-xs); }
+  .ly p { margin: 0; font-size: var(--fs-xs); color: var(--fg-2); line-height: 1.55; }
+  .ly.app { border-style: dashed; }
+  .ly.core { border-color: var(--accent); background: var(--accent-wash); }
+  .plats { display: grid; gap: 8px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 760px) { .plats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .plat { border: 1px solid var(--line-2); border-radius: var(--r-row); padding: 10px 12px; background: var(--panel); display: grid; gap: 4px; align-content: start; font-size: var(--fs-xs); color: var(--fg-2); }
+  .plat b { color: var(--fg); font-size: var(--fs-sm); }
+  .plat code { font-size: 11px; }
+  /* 막대 */
+  .hb { display: grid; gap: 6px; }
+  .hb .r { display: grid; grid-template-columns: minmax(0, 11em) minmax(0, 1fr); gap: 10px; align-items: center; font-size: var(--fs-xs); }
+  .hb .r .lab { color: var(--fg-2); line-height: 1.35; }
+  .hb .r .track { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .hb .r .b { height: 16px; border-radius: 0 4px 4px 0; background: var(--t-ui); min-width: 2px; flex: none; }
+  .hb .r .b.core { background: var(--accent); }
+  .hb .r .v { font-family: var(--font-code); white-space: nowrap; }
+  /* 깨우기 표 */
+  .yesno td.y { color: var(--accent-ink); font-weight: 600; }
+  .yesno td.n { color: var(--fg-3); }
+  /* 매트릭스 */
+  .mx { display: grid; grid-template-columns: minmax(8.5em, 1.25fr) repeat(4, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; font-size: var(--fs-xs); background: var(--panel); }
+  .mx .h { background: var(--panel-2); font-weight: 600; padding: 8px; border-left: 1px solid var(--line); }
+  .mx .h:first-child { border-left: 0; }
+  .mx .h small { display: block; font-weight: 400; color: var(--fg-3); font-size: 10.5px; }
+  .mx .g { grid-column: 1 / -1; background: var(--sunk); padding: 6px 8px; font-weight: 600; color: var(--fg-2); border-top: 1px solid var(--line); }
+  .mx .f { padding: 7px 8px; border-top: 1px solid var(--line); line-height: 1.35; }
+  .mx .c { all: unset; box-sizing: border-box; padding: 6px 8px; border-top: 1px solid var(--line); border-left: 1px solid var(--line); cursor: pointer; min-width: 0; display: grid; gap: 3px; align-content: start; }
+  .mx .c:hover { background: var(--accent-wash); }
+  .mx .c:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .mx .c[aria-pressed="true"] { background: var(--accent-wash-2); }
+  .mx .c .tech { color: var(--fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-code); font-size: 10.5px; }
+  .st { display: inline-block; justify-self: start; font-size: 10.5px; font-weight: 600; padding: 0 6px; border-radius: 3px; line-height: 1.6; }
+  .st.yes { background: var(--accent-wash); color: var(--accent-ink); }
+  .st.shared { background: var(--t-ui-wash); color: var(--t-ui); }
+  .st.partial { background: var(--warn-wash); color: var(--warn); }
+  .st.no { background: var(--error-wash); color: var(--error); }
+  @media (max-width: 700px) { .mx .c .tech { display: none; } .mx { grid-template-columns: minmax(6.5em, 1.3fr) repeat(4, minmax(0, 1fr)); } .mx .h small { display: none; } }
+  .mx-detail { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); padding: 12px 14px; display: grid; gap: 6px; font-size: var(--fs-sm); min-height: 7em; }
+  .mx-detail .tech { font-family: var(--font-code); font-size: var(--fs-xs); overflow-wrap: anywhere; background: var(--sunk); padding: 6px 8px; border-radius: var(--r-row); }
+  .mx-detail .refs { display: flex; flex-wrap: wrap; gap: 6px; font-family: var(--font-code); font-size: 11px; }
+  /* 역할 번역기 */
+  .role-cards { display: grid; gap: 10px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  @media (max-width: 900px) { .role-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .rc { border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--panel); padding: 10px 12px; display: grid; gap: 6px; align-content: start; min-width: 0; }
+  .rc h4 { margin: 0; font-size: var(--fs-xs); color: var(--fg-3); font-weight: 600; }
+  .rc .big { font-family: var(--font-code); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+  .rc .sub { font-size: var(--fs-xs); color: var(--fg-2); }
+  .rc.none { border-style: dashed; }
+  .rc.none .big { color: var(--fg-3); }
+  .role-pick { max-height: 9.5em; overflow-y: auto; padding: 2px; }
+  /* 시간선 */
+  .tl { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+  .tl li { display: grid; grid-template-columns: 4.2em 1.2em minmax(0, 1fr); gap: 10px; align-items: start; font-size: var(--fs-sm); }
+  .tl li .d { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--fg-3); padding-top: 2px; text-align: right; }
+  .tl li .dot { position: relative; align-self: stretch; }
+  .tl li .dot::before { content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--line-2); }
+  .tl li .dot::after { content: ""; position: absolute; left: 50%; top: 6px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--panel); border: 2px solid var(--accent); box-sizing: border-box; }
+  .tl li .m { padding-bottom: 12px; line-height: 1.5; }
+  .tl li .m code { font-size: var(--fs-xs); }
+  .myth { display: grid; gap: 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (max-width: 760px) { .myth { grid-template-columns: 1fr; } }
+  .myth .panel h4 { display: flex; gap: 8px; align-items: baseline; }
+  .myth .panel h4 .x { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--error); }
+</style>
+</head>
+<body data-lecture="11">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="11">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 11</span><span>5부 · 바깥 세계</span></div>
+      <h1>하나의 앱, 네 플랫폼</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">플랫폼을 모르는 <code>luil_core</code> 위에 플랫폼마다 얇은 host가 선다. host가 하는 일은 다섯 가지로 정해져 있다. 그래서 <code>hello_app.cpp</code> 한 파일이 Windows·Android·macOS·iOS의 네 진입점에서 그대로 돈다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>55분</dd></div>
+            <div><dt>선수 지식</dt><dd>2강(세 스레드), 7강(<code>renderer_host</code>)</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>app_host.h</code>·<code>android_app.cpp</code>·<code>skia_renderer.h</code>·<code>font_registry.h</code>·<code>accessibility_mapping.cpp</code></dd></div>
+            <div><dt>실험</dt><dd>깨우기 흐름, 플랫폼 매트릭스, 접근성 역할 번역기</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li><code>luil_core</code>와 <code>luil</code>의 경계와 그것을 지키는 장치를 설명한다.</li>
+            <li>host가 꼭 구현할 다섯 가지를 플랫폼별 기술로 말할 수 있다.</li>
+            <li>같은 hello가 네 진입점에서 다르게 시작하고 끝나는 모습을 안다.</li>
+            <li>접근성 어휘가 UIA·NSAccessibility·UIAccessibility 낱말이 되는 자리와, Android에 접근성이 없는 이유를 안다.</li>
+            <li>OS 프레임워크를 모르는 "순수 층"을 따로 두는 무늬의 이점을 말한다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="11.1">
+        <header class="slide-head">
+          <span class="num">11.1</span>
+          <h2>두 층: <code>luil_core</code>와 <code>luil</code></h2>
+          <p class="lede">정적 라이브러리를 둘로 나눈다. 플랫폼을 모르는 core, 그리고 그 위에 플랫폼마다 하나씩 서는 조립. 소비자는 어느 플랫폼에서나 <code>luil::luil</code> 하나만 링크한다.</p>
+        </header>
+        <div class="stack3" role="img" aria-label="앱 코드, luil_core, 플랫폼별 luil의 세 층">
+          <div class="ly app"><h4>앱 코드 <code>hello_app.cpp</code></h4><p><code>logic_driver</code> · <code>app_delegate</code>/<code>window_delegate</code> · <code>interaction_policy</code>. 플랫폼을 가리지 않는 한 벌이다.</p></div>
+          <div class="ly core"><h4><code>luil_core</code> <span class="small muted">STATIC · 플랫폼을 모른다</span></h4><p>UI element와 불변 tree(접근 색인 포함), 텍스트, 테마, 메시징, 세 thread의 조립(<code>app_host</code>), 한 frame 그리기(<code>draw_frame</code>), 렌더러 실패 물러섬(<code>renderer_host</code>), 글꼴 registry, 터치 접촉 추적, 접근성 어휘. Win32·Apple·Android 헤더를 include하면 시험이 실패한다.</p></div>
+          <div class="plats">
+            <div class="plat"><b>Windows</b><code>src/win32</code> + <code>src/net/winhttp</code><span>Direct3D 12, TSF, UI Automation, WebView2</span></div>
+            <div class="plat"><b>Android</b><code>src/android</code> + <code>src/net/android</code><span>GameActivity, Vulkan, GameTextInput. 접근성 없음</span></div>
+            <div class="plat"><b>macOS</b><code>src/macos</code> + <code>src/net/macos</code><span>AppKit, Metal, NSTextInputClient, VoiceOver</span></div>
+            <div class="plat"><b>iOS · iPadOS</b><code>src/ios</code><span>+ AppKit 없는 macOS 파일 25개, Android의 <code>android_text_input</code>, <code>net/macos</code></span></div>
+          </div>
+        </div>
+        <div class="cols two">
+          <figure class="fig" style="margin:0">
+            <div class="hb" id="size-bars" role="img" aria-label="디렉터리별 소스 줄 수"></div>
+            <figcaption>디렉터리별 줄 수 (<code>git ls-files … | xargs cat | wc -l</code>, 빈 줄·주석 포함). 초록은 플랫폼을 모르는 층, 파랑은 플랫폼 층이다. 접근성만 보면 Windows UIA 3,500줄, macOS 1,390줄, iOS 1,345줄, Android 0줄이다.</figcaption>
+          </figure>
+          <div class="walk">
+            <div class="code" data-lang="cmake" data-src="cmake/verify_core_portability.cmake:1-8,33-46" data-path="cmake/verify_core_portability.cmake" data-start="1"><script type="text/plain">
+# 플랫폼을 모르는 층(luil_core)이 플랫폼 헤더를 들이지 않았는지 본다.
+#
+# Windows에서는 core가 Win32 헤더를 include해도 그대로 빌드되고 test도 통과한다 —
+# 그 실수는 다른 플랫폼에서 core를 처음 세울 때에야 드러난다. 그래서 include 줄을
+# 직접 읽어 Windows에서 막는다 (docs/android-port-plan.md).
+#
+# 검사 대상은 include 줄뿐이다. 주석에 HWND·WM_CHAR 같은 이름이 나오는 것은 Win32와의
+# 관계를 설명하는 정당한 글이라 잡지 않는다.
+⋯@33
+
+# 플랫폼 SDK 헤더와 MSVC 전용 헤더다. 비교 전에 소문자로 바꾸므로 소문자로 적는다.
+#  - Apple과 Android의 것은 디렉터리(프레임워크) 이름으로 적는다. 끝의 `/`까지가 이름이라
+#    같은 글자로 시작하는 luil 헤더(`foundation_...h`)를 잡지 않는다.
+set(windows_header_pattern
+    "windows|winuser|wingdi|winbase|winnls|winhttp|winsock2|ws2tcpip|objbase|combaseapi|unknwn|wrl|d3d1[12]|dxgi|dcomp|dwrite|dwmapi|uiautomation|oleacc|ole2|shellapi|shlobj|imm|msctf|commctrl|intrin|webview2")
+set(apple_header_pattern
+    "cocoa/|appkit/|uikit/|foundation/|corefoundation/|coregraphics/|coretext/|coreservices/|quartzcore/|metal/|metalkit/|webkit/|security/|usernotifications/|avfoundation/|carbon/|objc/|dispatch/|mach/|targetconditionals")
+set(android_header_pattern
+    "jni\\.h|android/|game-activity/|game-text-input/")
+set(platform_header_pattern
+    "(${windows_header_pattern}|${apple_header_pattern}|${android_header_pattern})[^>\"]*")
+# luil 안에서 core 위의 계층이다.
+#  - macOS 계층의 디렉터리 이름은 아직 정하지 않았다. 어느 쪽으로 정해도 잡히게 둘 다 적는다.
+</script></div>
+            <ol class="walk-steps-src">
+              <li data-lines="1-5" data-title="왜 스크립트인가">Windows에서는 core가 Win32 헤더를 들여도 빌드되고 시험도 통과한다. 그 실수는 다른 플랫폼에서 core를 처음 세울 때에야 드러난다. 그래서 include 줄을 직접 읽어 Windows에서 막는다.</li>
+              <li data-lines="7-8" data-title="주석은 잡지 않는다">주석 속의 <code>HWND</code> 같은 낱말은 Win32와의 관계를 설명하는 정당한 글이라 잡지 않는다.</li>
+              <li data-lines="33-43" data-title="세 SDK의 헤더">Windows SDK·MSVC 헤더, Apple 프레임워크, Android 헤더를 이름으로 잡는다. Apple은 디렉터리 이름을 <code>/</code>까지 적어 같은 글자로 시작하는 luil 헤더를 잡지 않는다.</li>
+              <li data-lines="44-46" data-title="위층도 막는다">core 위의 계층(<code>win32/</code>, <code>android/</code>, <code>macos/</code>, <code>ios/</code>, <code>net/</code>) include도 막는다.</li>
+            </ol>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s2" data-num="11.2">
+        <header class="slide-head">
+          <span class="num">11.2</span>
+          <h2>host가 하는 다섯 가지</h2>
+          <p class="lede">창과 표면을 하나의 가상 클래스로 묶지 않았다. 대신 host의 일을 좁게 정했다. 진입점을 부른 thread를 UI thread로 삼아 이벤트 루프를 돌리고, 깨우기를 구현하고, 입력을 옮기고, 명령을 실행하고, 자원을 공급한다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>경계 (core 쪽)</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td>① UI thread와 이벤트 루프</td><td><code>wWinMain</code>의 thread. <code>GetMessageW</code> 루프</td><td>glue가 띄운 <code>android_main</code> thread. <code>ALooper_pollOnce</code> 루프</td><td>메인 thread. <code>[NSApp run]</code></td><td>메인 thread. <code>UIApplicationMain</code></td></tr>
+              <tr><td>② 깨우기 <code>wake_signals</code></td><td><code>PostMessageW</code> 사설 메시지</td><td><code>eventfd</code> + <code>ALooper_addFd</code></td><td><code>CFRunLoopPerformBlock</code> + <code>CFRunLoopWakeUp</code></td><td>macOS와 같은 방식</td></tr>
+              <tr><td>타이머 (<code>next_update</code>·<code>next_tick</code>)</td><td><code>SetTimer</code></td><td><code>poll_timeout()</code></td><td><code>NSTimer</code></td><td><code>NSTimer</code></td></tr>
+              <tr><td>③ 입력 → <code>raw_input_event</code></td><td><code>translate_pointer_message</code> + 접촉 추적기</td><td><code>input_translator</code> + 접촉 추적기</td><td>키는 AppKit 없는 <code>key_event_for</code></td><td>HID → Carbon 가상 키 → <code>key_event_for</code></td></tr>
+              <tr><td>④ <code>take_*</code> 명령 실행</td><td>창 명령·화면 남기기·앱 UI·클립보드</td><td>닫기·끝내기·편집 메뉴만 뜻이 있다</td><td><code>execute_host_commands</code></td><td>편집 메뉴만 뜻이 있다</td></tr>
+              <tr><td>⑤ 링크 자원 (글꼴·즉시 종료)</td><td>DirectWrite, Segoe UI · <code>__fastfail(7)</code></td><td>FreeType, sans-serif · <code>abort()</code></td><td>CoreText, <code>.AppleSystemUIFont</code> · <code>abort()</code></td><td>macOS 파일 그대로</td></tr>
+              <tr><td>렌더러 생성 함수</td><td><code>"Direct3D"</code></td><td><code>"Vulkan"</code> (한 번 물러선 Activity는 비운다)</td><td><code>"Metal"</code></td><td><code>"Metal"</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="lw" data-title="깨우기 흐름" data-surface="app_host::wake_signals" data-reset id="wk-lab">
+          <div class="lw-body lab-stack">
+            <div class="controls">
+              <div class="seg" id="wk-plat" role="group" aria-label="플랫폼">
+                <button type="button" data-v="win32" aria-pressed="true">Windows</button>
+                <button type="button" data-v="android" aria-pressed="false">Android</button>
+                <button type="button" data-v="macos" aria-pressed="false">macOS</button>
+                <button type="button" data-v="ios" aria-pressed="false">iOS</button>
+              </div>
+              <span class="sep"></span>
+              <button type="button" class="btn primary sm" id="wk-frame">frame 게시</button>
+              <button type="button" class="btn sm" id="wk-cmd">창 명령</button>
+            </div>
+            <div class="flow" id="wk-flow"></div>
+            <div class="log" id="wk-log" aria-live="polite"></div>
+            <div class="table-wrap">
+              <table class="t yesno" id="wk-table">
+                <thead><tr><th>깨우기 갈래</th><th>뜻</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="lw-foot">깨우기는 내용을 싣지 않고 신호만 나른다. 내용은 core의 큐와 slot이 나른다. 그래서 신호 하나를 잃어도 명령은 큐에 남아 다음 신호에 실행된다. 빈 갈래는 그 기능이 꺼졌다는 뜻이다. Android에서 <code>capture</code>가 비어 있으니 <code>app_host</code>가 화면 남기기 실행 함수를 만들지 않고, input pump도 그 요청을 내지 않는다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="include/luil/app/app_host.h:709-734,777-779,851-858" data-path="include/luil/app/app_host.h" data-start="709"><script type="text/plain">
+        // UI thread를 깨우는 신호들이다.
+        // platform 창이 자기 메시지 루프에 맞는 구현을 꽂는다
+        // (Win32 창은 PostMessage — 공개 API는 그 타입을 드러내지 않는다).
+        // logic·input thread에서 불리므로 구현은 thread-safe해야 하고,
+        // 신호만 나른다 — 내용(명령·요청)은 내부 큐가 나른다.
+        struct wake_signals
+        {
+            // frame·상호작용 상태가 게시됐다 (다시 그릴 때다).
+            // 전달에 성공했는지를 돌려준다 (창 메시지 큐 포화 같은 실패).
+            // 실패를 알리면 slot이 다음 게시에서 다시 신호한다 — 한 번의
+            // 실패가 영구적인 미갱신으로 굳지 않는 길이다.
+            std::function<bool()> snapshot {};
+            // input thread가 요청한 창 명령(`ui_command`)이 큐에 들어갔다.
+            // 내용은 `take_ui_commands()`가 나른다 — 신호가 유실돼도 명령은
+            // 큐에 남아 다음 신호에서 실행된다.
+            std::function<void()> ui_command {};
+            // 앱 UI 명령이 큐에 들어갔다.
+            std::function<void()> app_ui_command {};
+            // 클립보드 요청이 큐에 들어갔다.
+            std::function<void()> clipboard {};
+            // 표를 단 키(`key_pressed_event::report_ticket`)를 input thread가 처리했다 — 받았는가와 함께다.
+            // 내용이 표와 참거짓 하나라 큐 없이 신호가 나른다. 유실되면 그 키의 답은 오지 않는다 (플랫폼이 견딘다).
+            std::function<void(std::uint64_t ticket, bool handled)> key_report {};
+            // 화면 남기기·녹화 요청이 큐에 들어갔다.
+            std::function<void()> capture {};
+        };
+⋯@777
+        // UI thread 전용 진입점이다 (창 프로시저가 받은 입력을 그대로 넣는다).
+        // 입력 inbox는 drop_oldest라 밀리면 오래된 것부터 버려진다.
+        void post_raw_input(raw_input_event event) noexcept;
+⋯@851
+        // input thread가 큐에 넣은 창 명령을 모두 꺼낸다 (UI thread 전용).
+        [[nodiscard]] std::vector<ui_command> take_ui_commands();
+        // 명령과 그 출처를 함께 꺼낸다. 닫힘 훅의 중복 방지를 구분하는 플랫폼은 이 짝을 쓴다.
+        [[nodiscard]] std::vector<ui_command_request> take_ui_command_requests();
+        // input thread가 큐에 넣은 앱 UI 명령을 모두 꺼낸다 (UI thread 전용).
+        [[nodiscard]] std::vector<app_ui_command> take_app_ui_commands();
+        // input thread가 큐에 넣은 클립보드 요청을 모두 꺼낸다 (UI thread 전용).
+        [[nodiscard]] std::vector<clipboard_request> take_clipboard_requests();
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="709-713" data-title="신호만 나른다">logic·input thread에서 불리므로 구현은 thread-safe해야 한다. 공개 API는 Win32의 타입을 드러내지 않는다.</li>
+            <li data-lines="714-719" data-title="snapshot: 성공을 돌려준다">창 메시지 큐 포화처럼 전달에 실패하면 거짓을 돌려준다. 그러면 slot이 다음 게시에서 다시 신호한다. 한 번의 실패가 영구적인 미갱신으로 굳지 않는다.</li>
+            <li data-lines="720-734" data-title="큐가 나르는 넷, 신호가 나르는 하나">창 명령, 앱 UI 명령, 클립보드, 화면 남기기는 큐가 내용을 나른다. 키 보고(<code>key_report</code>)만 내용이 표와 참거짓 하나라 신호가 직접 나른다.</li>
+            <li data-lines="777-779" data-title="입력은 그대로 넣는다">UI thread 전용 진입점이다. 입력 inbox는 drop_oldest라 밀리면 오래된 것부터 버린다(3강).</li>
+            <li data-lines="851-858" data-title="UI thread가 꺼낸다">깨어난 UI thread가 큐를 통째로 꺼내 실행한다. 이 넷을 실행하는 것이 host의 네 번째 일이다.</li>
+          </ol>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/android/android_app.cpp:514-529,615-633" data-path="src/android/android_app.cpp" data-start="514"><script type="text/plain">
+                while (app_->destroyRequested == 0)
+                {
+                    int events { 0 };
+                    android_poll_source* source { nullptr };
+                    const int identifier { ALooper_pollOnce(poll_timeout(), nullptr, &events, reinterpret_cast<void**>(&source)) };
+                    if (identifier == LOOPER_ID_MAIN || identifier == LOOPER_ID_INPUT)
+                    {
+                        if (source != nullptr)
+                            source->process(app_, source);
+                    }
+                    else if (identifier == LOOPER_ID_USER)
+                    {
+                        drain_wake();
+                        execute_host_commands();
+                        dirty_ = true;
+                    }
+⋯@615
+                // UI thread를 깨우는 길이다. 다른 thread가 eventfd에 쓰면 looper가 깨어
+                // 그 큐를 비운다. Win32의 PostMessageW에 해당한다.
+                wake_fd_ = eventfd(0, EFD_CLOEXEC | EFD_NONBLOCK);
+                if (wake_fd_ < 0 || ALooper_addFd(app_->looper, wake_fd_, LOOPER_ID_USER, ALOOPER_EVENT_INPUT, nullptr, nullptr) != 1)
+                {
+                    log_error(u8"Failed to set up the UI thread wake signal.");
+                    return false;
+                }
+
+                const int wake_fd { wake_fd_ };
+                const auto signal = [wake_fd]() noexcept {
+                    const std::uint64_t one { 1 };
+                    return write(wake_fd, &one, sizeof(one)) == static_cast<ssize_t>(sizeof(one));
+                };
+                app_host::config host_config {};
+                host_config.wake.snapshot = signal;
+                host_config.wake.ui_command = [signal] { static_cast<void>(signal()); };
+                host_config.wake.app_ui_command = [signal] { static_cast<void>(signal()); };
+                host_config.wake.clipboard = [signal] { static_cast<void>(signal()); };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="514-518" data-title="한 루프, 세 출처">Android host의 루프는 <code>ALooper_pollOnce</code> 하나로 Activity 수명 주기(MAIN), 입력(INPUT), luil의 깨우기(USER)를 함께 기다린다. 시간 제한 <code>poll_timeout()</code>이 곧 타이머다.</li>
+            <li data-lines="519-523" data-title="glue의 사건">수명 주기와 입력은 GameActivity glue가 준 처리기에 넘긴다.</li>
+            <li data-lines="524-529" data-title="luil의 깨우기">USER 출처면 eventfd를 비우고, 쌓인 명령을 실행하고, 다시 그려야 한다고 표시한다.</li>
+            <li data-lines="615-622" data-title="eventfd를 looper에 단다">다른 thread가 eventfd에 쓰면 looper가 깬다. 주석이 말하듯 Win32의 <code>PostMessageW</code>에 해당한다.</li>
+            <li data-lines="624-633" data-title="갈래 넷에 같은 신호">snapshot, 창 명령, 앱 UI 명령, 클립보드가 모두 같은 eventfd 쓰기다. 화면 남기기와 키 보고 갈래는 채우지 않는다 — Android에서는 그 기능이 꺼져 있다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="11.3">
+        <header class="slide-head">
+          <span class="num">11.3</span>
+          <h2>만드는 법은 플랫폼, 정책은 core</h2>
+          <p class="lede">렌더러는 플랫폼이 생성 함수만 넘기고, 실패하면 CPU로 물러서는 정책은 core의 <code>renderer_host</code>가 한 곳에서 정한다. 글꼴과 즉시 종료는 등록 함수가 아니라 링크로 묶는다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/host/skia_renderer.h:48-81" data-path="src/host/skia_renderer.h" data-start="48"><script type="text/plain">
+    // 플랫폼이 넘기는 렌더러 생성 함수들이다.
+    // 실패 물러섬 정책(`renderer_host`)은 플랫폼을 가리지 않고, 무엇을 어떻게 만드는지만
+    // 플랫폼마다 다르다.
+    struct renderer_factories
+    {
+        // 오류 글에 쓰는 GPU 백엔드 이름이다 (Win32는 "Direct3D").
+        std::u8string gpu_name { u8"GPU" };
+        // 이 플랫폼의 GPU 렌더러를 만든다. 비어 있으면 GPU가 없는 것이다.
+        std::function<renderer_factory_result()> create_gpu {};
+        std::function<renderer_factory_result()> create_cpu {};
+    };
+
+    // 모드가 GPU를 반드시 요구하는가다 (`direct3d`, `gpu`).
+    // 요구하는 모드는 GPU를 세우지 못하면 CPU로 물러서지 않고 실패를 돌려준다.
+    [[nodiscard]] constexpr bool renderer_mode_requires_gpu(const renderer_mode mode) noexcept
+    {
+        return mode == renderer_mode::direct3d || mode == renderer_mode::gpu;
+    }
+
+    // 표면 하나의 렌더러와 그 실패 물러섬이다.
+    // `automatic`은 GPU를 먼저 세우고, 만들거나 크기를 바꾸거나 그리다 실패하면 CPU로
+    // 바꾼다. 한 번 물러선 표면은 GPU를 다시 시도하지 않는다 (rendering.md).
+    class renderer_host
+    {
+    public:
+        static std::unique_ptr<renderer_host> create(renderer_mode mode, renderer_fault_injection fault, renderer_factories factories, std::u8string& error);
+
+        [[nodiscard]] renderer_backend backend() const noexcept;
+        [[nodiscard]] bool used_fallback() const noexcept;
+        [[nodiscard]] bool resize(int width, int height, std::u8string& error);
+        [[nodiscard]] bool render(frame_state state, std::u8string& error);
+        // 지금 렌더러다. 플랫폼이 자기 확장(Win32의 웹뷰 합성 자리)을 물을 때 쓴다.
+        //  - CPU로 물러서면 다른 객체가 된다. 들고 있지 말고 쓸 때마다 묻는다.
+        [[nodiscard]] skia_renderer& current() noexcept;
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="48-58" data-title="생성 함수 둘과 이름">플랫폼이 넘기는 것은 GPU·CPU 렌더러를 만드는 함수 둘과 오류 글에 쓸 GPU 이름뿐이다. GPU 함수가 비어 있으면 GPU가 없는 플랫폼이다.</li>
+            <li data-lines="60-65" data-title="GPU를 요구하는 모드">앱이 쓰는 값은 <code>gpu</code> 하나다. 플랫폼별 값(<code>vulkan</code>, <code>metal</code>)을 두어 다른 플랫폼에서 고르면 오류가 나게 하는 길은 거절했다. 결과를 알리는 <code>renderer_backend</code>에만 그 이름들이 있다.</li>
+            <li data-lines="67-81" data-title="물러섬은 한 번">automatic은 GPU를 먼저 세우고, 만들거나 크기를 바꾸거나 그리다 실패하면 CPU로 바꾼다. 한 번 물러선 표면은 GPU를 다시 시도하지 않는다(7강). Android는 더 넓다 — 한 번 물러선 Activity는 창이 다시 생겨도 CPU다.</li>
+          </ol>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/host/font_registry.h:16-24,32-54" data-path="src/host/font_registry.h" data-start="16"><script type="text/plain">
+    // 플랫폼이 공급하는 글꼴 자원이다.
+    //
+    // 글꼴 registry의 cache·자물쇠·설정·대체 규칙은 플랫폼을 가리지 않는다. 플랫폼마다
+    // 다른 것은 아래 넷뿐이라 이 interface 하나로 받는다 (docs/android-port-plan.md).
+    // 구현은 thread-safe해야 한다 — registry가 자물쇠를 쥔 채 부르지만, 새로 만드는
+    // 관리자는 자물쇠 밖에서도 만든다.
+    class font_source
+    {
+    public:
+⋯@32
+        // 시스템에 설치된 글꼴을 읽는 관리자다.
+        // registry가 첫 조회 때 만들어 들고 있다가 `clear_font_caches`에서 놓는다.
+        // 만들지 못하면 nullptr이고, 그때는 이름으로 찾는 글꼴과 대체가 모두 없다.
+        [[nodiscard]] virtual sk_sp<SkFontMgr> make_system_manager() const = 0;
+
+        // registry가 들고 있지 않는, 부를 때마다 새로 만드는 관리자다.
+        // 파일·바이트에서 typeface를 만들고(앱 글꼴, codicon) 내장 UI 글꼴을 찾는다.
+        // 시스템 목록의 무효화와 수명이 달라 따로 만든다.
+        [[nodiscard]] virtual sk_sp<SkFontMgr> make_uncached_manager() const = 0;
+
+        // 앱이 기본 UI 글꼴 목록을 정하지 않았거나 목록이 모두 없는 이름일 때 찾는 가족이다.
+        [[nodiscard]] virtual std::u8string_view default_ui_family() const = 0;
+
+        // 사용자 UI 언어의 BCP-47 태그를 OS에서 읽는다 (`ko-KR` 같은 것).
+        // 읽지 못하면 빈 문자열이다. registry가 한 번만 부른다.
+        [[nodiscard]] virtual std::string read_user_language() const = 0;
+    };
+
+    // 이 플랫폼의 글꼴 자원이다.
+    // **플랫폼 계층이 하나를 정의한다** (Win32는 src/win32/win32_fonts.cpp). 등록 순서가
+    // 없도록 링크로 묶는다 — 창 없이 registry를 쓰는 test와 input thread의 글자 폭
+    // 측정이 어느 시작 순서에서든 같은 자원을 본다.
+    [[nodiscard]] const font_source& platform_font_source() noexcept;
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="16-24" data-title="다른 것은 넷뿐">글꼴 registry의 cache·자물쇠·설정·대체 규칙은 플랫폼을 가리지 않는다. 플랫폼마다 다른 것은 네 함수뿐이라 interface 하나로 받는다.</li>
+            <li data-lines="32-47" data-title="네 함수">시스템 글꼴 관리자, 부를 때마다 새로 만드는 관리자, 기본 UI 글꼴 가족, 사용자 UI 언어. Windows는 DirectWrite와 Segoe UI, Android는 FreeType과 sans-serif, Apple은 CoreText와 시스템 글꼴이다.</li>
+            <li data-lines="49-54" data-title="링크로 묶는다">플랫폼 계층이 이 함수를 하나 정의한다. 등록 순서가 없으므로 창 없는 test와 input thread의 글자 폭 측정이 어느 시작 순서에서든 같은 자원을 본다. core test는 빈 글꼴 관리자와 <code>abort()</code>를 정의한 stub을 링크한다.</li>
+          </ol>
+        </div>
+        <div class="callout key">
+          <i class="ci" aria-hidden="true">&#xEA61;</i>
+          <div>
+            <p class="ttl">필요 없는 interface는 만들지 않았다</p>
+            <p>이식 계획은 경계를 둘로 나눴다. core가 의존하는 경계(글꼴, 자산, 렌더러, host API)는 Windows로 먼저 세웠다. 플랫폼 안쪽에서만 쓰는 경계(텍스트 입력, 클립보드 실행, 커서)는 모양만 적어 두고 쓰는 단계에서 만들었다. 이유: "Win32 구현 하나만 보고 세운 인터페이스는 두 번째 구현에서 대개 다시 고치게 되기 때문이다." 계획에 있던 <code>system_appearance</code>·<code>asset_reader</code> interface는 끝내 만들지 않았다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s4" data-num="11.4">
+        <header class="slide-head">
+          <span class="num">11.4</span>
+          <h2>같은 hello, 네 진입점</h2>
+          <p class="lede">앱 쪽 절반 <code>hello_app.{h,cpp}</code>는 한 벌이다. 진입 파일만 플랫폼마다 20~60줄이다. 그런데 누가 부르는지, 돌아오는지, driver가 어디 사는지는 플랫폼마다 다르다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="Windows"><div class="code" data-lang="cpp" data-src="examples/hello/main.cpp:26-61" data-path="examples/hello/main.cpp" data-start="26"><script type="text/plain">
+int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
+{
+    // DPI 인지는 창을 만들기 전에 한 번 켠다.
+    luil::win32::enable_per_monitor_dpi_awareness();
+    // COM STA는 TSF(텍스트 입력)·파일 dialog가 요구한다.
+    // 이 예제는 텍스트 입력이 없지만 켜 두는 것이 관례다.
+    const luil::win32::com_sta_scope com {};
+
+    // 창의 겉모습과 정책이다. 길이는 전부 논리 96 DPI 기준 px다.
+    luil::win32::window_config config {};
+    config.class_name = L"Luil.Hello.Window";
+    config.caption.title = u8"hello luil";
+    config.caption.minimize_tooltip = u8"Minimize";
+    config.caption.maximize_tooltip = u8"Maximize or restore";
+    config.caption.close_tooltip = u8"Close";
+    config.initial_width = 800;
+    config.initial_height = 500;
+
+    // --position=x,y 로 창이 뜰 자리를 정한다 (물리 픽셀, 음수도 된다).
+    // 읽지 못하면 그냥 두어 OS가 정한다.
+    if (const auto arguments { luil::win32::command_line_arguments() }; arguments.has_value())
+        for (const std::u8string& argument : *arguments)
+            if (argument.starts_with(u8"--position="))
+                config.initial_position = luil::win32::parse_window_position(std::u8string_view { argument }.substr(11));
+
+    // 앱의 세 조각을 꽂는다.
+    // policy는 텍스트 입력·휠·단축키가 생길 때 구현한다 — 없으면 nullptr로 둔다.
+    hello::hello_driver driver {};
+    hello::hello_delegate delegate {};
+    luil::win32::window_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+
+    // 메시지 루프가 끝날 때까지 여기서 돈다. 반환값이 프로세스 종료 코드다.
+    return luil::win32::run_application_window(config, environment);
+}
+</script></div></section>
+          <section data-tab="Android"><div class="code" data-lang="cpp" data-src="examples/hello/android_main.cpp:1-24" data-path="examples/hello/android_main.cpp" data-start="1"><script type="text/plain">
+// luil hello의 Android 진입점이다. 앱 쪽 절반(hello_app)은 Windows와 같은 파일이다.
+//
+// GameActivity가 네이티브 라이브러리를 열고 별도 thread에서 android_main을 부른다.
+// 그 thread가 luil의 UI thread가 되고, run_application이 Activity가 끝날 때까지 돈다.
+
+#include "hello/hello_app.h"
+
+#include "luil/android/android_app.h"
+
+extern "C" void android_main(android_app* app)
+{
+    hello::hello_driver driver {};
+    // Windows용 delegate지만 플랫폼 중립 부분(app_delegate)만 Android host가 부른다.
+    hello::hello_delegate delegate {};
+
+    luil::android::application_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+    // 렌더러는 Vulkan이 먼저다. `adb shell setprop debug.luil.renderer cpu`처럼 시스템 속성으로
+    // 바꿔 띄울 수 있다 (apply_debug_properties).
+    luil::android::application_config config {};
+    luil::android::apply_debug_properties(config);
+    static_cast<void>(luil::android::run_application(app, config, environment));
+}
+</script></div></section>
+          <section data-tab="macOS"><div class="code" data-lang="cpp" data-src="examples/hello/macos_main.cpp:1-26" data-path="examples/hello/macos_main.cpp" data-start="1"><script type="text/plain">
+// luil hello의 macOS 진입점이다. 앱 쪽 절반(hello_app)은 Windows·Android와 같은 파일이다.
+//
+// main thread가 luil의 UI thread다. run_application이 창이 닫혀 종료가 끝날 때까지 돈다.
+
+#include "hello/hello_app.h"
+
+#include "luil/macos/macos_app.h"
+
+int main(const int argc, const char* const* const argv)
+{
+    luil::macos::application_config config {};
+    config.title = u8"hello luil";
+    config.initial_width = 800;
+    config.initial_height = 500;
+    for (const std::u8string& argument : luil::macos::command_line_arguments(argc, argv))
+        if (argument == u8"--smoke-test")
+            config.smoke_test = true;
+
+    hello::hello_driver driver {};
+    // Windows용 delegate지만 플랫폼 중립 부분(app_delegate)만 macOS host가 부른다.
+    hello::hello_delegate delegate {};
+    luil::macos::application_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+    return luil::macos::run_application(config, environment);
+}
+</script></div></section>
+          <section data-tab="iOS"><div class="code" data-lang="cpp" data-src="examples/hello/ios_main.cpp:1-23" data-path="examples/hello/ios_main.cpp" data-start="1"><script type="text/plain">
+// luil hello의 iOS 진입점이다. 앱 쪽 절반(hello_app)은 Windows·Android·macOS와 같은 파일이다.
+//
+// main thread가 luil의 UI thread다. run_application은 UIApplicationMain을 불러 돌아오지 않는다. 그래서 driver와
+// delegate는 프로세스가 끝날 때까지 사는 정적 객체다.
+
+#include "hello/hello_app.h"
+
+#include "luil/ios/ios_app.h"
+
+int main(const int argc, char** const argv)
+{
+    static hello::hello_driver driver {};
+    // Windows용 delegate지만 플랫폼 중립 부분(app_delegate)만 iOS host가 부른다.
+    static hello::hello_delegate delegate {};
+
+    luil::ios::application_environment environment {};
+    environment.driver = &driver;
+    environment.delegate = &delegate;
+    // 렌더러는 Metal이 먼저다. `xcrun simctl launch <기기> <번들 id> --renderer=cpu`처럼 인자로 바꿔 띄울 수 있다.
+    luil::ios::application_config config {};
+    luil::ios::apply_debug_arguments(config, argc, argv);
+    return luil::ios::run_application(argc, argv, config, environment);
+}
+</script></div></section>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td>진입 함수</td><td><code>wWinMain</code></td><td><code>android_main</code></td><td><code>main</code></td><td><code>main</code></td></tr>
+              <tr><td>누가 부르나</td><td>OS</td><td>GameActivity가 <b>별도 thread</b>에서</td><td>OS</td><td>OS</td></tr>
+              <tr><td>UI thread</td><td>그 thread</td><td><code>android_main</code> thread — Java 메인 thread가 아니다. View 일은 메인 thread로 넘긴다</td><td>메인 thread</td><td>메인 thread</td></tr>
+              <tr><td>돌아오는가</td><td>메시지 루프가 끝나면</td><td>Activity가 끝나면</td><td>창이 닫히고 종료가 끝나면</td><td><b>돌아오지 않는다</b> (시작 실패만 1)</td></tr>
+              <tr><td>driver·delegate</td><td>지역 변수</td><td>지역 변수</td><td>지역 변수</td><td><code>static</code> — 프로세스와 함께 살아야 한다</td></tr>
+              <tr><td>앞머리 준비</td><td>DPI 인식, COM STA (TSF·파일 대화 상자·UIA가 요구)</td><td>없음</td><td>없음</td><td>없음</td></tr>
+              <tr><td>화면의 caption</td><td>앱이 그린다 (<code>window_caption</code> 참)</td><td>app bar</td><td>시스템 제목 막대 (테두리 없는 창만 앱이 그린다)</td><td>app bar</td></tr>
+              <tr><td>종료 신호</td><td>창을 닫으면</td><td>뒤로 가기 끝에 Activity가 끝나면</td><td>닫기·⌘Q가 먼저 <code>ui_frame::close</code> 훅을 부른다</td><td><code>applicationWillTerminate:</code>. 끝내기·닫기 명령은 무시한다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">hello는 네 플랫폼 모두에서 <code>luil::win32::logic_driver</code>라는 이름을 쓴다. 공개 host API를 <code>luil/app/</code>으로 옮기면서 옛 이름을 별칭으로 남겼기 때문이다. 이름은 역사적이다.</p>
+      </section>
+
+      <section class="slide" id="s5" data-num="11.5">
+        <header class="slide-head">
+          <span class="num">11.5</span>
+          <h2>플랫폼 매트릭스</h2>
+          <p class="lede">28개 기능이 네 플랫폼에서 어떻게 서 있는지를 코드 줄과 함께 모았다. 칸을 누르면 쓰는 기술과 근거 줄이 나온다.</p>
+        </header>
+        <div class="lw" data-title="플랫폼 매트릭스" data-surface="28 기능 × 4 플랫폼" data-reset id="mx-lab">
+          <div class="lw-body lab-stack">
+            <div class="chips" id="mx-groups" aria-label="묶음"></div>
+            <div class="controls">
+              <label class="field"><input type="checkbox" id="mx-gaps"> 모두 지원하는 줄은 숨기기</label>
+              <span class="legend"><span><span class="st yes">지원</span> 고유 구현</span><span><span class="st shared">공유</span> 다른 플랫폼 파일</span><span><span class="st partial">일부</span></span><span><span class="st no">없음</span> 받기만 하거나 unsupported</span></span>
+            </div>
+            <div class="mx" id="mx-grid"></div>
+            <div class="mx-detail" id="mx-detail" aria-live="polite"></div>
+          </div>
+          <div class="lw-foot">근거 줄은 이 강의가 기준으로 삼은 커밋의 GitHub 줄로 이어진다. 이 표는 코드를 읽어 모은 것이다. 네 플랫폼 어느 것도 이 강의를 쓰며 실행해 보지는 않았다.</div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th><code>ui_platform</code> 값</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+            <tbody>
+              <tr><td><code>form_factor</code></td><td>desktop</td><td>mobile</td><td>desktop</td><td>mobile</td></tr>
+              <tr><td><code>window_caption</code></td><td>참</td><td>거짓</td><td>테두리 없는 창만</td><td>거짓</td></tr>
+              <tr><td><code>command_key_shortcuts</code> (⌘ 표기)</td><td>거짓</td><td>거짓</td><td>참</td><td>참</td></tr>
+              <tr><td><code>screen_orientation</code> · <code>system_bars</code></td><td>거짓</td><td>참</td><td>거짓</td><td>참</td></tr>
+              <tr><td><code>haptics</code></td><td>거짓</td><td>참</td><td>참</td><td>기기가 지원하면</td></tr>
+              <tr><td><code>clipboard_image_copy</code></td><td>참</td><td>거짓</td><td>참</td><td>참</td></tr>
+              <tr><td><code>tray</code> · <code>global_hotkeys</code></td><td>참</td><td>거짓</td><td>참</td><td>거짓</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small muted">능력 플래그가 거짓이어도 그 요청을 frame에 실어도 된다. 하지 못하는 플랫폼은 받기만 하고 아무 일도 하지 않는다. 플래그는 설정 화면에 그 항목을 둘지 고를 때 쓴다. 그래서 앱은 플랫폼마다 frame을 다르게 짓지 않는다.</p>
+      </section>
+
+      <section class="slide" id="s6" data-num="11.6">
+        <header class="slide-head">
+          <span class="num">11.6</span>
+          <h2>고른 길과 이식의 순서</h2>
+          <p class="lede">Android 이식 계획이 정한 순서를 macOS와 iOS도 따랐다. 경계를 먼저 가르고, core만 빌드하고, CPU host를 세우고, 그다음 GPU와 OS 서비스를 채운다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>질문</th><th>고른 길</th><th>거절한 길과 이유</th></tr></thead>
+            <tbody>
+              <tr><td>창과 표면의 모양</td><td>host마다 따로. 진입점 하나와 UI thread, 공유 코드, 필요한 서비스만 interface로</td><td>하나의 가상 클래스: "Win32는 창 여럿·비클라이언트 caption·popup마다 HWND, 모바일은 표면 하나에 수명 주기. 같은 인터페이스면 어느 쪽에도 맞지 않는다"</td></tr>
+              <tr><td>플랫폼 hook</td><td>링크 결합 (<code>platform_font_source</code>, <code>platform_fail_fast</code>)</td><td>등록 함수: 시작 순서에 기댄다. 등록보다 먼저 registry를 부르는 test와 input thread가 빈 자원을 본다</td></tr>
+              <tr><td>Android의 host</td><td>GameActivity + GameTextInput + Gradle. <b>luil이 드는 Java 소스는 0줄</b></td><td>NativeActivity만: Java는 없지만 "키 이벤트만 (한글 조합 불가)". 직접 만든 Activity: JNI와 SurfaceView를 다 든다</td></tr>
+              <tr><td>네트워크</td><td>OS 스택 (WinHTTP, <code>HttpURLConnection</code>, <code>NSURLSession</code>) — 프록시·인증서·TLS를 OS가 맡는다</td><td>libcurl + TLS 라이브러리: 의존이 무겁고 인증서 저장소를 따로 다뤄야 한다. Cronet: APK가 커진다</td></tr>
+              <tr><td>렌더러 순서</td><td>CPU를 먼저, GPU를 나중에</td><td>— 호스트·수명 주기 문제와 스왑체인 문제를 떼어 놓는다. CPU는 GPU 실패 때 물러설 자리이기도 하다</td></tr>
+              <tr><td>기기 요청</td><td>frame에 싣는 상태</td><td><code>app_host</code> setter: Activity가 다시 설 때 앱이 다시 불러야 하고, "마지막 요청만 유효"를 위해 slot이 또 필요하다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="small">"Java 0줄" 방침의 결과가 셋이다: Android에는 접근성, 파일 대화 상자(문서 선택기), 자동 완성이 없다. 모두 View를 상속한 Java 클래스가 있어야 하기 때문이다. 다만 지금 트리에는 WebSocket 전송부 Java 파일(224줄) 하나가 있다. 방침은 기능마다의 말이다.</p>
+        <ol class="tl" aria-label="macOS·iOS 이식의 차례 (보이는 커밋 기준)">
+          <li><span class="d">11-21</span><span class="dot"></span><span class="m">CMake를 세 갈래로 나눠 macOS에서 core와 그 test만 구성한다 (<code>1a2ef31</code>). caption 단추·웹뷰 자리·창 표시 모드 계산을 공통 층으로 옮긴다.</span></li>
+          <li><span class="d">11-24</span><span class="dot"></span><span class="m">AppKit host와 hello·demo. <b>CPU 렌더러</b>(raster → CGImage)부터 (<code>564a7b8</code>). "test 1997개(1개 건너뜀) 통과".</span></li>
+          <li><span class="d">11-24</span><span class="dot"></span><span class="m">WKWebView → <b>Metal</b>, 실패 시 CPU (<code>0976eea</code>) → 보조 창, 창마다 popup·입력.</span></li>
+          <li><span class="d">11-25</span><span class="dot"></span><span class="m">OS 서비스를 하나씩: 파일 대화 상자 → 서명 번들 → Keychain → 클립보드 → 알림 → … → NSURLSession → 단일 인스턴스 → AVFoundation.</span></li>
+          <li><span class="d">11-25</span><span class="dot"></span><span class="m"><b>VoiceOver</b>: AppKit 없는 매핑 층부터 (<code>1a80035</code>), 그다음 <code>NSAccessibilityElement</code> 다리, 그다음 host가 창마다 다리를 세운다.</span></li>
+          <li><span class="d">11-25</span><span class="dot"></span><span class="m"><b>iPhone·iPad UIKit host</b> (<code>765b4c6</code>, 19파일 7,860줄). AppKit을 모르는 macOS 파일과 Android의 IME 그림자 문서를 그대로 쓴다.</span></li>
+        </ol>
+        <p class="small muted">이 저장소 사본은 얕은 clone이라 커밋이 82개만 보인다. Android 이식은 2026-10-02~05에 단계별로 끝났다고 계획 문서에 적혀 있다.</p>
+      </section>
+
+      <section class="slide" id="s7" data-num="11.7">
+        <header class="slide-head">
+          <span class="num">11.7</span>
+          <h2>접근성: 어휘가 플랫폼 낱말이 되는 자리</h2>
+          <p class="lede">element는 플랫폼 중립 어휘(<code>access_role</code> 37값, <code>access_command</code> 9값)로 자기를 설명한다. 플랫폼마다 번역 표 하나가 그것을 UI Automation, NSAccessibility, UIAccessibility로 옮긴다. Android에는 번역 코드가 없다.</p>
+        </header>
+        <div class="lw" data-title="역할 번역기" data-surface="control_type_for · ax_role_of · traits_of" data-reset id="ro-lab">
+          <div class="lw-body lab-stack">
+            <div class="chips role-pick" id="ro-pick" aria-label="access_role"></div>
+            <div class="role-cards" id="ro-cards" aria-live="polite"></div>
+          </div>
+          <div class="lw-foot">역할은 "platform 어휘가 아니라 이 저장소의 element가 실제로 하는 일의 목록"이다. 번역은 플랫폼마다 한 곳이다: Windows는 <code>control_type_for</code>, macOS는 <code>ax_role_of</code>, iOS는 <code>traits_of</code>와 <code>container_type_of</code>. iOS의 trait에는 역할과 상관없는 공통 규칙이 덧붙는다: 바꿀 수 있는 범위면 Adjustable, 선택되었거나 켜졌으면 Selected, 비활성이면 NotEnabled.</div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th><code>access_info</code>·실행</th><th>UIA (Windows)</th><th>NSAccessibility (macOS)</th><th>UIAccessibility (iOS)</th></tr></thead>
+            <tbody>
+              <tr><td><code>name</code></td><td>Name</td><td>AXDescription. 글 상자(<code>static_text</code>)는 이름을 AXValue로 읽고 label을 비운다 — 두 번 읽지 않게</td><td><code>accessibilityLabel</code></td></tr>
+              <tr><td><code>checked</code>·<code>mixed</code></td><td>Toggle 패턴 (mixed는 Indeterminate)</td><td>AXValue 0·1·2</td><td>Selected trait (mixed면 붙이지 않는다)</td></tr>
+              <tr><td><code>range</code></td><td>RangeValue 패턴. 작은·큰 변화 = step·page</td><td>AXIncrement·AXDecrement는 step만큼, 없으면 범위의 1/20</td><td>Adjustable, <code>accessibilityIncrement</code></td></tr>
+              <tr><td><code>value</code> (글 칸)</td><td>Value·Text 패턴. 쓰기는 <code>replace_all</code></td><td>AXValue. 쓰기는 <code>replace_all</code></td><td>글 쓰기는 first responder의 <code>UITextInput</code></td></tr>
+              <tr><td>누름</td><td>Invoke·Toggle·Select → <code>access_click_event</code></td><td>AXPress → <code>access_click_event</code></td><td><code>accessibilityActivate</code> → press</td></tr>
+              <tr><td>변화 알림</td><td>property, StructureChanged, LiveRegionChanged …</td><td>ValueChanged, LayoutChanged, AnnouncementRequested …</td><td>ScreenChanged, LayoutChanged, Announcement …</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="cols two">
+          <div class="prose">
+            <p><b>provider는 포인터가 아니라 id를 쥔다.</b> tree는 frame마다 통째로 새로 지어지고, 그것을 넘어 남는 정체성은 id뿐이다. 그래서 질의가 올 때마다 지금 tree에서 다시 찾는다. 신원은 세 플랫폼에서 같은 꼴(<code>kind:owner</code>)이다.</p>
+            <p><b>보조 기술의 호출 안에서는 앱을 부르지 않는다.</b> 눌러서 하는 명령은 <code>access_click_event</code>로 input thread에 보내 마우스 클릭과 같은 자리, 같은 순서로 나가게 한다. 상태 변화는 그 뒤 발행본 대조가 알린다. "앱이 동작을 처리하기 전에 상태가 바뀌었다고 보고하지 않기 위한 순서다."</p>
+            <p><b>보조 기술로 할 수 있는 일은 사람이 할 수 있는 일의 부분집합이다.</b> 보이지 않는 것, modal 가둠 뒤의 것, 이미 그 상태인 누름은 거절한다. 판정은 사람이 쓰는 <code>hit_test</code>로 상자 안의 아홉 자리를 훑어서 한다.</p>
+          </div>
+          <div class="walk">
+            <div class="code" data-lang="cpp" data-src="src/ui/ui_tree.cpp:303-322" data-path="src/ui/ui_tree.cpp" data-start="303"><script type="text/plain">
+    const ui_element* ui_tree::access_sibling_of(const ui_element_id& id, const bool forward) const
+    {
+        const auto found { access_index_.find(id) };
+        // 구조(`none`)는 형제 줄에 서지 않는다 — 접힌 것의 자리는 자식들이 잇는다.
+        if (found == access_index_.end() || found->second.position == no_access_position)
+            return nullptr;
+        const std::vector<const ui_element*>* siblings { &access_top_ };
+        if (found->second.parent != nullptr)
+        {
+            // 줄에 선 자리가 있으면 부모의 목록도 반드시 있다 — 없음은 방어다.
+            const auto children { access_children_.find(found->second.parent) };
+            if (children == access_children_.end())
+                return nullptr;
+            siblings = &children->second;
+        }
+        const std::size_t position { found->second.position };
+        if (forward)
+            return position + 1 < siblings->size() ? (*siblings)[position + 1] : nullptr;
+        return position > 0 ? (*siblings)[position - 1] : nullptr;
+    }
+</script></div>
+            <ol class="walk-steps-src">
+              <li data-lines="303-308" data-title="색인에서 찾는다">접근 색인은 tree를 만들 때 한 번 짓는다(4강). 구조 역할(<code>none</code>)은 형제 줄에 서지 않고, 그 자리는 자식들이 잇는다.</li>
+              <li data-lines="309-317" data-title="형제 줄">부모가 없으면 최상위 줄, 있으면 부모의 자식 줄이다.</li>
+              <li data-lines="318-321" data-title="한 걸음이 O(1)">자리 번호 ±1이 곧 다음·이전 형제다. 색인이 없으면 UIA 클라이언트가 <code>NextSibling</code>을 되풀이할 때 형제마다 root에서 부모를 찾아 형제 수의 제곱이 된다. 줄에는 id의 임자만 서므로, 같은 id가 둘이어도 "다음"이 제자리로 돌아와 열거가 끝나지 않는 일이 없다.</li>
+            </ol>
+          </div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/macos/accessibility_mapping.cpp:251-289" data-path="src/macos/accessibility_mapping.cpp" data-start="251"><script type="text/plain">
+    std::optional<access_request> ax_action_request(const access_info& info, const ax_action action, const bool multiple_selection) noexcept
+    {
+        switch (action)
+        {
+        case ax_action::press:
+            // 상태를 든 것은 그 상태의 명령이다 (UIA의 `invokable`이 Invoke를 거르는 것과 같은 갈래).
+            if (info.checked.has_value())
+                return access_request { access_command::toggle };
+            if (info.selected.has_value())
+            {
+                access_request request { access_command::select };
+                request.multiple_selection = multiple_selection;
+                return request;
+            }
+            if (info.expanded.has_value())
+                return access_request { info.expanded == true ? access_command::collapse : access_command::expand };
+            if (info.range.has_value() || invoke_role(info.role) == false)
+                return std::nullopt;
+            return access_request { access_command::invoke };
+        case ax_action::increment:
+        case ax_action::decrement: {
+            if (info.range.has_value() == false)
+                return std::nullopt;
+            const float step { ax_range_step(*info.range) };
+            if (step <= 0.0f)
+                return std::nullopt;
+            const float signed_step { action == ax_action::increment ? step : -step };
+            return ax_range_request(info, static_cast<double>(info.range->value + signed_step));
+        }
+        // 메뉴를 보이라는 것은 펼침이다 (팝업 단추·하위 메뉴가 있는 항목). 이미 펼쳐졌으면 할 일이 없다.
+        case ax_action::show_menu:
+            if (info.expanded.has_value() == false)
+                return std::nullopt;
+            return access_request { access_command::expand };
+        // 물리기는 펼친 것을 접는다 (Esc와 같은 자리). 접혀 있으면 이 요소가 물릴 것이 없다.
+        case ax_action::cancel:
+            if (info.expanded != true)
+                return std::nullopt;
+            return access_request { access_command::collapse };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="251-268" data-title="누름의 번역">VoiceOver의 AXPress가 오면, 상태를 든 요소는 그 상태의 명령이 된다: 켬끔이면 toggle, 선택이면 select, 펼침이면 expand·collapse. 범위가 있거나 누를 역할이 아니면 할 수 없음이다. 나머지는 invoke다.</li>
+            <li data-lines="269-278" data-title="올림·내림">범위가 있을 때만 step만큼 값을 바꾸는 요청이 된다.</li>
+            <li data-lines="279-289" data-title="메뉴 보이기·물리기">메뉴를 보이라는 것은 펼침, 물리기(Esc)는 펼친 것을 접기다.</li>
+          </ol>
+        </div>
+        <div class="callout key">
+          <i class="ci" aria-hidden="true">&#xEA61;</i>
+          <div>
+            <p class="ttl">순수 층이라는 무늬</p>
+            <p>이 번역은 AppKit을 include하지 않는 <code>accessibility_mapping.cpp</code>에 있다. 그래서 AppKit도 화면 읽기도 없이 core test로 돌고, iOS 다리가 같은 파일을 그대로 쓴다. 같은 무늬가 저장소에 되풀이된다: Win32 포인터 번역은 "창도 시계도 모르므로 test가 결정적이다", Android 입력 번역은 "GameActivity의 구조체를 모르게 둔다", macOS 키 변환도 "AppKit을 모르게 둔다". OS 프레임워크를 모르는 계산을 떼어 내면 플랫폼 없이 시험할 수 있고, 다른 플랫폼이 그대로 가져다 쓸 수 있다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s8" data-num="11.8">
+        <header class="slide-head">
+          <span class="num">11.8</span>
+          <h2>오해하기 쉬운 점</h2>
+        </header>
+        <div class="myth">
+          <div class="panel"><h4><span class="x">아니다</span>"<code>luil::win32</code>는 Windows 전용이다"</h4><p class="small">macOS host 헤더가 <code>win32_window.h</code>를 include하고, 동영상 헤더 <code>luil/win32/media_player.h</code>는 macOS에서 AVFoundation으로 구현된다. hello도 네 플랫폼에서 이 이름공간의 별칭을 쓴다. 이름은 역사적이다.</p></div>
+          <div class="panel"><h4><span class="x">반만 맞다</span>"iOS는 macOS 이식을 고친 것이다"</h4><p class="small">host 본체, 접근성 다리, 웹뷰, 파일 감시는 따로 썼다. AppKit을 모르는 macOS 파일 25개는 그대로 컴파일하고, IME 연결은 Android의 <code>ime_session</code>을 가져다 쓴다. 두 플랫폼의 순수 층을 조합해 섰다.</p></div>
+          <div class="panel"><h4><span class="x">아니다</span>"UI thread는 늘 메인 thread다"</h4><p class="small">Android만 다르다. luil의 UI thread는 glue가 띄운 <code>android_main</code> thread다. 창 장식·햅틱·방향·권한처럼 View를 만지는 일은 Java 메인 thread로 넘긴다.</p></div>
+          <div class="panel"><h4><span class="x">아니다</span>"<code>LUIL_ENABLE_WEBVIEW</code>를 끄면 웹뷰가 모두 빠진다"</h4><p class="small">이것은 WebView2(Windows) 옵션이다. Windows가 아니면 아예 꺼 둔다. macOS·iOS의 WKWebView 파일은 늘 컴파일된다.</p></div>
+          <div class="panel"><h4><span class="x">아니다</span>"GPU가 회복되면 다시 GPU로 그린다"</h4><p class="small">automatic에서 물러선 표면은 GPU를 다시 시도하지 않는다. Android는 Activity 단위로, 창이 다시 생겨도 CPU다.</p></div>
+          <div class="panel"><h4><span class="x">아니다</span>"접근 tree는 창이 뜨면 바로 있다"</h4><p class="small">그린 적이 없는 창에는 tree가 없다. macOS는 가려진 창을 그리지 않아 보조 기술이 옛 계층을 읽은 적이 있다. 그리기를 건너뛸 때도 바뀐 tree를 다리에 건네도록 고쳤다.</p></div>
+        </div>
+        <div class="callout warn">
+          <i class="ci" aria-hidden="true">&#xEA6C;</i>
+          <div>
+            <p class="ttl">주석이 코드보다 늦은 곳</p>
+            <p><code>ui_platform.h</code>는 <code>clipboard_image_copy</code>를 "Win32만 참", <code>desktop</code>을 "(Windows)"라 적는다. <code>accessibility.h</code>는 "platform 번역은 win32 계층의 표 하나"라 적는다. 지금은 macOS·iOS도 참이고 번역 표도 셋이다. 강의에서 주석을 인용할 때 코드와 맞춰 봐야 하는 자리다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s9" data-num="11.9">
+        <header class="slide-head">
+          <span class="num">11.9</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>정적 라이브러리를 플랫폼을 모르는 <code>luil_core</code>와 플랫폼별 <code>luil</code>로 나눈다. core가 플랫폼 헤더를 들이지 않았는지는 include 줄을 읽는 시험이 Windows에서 지킨다.</li>
+          <li>host의 일은 다섯 가지다: UI thread와 이벤트 루프, 깨우기(<code>PostMessageW</code>·<code>eventfd</code>·<code>CFRunLoopPerformBlock</code>), 입력 변환, <code>take_*</code> 명령 실행, 링크로 묶는 자원.</li>
+          <li>깨우기는 신호만 나르고 내용은 core의 큐와 slot이 나른다. 빈 갈래는 그 기능이 꺼졌다는 뜻이다.</li>
+          <li>렌더러는 생성 함수만 플랫폼의 것이고 물러섬 정책은 core 한 곳이다. 글꼴과 즉시 종료는 등록 순서가 없도록 링크로 묶는다.</li>
+          <li>같은 <code>hello_app.cpp</code>가 네 진입점에서 돈다. Android의 UI thread는 메인 thread가 아니고, iOS의 진입점은 돌아오지 않는다.</li>
+          <li>접근성 어휘는 플랫폼을 모르고, 번역 표는 플랫폼마다 한 곳이다. Android에는 "Java 0줄" 방침 때문에 접근성 계층이 없다. OS를 모르는 번역 층은 core test로 돌고 다른 플랫폼이 그대로 쓴다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s10" data-num="11.10">
+        <header class="slide-head">
+          <span class="num">11.10</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="3">
+            <p class="q">Windows에서 <code>src/ui</code>의 파일 하나에 <code>#include &lt;windows.h&gt;</code>를 넣었다. Windows 빌드와 기존 시험은 모두 통과한다. 이 실수는 어디서 잡히나?</p>
+            <ol class="choices">
+              <li>컴파일러 경고</li>
+              <li>Android 빌드를 해야만 알 수 있다</li>
+              <li>include 줄을 읽는 CTest 항목 <code>luil_core_portability</code></li>
+              <li>잡히지 않는다</li>
+            </ol>
+            <div class="explain">Windows에서는 core가 Win32 헤더를 들여도 빌드되고 시험도 통과한다. 그래서 스크립트가 core 디렉터리의 include 줄을 직접 읽어 세 SDK의 헤더와 상위 계층 include를 찾아 실패시킨다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q"><code>platform_font_source()</code>를 앱 시작 때 부르는 등록 함수로 바꾸면 무엇이 나빠지나?</p>
+            <ol class="choices">
+              <li>글꼴을 그리는 속도가 느려진다</li>
+              <li>시작 순서에 기대게 되어, 등록보다 먼저 registry를 부르는 test와 input thread가 빈 자원을 본다</li>
+              <li>플랫폼마다 글꼴이 같아진다</li>
+              <li>달라지는 것이 없다</li>
+            </ol>
+            <div class="explain">링크 결합에는 등록 순서가 아예 없다. core test는 플랫폼 계층 대신 빈 글꼴 관리자와 <code>abort()</code>를 정의한 stub을 링크해, 어느 플랫폼에서나 같은 시험을 같은 수만큼 돌린다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">네 진입점에 대해 옳은 것은?</p>
+            <ol class="choices">
+              <li>네 플랫폼 모두 프로세스의 메인 thread가 UI thread다</li>
+              <li>Android의 <code>run_application</code>은 Activity가 끝나도 돌아오지 않는다</li>
+              <li>macOS의 진입점은 돌아오지 않아 driver를 <code>static</code>으로 둔다</li>
+              <li>iOS의 <code>run_application</code>은 돌아오지 않으므로 driver와 delegate를 <code>static</code>으로 둔다</li>
+            </ol>
+            <div class="explain">iOS는 <code>UIApplicationMain</code>을 불러 돌아오지 않는다. Android의 UI thread는 <code>android_main</code> thread이고, Activity가 끝나면 돌아온다. macOS는 창이 닫히고 종료가 끝나면 돌아온다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">UIA 클라이언트가 항목 1만 개인 목록의 자식을 <code>NextSibling</code>으로 훑는다. 접근 색인이 없어 걸음마다 root에서 부모를 찾는다면 비용은?</p>
+            <ol class="choices">
+              <li>형제 수의 제곱</li>
+              <li>형제 수에 비례</li>
+              <li>일정하다</li>
+              <li>tree 깊이에 비례</li>
+            </ol>
+            <div class="explain">색인이 있으면 한 걸음이 해시 조회와 벡터 색인으로 끝난다. 색인은 같은 id가 둘일 때 "다음"이 제자리로 돌아와 열거가 끝나지 않는 문제도 막는다. 줄에는 id의 임자만 선다.</div>
+          </div>
+          <div class="quiz" data-answer="3">
+            <p class="q">VoiceOver 번역(역할 표, 값, 실행 번역, 발행본 대조)을 AppKit 없는 <code>accessibility_mapping.cpp</code>에 따로 두어 얻은 것은?</p>
+            <ol class="choices">
+              <li>VoiceOver가 더 빨리 읽는다</li>
+              <li>Android에서도 같은 접근성이 된다</li>
+              <li>AppKit 없이 core test로 돌고, iOS 다리가 같은 파일을 그대로 쓴다</li>
+              <li>UIA와 같은 낱말을 쓰게 된다</li>
+            </ol>
+            <div class="explain">UIKit 쪽 파일은 객체·trait·알림 게시만 맡는다. 같은 생각이 Win32 포인터 번역, Android 입력 번역, macOS 키 변환에도 되풀이된다.</div>
+          </div>
+          <div class="quiz" data-answer="2">
+            <p class="q">luil의 <code>access_role::button</code>은 Android에서 무엇으로 번역되나?</p>
+            <ol class="choices">
+              <li><code>android.widget.Button</code></li>
+              <li>번역되지 않는다. Android host에는 접근성 계층이 없다</li>
+              <li>UIA의 Button과 같은 값</li>
+              <li>TalkBack이 화면의 글을 읽어 추측한다</li>
+            </ol>
+            <div class="explain"><code>AccessibilityNodeProvider</code>를 쓰려면 View를 상속한 Java 클래스가 필요하다. 이것이 "Java 소스 0줄" 방침과 부딪혀 들이지 않았다. <code>access_info</code>를 고쳐도 Android에서는 아무도 읽지 않는다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cmake.min.js"></script>
+<script src="assets/course.js"></script>
+<script src="assets/platforms.js"></script>
+<script>
+(function () {
+  "use strict";
+  const { el, flow, sourceUrl } = window.LU;
+  const $ = (id) => document.getElementById(id);
+  function segBind(id, onChange) {
+    const g = $(id);
+    const set = (v) => g.querySelectorAll("button[data-v]").forEach((x) => x.setAttribute("aria-pressed", x.dataset.v === v ? "true" : "false"));
+    g.addEventListener("click", (e) => { const b = e.target.closest("button[data-v]"); if (!b) return; set(b.dataset.v); onChange(b.dataset.v); });
+    return set;
+  }
+  function log(box, cls, text) {
+    box.append(el("div", { class: "row " + cls }, el("span", { class: "t", text: "" }), el("span", { class: "m", text })));
+    while (box.childNodes.length > 40) box.firstChild.remove();
+    box.scrollTop = box.scrollHeight;
+  }
+
+  /* ---------- 11.1 소스 규모 ---------- */
+  (function sizes() {
+    const ROWS = [
+      ["src/ui", 37415, true], ["include/luil 중립 헤더", 19014, true], ["src/host", 7094, true], ["src/text", 5269, true], ["src/theme", 573, true],
+      ["src/win32", 26137, false], ["src/macos", 15326, false], ["src/android", 8785, false], ["src/ios", 7795, false],
+    ];
+    const max = Math.max(...ROWS.map((r) => r[1]));
+    const box = $("size-bars");
+    for (const [name, v, core] of ROWS)
+      box.append(el("div", { class: "r" }, el("span", { class: "lab" }, el("code", { text: name })), el("span", { class: "track" }, el("span", { class: "b" + (core ? " core" : ""), style: `width: ${(v / max) * 78}%` }), el("span", { class: "v", text: v.toLocaleString() }))));
+  })();
+
+  /* ---------- 11.2 깨우기 흐름 ---------- */
+  const PLAT = {
+    win32: { name: "Windows", os: ["PostMessageW", "사설 창 메시지"], loop: ["GetMessageW 루프", "DispatchMessageW"], how: "창 큐에 사설 메시지를 넣는다", back: "메시지 루프가 그 메시지를 꺼내 창 프로시저에 넘긴다" },
+    android: { name: "Android", os: ["eventfd에 1을 쓴다", "ALooper_addFd(USER)"], loop: ["ALooper_pollOnce", "USER → drain_wake()"], how: "eventfd에 8바이트를 쓴다", back: "looper가 USER 출처로 깨어 eventfd를 비운다" },
+    macos: { name: "macOS", os: ["CFRunLoopPerformBlock", "+ CFRunLoopWakeUp"], loop: ["[NSApp run]", "공통 모드에서 블록 실행"], how: "메인 run loop에 블록을 맡기고 깨운다. 예약 표식이 겹친 신호를 합친다", back: "run loop가 공통 모드에서 블록을 실행한다" },
+    ios: { name: "iOS", os: ["CFRunLoopPerformBlock", "macOS와 같은 방식"], loop: ["UIApplicationMain", "메인 run loop"], how: "macOS와 같은 방식으로 메인 run loop를 깨운다", back: "메인 run loop가 블록을 실행한다" },
+  };
+  const WAKE = [
+    ["snapshot", "frame·상호작용 상태가 게시됐다 (성공 여부를 돌려준다)", [1, 1, 1, 1]],
+    ["ui_command", "창 명령이 큐에 들어갔다", [1, 1, 1, 1]],
+    ["app_ui_command", "앱 UI 명령이 큐에 들어갔다", [1, 1, 1, 1]],
+    ["clipboard", "클립보드 요청이 큐에 들어갔다", [1, 1, 1, 1]],
+    ["key_report", "표를 단 키를 input thread가 처리했다", [1, 0, 0, 0]],
+    ["capture", "화면 남기기·녹화 요청이 큐에 들어갔다", [1, 0, 1, 1]],
+  ];
+  (function wakeTable() {
+    const tb = $("wk-table").querySelector("tbody");
+    for (const [name, what, has] of WAKE)
+      tb.append(el("tr", null, el("td", null, el("code", { text: name })), el("td", { text: what }), has.map((h) => el("td", { class: h ? "y" : "n", text: h ? "있음" : "없음" }))));
+  })();
+  let wkPlat = "win32", wf = null, wkBusy = false;
+  const wkLog = $("wk-log");
+  function wkBuild() {
+    const P = PLAT[wkPlat];
+    wf = flow($("wk-flow"), {
+      label: "깨우기 신호가 UI thread에 닿는 길",
+      cols: 5,
+      lanes: [
+        { id: "lg", name: "logic thread", short: "logic", sub: "frame을 짓는다" },
+        { id: "in", name: "input thread", short: "input", sub: "창 명령을 쌓는다" },
+        { id: "os", name: "플랫폼 루프", short: "OS", sub: P.name },
+        { id: "ui", name: "UI thread", short: "UI", sub: "표면·렌더러" },
+      ],
+      stations: [
+        { id: "pub", lane: "lg", col: 0, title: "frame 게시", sub: "latest_slot" },
+        { id: "wsnap", lane: "lg", col: 1, title: "wake.snapshot()", sub: "신호만" },
+        { id: "q", lane: "in", col: 0, title: "창 명령", sub: "큐에 넣는다" },
+        { id: "wcmd", lane: "in", col: 1, title: "wake.ui_command()", sub: "신호만" },
+        { id: "os", lane: "os", col: 2, title: P.os[0], sub: P.os[1] },
+        { id: "loop", lane: "ui", col: 3, title: P.loop[0], sub: P.loop[1] },
+        { id: "act", lane: "ui", col: 4, title: "깬 일을 한다", sub: "그리기 · take_*" },
+      ],
+      edges: [
+        { from: "pub", to: "wsnap" }, { from: "wsnap", to: "os", label: "signal" },
+        { from: "q", to: "wcmd" }, { from: "wcmd", to: "os", label: "signal" },
+        { from: "os", to: "loop", label: "wake" }, { from: "loop", to: "act" },
+      ],
+    });
+  }
+  async function wkRun(kind) {
+    if (wkBusy) return;
+    wkBusy = true;
+    const P = PLAT[wkPlat];
+    wf.clear();
+    wkLog.textContent = "";
+    if (kind === "frame") {
+      log(wkLog, "lg", "[logic] 새 frame을 latest_slot에 게시한다 — 내용은 slot이 나른다");
+      wf.mark("pub");
+      if (!(await wf.hop("pub", "wsnap", { kind: "lg" }))) { wkBusy = false; return; }
+      log(wkLog, "lg", "[logic] wake.snapshot()을 부른다 — 신호만 보낸다");
+      if (!(await wf.hop("wsnap", "os", { kind: "lg" }))) { wkBusy = false; return; }
+    } else {
+      log(wkLog, "in", "[input] 창 명령(예: 최대화)을 큐에 넣는다 — 내용은 큐가 나른다");
+      wf.mark("q");
+      if (!(await wf.hop("q", "wcmd", { kind: "in" }))) { wkBusy = false; return; }
+      log(wkLog, "in", "[input] wake.ui_command()를 부른다 — 신호만 보낸다");
+      if (!(await wf.hop("wcmd", "os", { kind: "in" }))) { wkBusy = false; return; }
+    }
+    log(wkLog, "", `[${P.name}] ${P.how}`);
+    if (!(await wf.hop("os", "loop"))) { wkBusy = false; return; }
+    log(wkLog, "ui", `[UI] ${P.back}`);
+    if (!(await wf.hop("loop", "act"))) { wkBusy = false; return; }
+    if (kind === "frame") log(wkLog, "good", "[UI] slot에서 최신 frame을 꺼내 draw_frame으로 그린다");
+    else log(wkLog, "good", wkPlat === "android" || wkPlat === "ios" ? "[UI] take_ui_commands()로 꺼낸다 — 이 플랫폼에서 최대화 같은 창 명령은 뜻이 없어 받기만 한다" : "[UI] take_ui_commands()로 꺼내 창을 바꾼다");
+    wkBusy = false;
+  }
+  $("wk-frame").addEventListener("click", () => wkRun("frame"));
+  $("wk-cmd").addEventListener("click", () => wkRun("cmd"));
+  const wkSet = segBind("wk-plat", (v) => { wkPlat = v; wkBusy = false; wkBuild(); wkLog.textContent = ""; log(wkLog, "", PLAT[v].name + ": 단추를 눌러 신호를 보내라"); });
+  $("wk-lab").addEventListener("lw-reset", () => { wkPlat = "win32"; wkSet("win32"); wkBusy = false; wkBuild(); wkLog.textContent = ""; log(wkLog, "", "단추를 눌러 신호를 보내라"); });
+  wkBuild();
+  log(wkLog, "", "단추를 눌러 신호를 보내라");
+
+  /* ---------- 11.5 플랫폼 매트릭스 ---------- */
+  const MX = window.LUIL_PLATFORM_MATRIX;
+  const ST = { yes: "지원", shared: "공유", partial: "일부", no: "없음" };
+  let mxGroup = "모두", mxSel = { row: "accessibility", col: "android" };
+  const groups = ["모두", ...new Set(MX.rows.map((r) => r.group))];
+  const grpBox = $("mx-groups");
+  groups.forEach((g) => {
+    const b = el("button", { type: "button", class: "chip", "aria-pressed": g === mxGroup ? "true" : "false", text: g });
+    b.addEventListener("click", () => { mxGroup = g; grpBox.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false")); mxRender(); });
+    grpBox.append(b);
+  });
+  function refLink(ref) {
+    const m = ref.match(/^([^:\s]+):(\d+)(?:[-–](\d+))?/);
+    if (!m) return el("span", { text: ref });
+    return el("a", { href: sourceUrl(m[1], +m[2], m[3] ? +m[3] : null), target: "_blank", rel: "noopener", text: ref });
+  }
+  function mxDetail() {
+    const row = MX.rows.find((r) => r.id === mxSel.row);
+    const col = MX.columns.find((c) => c.id === mxSel.col);
+    const box = $("mx-detail");
+    box.textContent = "";
+    if (!row || !col) return;
+    const cell = row.cells[col.id];
+    box.append(el("div", null, el("b", { text: row.label }), " · " + col.label + " ", el("span", { class: "st " + cell.status, text: ST[cell.status] })));
+    if (cell.tech) box.append(el("div", { class: "tech", text: cell.tech }));
+    if (cell.note) box.append(el("div", { class: "small", text: cell.note }));
+    if (cell.refs && cell.refs.length) box.append(el("div", { class: "refs" }, cell.refs.map(refLink)));
+  }
+  function mxRender() {
+    const grid = $("mx-grid");
+    const hideFull = $("mx-gaps").checked;
+    grid.textContent = "";
+    grid.append(el("div", { class: "h", text: "기능" }), ...MX.columns.map((c) => el("div", { class: "h" }, c.label, el("small", { text: c.platform }))));
+    let last = null;
+    for (const row of MX.rows) {
+      if (mxGroup !== "모두" && row.group !== mxGroup) continue;
+      const sts = MX.columns.map((c) => row.cells[c.id].status);
+      if (hideFull && sts.every((s) => s === "yes" || s === "shared")) continue;
+      if (row.group !== last) { grid.append(el("div", { class: "g", text: row.group })); last = row.group; }
+      grid.append(el("div", { class: "f", text: row.label }));
+      for (const c of MX.columns) {
+        const cell = row.cells[c.id];
+        const b = el("button", { type: "button", class: "c", "aria-pressed": mxSel.row === row.id && mxSel.col === c.id ? "true" : "false", "aria-label": `${row.label}, ${c.label}: ${ST[cell.status]}` },
+          el("span", { class: "st " + cell.status, text: ST[cell.status] }), el("span", { class: "tech", text: cell.tech || "" }));
+        b.addEventListener("click", () => {
+          mxSel = { row: row.id, col: c.id };
+          grid.querySelectorAll(".c[aria-pressed=true]").forEach((x) => x.setAttribute("aria-pressed", "false"));
+          b.setAttribute("aria-pressed", "true");
+          mxDetail();
+        });
+        grid.append(b);
+      }
+    }
+    mxDetail();
+  }
+  $("mx-gaps").addEventListener("change", mxRender);
+  $("mx-lab").addEventListener("lw-reset", () => { mxGroup = "모두"; mxSel = { row: "accessibility", col: "android" }; $("mx-gaps").checked = false; grpBox.querySelectorAll(".chip").forEach((x, i) => x.setAttribute("aria-pressed", i === 0 ? "true" : "false")); mxRender(); });
+  mxRender();
+
+  /* ---------- 11.7 역할 번역기 ---------- */
+  const ROLES = window.LUIL_ACCESS_ROLES.roles;
+  let roSel = "button";
+  const pick = $("ro-pick");
+  ROLES.forEach((r) => {
+    const b = el("button", { type: "button", class: "chip", "aria-pressed": r.role === roSel ? "true" : "false" }, el("code", { text: r.role }));
+    b.addEventListener("click", () => { roSel = r.role; pick.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false")); roRender(); });
+    pick.append(b);
+  });
+  function card(title, big, sub, none) {
+    return el("div", { class: "rc" + (none ? " none" : "") }, el("h4", { text: title }), el("div", { class: "big", text: big }), sub ? el("div", { class: "sub", text: sub }) : null);
+  }
+  function roRender() {
+    const r = ROLES.find((x) => x.role === roSel);
+    const box = $("ro-cards");
+    box.textContent = "";
+    box.append(
+      card("Windows · UI Automation", r.uia || "—", "ControlType (control_type_for)"),
+      card("macOS · NSAccessibility", (r.ax || []).join(" · ") || "—", "역할 (ax_role_of)"),
+      card("iOS · UIAccessibility", r.ios_traits || "—", r.ios_container ? "container: " + r.ios_container : "trait (traits_of)"),
+      card("Android", "번역 코드 없음", "접근성 계층을 들이지 않았다 (Java 0줄 방침)", true),
+    );
+  }
+  $("ro-lab").addEventListener("lw-reset", () => { roSel = "button"; pick.querySelectorAll(".chip").forEach((x) => x.setAttribute("aria-pressed", x.textContent === "button" ? "true" : "false")); roRender(); });
+  roRender();
+})();
+</script>
+</body>
+</html>

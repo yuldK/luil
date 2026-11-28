@@ -1,0 +1,966 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>02 세 스레드와 한 방향 흐름 · luil 해부학</title>
+<meta name="description" content="luil 해부학 2강. UI·input·logic 세 스레드의 소유권, app_host의 조립, logic loop의 묶음 처리, 게시 순서, 종료 절차와 시간 예산.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .own { display: grid; gap: 12px; }
+  @media (min-width: 860px) { .own { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  .own .panel { border-top: 3px solid var(--lane); }
+  .own .ui { --lane: var(--t-ui); }
+  .own .in { --lane: var(--t-in); }
+  .own .lg { --lane: var(--t-lg); }
+  .own li code { font-size: 0.82em; }
+  .bridge-detail { display: grid; gap: 10px; }
+  .bridge-list { display: grid; gap: 8px; }
+  .bridge-card { appearance: none; text-align: left; font: inherit; color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; cursor: pointer; display: grid; gap: 2px; }
+  .bridge-card[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-wash); }
+  .bridge-card .route { font-size: var(--fs-xs); color: var(--fg-2); }
+  .bridge-card .nm { font-family: var(--font-code); font-size: var(--fs-sm); }
+  .seq-hit { cursor: pointer; }
+  .seq-hit .d-line { transition: stroke 0.15s, stroke-width 0.15s; }
+  .seq-hit:hover .d-line, .seq-hit.on .d-line { stroke: var(--accent); stroke-width: 2.25; }
+  .seq-hit.on .d-text.mono { fill: var(--accent-ink); font-weight: 600; }
+  .seq-hit .hitbox { fill: transparent; }
+  .batch { display: grid; gap: 10px; }
+  .batch-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .batch-group { display: inline-flex; flex-wrap: wrap; gap: 2px; padding: 4px; border: 1px solid var(--line-2); border-radius: var(--r-row); max-width: 100%; }
+  .batch-group i { width: 6px; height: 12px; border-radius: 1px; background: var(--t-lg); opacity: 0.85; }
+  .batch-group i.first { background: var(--accent); opacity: 1; }
+  .batch-group .pub { font-family: var(--font-code); font-size: 10.5px; color: var(--fg-2); padding: 0 4px; align-self: center; }
+  .shut { display: grid; gap: 12px; }
+  .shut-steps { display: grid; gap: 6px; counter-reset: st; margin: 0; padding: 0; list-style: none; }
+  .shut-steps li { display: grid; grid-template-columns: 2em minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); font-size: var(--fs-sm); line-height: 1.55; }
+  .shut-steps li .n { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--fg-3); padding-top: 2px; }
+  .shut-steps li .st { font-family: var(--font-code); font-size: var(--fs-xs); white-space: nowrap; color: var(--fg-3); padding-top: 2px; }
+  .shut-steps li.run { border-color: var(--accent); }
+  .shut-steps li.ok .st { color: var(--accent-ink); }
+  .shut-steps li.bad { border-color: var(--error); background: var(--error-wash); }
+  .shut-steps li.bad .st { color: var(--error); }
+  .shut-steps li.skip { opacity: 0.55; }
+  .timeline { position: relative; height: 34px; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); overflow: hidden; }
+  .timeline .fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-wash-2); width: 0; }
+  .timeline .mark { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line-3); }
+  .timeline .mark span { position: absolute; top: 2px; left: 4px; font-family: var(--font-code); font-size: 10px; color: var(--fg-2); white-space: nowrap; }
+  .timeline .now { position: absolute; right: 8px; bottom: 4px; font-family: var(--font-code); font-size: 11px; color: var(--fg); }
+</style>
+</head>
+<body data-lecture="2">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="02">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 02</span><span>1부 · 큰 그림</span></div>
+      <h1>세 스레드와 한 방향 흐름</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">UI는 그리기만, input은 판정만, logic은 상태만 맡는다. 세 스레드는 서로를 기다리지 않고, 사건은 channel로, 상태는 latest_slot으로 건넌다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>45분</dd></div>
+            <div><dt>선수 지식</dt><dd>1강, mutex·condition variable</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>app_host.h</code>·<code>app_host.cpp</code></dd></div>
+            <div><dt>실험</dt><dd>스레드 사이의 다리, 묶음 처리, 종료 절차</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li>UI·input·logic 세 스레드가 각각 무엇을 소유하는지 말할 수 있다.</li>
+            <li>app_host가 채널·slot·명령 큐로 세 스레드를 잇는 모양을 그릴 수 있다.</li>
+            <li>logic loop가 메시지를 묶어 처리하고 frame을 한 번만 게시하는 이유를 설명한다.</li>
+            <li>종료 절차의 단계와 시간 예산, 그리고 fail-fast를 고른 이유를 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="2.1">
+        <header class="slide-head">
+          <span class="num">2.1</span>
+          <h2>왜 스레드를 셋으로 나누나</h2>
+          <p class="lede">한 스레드가 모든 일을 하면, 가장 느린 일이 화면과 입력을 함께 멈춘다.</p>
+        </header>
+        <div class="prose">
+          <p>전통적인 GUI 프로그램은 창 메시지를 받는 스레드 하나에서 입력 처리, 앱 상태 변경, 그리기를 모두 한다. 그 스레드에서 파일을 읽거나 큰 목록을 다시 정렬하면 그동안 창은 다시 그려지지 않고, 마우스는 눌러도 반응이 없다. luil은 일을 성격에 따라 세 스레드로 나누고, 각 스레드가 소유하는 것을 정해 둔다.</p>
+        </div>
+        <div class="own">
+          <div class="panel ui">
+            <h3><span class="thread-chip ui">UI thread</span></h3>
+            <p>OS가 "이 스레드에서만"을 요구하는 것들이다.</p>
+            <ul>
+              <li>창(HWND), 렌더러와 표면</li>
+              <li>WebView2, 클립보드, TSF COM 호출</li>
+              <li>메시지 루프와 그리기(<code>WM_PAINT</code>)</li>
+            </ul>
+          </div>
+          <div class="panel in">
+            <h3><span class="thread-chip in">input thread</span></h3>
+            <p>입력을 뜻 있는 동작으로 바꾸는 상태 기계다.</p>
+            <ul>
+              <li>raw 이벤트의 큐</li>
+              <li><code>interaction_controller</code> — hover·누름·클릭·끌기·초점</li>
+              <li><code>interaction_snapshot</code> 게시</li>
+            </ul>
+          </div>
+          <div class="panel lg">
+            <h3><span class="thread-chip lg">logic thread</span></h3>
+            <p>앱 상태의 유일한 주인이다.</p>
+            <ul>
+              <li>앱 상태와 <code>logic_driver</code></li>
+              <li>메시지 처리(<code>handle</code>)와 시간 갱신(<code>tick</code>)</li>
+              <li>불변 <code>ui_frame</code>·tree 게시</li>
+            </ul>
+          </div>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">읽기와 쓰기의 규칙</span>UI와 input은 불변 tree를 <b>읽기만</b> 하고, logic은 새 frame과 tree를 <b>만들기만</b> 한다. 앱 상태는 logic에서만 바뀌고, 다른 스레드는 메시지를 보낼 뿐이다. 이 규칙이 지켜지면 tree에는 잠금이 필요 없다.</div></div>
+      </section>
+
+      <section class="slide" id="s2" data-num="2.2">
+        <header class="slide-head">
+          <span class="num">2.2</span>
+          <h2>스레드 사이의 다리</h2>
+          <p class="lede">세 스레드는 공유 변수가 아니라 정해진 다리로만 이야기한다. 다리를 눌러 무엇이 건너가는지 보자.</p>
+        </header>
+        <div class="lw" data-title="app_host의 다리" data-surface="src/host/app_host.cpp · struct assembly" id="bridge-lab">
+          <div class="lw-body">
+            <div id="bridge-diagram"></div>
+            <div class="bridge-detail" id="bridge-detail" aria-live="polite"></div>
+          </div>
+        </div>
+        <div class="prose">
+          <p>다리는 세 종류다. <strong>channel</strong>은 사건을 순서대로 나르는 큐(실선), <strong>latest_slot</strong>은 최신 상태 하나만 두는 칸(점선), <strong>명령 큐</strong>는 UI thread에서만 할 수 있는 일을 부탁하는 목록과 깨우기 신호(점점선)다. 두 메시징 장치는 3강에서 코드 한 줄까지 읽는다.</p>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="2.3">
+        <header class="slide-head">
+          <span class="num">2.3</span>
+          <h2>조립체 assembly 읽기</h2>
+          <p class="lede">세 스레드가 나눠 쓰는 것은 전부 구조체 하나에 들어 있다. 선언 순서까지 설계다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/host/app_host.cpp:76-98,116-122,141-154" data-path="src/host/app_host.cpp" data-start="76"><script type="text/plain">
+    // 구성 요소의 선언 순서가 곧 파괴의 역순이다.
+    // 스레드는 shutdown()이 먼저 멈추므로 여기서는 소유만 담당한다.
+    struct app_host::assembly
+    {
+        messaging::channel<raw_input_event> input_inbox { messaging::channel_options { 4096, messaging::overflow_policy::drop_oldest, {} } };
+        messaging::channel<app_message> app_inbox { messaging::channel_options { 1024, messaging::overflow_policy::reject_newest, {} } };
+        // UI가 이미 만든 완료 메시지는 app inbox에 들어갈 때까지 보관한다.
+        std::mutex file_dialog_mutex {};
+        std::deque<app_message> file_dialog_messages {};
+        std::vector<app_message> initial_messages {};
+        messaging::latest_slot<std::shared_ptr<const ui_frame>> frame_slot {};
+        messaging::latest_slot<std::shared_ptr<const ui_tree>> tree_slot {};
+        // 주 tree를 짓기 전에 처리한 app 메시지의 표다 (`acquired_tree_ticket`).
+        // tree 게시와 표 갱신을 한 자물쇠로 묶는다. 따로 두면 UI thread가 tree를 집은 뒤 표를 읽기 전에 다음 판이
+        // 끼어들어, 옛 tree에 새 표가 붙는다 — 그러면 아직 반영되지 않은 크기를 반영됐다고 본다.
+        std::mutex tree_ticket_mutex {};
+        std::uint64_t published_tree_ticket { 0 };
+        // logic thread만 쓴다. 지금까지 처리한 메시지의 표다.
+        std::uint64_t handled_ticket { 0 };
+        // 주 창 밖 표면(popup·보조 창)의 tree들이다.
+        // 주 tree처럼 신호 없이 게시하고 input thread가 처리 직전에 받는다.
+        messaging::latest_slot<surface_tree_list> surface_tree_slot {};
+        messaging::latest_slot<interaction_snapshot> interaction_slot {};
+⋯@116
+        // 창 명령 큐다.
+        // input thread가 넣고 UI thread가 신호를 받아 꺼낸다.
+        // 신호는 유실될 수 있어도(창 메시지 게시 실패) 내용은 여기 남는다.
+        std::mutex ui_command_mutex {};
+        std::vector<ui_command_request> ui_commands {};
+        // 큐에 넣고 UI thread를 깨우는 길이다. input thread와 `post_ui_command`가 함께 쓴다.
+        std::function<void(ui_command)> forward_ui_command {};
+⋯@141
+        // shutdown()이 정한 종료 예산의 마감시각이다.
+        // 종료 신호 게시와 logic 처리 대기가 이 하나를 나눠 본다.
+        // shutdown() 안에서만 쓰지만 두 함수가 함께 읽으므로 조립체가 들고 있다.
+        std::chrono::steady_clock::time_point shutdown_deadline {};
+
+        // 스레드 최상단 예외 가드가 세운다 (`app_host::faulted()`가 읽는다).
+        std::atomic<bool> faulted { false };
+        // logic thread가 진입 함수를 벗어나기 직전에 세운다.
+        // shutdown()이 무기한 join에 들어가기 전에 이 값을 유한 시간만 기다린다.
+        std::atomic<bool> logic_thread_exited { false };
+
+        std::thread logic_thread {};
+        std::thread input_thread {};
+    };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="76-79" data-title="선언 순서가 곧 파괴의 역순">C++은 멤버를 선언의 역순으로 파괴한다. 스레드(맨 아래)가 가장 먼저, 채널(맨 위)이 가장 나중에 사라진다. 스레드가 아직 쓰는 채널이 먼저 사라지는 일이 구조적으로 막힌다. 스레드 자체는 <code>shutdown()</code>이 먼저 멈춘다.</li>
+            <li data-lines="80-81" data-title="두 channel의 용량과 정책">raw 입력은 4096칸에 <code>drop_oldest</code>다. 포인터 이동이 몰리면 오래된 것을 버린다. 앱 메시지는 1024칸에 <code>reject_newest</code>다. 넘치면 새 것을 거절해 게시한 쪽이 알게 한다. 사건의 성격이 정책을 고른다(3강).</li>
+            <li data-lines="86-87,97-98" data-title="네 개의 latest_slot">frame(UI가 읽음), 주 tree와 표면 tree 목록(input이 읽음), interaction snapshot(UI가 읽음). 새 값이 옛 값을 덮으므로 소비자가 느려도 쌓이지 않는다.</li>
+            <li data-lines="88-94" data-title="tree와 처리 표를 한 자물쇠로">logic이 처리한 메시지의 번호(ticket)를 tree와 함께 게시한다. UI는 "이 tree가 내가 보낸 창 크기 메시지를 반영했는가"를 이 번호로 판단한다. 둘을 따로 게시하면 옛 tree에 새 번호가 붙을 수 있어 한 자물쇠로 묶었다.</li>
+            <li data-lines="116-122" data-title="UI thread에 부탁하는 명령 큐">창 최소화·클립보드처럼 UI thread만 할 수 있는 일은 큐에 넣고 깨우기 신호를 보낸다. 신호(창 메시지)는 유실될 수 있어도 내용은 큐에 남아 다음 신호에 실행된다.</li>
+            <li data-lines="141-153" data-title="종료 예산과 고장 표시">종료 마감시각, 스레드 최상단에서 예외를 잡았다는 <code>faulted</code>, logic이 진입 함수를 벗어났다는 표시. 모두 <code>shutdown()</code>이 무기한 기다리지 않기 위한 장치다(2.8).</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s4" data-num="2.4">
+        <header class="slide-head">
+          <span class="num">2.4</span>
+          <h2>조립 순서: 채널 → callback → 스레드</h2>
+          <p class="lede">던질 수 있는 준비는 모두 스레드를 시작하기 전에 끝낸다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/host/app_host.cpp:192-206,276-309" data-path="src/host/app_host.cpp" data-start="192"><script type="text/plain">
+    app_host::app_host(config configuration, logic_driver& driver, interaction_policy* const policy)
+        : assembly_ { std::make_unique<assembly>() }
+        , driver_ { driver }
+    {
+        // 조립 순서는 "채널 생성 → callback 설정 → 스레드 시작"으로 고정한다.
+        // wake 신호는 platform이 준 불투명 함수라 여기에는 창 개념이 없다.
+        // 던질 수 있는 준비(callback 구성)는 전부 스레드 시작 앞에 있어야 한다 —
+        // 시작 뒤의 준비 실패는 joinable thread 파괴, 곧 terminate가 된다.
+        if (configuration.wake.snapshot != nullptr)
+        {
+            assembly_->frame_slot.set_signal_callback(configuration.wake.snapshot);
+            // hover·tooltip·drag 표시가 바뀌면 다시 그린다.
+            // wake 신호는 frame과 같다.
+            assembly_->interaction_slot.set_signal_callback(configuration.wake.snapshot);
+        }
+⋯@276
+        parts.initial_messages = std::move(configuration.initial_messages);
+        assembly_->logic_thread = std::thread { &app_host::logic_thread_main, this };
+
+        try
+        {
+            assembly_->input_thread = std::thread {
+                &input_thread_main,
+                std::ref(parts.input_inbox),
+                std::ref(parts.tree_slot),
+                std::ref(parts.surface_tree_slot),
+                std::ref(parts.app_inbox),
+                std::ref(parts.interaction_slot),
+                std::move(forward_ui_command),
+                policy,
+                std::move(configuration.interaction),
+                std::move(execute_app_ui_command),
+                std::move(execute_clipboard),
+                std::ref(parts.touch_slot),
+                parts.haptic,
+                configuration.wake.key_report,
+                std::move(execute_capture),
+                std::ref(parts.faulted),
+            };
+        }
+        catch (...)
+        {
+            // input thread를 만들지 못했다 (자원 고갈).
+            // shutdown() 4단계와 같은 되감기다: inbox를 닫으면 logic이 곧 나온다.
+            // 실패는 호출자의 것이고 프로세스는 산다.
+            assembly_->app_inbox.close();
+            assembly_->logic_thread.join();
+            throw;
+        }
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="196-199" data-title="순서를 고정하는 이유"><code>std::thread</code>가 join되지 않은 채 파괴되면 <code>std::terminate</code>다. 스레드를 시작한 뒤에 준비가 실패해 예외가 나면 프로세스가 죽는다. 그래서 예외가 날 수 있는 준비(callback 구성)는 전부 앞에 둔다.</li>
+            <li data-lines="200-206" data-title="깨우기 신호는 불투명 함수">frame과 interaction slot에 같은 깨우기 신호를 단다. Win32에서는 <code>PostMessageW</code>지만 이 코드는 그 사실을 모른다. 플랫폼이 준 <code>std::function</code>일 뿐이라 창 없이도 조립된다.</li>
+            <li data-lines="276-277" data-title="logic thread가 먼저 선다">초기 메시지(창의 첫 크기·배율)를 넘기고 logic thread를 시작한다. logic은 <code>start()</code>, 초기 메시지 처리, 첫 frame 게시 순으로 움직인다.</li>
+            <li data-lines="279-298" data-title="input thread에 넘기는 것들">input thread는 채널과 slot의 참조, 정책, 명령 실행 callback을 받는다. 앱 상태는 넘기지 않는다. input이 상태에 닿을 길 자체가 없다.</li>
+            <li data-lines="300-308" data-title="반쯤 선 조립을 되감는다">input thread를 만들지 못하면(자원 고갈) app inbox를 닫아 logic을 내보내고 join한 뒤 예외를 다시 던진다. 실패는 호출자의 것이고 프로세스는 산다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s5" data-num="2.5">
+        <header class="slide-head">
+          <span class="num">2.5</span>
+          <h2>logic loop: 묶어서 처리하고, 한 번 게시한다</h2>
+          <p class="lede">메시지가 몰려와도 frame은 묶음마다 한 번만 짓는다. 상한 64가 렌더링 기회를 지킨다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/host/app_host.cpp:730-810" data-path="src/host/app_host.cpp" data-start="730"><script type="text/plain">
+    void app_host::logic_loop()
+    {
+        driver_.start();
+        for (app_message& message : assembly_->initial_messages)
+            if (message.empty() == false)
+                driver_.handle(std::move(message));
+        assembly_->initial_messages.clear();
+        publish_frame();
+        std::optional<std::chrono::steady_clock::time_point> next_tick { driver_.next_tick() };
+        std::vector<messaging::envelope<app_message>> batch {};
+        messaging::envelope<app_message> received {};
+        while (true)
+        {
+            // 예고된 tick이 있으면 그때까지만 기다린다.
+            // 없으면 250ms — 종료 신호 확인 주기다.
+            std::chrono::milliseconds wait { 250 };
+            if (next_tick.has_value())
+            {
+                const auto remaining { std::chrono::duration_cast<std::chrono::milliseconds>(*next_tick - std::chrono::steady_clock::now()) };
+                if (remaining < wait)
+                    wait = remaining > std::chrono::milliseconds { 0 } ? remaining : std::chrono::milliseconds { 0 };
+            }
+
+            const messaging::receive_status status { assembly_->app_inbox.receive_wait(received, wait) };
+            if (status == messaging::receive_status::closed)
+            {
+                publish_frame();
+                return;
+            }
+
+            bool changed { false };
+            if (status == messaging::receive_status::received)
+            {
+                driver_.handle(std::move(received.payload));
+                assembly_->handled_ticket = received.sequence + 1;
+                release_handled_work();
+
+                // 몰려온 메시지는 한 번에 처리하고 frame은 batch당 한 번만 게시한다.
+                // 상한이 렌더링 기회를 보존한다.
+                batch.clear();
+                static_cast<void>(assembly_->app_inbox.drain(batch, 63));
+                {
+                    // 포화 거절과 같은 자물쇠로 묶어, 직전 drain과 엇갈린 결과도 이 자리에서 집는다.
+                    const std::scoped_lock lock { assembly_->file_dialog_mutex };
+                    auto& messages { assembly_->file_dialog_messages };
+                    while (messages.empty() == false)
+                    {
+                        const auto result { assembly_->app_inbox.post(messages.front()) };
+                        if (result == messaging::post_result::channel_full)
+                            break;
+                        if (result == messaging::post_result::channel_closed)
+                        {
+                            messages.clear();
+                            break;
+                        }
+                        messages.pop_front();
+                    }
+                }
+                for (messaging::envelope<app_message>& entry : batch)
+                {
+                    driver_.handle(std::move(entry.payload));
+                    assembly_->handled_ticket = entry.sequence + 1;
+                    release_handled_work();
+                }
+                changed = true;
+            }
+
+            // 예고 시각이 지났으면 메시지가 없어도 시간이 logic을 움직인다.
+            if (next_tick.has_value() && std::chrono::steady_clock::now() >= *next_tick)
+            {
+                driver_.tick(std::chrono::steady_clock::now());
+                changed = true;
+            }
+
+            if (changed == false)
+                continue;
+            publish_frame();
+            // 예고는 frame 게시 뒤마다 다시 묻는다 (다음 만료가 바뀌었을 수 있다).
+            next_tick = driver_.next_tick();
+        }
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="732-737" data-title="시작: start → 초기 메시지 → 첫 frame">플랫폼이 확정한 창 크기·배율을 초기 메시지로 먼저 처리한 뒤 첫 frame을 게시한다. 그래서 첫 배치부터 실제 크기를 쓴다.</li>
+            <li data-lines="742-750" data-title="얼마나 기다릴까">예고된 tick이 있으면 그 시각까지, 없으면 250ms만 기다린다. 250ms는 종료 신호를 확인하는 주기다. 메시지도 tick도 없으면 스레드는 잠든다. 바쁜 대기(busy wait)가 없다.</li>
+            <li data-lines="752-757" data-title="닫힌 inbox는 종료다">inbox가 닫혔고 비었으면 마지막 frame을 게시하고 돌아온다. 이것이 logic thread의 유일한 정상 출구다.</li>
+            <li data-lines="759-770" data-title="하나를 받고, 63개를 더 꺼낸다">한 건을 처리한 뒤 <code>drain(batch, 63)</code>으로 쌓인 것을 한 번의 잠금으로 최대 63개 더 꺼낸다. 한 번 깰 때 최대 64건이다. 상한이 없으면 계속 밀려드는 메시지가 frame 게시를 굶길 수 있다.</li>
+            <li data-lines="771-788" data-title="파일 대화 상자의 결과를 다시 넣는다">UI thread가 만든 파일 대화 상자 결과는 inbox가 가득 차 있으면 따로 보관된다. 이 자리에서 여유가 생긴 만큼 다시 넣는다. 사용자가 고른 파일을 잃지 않기 위한 자리다.</li>
+            <li data-lines="789-795" data-title="묶음의 나머지를 처리한다">꺼낸 메시지를 순서대로 <code>handle</code>한다. 처리한 번호(ticket)를 남겨 tree 게시와 짝을 맞춘다.</li>
+            <li data-lines="798-809" data-title="시간이 logic을 움직인다, 그리고 게시">예고 시각이 지났으면 메시지가 없어도 <code>tick(now)</code>을 부른다. 무엇이든 바뀌었으면 frame을 <b>한 번</b> 게시하고, 다음 예고를 다시 묻는다.</li>
+          </ol>
+        </div>
+        <div class="lw" data-title="묶음 처리 셈" data-surface="receive_wait + drain(63)" id="batch-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <label class="field" for="batch-n">inbox에 쌓인 메시지</label>
+              <input type="range" id="batch-n" min="1" max="300" value="150">
+              <output id="batch-out" for="batch-n">150</output>
+            </div>
+            <div class="batch" id="batch-vis" aria-live="polite"></div>
+          </div>
+          <div class="lw-foot">한 번 깰 때 <code>receive_wait</code>로 1건, <code>drain</code>으로 최대 63건을 꺼낸다(진한 칸이 receive_wait). 미리 쌓인 N건은 ⌈N/64⌉번의 묶음이 되고, frame은 묶음마다 한 번 게시된다. 처리하는 동안 새로 들어온 메시지는 다음 묶음으로 간다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s6" data-num="2.6">
+        <header class="slide-head">
+          <span class="num">2.6</span>
+          <h2>게시 순서: tree 먼저, frame은 마지막</h2>
+          <p class="lede">UI를 깨우는 신호는 frame slot에만 달려 있다. 그래서 frame을 맨 나중에 게시한다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/host/app_host.cpp:678-702" data-path="src/host/app_host.cpp" data-start="678"><script type="text/plain">
+    void app_host::publish_frame()
+    {
+        const std::shared_ptr<const ui_frame> frame { driver_.make_frame() };
+        if (frame == nullptr)
+            return;
+        // wake 신호는 frame 게시에 붙어 있고 tree slot에는 신호가 없다.
+        // tree를 먼저 게시해야 깨어난 UI 스레드가 새 tree를 읽는다.
+        {
+            const std::lock_guard<std::mutex> lock { assembly_->tree_ticket_mutex };
+            static_cast<void>(assembly_->tree_slot.publish(frame->tree));
+            assembly_->published_tree_ticket = assembly_->handled_ticket;
+        }
+        // popup·보조 창·도킹 표면의 tree가 한 표면 목록으로 input thread에 간다.
+        // controller에는 표면만 있고 셋의 구분이 없다.
+        surface_tree_list surfaces {};
+        surfaces.reserve(frame->popups.size() + frame->windows.size() + frame->docked_surfaces.size());
+        for (const ui_popup& popup : frame->popups)
+            surfaces.emplace_back(popup.id, popup.tree);
+        for (const ui_window& window : frame->windows)
+            surfaces.emplace_back(window.id, window.tree);
+        for (const ui_docked_surface& docked : frame->docked_surfaces)
+            surfaces.emplace_back(docked.id, docked.tree);
+        static_cast<void>(assembly_->surface_tree_slot.publish(std::move(surfaces)));
+        static_cast<void>(assembly_->frame_slot.publish(frame));
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="680-682" data-title="앱이 frame을 짓는다"><code>make_frame()</code>은 앱 코드다. 1강의 hello처럼 tree를 새로 지어 <code>shared_ptr&lt;const ui_frame&gt;</code>으로 돌려준다.</li>
+            <li data-lines="683-689" data-title="주 tree를 먼저">tree slot에는 깨우기 신호가 없다. input thread는 입력을 처리하기 직전에 이 slot에서 새 tree를 집는다. 처리한 메시지 번호도 같은 자물쇠 안에서 적는다.</li>
+            <li data-lines="690-700" data-title="popup·보조 창·도킹 표면의 tree">주 창 밖 표면들의 tree를 (id, tree) 목록 하나로 모아 게시한다. input의 controller에게는 표면만 있고 셋의 구분이 없다.</li>
+            <li data-lines="701" data-title="마지막으로 frame — 이것이 UI를 깨운다">frame 게시가 깨우기 신호를 낸다. 깨어난 UI thread가 무엇을 읽든 이미 새 tree가 게시되어 있다. 순서를 바꾸면 UI가 새 frame에 옛 tree를 짝지을 수 있다.</li>
+          </ol>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">원자적 transaction은 아니다</span>세 slot은 따로 게시되므로 모든 조회가 한 frame의 transaction은 아니다. input이 새 tree를 받기 전에는 옛 tree로 이벤트를 처리하므로 tree와 interaction이 서로 다른 frame일 수 있다. 그래도 어느 쪽도 수정되지 않으므로 읽는 쪽이 망가진 값을 보는 일은 없다.</div></div>
+      </section>
+
+      <section class="slide" id="s7" data-num="2.7">
+        <header class="slide-head">
+          <span class="num">2.7</span>
+          <h2>시간이 흐르는 두 길</h2>
+          <p class="lede">"3초 뒤에 토스트를 지운다"와 "caret을 깜박인다"는 다른 일이다. 하나는 상태가 바뀌고, 하나는 그림만 바뀐다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th><code>logic_driver::next_tick</code> / <code>tick</code></th><th><code>ui_element::next_update</code></th></tr></thead>
+            <tbody>
+              <tr><th>무엇이 바뀌나</th><td>앱 상태 (토스트 만료, 진행률, 시간 제한)</td><td>그림만 (caret 깜박임, spinner 회전, tooltip 지연)</td></tr>
+              <tr><th>도는 스레드</th><td><span class="thread-chip lg">logic</span></td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><th>시간이 되면</th><td><code>tick(now)</code>이 상태를 바꾸고 새 frame을 게시한다</td><td>같은 tree를 다시 그린다 (tree는 그대로)</td></tr>
+              <tr><th>예고가 없으면</th><td>logic은 250ms마다 종료만 확인하고 잔다</td><td>플랫폼이 timer를 걸지 않는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>둘 다 같은 원칙을 따른다. <strong>시계를 읽는 쪽이 아니라 시각을 예고하는 쪽</strong>이다. element와 driver는 "다음에 언제 깨워 달라"만 답하고, 기다림은 루프가 맡는다. 앱은 스레드를 만들지 않고도 "3초 뒤 지운다"를 표현할 수 있다. element는 전환의 소유자가 아니다. 움직임과 시간은 9강에서 다시 다룬다.</p>
+        </div>
+      </section>
+
+      <section class="slide" id="s8" data-num="2.8">
+        <header class="slide-head">
+          <span class="num">2.8</span>
+          <h2>종료 절차와 시간 예산</h2>
+          <p class="lede">창을 닫을 때 앱은 저장을 끝내야 하고, 프로세스는 영원히 매달리면 안 된다. 두 요구를 시간 예산으로 맞춘다.</p>
+        </header>
+        <div class="lw" data-title="shutdown() 따라가기" data-surface="UI thread · 예산 3000ms + 1000ms" data-reset id="shut-lab">
+          <div class="lw-body shut">
+            <div class="controls">
+              <span class="field">상황</span>
+              <div class="seg" role="group" aria-label="종료 상황" id="shut-scenario">
+                <button type="button" data-s="normal" aria-pressed="true">정상</button>
+                <button type="button" data-s="flood">inbox 포화</button>
+                <button type="button" data-s="stall">긴 handle</button>
+                <button type="button" data-s="hang">응답 없는 logic</button>
+              </div>
+              <button class="btn primary" type="button" id="shut-run"><i class="ci" aria-hidden="true">&#xEB2C;</i>창 닫기</button>
+            </div>
+            <div class="timeline" aria-hidden="true">
+              <div class="fill" id="shut-fill"></div>
+              <div class="mark" style="left:0%"><span>0</span></div>
+              <div class="mark" style="left:66.6667%"><span>3000ms 마감</span></div>
+              <div class="mark" style="left:88.8889%"><span>+1000ms</span></div>
+              <div class="now" id="shut-now">0ms</div>
+            </div>
+            <ol class="shut-steps" id="shut-steps"></ol>
+            <p class="small muted" id="shut-note"></p>
+          </div>
+        </div>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/host/app_host.cpp:316-396" data-path="src/host/app_host.cpp" data-start="316"><script type="text/plain">
+    void app_host::shutdown() noexcept
+    {
+        if (shut_down_)
+            return;
+        shut_down_ = true;
+
+        // 게시(1)와 처리 대기(2)가 쓰는 예산이다.
+        // 둘이 이 하나를 나눠 써야 그 구간의 최악이 3초로 유지된다 —
+        // 따로 재면 3초 게시 + 3초 대기가 되어 붙잡는 시간이 두 배가 된다.
+        // UI thread를 이만큼 붙잡는 것 자체는 새 위험이 아니다: 대기 단계가 전부터
+        // 정확히 그만큼 잡고 있었고, 이 시점의 창은 이미 파괴 중이라 그릴 것이 없다.
+        // join 앞의 탈출 확인은 wait_for_logic_exit의 별도 상한이 맡는다 —
+        // 두 상한을 합쳐도 세션 종료 유예(기본 5초) 안이다.
+        constexpr std::chrono::milliseconds shutdown_limit { 3000 };
+        assembly_->shutdown_deadline = std::chrono::steady_clock::now() + shutdown_limit;
+
+        // 0. 취소를 먼저 알린다.
+        //    오래 걸리는 handle·tick·make_frame이 이를 보고 일찍 돌아와야
+        //    아래 단계들이 예산 안에 끝난다.
+        driver_.cancel();
+
+        // 1. logic이 종료 상태를 게시하게 한다.
+        //    포화된 inbox는 게시를 버리므로 마감시각까지 다시 넣어 본다.
+        //    메시지가 몰린 순간의 세션 종료에서 종료 저장이 통째로 날아가던 자리다.
+        //    make_close_message는 앱 코드라 던질 수 있다 — 만들지 못한 종료
+        //    신호는 게시 실패와 같은 취급이고, 남은 정리는 그대로 진행한다.
+        bool close_posted { false };
+        try
+        {
+            close_posted = post_close_message(assembly_->app_inbox, driver_.make_close_message(), assembly_->shutdown_deadline);
+        }
+        catch (...)
+        {
+        }
+
+        // 2. logic이 종료 신호를 처리할 때까지 기다린다.
+        //    이 시점 이후에는 종료 저장 요청이 이미 worker에 들어가 있다.
+        //    게시하지 못했으면 기다릴 이유가 없다 — 남은 예산을 태우지 않고 정리로 간다.
+        if (close_posted)
+            wait_for_logic_shutdown();
+
+        // 3. worker를 먼저 끝낸다.
+        //    취소된 작업의 event가 아직 열린 app inbox로
+        //    들어가거나, 이후 닫힌 inbox에서 조용히 버려진다.
+        //    이것도 앱 코드다 — 던져도 채널 close와 join은 반드시 실행한다.
+        try
+        {
+            driver_.stop_workers();
+        }
+        catch (...)
+        {
+        }
+
+        // 4. app inbox를 닫아 남은 메시지를 소진시키고 join한다.
+        //    join 자체는 무기한이라, 스레드가 실제로 나오는지 먼저 유한하게
+        //    확인한다. cancel과 close에도 나오지 않는 logic은 회복 불능이다 —
+        //    보이지 않는 무기한 hang(창 닫힘·세션 종료가 영원히 멎는다) 대신
+        //    즉시 실패를 택한다. detach는 assembly 수명을 깨므로 금지다.
+        {
+            const std::scoped_lock lock { assembly_->file_dialog_mutex };
+            assembly_->app_inbox.close();
+            assembly_->file_dialog_messages.clear();
+        }
+        if (assembly_->logic_thread.joinable())
+        {
+            wait_for_logic_exit();
+            if (assembly_->logic_thread_exited.load() == false)
+                platform_fail_fast();
+            assembly_->logic_thread.join();
+        }
+
+        // 5. input을 닫고 join한 뒤 slot을 닫는다.
+        //    input pump는 닫힌 inbox에서 즉시 돌아오므로 이 join은 짧다.
+        assembly_->input_inbox.close();
+        if (assembly_->input_thread.joinable())
+            assembly_->input_thread.join();
+        assembly_->frame_slot.close();
+        assembly_->tree_slot.close();
+        assembly_->surface_tree_slot.close();
+        assembly_->interaction_slot.close();
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="322-330" data-title="두 단계가 나눠 쓰는 3초">종료 신호 게시와 처리 대기가 마감시각 하나를 나눠 쓴다. 따로 재면 최악이 3초 + 3초가 된다. 두 상한을 합쳐도 세션 종료 유예(기본 5초) 안에 든다.</li>
+            <li data-lines="332-335" data-title="0. 취소를 먼저 알린다">오래 걸리는 <code>handle</code>·<code>tick</code>·<code>make_frame</code>이 <code>cancel()</code>을 보고 일찍 돌아와야 뒤의 단계가 예산 안에 끝난다.</li>
+            <li data-lines="337-349" data-title="1. 종료 신호를 끝까지 넣어 본다">inbox가 가득 차 있으면 <code>reject_newest</code>가 종료 신호를 버린다. 그러면 종료 저장이 통째로 사라진다. 그래서 이 한 건만은 마감까지 1ms 간격으로 다시 넣어 본다.</li>
+            <li data-lines="351-355" data-title="2. 처리될 때까지 기다린다"><code>shutdown_completed()</code>가 참이 될 때까지, 마감까지만 기다린다. 이 시점에는 종료 저장 요청이 worker에 들어가 있다.</li>
+            <li data-lines="357-367" data-title="3. worker를 멈춘다">앱이 소유한 worker를 멈춘다. 앱 코드라 던질 수 있으므로 잡고 넘어간다. 채널 close와 join은 반드시 실행되어야 한다.</li>
+            <li data-lines="369-385" data-title="4. 닫고, 유한하게 기다리고, 안 되면 fail-fast">inbox를 닫으면 건강한 logic은 남은 메시지를 소진하고 수 ms 안에 나온다. 1초를 기다려도 나오지 않으면 <code>platform_fail_fast()</code>로 즉시 끝낸다. 보이지 않는 무기한 hang보다 즉시 실패가 낫다는 선택이다. <code>detach</code>는 assembly 수명을 깨므로 금지다.</li>
+            <li data-lines="387-395" data-title="5. input을 닫고 slot을 닫는다">input pump는 닫힌 inbox에서 곧바로 돌아오므로 이 join은 짧다. 마지막으로 slot들을 닫는다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s9" data-num="2.9">
+        <header class="slide-head">
+          <span class="num">2.9</span>
+          <h2>예외는 오류 전달 수단이 아니다</h2>
+          <p class="lede">스레드 진입 함수를 벗어난 예외는 곧 <code>std::terminate</code>다. luil은 그것을 잡아 "고장"으로 기록한다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/host/app_host.cpp:704-728" data-path="src/host/app_host.cpp" data-start="704"><script type="text/plain">
+    void app_host::logic_thread_main()
+    {
+        // driver 예외는 계약 밖 입력이다 (헤더의 예외 계약).
+        // 스레드 진입 함수를 벗어난 예외는 곧 terminate라, 여기서 삼키고
+        // faulted로 알린 뒤 inbox를 닫는다 — shutdown()의 게시도 곧바로
+        // 포기하게 되고, 탈출 표시 덕에 join은 즉시 돌아온다.
+        try
+        {
+            logic_loop();
+        }
+        catch (...)
+        {
+            assembly_->faulted.store(true);
+            {
+                const std::scoped_lock lock { assembly_->file_dialog_mutex };
+                assembly_->app_inbox.close();
+                assembly_->file_dialog_messages.clear();
+            }
+            // 멈춘 logic은 쌓인 메시지를 처리하지 않는다. 그 메시지들이 쥔 배경 작업 시간도 돌려준다.
+            const std::lock_guard<std::mutex> lock { assembly_->held_work_mutex };
+            assembly_->held_work.clear();
+            assembly_->holding_work.store(false);
+        }
+        assembly_->logic_thread_exited.store(true);
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="706-713" data-title="최상단에서 모두 잡는다">driver의 예외는 계약 밖의 입력이다. 잡지 않으면 프로세스가 끝나므로 여기서 삼킨다.</li>
+            <li data-lines="714-723" data-title="고장을 기록하고 inbox를 닫는다"><code>faulted</code>를 세우고 inbox를 닫는다. 그러면 <code>shutdown()</code>의 게시도 곧바로 포기하고, 쌓여 있던 메시지가 쥔 배경 작업 시간도 돌려준다.</li>
+            <li data-lines="727" data-title="탈출 표시">스레드가 진입 함수를 벗어난다는 표시다. <code>shutdown()</code>은 이 값을 보고 join이 곧 돌아온다는 것을 안다.</li>
+          </ol>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">오류는 값으로 나른다</span>파일을 열지 못했다, 요청이 실패했다 같은 앱 오류는 메시지나 frame의 상태 값으로 전달한다. 예외로 logic이 멈추면 frame 게시와 메시지 처리가 함께 멎는다. UI는 <code>faulted()</code>를 보고 앱을 끝낼 수 있다.</div></div>
+      </section>
+
+      <section class="slide" id="s10" data-num="2.10">
+        <header class="slide-head">
+          <span class="num">2.10</span>
+          <h2>창 없이 조립하고 시험하기</h2>
+          <p class="lede">깨우기 신호를 비워 두면 app_host는 창 없이 선다. 종료의 경계 조건을 테스트로 잠글 수 있다.</p>
+        </header>
+        <div class="prose">
+          <p>아래 테스트는 실제로 있었던 문제를 잠근다. 메시지가 몰린 순간에 세션이 끝나면 포화된 inbox가 종료 신호를 버려 종료 저장이 통째로 날아갔다. 테스트는 inbox 용량의 두 배를 밀어 넣어 종료 신호가 들어갈 자리를 없앤 뒤, 그래도 종료 저장이 돌고 3초 예산을 헛태우지 않는지 확인한다.</p>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="tests/app_host_tests.cpp:344-375" data-path="tests/app_host_tests.cpp" data-start="344"><script type="text/plain">
+TEST_CASE("The close message survives a saturated app inbox", "[win32][host][shutdown]")
+{
+    blocking_driver driver {};
+    {
+        luil::win32::app_host host { luil::win32::app_host::config {}, driver, nullptr };
+
+        // gate를 닫은 채 app inbox 용량(1024)의 두 배를 밀어 넣는다.
+        // 넘친 것은 reject_newest가 버린다 — 여기서 중요한 것은 넘친 쪽이 아니라
+        // 이 상태에서 종료 신호가 들어갈 자리가 남아 있지 않다는 사실이다.
+        for (int index { 0 }; index < 2048; ++index)
+            host.post_app_message(luil::app_message { ping_intent { u8"flood" } });
+
+        // 넘친 게시는 조용히 버려진다 (reject_newest의 의도된 한계).
+        // 유실이 있었다는 사실은 통계로만 관찰된다.
+        REQUIRE(host.app_inbox_statistics().rejected > 0);
+
+        const std::chrono::steady_clock::time_point started { std::chrono::steady_clock::now() };
+        std::thread closer { [&host] { host.shutdown(); } };
+        // 게시가 마감시각까지 다시 시도하는 동안 소비가 풀리고 자리가 난다.
+        std::this_thread::sleep_for(50ms);
+        driver.gate.store(true);
+        closer.join();
+        const std::chrono::milliseconds elapsed { std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - started) };
+
+        // 종료 신호가 포화에 삼켜지면 이 둘이 함께 무너진다:
+        // 종료 저장이 돌지 않고, 대기 상한 3초를 통째로 헛태운다.
+        REQUIRE(driver.closed.load());
+        REQUIRE(elapsed < 2500ms);
+        // gate가 열린 뒤 막혀 있던 소비가 실제로 풀렸다는 확인이다.
+        REQUIRE(driver.handled.load() > 0);
+    }
+}
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="346-348" data-title="창 없는 host">설정이 비어 있으니 깨우기 신호도 창도 없다. logic과 input 스레드, 채널과 slot만 선다.</li>
+            <li data-lines="350-357" data-title="inbox를 넘치게 한다">gate를 닫은 driver는 첫 메시지를 붙잡고 있다. 그 사이 2048건을 넣으면 1024건이 거절된다. 거절은 조용하고, 통계(<code>rejected</code>)로만 보인다.</li>
+            <li data-lines="359-364" data-title="다른 스레드에서 종료한다">종료는 별도 스레드에서 시작하고, 50ms 뒤 gate를 연다. 그동안 종료 신호 게시는 1ms 간격으로 재시도하고 있다.</li>
+            <li data-lines="366-372" data-title="무엇을 확인하나">종료 저장이 돌았고(<code>closed</code>), 2.5초 안에 끝났다. 종료 신호가 포화에 삼켜졌다면 두 확인이 함께 무너진다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s11" data-num="2.11">
+        <header class="slide-head">
+          <span class="num">2.11</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>UI는 OS 자원과 그리기, input은 상호작용 상태 기계, logic은 앱 상태를 소유한다. 앱 상태를 바꾸는 곳은 logic 하나다.</li>
+          <li>스레드 사이에는 정해진 다리만 있다. 사건은 channel, 상태는 latest_slot, UI 전용 작업은 명령 큐와 깨우기 신호로 건넌다.</li>
+          <li>assembly의 선언 순서가 파괴의 역순이고, 조립은 채널 → callback → 스레드 순서로 고정한다.</li>
+          <li>logic은 한 번 깰 때 최대 64건을 처리하고 frame을 한 번 게시한다. tree를 먼저, UI를 깨우는 frame을 마지막에 게시한다.</li>
+          <li>시간은 예고로 다룬다. 상태가 바뀌면 <code>next_tick</code>/<code>tick</code>, 그림만 바뀌면 <code>next_update</code>다.</li>
+          <li>종료는 cancel → 종료 신호(재시도) → 처리 대기 → worker 정지 → close·유한 대기 → join 순서이고, 응답 없는 logic은 fail-fast로 끝낸다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s12" data-num="2.12">
+        <header class="slide-head">
+          <span class="num">2.12</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="2">
+            <p class="q">inbox에 메시지 200건이 미리 쌓여 있다. 처리하는 동안 새 메시지가 없다면 logic은 frame을 몇 번 게시하는가?</p>
+            <ol class="choices">
+              <li>1번</li>
+              <li>4번</li>
+              <li>200번</li>
+              <li>63번</li>
+            </ol>
+            <div class="explain">한 번 깰 때 <code>receive_wait</code>로 1건, <code>drain</code>으로 최대 63건, 합쳐 64건을 처리하고 frame을 한 번 게시한다. 200 = 64 + 64 + 64 + 8이므로 4번이다.</div>
+          </div>
+          <div class="quiz" data-answer="3">
+            <p class="q"><code>publish_frame()</code>이 frame slot을 tree slot보다 나중에 게시하는 이유는?</p>
+            <ol class="choices">
+              <li>frame이 tree보다 크기 때문에</li>
+              <li>input thread가 frame을 먼저 읽기 때문에</li>
+              <li>UI를 깨우는 신호가 frame slot에 달려 있어, 깨어난 UI가 새 tree를 보게 하려고</li>
+              <li>순서는 상관없고 관례일 뿐이다</li>
+            </ol>
+            <div class="explain">wake 신호는 frame slot에만 붙어 있다. tree를 먼저 게시해야 신호를 받고 깨어난 UI thread가 이미 게시된 새 tree를 읽는다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">종료 절차에서 inbox를 닫은 뒤 1초를 기다려도 logic thread가 나오지 않으면?</p>
+            <ol class="choices">
+              <li><code>platform_fail_fast()</code>로 즉시 끝낸다</li>
+              <li>스레드를 <code>detach</code>하고 계속 진행한다</li>
+              <li>나올 때까지 무기한 join한다</li>
+              <li>logic thread를 강제로 죽이고 다시 시작한다</li>
+            </ol>
+            <div class="explain">cancel과 close에도 나오지 않는 logic은 회복할 수 없다. 보이지 않는 무기한 hang 대신 즉시 실패를 고른다. detach는 assembly의 수명을 깨므로 금지다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">"3초 뒤에 토스트를 지운다"를 luil 앱에서 표현하는 올바른 방법은?</p>
+            <ol class="choices">
+              <li>토스트 element가 3초를 세다가 스스로 사라진다</li>
+              <li>앱이 타이머 스레드를 만들어 3초 뒤 상태를 지운다</li>
+              <li>UI thread의 <code>next_update</code>가 3초 뒤 토스트를 지운다</li>
+              <li><code>next_tick()</code>이 만료 시각을 답하고, <code>tick(now)</code>에서 토스트를 상태에서 뺀다</li>
+            </ol>
+            <div class="explain">토스트가 사라지는 것은 앱 상태의 변화다. logic의 <code>next_tick</code>이 시각을 예고하면 루프가 그때 <code>tick</code>을 부르고 새 frame을 게시한다. <code>next_update</code>는 그림만 다시 그리는 길이다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/course.js"></script>
+<script>
+(function () {
+  const { el, svg, icon } = window.LU;
+
+  /* ---------- 2.2 다리 ---------- */
+  const B = [
+    { id: "input_inbox", from: "ui", to: "in", kind: "channel", name: "input_inbox", type: "channel<raw_input_event>", policy: "drop_oldest · 4096칸", carries: "포인터·키·문자·초점 사건", who: "UI thread가 OS 이벤트를 바꿔 넣고, input thread 하나가 꺼낸다.", why: "포인터 이동은 최신 좌표가 중요하다. 넘치면 오래된 것을 버리고, 건너뛴 번호를 본 input은 진행 중인 몸짓을 취소한다." },
+    { id: "interaction_slot", from: "in", to: "ui", kind: "slot", name: "interaction_slot", type: "latest_slot<interaction_snapshot>", policy: "최신 값 하나 · UI 깨우기", carries: "hover·눌림·초점·메뉴 강조·끌기 표시", who: "input이 게시하고 UI가 그릴 때 읽는다.", why: "이전 snapshot과 다를 때만 게시하므로 같은 element 위의 단순한 이동은 UI를 깨우지 않는다." },
+    { id: "commands", from: "in", to: "ui", kind: "queue", name: "ui_commands · clipboard · capture", type: "mutex + vector + wake", policy: "내용은 큐, 신호는 깨우기", carries: "창 명령, 앱 UI 명령, 클립보드·화면 남기기 요청", who: "input이(또는 아무 스레드가) 넣고, UI가 신호를 받아 꺼내 실행한다.", why: "창 조작·클립보드는 UI thread만 할 수 있다. 신호가 유실돼도 내용은 큐에 남는다." },
+    { id: "app_inbox", from: "in", to: "lg", kind: "channel", name: "app_inbox", type: "channel<app_message>", policy: "reject_newest · 1024칸", carries: "element 액션이 돌려준 앱 메시지", who: "input(액션), UI(delegate), 아무 스레드(post_app_message)가 넣고 logic 하나가 꺼낸다.", why: "앱 메시지는 버리면 안 된다. 넘치면 새 것을 거절해 게시한 쪽이 알게 하고, 종료 신호처럼 꼭 필요한 것은 재시도한다." },
+    { id: "app_inbox_ui", from: "ui", to: "lg", kind: "channel", name: "app_inbox (UI 쪽)", type: "같은 channel<app_message>", policy: "reject_newest · 1024칸", carries: "창 크기·DPI·파일 드롭·종료 신호", who: "window_delegate가 만든 메시지를 UI thread가 넣는다.", why: "UI의 사건도 앱 상태를 바꾸려면 같은 문으로 들어가야 한다. 상태의 문은 하나다." },
+    { id: "tree_slot", from: "lg", to: "in", kind: "slot", name: "tree_slot · surface_tree_slot", type: "latest_slot<shared_ptr<const ui_tree>>", policy: "최신 값 하나 · 신호 없음", carries: "주 tree, popup·보조 창·도킹 표면의 tree", who: "logic이 게시하고, input이 이벤트를 처리하기 직전에 집는다.", why: "input은 어차피 이벤트로 깨어나므로 신호가 필요 없다. 250ms 대기 상한이 이벤트가 없어도 새 tree를 받게 한다." },
+    { id: "frame_slot", from: "lg", to: "ui", kind: "slot", name: "frame_slot", type: "latest_slot<shared_ptr<const ui_frame>>", policy: "최신 값 하나 · UI 깨우기", carries: "tree, popup·보조 창, 외양·글꼴·스타일, 창 배치 요청", who: "logic이 맨 마지막에 게시하고 UI가 깨어나 읽는다.", why: "UI가 느려도 frame이 쌓이지 않는다. 중간 version은 건너뛰고 늘 최신만 그린다." },
+  ];
+  const LANES = [{ id: "ui", name: "UI thread" }, { id: "in", name: "input thread" }, { id: "lg", name: "logic thread" }];
+  const holder = document.getElementById("bridge-diagram");
+  const detail = document.getElementById("bridge-detail");
+  let current = "app_inbox";
+  let lastW = 0;
+
+  function showDetail(id) {
+    current = id;
+    const b = B.find((x) => x.id === id);
+    detail.textContent = "";
+    const lane = (k) => LANES.find((l) => l.id === k).name;
+    detail.append(
+      el("div", { class: "panel" },
+        el("h4", null, el("code", { text: b.name }), el("span", { class: "tag", text: b.kind === "channel" ? "channel · 사건" : b.kind === "slot" ? "latest_slot · 상태" : "명령 큐" })),
+        el("p", { class: "readout", text: lane(b.from) + " → " + lane(b.to) + "  ·  " + b.type + "  ·  " + b.policy }),
+        el("p", null, el("b", { text: "나르는 것  " }), b.carries),
+        el("p", null, el("b", { text: "누가  " }), b.who),
+        el("p", null, el("b", { text: "왜 이 모양인가  " }), b.why))
+    );
+    holder.querySelectorAll("[data-b]").forEach((n) => {
+      const on = n.dataset.b === id;
+      n.classList.toggle("on", on);
+      if (n.tagName === "BUTTON") n.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  }
+
+  function render() {
+    const W = Math.round(holder.clientWidth || 800);
+    lastW = W;
+    holder.textContent = "";
+    if (W < 640) {
+      const list = el("div", { class: "bridge-list", role: "group", "aria-label": "스레드 사이의 다리" });
+      for (const b of B) {
+        const lane = (k) => LANES.find((l) => l.id === k).name;
+        list.append(el("button", { type: "button", class: "bridge-card", "data-b": b.id, "aria-pressed": "false", onclick: () => showDetail(b.id) },
+          el("span", { class: "route", text: lane(b.from) + " → " + lane(b.to) }), el("span", { class: "nm", text: b.name })));
+      }
+      holder.append(list);
+      showDetail(current);
+      return;
+    }
+    const xs = { ui: W * 0.12, in: W * 0.5, lg: W * 0.88 };
+    const top = 58;
+    const gap = 52;
+    const H = top + B.length * gap + 24;
+    const s = svg("svg", { viewBox: `0 0 ${W} ${H}`, width: W, height: H, role: "img", "aria-label": "UI, input, logic 세 스레드를 잇는 채널, slot, 명령 큐" });
+    const mk = "ba" + Math.random().toString(36).slice(2, 7);
+    s.append(svg("defs", null, svg("marker", { id: mk, viewBox: "0 0 10 10", refX: "9", refY: "5", markerWidth: "9", markerHeight: "9", markerUnits: "userSpaceOnUse", orient: "auto-start-reverse" }, svg("path", { d: "M0,0 L10,5 L0,10 z", class: "d-arrowhead" }))));
+    for (const ln of LANES) {
+      const x = xs[ln.id];
+      s.append(svg("rect", { x: x - 70, y: 8, width: 140, height: 34, rx: 4, class: "d-box" }));
+      s.append(svg("circle", { cx: x - 52, cy: 25, r: 4, class: "d-dot " + ln.id }));
+      s.append(svg("text", { x: x + 6, y: 30, "text-anchor": "middle", class: "d-text b", text: ln.name }));
+      s.append(svg("line", { x1: x, y1: 42, x2: x, y2: H - 8, class: "d-line faint dash" }));
+    }
+    B.forEach((b, i) => {
+      const y = top + i * gap + 18;
+      const x1 = xs[b.from];
+      const x2 = xs[b.to];
+      const dir = x2 > x1 ? 1 : -1;
+      const g = svg("g", { class: "seq-hit", "data-b": b.id, tabindex: "0", role: "button", "aria-label": b.name + " 자세히" });
+      g.append(svg("rect", { class: "hitbox", x: Math.min(x1, x2), y: y - 30, width: Math.abs(x2 - x1), height: 44 }));
+      const dash = b.kind === "slot" ? "6 4" : b.kind === "queue" ? "2 3" : null;
+      g.append(svg("line", { x1: x1 + dir * 4, y1: y, x2: x2 - dir * 6, y2: y, class: "d-line", "stroke-dasharray": dash, "marker-end": `url(#${mk})` }));
+      const mid = (x1 + x2) / 2;
+      g.append(svg("text", { x: mid, y: y - 8, "text-anchor": "middle", class: "d-text mono", text: b.name }));
+      g.append(svg("text", { x: mid, y: y + 16, "text-anchor": "middle", class: "d-text sm faint", text: b.policy }));
+      g.addEventListener("click", () => showDetail(b.id));
+      g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); showDetail(b.id); } });
+      s.append(g);
+    });
+    // 범례
+    const ly = H - 10;
+    void ly;
+    holder.append(s);
+    holder.append(el("div", { class: "legend", style: { marginTop: "6px" } },
+      el("span", null, svgLegend(null), "channel — 사건, FIFO"),
+      el("span", null, svgLegend("6 4"), "latest_slot — 최신 상태"),
+      el("span", null, svgLegend("2 3"), "명령 큐 + 깨우기")));
+    showDetail(current);
+  }
+  function svgLegend(dash) {
+    return svg("svg", { width: 28, height: 10, viewBox: "0 0 28 10", "aria-hidden": "true" }, svg("line", { x1: 1, y1: 5, x2: 27, y2: 5, class: "d-line", "stroke-dasharray": dash }));
+  }
+  render();
+  if ("ResizeObserver" in window) new ResizeObserver(() => { const W = Math.round(holder.clientWidth); if (Math.abs(W - lastW) > 8) render(); }).observe(holder);
+
+  /* ---------- 2.5 묶음 처리 ---------- */
+  const nIn = document.getElementById("batch-n");
+  const nOut = document.getElementById("batch-out");
+  const vis = document.getElementById("batch-vis");
+  function batch() {
+    const n = Number(nIn.value);
+    nOut.textContent = n + "건";
+    vis.textContent = "";
+    const groups = Math.ceil(n / 64);
+    const row = el("div", { class: "batch-row" });
+    let left = n;
+    for (let g = 0; g < groups; g++) {
+      const k = Math.min(64, left);
+      left -= k;
+      const box = el("span", { class: "batch-group", title: (g + 1) + "번째 깨어남: " + k + "건 처리 → frame 1번 게시" });
+      for (let i = 0; i < k; i++) box.append(el("i", { class: i === 0 ? "first" : "" }));
+      box.append(el("span", { class: "pub", text: "→ frame" }));
+      row.append(box);
+    }
+    vis.append(row, el("div", { class: "stat-row" },
+      el("div", null, el("span", { class: "k", text: "handle() 호출" }), el("span", { class: "v", text: String(n) })),
+      el("div", null, el("span", { class: "k", text: "깨어난 횟수" }), el("span", { class: "v", text: String(groups) })),
+      el("div", null, el("span", { class: "k", text: "make_frame() · 게시" }), el("span", { class: "v", text: String(groups) })),
+      el("div", null, el("span", { class: "k", text: "묶음이 없다면 게시" }), el("span", { class: "v", text: String(n) }))));
+  }
+  nIn.addEventListener("input", batch);
+  batch();
+
+  /* ---------- 2.8 종료 절차 ---------- */
+  const STEPS = [
+    { id: "cancel", n: "0", name: "driver.cancel()", sub: "오래 걸리는 일에 그만하라고 알린다" },
+    { id: "post", n: "1", name: "종료 신호 게시", sub: "가득 차 있으면 1ms 간격으로 마감까지 재시도" },
+    { id: "wait", n: "2", name: "shutdown_completed() 대기", sub: "마감(3000ms)까지" },
+    { id: "workers", n: "3", name: "stop_workers()", sub: "앱의 worker를 멈춘다" },
+    { id: "close", n: "4", name: "app inbox close · 탈출 대기", sub: "최대 1000ms, 안 나오면 fail-fast" },
+    { id: "join", n: "4", name: "logic join", sub: "" },
+    { id: "input", n: "5", name: "input close · join, slot close", sub: "" },
+  ];
+  const SCN = {
+    normal: { note: "건강한 앱이다. 실제로는 전체가 수 ms 안에 끝난다. 보이도록 늦춰 보여 준다.", plan: [["cancel", 2, "ok"], ["post", 2, "ok", "바로 들어감"], ["wait", 6, "ok", "처리됨"], ["workers", 2, "ok"], ["close", 4, "ok", "곧 나옴"], ["join", 1, "ok"], ["input", 2, "ok"]] },
+    flood: { note: "메시지 1024건이 inbox를 채운 채 logic이 처리 중이다. 종료 신호는 자리가 날 때까지 재시도된다 (2.10의 테스트와 같은 상황).", plan: [["cancel", 2, "ok"], ["post", 52, "ok", "52ms에 들어감"], ["wait", 180, "ok", "쌓인 것 처리 후"], ["workers", 2, "ok"], ["close", 6, "ok"], ["join", 1, "ok"], ["input", 2, "ok"]] },
+    stall: { note: "handle 하나가 오래 걸리는 일을 하다가 cancel()을 보고 일찍 돌아온다. 예산 안에 정상 종료한다.", plan: [["cancel", 2, "ok", "handle이 봄"], ["post", 2, "ok"], ["wait", 120, "ok", "일찍 돌아옴"], ["workers", 2, "ok"], ["close", 4, "ok"], ["join", 1, "ok"], ["input", 2, "ok"]] },
+    hang: { note: "logic이 cancel도 close도 보지 않는 무한 루프에 빠졌다. 3초 마감에 대기를 포기하고, 1초 탈출 대기도 넘기면 즉시 실패한다.", plan: [["cancel", 2, "ok", "무시됨"], ["post", 2, "ok"], ["wait", 2996, "bad", "마감 — 포기"], ["workers", 2, "ok"], ["close", 1000, "bad", "나오지 않음"], ["join", 0, "fail", "platform_fail_fast()"], ["input", 0, "skip", "도달하지 않음"]] },
+  };
+  let scn = "normal";
+  let runGen = 0;
+  const stepsEl = document.getElementById("shut-steps");
+  const fill = document.getElementById("shut-fill");
+  const nowEl = document.getElementById("shut-now");
+  const noteEl = document.getElementById("shut-note");
+  function drawSteps() {
+    stepsEl.textContent = "";
+    for (const st of STEPS) stepsEl.append(el("li", { "data-id": st.id }, el("span", { class: "n", text: st.n }), el("span", null, el("b", { text: st.name }), st.sub ? el("span", { class: "muted", text: " — " + st.sub }) : null), el("span", { class: "st", text: "대기" })));
+    fill.style.width = "0%";
+    nowEl.textContent = "0ms";
+    noteEl.textContent = SCN[scn].note;
+  }
+  async function run() {
+    const gen = ++runGen;
+    drawSteps();
+    let t = 0;
+    const total = 4500;
+    const speed = scn === "hang" ? 1 : 0.05; // 정상 경로는 ms 단위라 늘려 보여 준다
+    for (const [id, dur, res, label] of SCN[scn].plan) {
+      if (gen !== runGen) return;
+      const li = stepsEl.querySelector('[data-id="' + id + '"]');
+      li.classList.add("run");
+      li.querySelector(".st").textContent = "진행 중";
+      const start = t;
+      const realMs = scn === "hang" ? dur : Math.max(260, dur / speed / 20);
+      const t0 = performance.now();
+      await new Promise((resolve) => {
+        const tickf = (now) => {
+          if (gen !== runGen) return resolve();
+          const k = Math.min(1, (now - t0) / Math.max(1, realMs));
+          const cur = start + dur * k;
+          fill.style.width = Math.min(100, (cur / total) * 100) + "%";
+          nowEl.textContent = Math.round(cur) + "ms";
+          if (k < 1) requestAnimationFrame(tickf);
+          else resolve();
+        };
+        if (window.LU.reduced()) { setTimeout(resolve, 200); } else requestAnimationFrame(tickf);
+      });
+      t = start + dur;
+      fill.style.width = Math.min(100, (t / total) * 100) + "%";
+      nowEl.textContent = Math.round(t) + "ms";
+      li.classList.remove("run");
+      li.classList.add(res === "ok" ? "ok" : res === "skip" ? "skip" : "bad");
+      li.querySelector(".st").textContent = label || (res === "ok" ? "끝" : res);
+      if (res === "fail") {
+        noteEl.textContent = SCN[scn].note + " 프로세스는 여기서 끝난다 — 영원히 매달린 창보다 낫다.";
+        break;
+      }
+    }
+  }
+  document.getElementById("shut-scenario").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-s]");
+    if (!b) return;
+    scn = b.dataset.s;
+    runGen++;
+    b.parentElement.querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x === b ? "true" : "false"));
+    drawSteps();
+  });
+  document.getElementById("shut-run").addEventListener("click", run);
+  document.getElementById("shut-lab").addEventListener("lw-reset", () => { runGen++; drawSteps(); });
+  drawSteps();
+})();
+</script>
+</body>
+</html>

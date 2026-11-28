@@ -1,0 +1,1138 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>05 배치: 자리를 나눠 주는 법 · luil 해부학</title>
+<meta name="description" content="luil 해부학 5강. 논리 픽셀과 물리 픽셀, 부모가 slot을 주는 arrange 계약, stack의 고정·유연·맞춤 길이와 하한·상한 풀기, 자르는 컨테이너와 흘리는 창, 10만 행 가상 목록.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .px-grid { display: grid; gap: 14px; }
+  @media (min-width: 900px) { .px-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr); align-items: start; } }
+  .stage-wrap { overflow-x: auto; padding: 18px 18px 26px; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); }
+  .stage { position: relative; border: 1.5px dashed var(--line-3); border-radius: 2px; background: var(--panel); flex: none; }
+  .stage .pad { position: absolute; border: 1px dotted var(--line-2); pointer-events: none; }
+  .stage .it { position: absolute; box-sizing: border-box; border: 1.5px solid var(--line-3); background: var(--panel-2); border-radius: 3px; font-family: var(--font-code); font-size: 10.5px; line-height: 1.25; padding: 2px 4px; overflow: hidden; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: var(--fg); min-width: 0; }
+  .stage .it.flex { background: var(--accent-wash); border-color: var(--accent); }
+  .stage .it.flex.min { border-color: var(--warn); background: var(--warn-wash); }
+  .stage .it.flex.max { border-color: var(--t-lg); background: var(--t-lg-wash); }
+  .stage .it.fit { background: var(--t-ui-wash); border-color: var(--t-ui); }
+  .stage .it.gap { border-style: dashed; border-color: var(--line-2); background: repeating-linear-gradient(135deg, transparent 0 5px, var(--line) 5px 6px); color: var(--fg-3); }
+  .stage .it.over { outline: 2px solid var(--error); outline-offset: -1px; }
+  .stage .it b { font-weight: 600; font-size: 11px; }
+  .stage-label { position: absolute; left: 0; top: -17px; font-family: var(--font-code); font-size: 10.5px; color: var(--fg-3); white-space: nowrap; }
+  .items-table input[type="number"] { width: 64px; min-height: 26px; padding: 2px 6px; font-family: var(--font-code); font-size: 12px; }
+  .items-table select { min-height: 26px; padding: 2px 4px; font-size: 12px; }
+  .items-table td { padding: 5px 8px; vertical-align: middle; }
+  .items-table input:disabled, .items-table select:disabled { opacity: 0.35; }
+  .steps-table td, .steps-table th { font-family: var(--font-code); font-size: 11.5px; }
+  .vl { display: grid; gap: 16px; }
+  @media (min-width: 980px) { .vl { grid-template-columns: auto minmax(0, 1fr); align-items: start; } }
+  .vl-stage { display: flex; gap: 14px; align-items: flex-start; }
+  .vl-lane { position: relative; width: min(300px, 62vw); height: 384px; overflow: hidden; border-radius: var(--r-row); background: var(--bg); border: 1px solid var(--line); touch-action: none; overscroll-behavior: contain; }
+  .vl-win { position: absolute; left: 0; right: 0; top: 72px; height: 240px; border: 2px solid var(--accent); border-radius: 3px; pointer-events: none; z-index: 2; }
+  .vl-mask { position: absolute; left: 0; right: 0; background: color-mix(in srgb, var(--bg) 70%, transparent); z-index: 1; pointer-events: none; }
+  .vl-row { position: absolute; left: 6px; right: 6px; box-sizing: border-box; border-bottom: 1px solid var(--line); display: flex; align-items: center; gap: 8px; padding: 0 8px; font-size: 12px; font-family: var(--font-code); background: var(--panel); }
+  .vl-row .ix { color: var(--fg-3); font-size: 10.5px; min-width: 6ch; }
+  .vl-row.tall { background: var(--panel-2); }
+  .vl-row.cursor { box-shadow: inset 0 0 0 2px var(--t-ui); }
+  .vl-tag { position: absolute; right: 8px; z-index: 3; font-family: var(--font-code); font-size: 10px; color: var(--fg-2); background: var(--panel); padding: 1px 5px; border-radius: 3px; border: 1px solid var(--line); }
+  .vl-mini { position: relative; width: 14px; height: 384px; border-radius: 7px; background: var(--sunk); border: 1px solid var(--line); flex: none; }
+  .vl-mini i { position: absolute; left: 2px; right: 2px; border-radius: 5px; background: var(--accent); }
+  .vl-big { font-size: clamp(1.6rem, 1.2rem + 1.4vw, 2.2rem); font-weight: 600; line-height: 1.1; }
+  .vl-compare { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .vl-compare > div { background: var(--panel); padding: 12px 14px; }
+  .vl-compare .k { font-size: var(--fs-xs); color: var(--fg-3); }
+  .vl-cursor-note { font-size: var(--fs-sm); color: var(--fg-2); }
+</style>
+</head>
+<body data-lecture="5">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="05">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 05</span><span>2부 · 뼈대</span></div>
+      <h1>배치: 자리를 나눠 주는 법</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">부모가 자리를 정하고, 자식은 그 안에 선다. 측정 단계 없이 한 방향으로 흐르는 배치는 logic thread가 tree를 지을 때 끝난다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>55분</dd></div>
+            <div><dt>선수 지식</dt><dd>4강, CSS flexbox를 알면 도움</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>stack_element.cpp</code>·<code>flexible_lengths.h</code>·<code>virtual_list_element.cpp</code></dd></div>
+            <div><dt>실험</dt><dd>stack 실험장, 10만 행 가상 목록</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li>논리 픽셀·물리 픽셀·scale의 관계로 slot을 손으로 계산할 수 있다.</li>
+            <li>arrange 계약과, luil이 측정 단계를 두지 않은 이유를 말할 수 있다.</li>
+            <li>stack이 고정·유연·맞춤 길이와 하한·상한을 나누는 걸음을 따라갈 수 있다.</li>
+            <li>컨테이너를 "자르지 않음"과 "자르고 흘림"으로 나눠 고를 수 있다.</li>
+            <li>가상 목록이 10만 행을 수십 개의 element로 보여 주는 방법을 설명한다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="5.1">
+        <header class="slide-head">
+          <span class="num">5.1</span>
+          <h2>배치는 tree를 지을 때 끝난다</h2>
+          <p class="lede">그리기 직전에 계산하지 않는다. 창 크기가 바뀌면 옛 tree를 다시 배치하지 않고 새 크기로 새 tree를 짓는다.</p>
+        </header>
+        <ol class="recap">
+          <li><span class="thread-chip ui">UI</span> 창 크기나 DPI가 바뀌면 delegate가 <code>make_window_metrics_message(width, height, scale)</code>로 앱 메시지를 만든다. 폭·높이는 물리 픽셀, scale은 물리 ÷ 논리다.</li>
+          <li><span class="thread-chip lg">logic</span> <code>handle()</code>이 크기를 상태에 저장하고, 바뀐 것이 있으니 <code>make_frame()</code>이 불린다.</li>
+          <li><span class="thread-chip lg">logic</span> 앱이 <code>make_frame()</code> 안에서 tree를 새로 짓고 <code>arrange()</code>를 부른다. <b>배치는 여기서 끝난다.</b></li>
+          <li><span class="thread-chip lg">logic</span> host가 tree, 표면 tree 목록, frame 순서로 게시한다(2강).</li>
+          <li><span class="thread-chip ui">UI</span>·<span class="thread-chip in">input</span> 배치가 끝난 불변 tree를 그리고, hit test한다.</li>
+        </ol>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">결과는 값이다</span>배치의 결과는 element마다 확정된 <code>bounds()</code>다. 게시된 뒤에는 바뀌지 않으므로 그리기와 hit test가 같은 사각형을 본다. 그리기와 입력이 서로 다른 배치를 보는 일이 구조적으로 없다.</div></div>
+      </section>
+
+      <section class="slide" id="s2" data-num="5.2">
+        <header class="slide-head">
+          <span class="num">5.2</span>
+          <h2>두 가지 픽셀</h2>
+          <p class="lede">설정은 논리 픽셀로 적고, slot과 bounds는 물리 픽셀이다. 둘 사이를 scale이 잇는다.</p>
+        </header>
+        <div class="px-grid">
+          <div class="prose">
+            <p><strong>논리 픽셀</strong>은 96 DPI 기준의 길이다(Android에서는 dp). 앱이 적는 여백 24, 간격 12, 버튼 높이 30이 모두 논리 값이다. <strong>물리 픽셀</strong>은 화면의 실제 픽셀이다. 150% 모니터에서는 scale이 1.5라 논리 24가 물리 36이 된다.</p>
+            <ul>
+              <li><b>논리로 남는 것</b> — 모든 config, <code>preferred_size()</code>의 답, scroll offset, scroll 치수</li>
+              <li><b>물리인 것</b> — <code>slot</code>, <code>bounds()</code>, <code>viewport()</code>, hit test 좌표</li>
+              <li><b>반올림은 없다</b> — stack의 배치 코드에는 round·floor·ceil이 없어 139.5 같은 소수가 그대로 나온다.</li>
+            </ul>
+          </div>
+          <div class="lw" data-title="hello의 배치를 손으로" data-surface="stack · padding 24 · spacing 12" id="px-lab">
+            <div class="lw-body">
+              <div class="controls">
+                <span class="field">모니터 배율</span>
+                <div class="seg" role="group" aria-label="배율" id="px-scale">
+                  <button type="button" data-v="1">100%</button>
+                  <button type="button" data-v="1.25">125%</button>
+                  <button type="button" data-v="1.5" aria-pressed="true">150%</button>
+                  <button type="button" data-v="2">200%</button>
+                </div>
+              </div>
+              <div class="table-wrap"><table class="t" id="px-table"></table></div>
+              <p class="small muted" id="px-note"></p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="5.3">
+        <header class="slide-head">
+          <span class="num">5.3</span>
+          <h2>arrange 계약: 부모가 slot을 준다</h2>
+          <p class="lede">자식은 받은 slot으로 자기 bounds를 확정하고, 다시 자기 자식에게 slot을 내려 준다. 전면적인 측정 단계는 없다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="include/luil/ui/ui_element.h:777-836" data-path="include/luil/ui/ui_element.h" data-start="777"><script type="text/plain">
+    struct arrange_context
+    {
+        rect_f slot {};
+        float scale { 1.0f };
+        float scroll_offset { 0.0f };
+        // 그릴 수 있는 표면 전체다 (tree 좌표, 물리 픽셀). 앱의 자리가 안전 영역이면 그 밖(상태 표시줄·제스처 막대·
+        // 컷아웃 자리)까지 닿는다 — root 자리가 (0, 0)에서 시작하므로 왼쪽·위 몫은 음수다 (`window_surface`).
+        //  - 비어 있으면 자리 밖을 모른다는 뜻이고 지금까지처럼 자리 안에만 그린다. 앱이 넘길 때만 쓰인다.
+        //  - scrim과 시트 바탕처럼 화면 끝까지 칠해야 하는 것만 쓴다. 누르기는 지금처럼 자리 안에서만 받는다.
+        //  - 자식 문맥이 그대로 잇는다. 자르는 부모(흘리는 창·확대 보기) 안에서는 그 부모가 자른다.
+        rect_f surface {};
+        // 배치에서 글 폭을 재는 함수다 (`text_measurer`). 비어 있으면 그리기와 같은 UI 글꼴로 잰다
+        // (`default_text_measurer`) — 배치를 손으로 짜는 조립도 따로 넘길 것이 없다.
+        //  - 글 폭에 따라 줄 수가 바뀌는 요소(여러 줄 칸의 자동 줄 넘김)만 쓴다. 잰 값은 배치 결과에 남기고
+        //    포인터를 붙잡아 두지 않는다 — 배치가 끝나면 이 문맥은 사라진다.
+        //  - Test는 고정 폭 가짜를 넣는다. Core test의 글꼴 관리자는 비어 있어 기본 측정기는 폭 0을 잰다.
+        const text_measurer* measurer { nullptr };
+
+        // 내용 크기를 재는 element가 글자 크기를 읽는 스타일 치수다 (`ui_style::metrics`).
+        //  - 비어 있으면 내장 스타일의 치수다 (`default_ui_style`). 그리기의 `draw_context::metrics`와 같은 값을
+        //    넘겨야 잰 폭과 그린 글이 맞는다 — 스타일을 바꾼 앱은 `make_arranged_tree`에 같은 치수를 준다.
+        //  - 포인터만 들고 배치가 끝나면 잊는다 (`measurer`와 같다).
+        const ui_metrics* metrics { nullptr };
+        // 앱의 스타일 전체다. 컴포넌트가 자기 칸(`ui_style::tab_bar` 같은 것)을 **배치에서** 읽어 그 모양으로
+        // 자리를 잡고 그린다 (tab-bar-style-design.md의 공용 스타일).
+        //  - 배치에서 읽는 까닭은 모양이 자리와 입력 규칙까지 정하기 때문이다 — 닫기 단추를 숨기는 모양은 터치의
+        //    탭이 그 단추를 지나가게 한다. 그림만 바꾸는 값이라도 같은 자리에서 읽어 한 tree가 한 스타일을 본다.
+        //  - 비어 있으면 내장 스타일이다 (`default_ui_style`, LUIL_STYLE로 바꾼 값). 읽을 때는 `app_style()`로 묻는다.
+        //  - 스타일을 실행 시점에 바꾸는 앱은 `ui_frame::style`(팔레트)과 `make_arranged_tree`(이것)에 같은 값을 준다.
+        //  - 포인터만 들고 배치가 끝나면 잊는다 (`metrics`와 같다).
+        const ui_style* style { nullptr };
+
+        // 이 배치가 쓸 측정기다.
+        [[nodiscard]] const text_measurer& measure_text() const;
+        // 이 배치가 쓸 앱 스타일이다 (비었으면 내장 스타일).
+        [[nodiscard]] const ui_style& app_style() const noexcept;
+        // 이 배치로 내용 크기를 재는 문맥이다 (`ui_element::preferred_size`).
+        //  - 머리글에 둔다. 묻기만 하는 컨테이너가 기본 측정기(글꼴 등록부)까지 링크로 끌어오지 않는다
+        //    (`text_measurer.cpp`의 경계).
+        [[nodiscard]] measure_context measure() const noexcept
+        {
+            return { scale, measurer, metrics, style };
+        }
+
+        // 같은 배율·scroll_offset으로 자식에게 줄 문맥이다.
+        // 자리만 새로 준다 — 자식 문맥을 손으로 지으면 뒤의 값을 빠뜨리기 쉽고,
+        // 빠뜨려도 그 자리에서는 아무 일도 일어나지 않는다. 몇 계층 아래의
+        // sticky 머리행이 조용히 어긋날 뿐이다 (tree-arrange-design.md).
+        //  - 문맥에 새 값이 생겨도 모든 부모가 저절로 잇는다.
+        [[nodiscard]] arrange_context for_child(const rect_f& child_slot) const noexcept
+        {
+            return { child_slot, scale, scroll_offset, surface, measurer, metrics, style };
+        }
+
+        // 표면 전체를 아는가다 (넓이가 있는 `surface`).
+        [[nodiscard]] bool knows_surface() const noexcept
+        {
+            return surface.width > 0.0f && surface.height > 0.0f;
+        }
+    };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="777-781" data-title="slot·scale·scroll_offset">부모가 준 자리(물리), 물리 ÷ 논리 배율, 그리고 가장 가까운 세로 스크롤 창이 흘러간 양(논리)이다. scroll_offset은 sticky 머리행이 창의 윗변을 되짚을 때 쓴다.</li>
+            <li data-lines="782-807" data-title="surface·measurer·metrics·style">그릴 수 있는 표면 전체, 글 폭 측정기, 스타일 치수, 앱 스타일이다. 모두 포인터만 들고 배치가 끝나면 잊는다. 측정기를 넣을 수 있어 test가 고정 폭 가짜를 쓴다.</li>
+            <li data-lines="813-819" data-title="measure — 묻는 문맥">맞춤 항목에게 원하는 크기를 물을 때의 문맥이다. 배치 결과(bounds)를 읽지 않고 config만으로 답하게 한다.</li>
+            <li data-lines="821-829" data-title="for_child — 자리만 바꾸고 나머지는 잇는다">자식 문맥을 손으로 지으면 뒤의 값을 빠뜨리기 쉽고, 빠뜨려도 그 자리에서는 아무 일도 없다. 몇 계층 아래의 sticky 머리행이 조용히 어긋날 뿐이다. 그래서 자리만 새로 주는 함수 하나로 모았다. 문맥에 새 값이 생겨도 모든 부모가 저절로 잇는다.</li>
+          </ol>
+        </div>
+        <div class="cols two">
+          <div class="panel">
+            <h3>새 컨테이너가 따르는 순서</h3>
+            <ol style="margin:0;padding-left:1.2em;display:grid;gap:4px">
+              <li>자기 bounds를 <code>context.slot</code>으로 정한다.</li>
+              <li>논리 길이에 유효한 scale(<code>scale &gt; 0 ? scale : 1</code>)을 곱한다.</li>
+              <li>자식마다 물리 slot을 계산한다.</li>
+              <li><code>context.for_child(slot)</code>으로 자식을 배치한다.</li>
+              <li>스크롤 창의 viewport·최대치 같은 결과를 남긴다.</li>
+            </ol>
+          </div>
+          <div class="panel">
+            <h3>측정 단계를 두지 않는 이유</h3>
+            <p>길이는 담을 때 정한다. element가 자기 크기를 알릴 필요가 없고, 배치가 담는 쪽 코드에 그대로 드러난다. 내용 크기가 꼭 필요한 맞춤 자리만 <code>preferred_size()</code>로 묻는다. 고정·유연 길이만 쓰는 tree는 아무에게도 묻지 않는다.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="slide" id="s4" data-num="5.4">
+        <header class="slide-head">
+          <span class="num">5.4</span>
+          <h2>stack 실험장</h2>
+          <p class="lede">고정 길이와 간격을 먼저 빼고, 남은 자리를 유연 항목이 비율대로 나눈다. 하한·상한에 걸리면 몫을 다시 나눈다.</p>
+        </header>
+        <div class="lw" data-title="stack_element::arrange" data-surface="stack_element.cpp · flexible_lengths.h 재현" data-reset id="st-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <span class="field">예시</span>
+              <div class="seg" role="group" aria-label="예시" id="st-preset">
+                <button type="button" data-v="basic" aria-pressed="true">고정·유연·고정</button>
+                <button type="button" data-v="minfill">하한 풀기</button>
+                <button type="button" data-v="maxcap">상한</button>
+                <button type="button" data-v="overflow">넘침</button>
+                <button type="button" data-v="gap">유연 간격</button>
+              </div>
+            </div>
+            <div class="controls">
+              <span class="field">방향</span>
+              <div class="seg" role="group" aria-label="방향" id="st-dir"><button type="button" data-v="column" aria-pressed="true">column</button><button type="button" data-v="row">row</button></div>
+              <label class="field" for="st-main">주축 길이</label><input type="range" id="st-main" min="80" max="640" value="300"><output id="st-main-out" for="st-main">300</output>
+              <label class="field" for="st-spacing">spacing</label><input type="range" id="st-spacing" min="0" max="24" value="10" style="width:90px"><output id="st-spacing-out" for="st-spacing">10</output>
+              <label class="field" for="st-padding">padding</label><input type="range" id="st-padding" min="0" max="32" value="20" style="width:90px"><output id="st-padding-out" for="st-padding">20</output>
+            </div>
+            <div class="controls">
+              <span class="field">주축 정렬</span>
+              <div class="seg" role="group" aria-label="주축 정렬" id="st-ma"><button type="button" data-v="start" aria-pressed="true">start</button><button type="button" data-v="center">center</button><button type="button" data-v="end">end</button></div>
+              <span class="field">교차축 정렬</span>
+              <div class="seg" role="group" aria-label="교차축 정렬" id="st-ca"><button type="button" data-v="start">start</button><button type="button" data-v="center">center</button><button type="button" data-v="end">end</button><button type="button" data-v="stretch" aria-pressed="true">stretch</button></div>
+              <span class="field">배율</span>
+              <div class="seg" role="group" aria-label="배율" id="st-scale"><button type="button" data-v="1" aria-pressed="true">1</button><button type="button" data-v="1.5">1.5</button><button type="button" data-v="2">2</button></div>
+            </div>
+            <div class="stage-wrap" id="st-stage-wrap"></div>
+            <div class="legend" aria-hidden="true"><span><i style="background:var(--panel-2);border:1px solid var(--line-3)"></i>고정</span><span><i style="background:var(--accent-wash);border:1px solid var(--accent)"></i>유연</span><span><i style="background:var(--warn-wash);border:1px solid var(--warn)"></i>유연 — 하한에 섬</span><span><i style="background:var(--t-lg-wash);border:1px solid var(--t-lg)"></i>유연 — 상한에 섬</span><span><i style="background:var(--t-ui-wash);border:1px solid var(--t-ui)"></i>맞춤</span><span><i style="border:1px dashed var(--line-2)"></i>간격(gap)</span><span><i style="outline:2px solid var(--error)"></i>slot 밖으로 넘침</span></div>
+            <div class="table-wrap"><table class="t items-table" id="st-items"></table></div>
+            <div class="controls"><button class="btn sm" type="button" id="st-add"><i class="ci" aria-hidden="true">&#xEA60;</i>항목 더하기</button><span class="small muted">맞춤 항목의 "길이"는 자식이 답하는 원하는 크기로 쓴다. 원하는 교차 길이는 40으로 가정한다.</span></div>
+            <div class="table-wrap"><table class="t" id="st-out"></table></div>
+            <div><div class="small muted" style="margin-bottom:6px">distribute_flexible의 걸음 (유연 항목이 있을 때)</div><div class="table-wrap"><table class="t steps-table" id="st-steps"></table></div></div>
+          </div>
+          <div class="lw-foot">해 볼 것: <b>하한 풀기</b>에서 주축 길이를 300 → 120으로 줄여 보라. 300에서는 하한 160에 걸린 항목의 부족분을 다른 유연 항목이 내준다(160/140). 120에서는 하한들의 합이 자리를 넘어 stack이 넘친다. stack은 넘침을 자르지 않는다.</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s5" data-num="5.5">
+        <header class="slide-head">
+          <span class="num">5.5</span>
+          <h2>stack 읽기</h2>
+          <p class="lede">105줄 안에 맞춤 측정, 고정 합, 유연 분배, 주축 정렬, 교차축 정렬이 차례로 들어 있다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/ui/stack_element.cpp:58-162" data-path="src/ui/stack_element.cpp" data-start="58"><script type="text/plain">
+    void stack_element::arrange(const arrange_context& context)
+    {
+        set_bounds(context.slot);
+        if (entries_.empty())
+            return;
+
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        const bool row { config_.direction == stack_direction::row };
+        const float left { context.slot.x + config_.padding.left * scale };
+        const float top { context.slot.y + config_.padding.top * scale };
+        const float inner_width { context.slot.width - (config_.padding.left + config_.padding.right) * scale };
+        const float inner_height { context.slot.height - (config_.padding.top + config_.padding.bottom) * scale };
+        const float main_total { row ? inner_width : inner_height };
+        const float cross_total { row ? inner_height : inner_width };
+
+        // 맞춤 항목에게 원하는 크기를 한 번씩 묻는다. 맞춤 항목이 없으면 아무에게도 묻지 않는다.
+        //  - 가로 stack의 폭은 제한 없이, 세로 stack의 높이는 교차 폭에서 묻는다 (여러 줄 글이 그 폭에서 접힌다).
+        std::vector<size_f> fitted(entries_.size());
+        const measure_context measure { context.measure() };
+        const float fit_width { row ? std::numeric_limits<float>::infinity() : std::max(0.0f, cross_total / scale) };
+        for (std::size_t index = 0; index < entries_.size(); ++index)
+            if (entries_[index].item.fit && entries_[index].child != nullptr)
+                fitted[index] = fitted_size(*entries_[index].child, measure, fit_width);
+        const auto flexible = [this](const std::size_t index) { return entries_[index].item.fit == false && entries_[index].item.weight > 0.0f; };
+
+        // 고정 길이와 간격을 뺀 나머지를 비율대로 나눈다.
+        const float spacing { config_.spacing * scale };
+        float fixed { spacing * static_cast<float>(entries_.size() - 1) };
+        float weights { 0.0f };
+        for (std::size_t index = 0; index < entries_.size(); ++index)
+            if (flexible(index))
+                weights += entries_[index].item.weight;
+            else if (entries_[index].item.fit)
+                fixed += (row ? fitted[index].width : fitted[index].height) * scale;
+            else
+                fixed += entries_[index].item.length * scale;
+        float remaining { main_total - fixed };
+        if (remaining < 0.0f)
+            remaining = 0.0f;
+
+        // 유연 항목은 하한·상한을 지키며 남은 자리를 비율대로 나눈다 (`distribute_flexible`).
+        //  - 하한에 걸린 항목의 부족분은 다른 유연 항목의 몫에서 나온다. 하한들의 합이 남은 자리를 넘을 때만 넘친다.
+        //  - 상한에 걸린 항목이 남긴 자리는 걸리지 않은 항목이 나눈다.
+        //  - 제한이 없으면 몫은 지금까지의 식(`remaining × weight / weights`) 그대로다.
+        std::vector<float> lengths(entries_.size(), 0.0f);
+        std::vector<flexible_share> shares {};
+        std::vector<std::size_t> owners {};
+        for (std::size_t index = 0; index < entries_.size(); ++index)
+        {
+            if (flexible(index) == false)
+                continue;
+            const stack_item& item { entries_[index].item };
+            shares.push_back({ .weight = item.weight, .minimum = item.minimum * scale, .maximum = item.maximum * scale });
+            owners.push_back(index);
+        }
+        const std::vector<float> resolved { distribute_flexible(shares, remaining) };
+        float flexible_total { 0.0f };
+        for (std::size_t share = 0; share < owners.size(); ++share)
+        {
+            lengths[owners[share]] = resolved[share];
+            flexible_total += resolved[share];
+        }
+
+        // 남는 자리는 유연 항목이 다 가져가므로, 유연 항목이 하나도 없거나 모두 상한에 걸렸을 때만
+        // 정렬이 뜻을 갖는다.
+        //  - 음수로 내려가지 않는다. 하한들이 넘칠 때 가운데·끝 정렬이 여백 밖으로 새는 경계가 아예 없다.
+        float free { weights > 0.0f ? std::max(0.0f, remaining - flexible_total) : remaining };
+        float offset { 0.0f };
+        if (config_.main_alignment == stack_main_alignment::center)
+            offset = free / 2.0f;
+        else if (config_.main_alignment == stack_main_alignment::end)
+            offset = free;
+
+        for (std::size_t index = 0; index < entries_.size(); ++index)
+        {
+            const entry& current { entries_[index] };
+            float length { lengths[index] };
+            if (current.item.fit)
+                length = (row ? fitted[index].width : fitted[index].height) * scale;
+            else if (flexible(index) == false)
+                length = current.item.length * scale;
+            if (current.child != nullptr)
+            {
+                // 교차축 길이를 정하지 않았으면 남는 폭을 다 채운다.
+                //  - 맞춤 항목은 정렬이 `stretch`가 아니면 원하는 교차 길이에 선다.
+                float cross_length { current.item.cross_length > 0.0f ? current.item.cross_length * scale : cross_total };
+                if (current.item.fit && current.item.cross_length <= 0.0f && config_.cross_alignment != stack_alignment::stretch)
+                    cross_length = (row ? fitted[index].height : fitted[index].width) * scale;
+                float cross_offset { 0.0f };
+                if (config_.cross_alignment == stack_alignment::center)
+                    cross_offset = (cross_total - cross_length) / 2.0f;
+                else if (config_.cross_alignment == stack_alignment::end)
+                    cross_offset = cross_total - cross_length;
+
+                const rect_f slot {
+                    row ? left + offset : left + cross_offset,
+                    row ? top + cross_offset : top + offset,
+                    row ? length : cross_length,
+                    row ? cross_length : length,
+                };
+                current.child->arrange(context.for_child(slot));
+            }
+            offset += length + spacing;
+        }
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="58-62" data-title="자기 bounds부터">계약의 첫걸음이다. 빈 stack은 자기 bounds만 잡고 끝난다.</li>
+            <li data-lines="64-71" data-title="padding을 빼고 두 축을 정한다">padding에 scale을 곱해 안쪽 영역을 구한다. padding이 slot보다 커서 음수가 되어도 다듬지 않는다. 주축은 쌓는 방향, 교차축은 그와 직각이다.</li>
+            <li data-lines="73-80" data-title="맞춤 항목만 묻는다">맞춤(<code>fit</code>) 항목에게만 원하는 크기를 묻는다. 가로 stack은 폭 제한 없이, 세로 stack은 교차 폭에서 묻는다. 여러 줄 글이 그 폭에서 접히기 때문이다.</li>
+            <li data-lines="83-96" data-title="고정 합과 남은 자리">간격은 항목 수 − 1번 들어가고, gap도 항목으로 센다. 고정·맞춤 길이를 더해 빼고 남은 자리를 구한다. 음수면 0이다.</li>
+            <li data-lines="98-119" data-title="유연 항목의 분배">하한·상한도 물리로 바꿔 <code>distribute_flexible</code>에 넘긴다(5.6). 하한에 걸린 항목의 부족분은 다른 유연 항목의 몫에서 나온다.</li>
+            <li data-lines="121-129" data-title="정렬은 남는 자리가 있을 때만">유연 항목이 남는 자리를 다 가져가므로 정렬은 유연 항목이 없거나 모두 상한에 섰을 때만 뜻이 있다. free는 음수로 내려가지 않아, 넘칠 때 가운데 정렬이 여백 밖으로 새지 않는다.</li>
+            <li data-lines="131-151" data-title="교차축 길이와 자리">교차 길이를 주면 그 길이, 아니면 남는 폭을 다 채운다. <code>stretch</code>는 지정한 교차 길이를 늘리지 않는다. 그때는 start와 같다.</li>
+            <li data-lines="152-161" data-title="자식에게 slot을 내려 준다">slot을 만들어 <code>for_child</code>로 배치하고 offset을 늘린다. gap 항목은 자식이 없어 offset만 늘린다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s6" data-num="5.6">
+        <header class="slide-head">
+          <span class="num">5.6</span>
+          <h2>하한·상한을 지키는 비율 분배</h2>
+          <p class="lede">CSS flexbox의 "유연 길이 풀기"와 같은 절차다. 한 걸음마다 어긴 항목을 세우고, 남은 자리를 나머지가 다시 나눈다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/ui/flexible_lengths.h:16-76" data-path="src/ui/flexible_lengths.h" data-start="16"><script type="text/plain">
+    // 남은 자리(`pool`)를 유연 항목들에게 비율대로 나누되 하한·상한을 지킨다 (stack·grid가 같이 쓴다).
+    //  - 한 걸음마다 남은 항목의 몫을 견주어, 하한·상한을 어긴 항목을 그 값에 세운다. 세운 항목이 쓴 자리를 뺀 나머지를
+    //    아직 서지 않은 항목이 다시 나눈다. 어긴 양의 합이 늘리는 쪽(하한)이면 하한 쪽만, 줄이는 쪽(상한)이면 상한 쪽만
+    //    세운다 — 한쪽을 세우면 다른 쪽의 몫이 바뀌기 때문이다 (CSS flexbox의 "유연 길이 풀기"와 같은 절차다).
+    //  - 그래서 한 항목이 하한에 걸리면 그 부족분은 다른 유연 항목의 몫에서 나온다. 하한들의 합이 자리를 넘을 때만
+    //    전체가 넘친다.
+    //  - 하한이 상한보다 크면 하한이 이긴다.
+    //  - 모두 상한에 섰으면 합이 `pool`보다 작다. 남는 자리는 담는 쪽(주축 정렬)이 둔다.
+    [[nodiscard]] inline std::vector<float> distribute_flexible(const std::span<const flexible_share> items, const float pool)
+    {
+        std::vector<float> lengths(items.size(), 0.0f);
+        std::vector<bool> frozen(items.size(), false);
+        // 한 걸음에 적어도 하나를 세우므로 항목 수만큼이면 끝난다.
+        for (std::size_t step { 0 }; step <= items.size(); ++step)
+        {
+            float used { 0.0f };
+            float open { 0.0f };
+            for (std::size_t index { 0 }; index < items.size(); ++index)
+            {
+                if (frozen[index])
+                    used += lengths[index];
+                else
+                    open += items[index].weight;
+            }
+            if (open <= 0.0f)
+                break;
+            const float free { pool - used > 0.0f ? pool - used : 0.0f };
+            float violation { 0.0f };
+            std::vector<float> excess(items.size(), 0.0f);
+            for (std::size_t index { 0 }; index < items.size(); ++index)
+            {
+                if (frozen[index])
+                    continue;
+                const flexible_share& item { items[index] };
+                const float share { free * (item.weight / open) };
+                float clamped { share };
+                if (item.maximum > 0.0f && clamped > item.maximum)
+                    clamped = item.maximum;
+                if (item.minimum > 0.0f && clamped < item.minimum)
+                    clamped = item.minimum;
+                lengths[index] = clamped;
+                excess[index] = clamped - share;
+                violation += excess[index];
+            }
+            bool froze { false };
+            for (std::size_t index { 0 }; index < items.size(); ++index)
+            {
+                if (frozen[index] || excess[index] == 0.0f)
+                    continue;
+                // 합이 0이면(늘림과 줄임이 맞먹으면) 어긴 것을 모두 세운다.
+                if (violation == 0.0f || (violation > 0.0f) == (excess[index] > 0.0f))
+                {
+                    frozen[index] = true;
+                    froze = true;
+                }
+            }
+            if (froze == false)
+                break;
+        }
+        return lengths;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="16-23" data-title="계약을 주석이 적는다">하한에 걸린 항목의 부족분은 다른 유연 항목의 몫에서 나오고, 하한들의 합이 자리를 넘을 때만 넘친다. 하한이 상한보다 크면 하한이 이긴다. stack과 grid가 같이 쓴다.</li>
+            <li data-lines="29-42" data-title="걸음의 시작: 이미 선 것과 열린 비율">세운(frozen) 항목이 쓴 자리와 아직 서지 않은 항목의 비율 합을 센다. 열린 비율이 없으면 끝이다.</li>
+            <li data-lines="45-59" data-title="몫을 계산하고 제한을 건다">몫 = 남은 자리 × 비율 / 열린 비율 합. 상한을 먼저, 하한을 나중에 적용해 하한이 이긴다. 어긴 양(excess)과 그 합(violation)을 센다.</li>
+            <li data-lines="60-73" data-title="한쪽만 세운다">어긴 양의 합이 늘리는 쪽(양수)이면 하한에 걸린 것만, 줄이는 쪽(음수)이면 상한에 걸린 것만 세운다. 한쪽을 세우면 다른 쪽의 몫이 바뀌기 때문이다. 세운 것이 없으면 끝이다.</li>
+            <li data-lines="28-29,75" data-title="항목 수 + 1걸음이면 끝난다">한 걸음에 적어도 하나를 세우므로 걸음 수는 항목 수 + 1을 넘지 않는다. 5.4의 실험장 아래 표가 이 걸음을 그대로 보여 준다.</li>
+          </ol>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">규칙이 바뀐 이야기</span>예전에는 하한이 다른 항목의 몫을 줄이지 않아, 한 항목이 하한에 걸리면 늘 넘쳤다. 데모의 변경 작업대가 좁은 창에서 잘린 원인이었다. 지금 규칙으로 바꾸면서 test가 "폭 300에서 [w1 min 160, w1] → 160/140"을 잠근다. 설계 문서의 불변식 목록 한 줄은 아직 옛 규칙을 적고 있어, 코드와 test를 정본으로 본다.</div></div>
+      </section>
+
+      <section class="slide" id="s7" data-num="5.7">
+        <header class="slide-head">
+          <span class="num">5.7</span>
+          <h2>이름 붙은 필드가 막은 버그</h2>
+          <p class="lede">항목의 길이를 이름 없는 float 세 개로 받던 시절, 가로 stack의 버튼들이 60px 넘게 줄 밖으로 삐져나가도 아무도 알아채지 못했다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="include/luil/ui/stack_element.h:57-94" data-path="include/luil/ui/stack_element.h" data-start="57"><script type="text/plain">
+    // 한 항목의 배치 설정이다 (길이는 전부 논리 픽셀).
+    //
+    // 항목 쪽 값을 여기 모으는 이유는 **이름 없는 float가 늘면 부르는 쪽에서 무슨
+    // 값인지 읽을 수 없어서다.** 세 번째 인자였던 `cross_length`는 세로 stack의
+    // 습관인 (높이, 폭) 순서로 가로 stack의 두 자리에 적혀 있었고, 그 버튼들이 줄
+    // 밖으로 60px 넘게 삐져나간 채로 아무도 알아채지 못했다. 지정 초기화
+    // `{ .length = 96.0f, .cross_length = 30.0f }`는 그 오류를 애초에 쓸 수 없게 한다.
+    //
+    // **없음은 언제나 0으로 말한다.** `std::optional`을 섞지 않는다 — 한 구조체
+    // 안에서 없음을 말하는 법이 둘이 되면 안 된다.
+    struct stack_item
+    {
+        // 주축 길이다. `weight`가 0보다 크면 쓰지 않는다.
+        float length { 0.0f };
+        // 0보다 크면 고정 길이를 뺀 나머지를 이 비율로 나눠 갖는다.
+        float weight { 0.0f };
+        // 0보다 크면 교차축 길이도 정하고, 아니면 남는 폭을 다 채운다.
+        float cross_length { 0.0f };
+        // 유연 항목이 **반드시 받는** 주축 길이다. 0이면 하한이 없다.
+        // `weight`가 0보다 클 때만 뜻을 갖는다 — 고정 항목은 `length`가 이미
+        // 하한이자 상한이라, 배치가 그것을 다시 흥정하면 "길이는 담을 때 정한다"가
+        // 거짓이 된다.
+        //  - 하한에 걸려 늘어난 만큼은 **다른 유연 항목의 몫에서 나온다.** 하한에 걸린 항목은 하한에 서고 나머지
+        //    유연 항목이 남은 자리를 비율대로 다시 나눈다.
+        //  - 유연 하한들의 합이 남은 자리를 넘을 때만 컨테이너를 넘친다. 넘침을 자르는 것은 이 element의 일이 아니다.
+        //  - 예전에는 다른 항목에서 빼지 않아 하나가 하한에 걸리면 늘 넘쳤다. 이 필드의 뜻(반드시 받는 길이)은 그대로다.
+        float minimum { 0.0f };
+        // 유연 항목이 넘지 않는 주축 길이다. 0이면 상한이 없다.
+        //  - 상한에 걸린 항목이 남긴 자리는 **아직 걸리지 않은 유연 항목이** 비율대로 나눠 갖는다. 모두 걸렸으면
+        //    남는 자리가 되어 `main_alignment`이 둔다 (stack-expressiveness-design.md).
+        //  - 하한보다 작으면 하한이 이긴다.
+        float maximum { 0.0f };
+        // 주축 길이를 자식이 원하는 크기로 잰다 (`ui_element::preferred_size`). `length`와 `weight`는 쓰지 않는다.
+        //  - 가로 stack은 자식의 원하는 폭을, 세로 stack은 이 stack의 교차 폭에서 원하는 높이를 쓴다.
+        //  - 답하지 않는 자식은 0이다.
+        //  - `cross_length`가 0이고 교차축 정렬이 `stretch`가 아니면 교차축 길이도 원하는 크기다.
+        bool fit { false };
+    };
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="57-63" data-title="지정 초기화가 오류를 쓸 수 없게 한다">세 번째 인자였던 <code>cross_length</code>가 세로 stack의 습관인 (높이, 폭) 순서로 가로 stack에 적혀 있었다. <code>{ .length = 96.0f, .cross_length = 30.0f }</code>처럼 이름을 쓰게 하면 그 실수는 애초에 쓸 수 없다. 1강 hello의 버튼도 이 꼴로 담는다.</li>
+            <li data-lines="65-66" data-title="없음은 언제나 0">한 구조체 안에서 "없음"을 말하는 법이 둘(<code>0</code>과 <code>std::optional</code>)이 되면 안 된다.</li>
+            <li data-lines="69-74" data-title="length·weight·cross_length"><code>weight &gt; 0</code>이면 유연 항목이고 <code>length</code>는 쓰지 않는다. 교차 길이가 0이면 남는 폭을 다 채운다.</li>
+            <li data-lines="75-88" data-title="하한과 상한은 유연 항목만">고정 항목은 <code>length</code>가 이미 하한이자 상한이다. 배치가 그것을 다시 흥정하면 "길이는 담을 때 정한다"가 거짓이 된다.</li>
+            <li data-lines="89-93" data-title="fit — 묻는 항목">주축 길이를 자식의 원하는 크기로 잰다. 답하지 않는 자식은 0이다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s8" data-num="5.8">
+        <header class="slide-head">
+          <span class="num">5.8</span>
+          <h2>컨테이너 지도: 자르는가, 흘리는가</h2>
+          <p class="lede">컨테이너마다 맡은 일은 하나다. 고를 때의 첫 질문은 "넘친 것을 자르고 흘려야 하는가"다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>컨테이너</th><th>하는 일</th><th>넘칠 때</th><th>흘림</th></tr></thead>
+            <tbody>
+              <tr><td><code>stack</code></td><td>한 축으로 쌓기 — 고정·유연·맞춤, 하한·상한</td><td>slot 밖으로 나간다</td><td>없음</td></tr>
+              <tr><td><code>wrap</code></td><td>같은 크기 항목을 줄바꿈</td><td>아래로 넘친다</td><td>없음</td></tr>
+              <tr><td><code>grid</code></td><td>행·열 칸 (폼) — 고정·맞춤·유연 줄</td><td>칸 밖으로 넘친다</td><td>없음</td></tr>
+              <tr><td><code>layer</code></td><td>한 자리에 겹치기, 칸 안 정렬</td><td>넘친다</td><td>없음</td></tr>
+              <tr class="hi"><td><code>strip</code></td><td>가로로 긴 내용</td><td><b>잘린다</b></td><td>가로</td></tr>
+              <tr class="hi"><td><code>scroll_view</code></td><td>세로로 긴 내용</td><td><b>잘린다</b></td><td>세로</td></tr>
+              <tr class="hi"><td><code>scroll_area</code></td><td>scroll_view + 막대 + 휠 + 치수</td><td>안쪽 scroll_view가 자른다</td><td>세로 + 막대</td></tr>
+              <tr><td><code>root</code> · <code>panel</code></td><td>가지를 담기만 / 바탕을 칠하고 내용에 자기 slot을 그대로</td><td>—</td><td>없음</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/scroll_view_element.cpp:50-80" data-path="src/ui/scroll_view_element.cpp" data-start="50"><script type="text/plain">
+    void scroll_view_element::arrange(const arrange_context& context)
+    {
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        scale_ = scale;
+        set_bounds(context.slot);
+        viewport_ = context.slot;
+
+        // 넘치는 만큼만 흘릴 수 있다.
+        // 다듬은 값을 남겨 두어 담는 쪽이 같은 값을 스크롤 막대에 넘길 수 있게 한다.
+        // 다듬는 식은 공개 함수 clamp_scroll과 같다 — 앱이 tree를 만들기 전에
+        // 같은 식으로 다듬을 수 있어야 막대와 내용이 어긋나지 않는다.
+        const float content_height { config_.content_height * scale };
+        maximum_scroll_ = content_height > context.slot.height ? (content_height - context.slot.height) / scale : 0.0f;
+        config_.scroll_offset = clamp_scroll(config_.content_height, context.slot.height / scale, config_.scroll_offset);
+
+        if (content_ == nullptr)
+            return;
+
+        // 내용은 흘러간 만큼 위로 올린 자리에 통째로 배치한다.
+        // 내용이 받은 slot으로 보이는 범위를 알 수 있어 가상화도 여기서 가능하다.
+        const rect_f slot {
+            context.slot.x,
+            context.slot.y - config_.scroll_offset * scale,
+            context.slot.width,
+            content_height > context.slot.height ? content_height : context.slot.height,
+        };
+        // 자식 문맥을 잇지 않고 **새로 정하는** 유일한 자리다.
+        // 아래의 sticky 머리행은 자기를 감싼 가장 가까운 스크롤 창의 값을 봐야 한다.
+        //  - 측정기와 스타일은 잇는다. 흘리는 창 안의 글도 같은 글꼴로 재고 같은 모양으로 그린다.
+        content_->arrange({ slot, scale, config_.scroll_offset, {}, context.measurer, context.metrics, context.style });
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="52-55" data-title="창은 받은 slot 그대로">viewport는 받은 slot(물리)이다.</li>
+            <li data-lines="57-63" data-title="다듬는 식은 앱과 한 벌">넘치는 만큼만 흘릴 수 있다. 앱이 tree를 짓기 전에 쓰는 공개 함수 <code>clamp_scroll</code>과 같은 식이라 막대와 내용이 어긋나지 않는다. 식이 두 벌이 되면 반드시 어긋난다.</li>
+            <li data-lines="68-75" data-title="내용을 흘러간 만큼 위로">내용은 offset × scale만큼 위로 올린 자리에 통째로 배치된다. 내용이 받은 slot으로 보이는 범위를 알 수 있어 가상화가 여기서 가능해진다.</li>
+            <li data-lines="76-79" data-title="문맥을 새로 짓는 유일한 자리">다른 컨테이너는 모두 <code>for_child</code>로 잇는다. 세로 스크롤 창만 scroll_offset을 자기 값으로 바꾸고 surface를 비운다. 아래의 sticky 머리행이 가장 가까운 스크롤 창의 값을 봐야 하기 때문이다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s9" data-num="5.9">
+        <header class="slide-head">
+          <span class="num">5.9</span>
+          <h2>가상 목록: 10만 행을 수십 개로</h2>
+          <p class="lede">"십만 줄짜리 화면이 element 십만 개가 되지 않게 하는 것이 이 컴포넌트가 하는 일의 전부다." 창에 걸치는 행과 그 위아래 몇 줄만 짓는다.</p>
+        </header>
+        <div class="lw" data-title="virtual_list_element" data-surface="row_height 24 · 창 240 · 반열린 구간" data-reset id="vl-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <span class="field">overscan</span>
+              <div class="seg" role="group" aria-label="overscan" id="vl-over"><button type="button" data-v="0">0</button><button type="button" data-v="1">1</button><button type="button" data-v="2" aria-pressed="true">2 (기본)</button><button type="button" data-v="4">4</button></div>
+              <span class="field">행 높이</span>
+              <div class="seg" role="group" aria-label="행 높이" id="vl-h"><button type="button" data-v="fixed" aria-pressed="true">모두 24</button><button type="button" data-v="var">열 줄마다 48</button></div>
+              <label class="field" for="vl-cursor">커서 행</label><input type="number" id="vl-cursor" min="0" max="99999" placeholder="없음" style="width:96px">
+            </div>
+            <div class="controls">
+              <label class="field" for="vl-off">scroll_offset</label>
+              <input type="range" id="vl-off" min="0" max="2399760" value="0" step="1" style="width:min(420px,60vw)">
+              <button class="btn sm" type="button" data-jump="0">처음</button>
+              <button class="btn sm" type="button" data-jump="mid">가운데</button>
+              <button class="btn sm" type="button" data-jump="end">끝</button>
+            </div>
+            <div class="vl">
+              <div class="vl-stage">
+                <div class="vl-lane" id="vl-lane" aria-label="목록 창. 휠이나 끌기로 흘린다"></div>
+                <div class="vl-mini" id="vl-mini" aria-hidden="true"><i></i></div>
+              </div>
+              <div style="display:grid;gap:12px;min-width:0">
+                <div class="vl-compare">
+                  <div><div class="k">모델의 항목</div><div class="vl-big" id="vl-n">100,000</div></div>
+                  <div><div class="k">tree에 선 행 element</div><div class="vl-big" id="vl-built">—</div></div>
+                </div>
+                <div class="stat-row" id="vl-stats"></div>
+                <p class="vl-cursor-note" id="vl-note"></p>
+              </div>
+            </div>
+          </div>
+          <div class="lw-foot">초록 테가 보이는 창이다. 테 밖에 흐리게 걸린 행은 overscan으로 지었지만 안쪽 scroll_view가 잘라서 그리지도 누르지도 않는다. 커서 행에 9000을 넣고 처음에 두면, 창 밖 커서 행 하나가 따로 서는 것이 숫자에 보인다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/ui/virtual_list_element.cpp:838-897" data-path="src/ui/virtual_list_element.cpp" data-start="838"><script type="text/plain">
+    void virtual_list_element::arrange(const arrange_context& context)
+    {
+        set_bounds(context.slot);
+        const float scale { context.scale > 0.0f ? context.scale : 1.0f };
+        viewport_height_ = context.slot.height / scale;
+
+        // 지을 행을 정하는 것은 **배치 시점**이다. 창 높이를 알아야 어디까지
+        // 걸치는지 답할 수 있고, 창 높이는 slot이 정해져야 안다.
+        //  - `arrange`가 자식을 만드는 유일한 자리다. tree는 아직 게시되지
+        //    않았으므로 만드는 것이 허용된다 (`tab_bar_element`가 넘침 버튼의
+        //    보임을 자기 arrange에서 정하는 것과 같은 걸음이다).
+        // 행은 **높이가 있는 첫 배치**에서 한 번만 짓는다.
+        //  - 자식은 tree 하나에 한 벌이라 두 번 지으면 같은 자리표가 둘 선다.
+        //  - 높이가 0인 배치를 계기로 삼지 않는 이유는, 담는 쪽이 자리를 잡기
+        //    전에 한 번 0으로 배치해 볼 수 있어서다. 그때 지으면 아무 행도 걸치지
+        //    않아 빈 목록이 굳는다.
+        if (realized_built_ == false && context.slot.height > 0.0f)
+        {
+            realized_built_ = true;
+            // 폭으로 열을 정하는 격자는 지금 폭에서 열과 내용 높이를 다시 잰다.
+            if (grid())
+            {
+                // 칸은 막대를 뺀 내용 폭에 선다. 막대가 서는지는 내용 높이가 정하고 그것은 열 수가 정하므로, 막대 없이
+                // 세어 넘치면 막대 폭을 빼고 다시 센다 (열이 줄면 더 넘칠 뿐이라 한 번이면 된다).
+                const float width { context.slot.width / scale };
+                const bool bar_possible { config_.scroll != nullptr && config_.bar != scrollbar_visibility::never };
+                columns_ = virtual_list_grid_columns(config_, width);
+                content_height_ = static_cast<float>(grid_rows(model().size(), columns_)) * config_.row_height;
+                if (bar_possible && (config_.bar == scrollbar_visibility::always || content_height_ > viewport_height_))
+                {
+                    columns_ = virtual_list_grid_columns(config_, width - scroll_area_bar_width);
+                    content_height_ = static_cast<float>(grid_rows(model().size(), columns_)) * config_.row_height;
+                }
+                area_->set_content_height(content_height_);
+            }
+            const float offset { clamp_scroll(content_height_, viewport_height_, config_.scroll_offset) };
+            if (grid())
+            {
+                // 걸치는 줄의 반열린 구간을 항목 구간으로 옮긴다. 줄 단위로 위아래를 더 짓는다.
+                const std::size_t rows { grid_rows(model().size(), columns_) };
+                if (rows > 0 && config_.row_height > 0.0f && viewport_height_ > 0.0f)
+                {
+                    const auto first_row { static_cast<std::size_t>(offset / config_.row_height) };
+                    const auto end_row { std::min(rows, static_cast<std::size_t>(std::ceil((offset + viewport_height_) / config_.row_height))) };
+                    const std::size_t margin { config_.overscan > 0 ? static_cast<std::size_t>(config_.overscan) : 0u };
+                    const std::size_t begin_row { first_row > margin ? first_row - margin : 0u };
+                    const std::size_t last_row { std::min(rows, end_row + margin) };
+                    realized_ = { begin_row * columns_, std::min(model().size(), last_row * columns_) };
+                }
+                else
+                    realized_ = {};
+            }
+            else
+                realized_ = virtual_list_visible_range(model(), config_.row_height, offset, viewport_height_, config_.overscan);
+            build_rows();
+        }
+        // 이름은 안쪽 영역을 지나 막대까지 이어진다 (`list_element`와 같은 줄).
+        area_->set_access_name(access_name());
+        area_->arrange(context.for_child(context.slot));
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="838-842" data-title="창 높이를 안다">slot이 정해져야 창 높이를 알고, 창 높이를 알아야 어디까지 걸치는지 답할 수 있다.</li>
+            <li data-lines="844-856" data-title="배치가 자식을 짓는 유일한 자리">tree가 아직 게시되지 않았으므로 arrange에서 행 element를 만드는 것이 허용된다. 행은 높이가 있는 첫 배치에서 한 번만 짓는다. 두 번 지으면 같은 자리표가 둘 서고, 높이 0 배치를 계기로 삼으면 빈 목록이 굳는다.</li>
+            <li data-lines="857-872" data-title="격자는 폭에서 열을 센다">격자 모드는 지금 폭에서 열 수를 세고, 막대가 서면 막대 폭을 빼고 한 번 더 센다. 열이 줄면 더 넘칠 뿐이라 한 번이면 된다.</li>
+            <li data-lines="873-891" data-title="반열린 구간과 overscan">offset을 다듬고 창에 걸치는 반열린 구간 [begin, end)를 구한 뒤 위아래로 overscan만큼 넓힌다. 반열린 구간이라 창 높이가 행 높이의 배수여도 한 줄을 덤으로 짓지 않는다.</li>
+            <li data-lines="892-896" data-title="짓고, 한 번 배치한다">창 구간의 행, 구간 밖이면 커서 행, 창 밖에서 고른 행(최대 64개)을 모델 차례로 짓는다. 그리고 안쪽 scroll_area를 한 번 배치한다. 내용의 arrange가 한 frame에 두 번 불리면 같은 행이 둘 선다.</li>
+          </ol>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">아직 재지 않은 것은 재지 않았다고 쓴다</span>가변 높이를 지원하려고 보이는 범위는 앞에서부터 더해 찾는다(O(n)). 누적 높이 캐시는 "100만 줄 frame 하나가 Release에서 1ms를 넘으면 넣는다"는 기준과 함께 계측 뒤로 미뤘고, 설계 문서의 계측 표는 아직 "측정 전"이다. 잰 것은 공유 모델의 효과다. 10만 항목을 frame마다 값으로 넘기면 약 2.1ms, <code>shared_items</code>로 공유하면 약 0.1ms였다.</div></div>
+      </section>
+
+      <section class="slide" id="s10" data-num="5.10">
+        <header class="slide-head">
+          <span class="num">5.10</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>배치는 logic thread가 <code>make_frame()</code>에서 tree를 지을 때 끝난다. 결과인 bounds는 게시 뒤 바뀌지 않는다.</li>
+          <li>config는 논리 픽셀, slot과 bounds는 물리 픽셀이다. scale이 둘을 잇고, 배치 코드에는 반올림이 없다.</li>
+          <li>부모가 slot을 정하고 자식이 bounds를 확정한다. 측정 단계는 없고, 맞춤 자리만 <code>preferred_size()</code>로 묻는다.</li>
+          <li>stack은 고정·간격을 빼고 남은 자리를 유연 항목에 나눈다. 하한·상한은 CSS flexbox식 걸음으로 풀고, 넘쳐도 자르지 않는다.</li>
+          <li>stack·wrap·grid·layer는 자르지 않고, strip·scroll_view는 자르고 흘린다. scroll_view만 자식 문맥의 scroll_offset을 새로 짓는다.</li>
+          <li>가상 목록은 배치 시점에 창의 반열린 구간과 overscan, 커서 행, 고른 행(최대 64)만 짓는다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s11" data-num="5.11">
+        <header class="slide-head">
+          <span class="num">5.11</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="2">
+            <p class="q">세로 stack(spacing 8, 좌우 padding 10)에 길이 30짜리 고정 항목 둘을 담고 slot {0, 0, 200, 200}, scale 2로 배치했다. 둘째 항목의 y는?</p>
+            <ol class="choices">
+              <li>38</li>
+              <li>76</li>
+              <li>68</li>
+              <li>60</li>
+            </ol>
+            <div class="explain">길이·간격은 논리라 stack이 scale을 곱한다. 첫째 높이 30 × 2 = 60, 간격 8 × 2 = 16이므로 둘째 y = 60 + 16 = 76이다. 좌우 padding 10은 각각 20이 되어 x = 20, 폭 = 160이다.</div>
+          </div>
+          <div class="quiz" data-answer="3">
+            <p class="q">폭 300인 가로 stack에 <code>{ weight 1, minimum 160 }</code>과 <code>{ weight 1 }</code>을 담았다. 두 폭은?</p>
+            <ol class="choices">
+              <li>150 / 150</li>
+              <li>160 / 150 — 10만큼 넘친다</li>
+              <li>160 / 140</li>
+              <li>300 / 0</li>
+            </ol>
+            <div class="explain">처음 몫 150이 하한 160에 걸려 첫째가 160에 선다. 남은 140은 둘째가 갖는다. 하한의 부족분은 다른 유연 항목에서 나오고, 하한들의 합이 자리를 넘을 때만 넘친다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">행 높이 20, 항목 5개, 창 높이 40, scroll_offset 40, overscan 0이다. 실현되는 구간은?</p>
+            <ol class="choices">
+              <li>[2, 4)</li>
+              <li>[1, 4)</li>
+              <li>[2, 5)</li>
+              <li>[1, 5)</li>
+            </ol>
+            <div class="explain">창은 [40, 80)이다. 1번 행 [20, 40)은 윗변에 닿기만 하고, 4번 행 [80, 100)은 아랫변에서 시작한다. 둘 다 걸치지 않으므로 [2, 4)다. overscan 1이면 [1, 5)가 된다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">기본 정렬(<code>stretch</code>)인 세로 stack에 버튼을 <code>{ .length = 30, .cross_length = 120 }</code>으로 담았다. 버튼은 어디에 서는가?</p>
+            <ol class="choices">
+              <li>stack의 폭 전체로 늘어난다</li>
+              <li>가로 가운데에 선다</li>
+              <li>오른쪽 끝에 선다</li>
+              <li>폭 120으로 안쪽 영역의 왼쪽 끝에 선다</li>
+            </ol>
+            <div class="explain"><code>stretch</code>는 교차 길이를 지정하지 않은 항목을 채우는 기본 동작이고, 지정한 <code>cross_length</code>를 강제로 늘리지 않는다. offset 계산에서 stretch는 start와 같다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/course.js"></script>
+<script>
+(function () {
+  const { el } = window.LU;
+  const fmt = (v) => (Math.round(v * 100) / 100).toLocaleString("ko-KR", { maximumFractionDigits: 2 });
+  function seg(id, onChange) {
+    const g = document.getElementById(id);
+    g.addEventListener("click", (e) => {
+      const b = e.target.closest("button[data-v]");
+      if (!b) return;
+      setSeg(id, b.dataset.v);
+      onChange(b.dataset.v);
+    });
+  }
+  function setSeg(id, v) {
+    document.getElementById(id).querySelectorAll("button").forEach((x) => x.setAttribute("aria-pressed", x.dataset.v === String(v) ? "true" : "false"));
+  }
+
+  /* ---------- 재현: flexible_lengths.h · stack_element.cpp (브리프 §5.1~5.2, 저장소 test 기대값과 대조함) ---------- */
+  function distributeFlexible(items, pool, trace) {
+    const n = items.length;
+    const lengths = new Array(n).fill(0);
+    const frozen = new Array(n).fill(false);
+    const why = new Array(n).fill("");
+    for (let step = 0; step <= n; ++step) {
+      let used = 0, open = 0;
+      for (let i = 0; i < n; ++i) { if (frozen[i]) used += lengths[i]; else open += items[i].weight; }
+      if (open <= 0) break;
+      const free = pool - used > 0 ? pool - used : 0;
+      let violation = 0;
+      const excess = new Array(n).fill(0);
+      const rows = [];
+      for (let i = 0; i < n; ++i) {
+        if (frozen[i]) continue;
+        const it = items[i];
+        const share = free * (it.weight / open);
+        let clamped = share;
+        if (it.maximum > 0 && clamped > it.maximum) clamped = it.maximum;
+        if (it.minimum > 0 && clamped < it.minimum) clamped = it.minimum;
+        lengths[i] = clamped;
+        excess[i] = clamped - share;
+        violation += excess[i];
+        rows.push({ i, share, clamped, excess: excess[i] });
+      }
+      let froze = false;
+      const newly = [];
+      for (let i = 0; i < n; ++i) {
+        if (frozen[i] || excess[i] === 0) continue;
+        if (violation === 0 || (violation > 0) === (excess[i] > 0)) { frozen[i] = true; froze = true; why[i] = excess[i] > 0 ? "min" : "max"; newly.push(i); }
+      }
+      if (trace) trace.push({ step, free, open, violation, rows, newly });
+      if (!froze) break;
+    }
+    return { lengths, why };
+  }
+
+  function arrangeStack(slot, scale, config, entries, trace) {
+    const result = { slots: entries.map(() => null), lengths: entries.map(() => 0), why: entries.map(() => ""), remaining: 0, free: 0 };
+    if (!entries.length) return result;
+    const s = scale > 0 ? scale : 1;
+    const row = config.direction === "row";
+    const p = config.padding;
+    const left = slot.x + p.left * s;
+    const top = slot.y + p.top * s;
+    const innerW = slot.width - (p.left + p.right) * s;
+    const innerH = slot.height - (p.top + p.bottom) * s;
+    const mainTotal = row ? innerW : innerH;
+    const crossTotal = row ? innerH : innerW;
+    const fitWidth = row ? Infinity : Math.max(0, crossTotal / s);
+    const fitted = entries.map((e) => (e.fit && e.child ? (e.preferred && e.preferred(fitWidth)) || { width: 0, height: 0 } : { width: 0, height: 0 }));
+    const flexible = (e) => e.fit === false && e.weight > 0;
+    const spacing = config.spacing * s;
+    let fixed = spacing * (entries.length - 1);
+    let weights = 0;
+    entries.forEach((e, i) => {
+      if (flexible(e)) weights += e.weight;
+      else if (e.fit) fixed += (row ? fitted[i].width : fitted[i].height) * s;
+      else fixed += e.length * s;
+    });
+    let remaining = mainTotal - fixed;
+    if (remaining < 0) remaining = 0;
+    const lengths = new Array(entries.length).fill(0);
+    const shares = [], owners = [];
+    entries.forEach((e, i) => { if (flexible(e)) { shares.push({ weight: e.weight, minimum: e.minimum * s, maximum: e.maximum * s }); owners.push(i); } });
+    const resolved = distributeFlexible(shares, remaining, trace);
+    let flexibleTotal = 0;
+    owners.forEach((i, k) => { lengths[i] = resolved.lengths[k]; flexibleTotal += resolved.lengths[k]; result.why[i] = resolved.why[k]; });
+    const free = weights > 0 ? Math.max(0, remaining - flexibleTotal) : remaining;
+    let offset = 0;
+    if (config.main_alignment === "center") offset = free / 2;
+    else if (config.main_alignment === "end") offset = free;
+    entries.forEach((e, i) => {
+      let length = lengths[i];
+      if (e.fit) length = (row ? fitted[i].width : fitted[i].height) * s;
+      else if (!flexible(e)) length = e.length * s;
+      result.lengths[i] = length;
+      if (e.child) {
+        let crossLength = e.cross_length > 0 ? e.cross_length * s : crossTotal;
+        if (e.fit && e.cross_length <= 0 && config.cross_alignment !== "stretch") crossLength = (row ? fitted[i].height : fitted[i].width) * s;
+        let crossOffset = 0;
+        if (config.cross_alignment === "center") crossOffset = (crossTotal - crossLength) / 2;
+        else if (config.cross_alignment === "end") crossOffset = crossTotal - crossLength;
+        result.slots[i] = row ? { x: left + offset, y: top + crossOffset, width: length, height: crossLength } : { x: left + crossOffset, y: top + offset, width: crossLength, height: length };
+      }
+      offset += length + spacing; // gap은 자식이 없어 자리만 늘린다
+    });
+    result.remaining = remaining;
+    result.free = free;
+    result.inner = { x: left, y: top, w: innerW, h: innerH };
+    return result;
+  }
+
+  /* ---------- 5.2 hello의 배치 ---------- */
+  const pxTable = document.getElementById("px-table");
+  const pxNote = document.getElementById("px-note");
+  function pxRender(scale) {
+    const W = 800 * scale, H = 500 * scale;
+    const cap = 36 * scale;
+    const column = { x: 0, y: cap, width: W, height: H - cap };
+    const r = arrangeStack(column, scale, { direction: "column", spacing: 12, padding: { left: 24, top: 24, right: 24, bottom: 24 }, cross_alignment: "stretch", main_alignment: "start" },
+      [{ child: true, length: 21, weight: 0, cross_length: 0, minimum: 0, maximum: 0, fit: false }, { child: true, length: 30, weight: 0, cross_length: 120, minimum: 0, maximum: 0, fit: false }]);
+    const rows = [
+      ["root", "창 전체 800 × 500", { x: 0, y: 0, width: W, height: H }],
+      ["caption", "높이 36", { x: 0, y: 0, width: W, height: cap }],
+      ["column (stack)", "padding 24, spacing 12", column],
+      ["label", "높이 21 (14px 글자 + 7)", r.slots[0]],
+      ["button", "{ .length = 30, .cross_length = 120 }", r.slots[1]],
+    ];
+    pxTable.innerHTML = "<thead><tr><th>element</th><th>앱이 적은 값 (논리)</th><th class='num'>x</th><th class='num'>y</th><th class='num'>w</th><th class='num'>h</th></tr></thead>";
+    const tb = el("tbody");
+    for (const [name, logical, s] of rows) tb.append(el("tr", null, el("td", null, el("code", { text: name })), el("td", { text: logical }), el("td", { class: "num", text: fmt(s.x) }), el("td", { class: "num", text: fmt(s.y) }), el("td", { class: "num", text: fmt(s.width) }), el("td", { class: "num", text: fmt(s.height) })));
+    pxTable.append(tb);
+    pxNote.textContent = "x·y·w·h는 물리 픽셀이다. scale " + scale + "에서 창은 " + fmt(W) + " × " + fmt(H) + " 물리 픽셀이고, 화면에서의 크기는 모든 배율에서 같다. 라벨 높이 21은 시스템 글자 크기가 기본일 때 값이다.";
+  }
+  seg("px-scale", (v) => pxRender(Number(v)));
+  pxRender(1.5);
+
+  /* ---------- 5.4 stack 실험장 ---------- */
+  const PRESETS = {
+    basic: { dir: "column", main: 300, cross: 200, spacing: 10, padding: 20, ma: "start", ca: "stretch", scale: 1, items: [{ t: "fixed", v: 30 }, { t: "flex", v: 1 }, { t: "fixed", v: 40 }] },
+    minfill: { dir: "row", main: 300, cross: 90, spacing: 0, padding: 0, ma: "start", ca: "stretch", scale: 1, items: [{ t: "flex", v: 1, min: 160 }, { t: "flex", v: 1 }] },
+    maxcap: { dir: "row", main: 300, cross: 90, spacing: 0, padding: 0, ma: "center", ca: "stretch", scale: 1, items: [{ t: "flex", v: 1, max: 50 }, { t: "flex", v: 1, max: 100 }] },
+    overflow: { dir: "column", main: 300, cross: 100, spacing: 0, padding: 0, ma: "start", ca: "stretch", scale: 1, items: [{ t: "fixed", v: 200 }, { t: "flex", v: 1 }, { t: "fixed", v: 200 }] },
+    gap: { dir: "row", main: 300, cross: 90, spacing: 8, padding: 0, ma: "start", ca: "center", scale: 1, items: [{ t: "flexgap", v: 1 }, { t: "fixed", v: 88, cross: 40 }, { t: "fixed", v: 88, cross: 40 }] },
+  };
+  const ST = {};
+  const KIND = { fixed: "고정", flex: "유연", fit: "맞춤", gap: "간격", flexgap: "유연 간격" };
+  const wrap = document.getElementById("st-stage-wrap");
+  const itemsT = document.getElementById("st-items");
+  const outT = document.getElementById("st-out");
+  const stepsT = document.getElementById("st-steps");
+  const mainIn = document.getElementById("st-main");
+  const spIn = document.getElementById("st-spacing");
+  const padIn = document.getElementById("st-padding");
+
+  function loadPreset(name) {
+    const p = PRESETS[name];
+    Object.assign(ST, JSON.parse(JSON.stringify(p)));
+    mainIn.value = ST.main; spIn.value = ST.spacing; padIn.value = ST.padding;
+    setSeg("st-dir", ST.dir); setSeg("st-ma", ST.ma); setSeg("st-ca", ST.ca); setSeg("st-scale", ST.scale);
+    renderItems();
+    compute();
+  }
+
+  function renderItems() {
+    itemsT.innerHTML = "<thead><tr><th>#</th><th>종류</th><th>길이 / 비율</th><th>하한</th><th>상한</th><th>교차 길이</th><th></th></tr></thead>";
+    const tb = el("tbody");
+    ST.items.forEach((it, i) => {
+      const sel = el("select", { "aria-label": "항목 " + (i + 1) + " 종류" });
+      for (const k of Object.keys(KIND)) sel.append(el("option", { value: k, text: KIND[k], selected: it.t === k ? true : null }));
+      const num = (key, enabled, label) => {
+        const inp = el("input", { type: "number", step: "1", value: it[key] != null ? it[key] : "", placeholder: "0", "aria-label": label, disabled: enabled ? null : true });
+        inp.addEventListener("input", () => { it[key] = inp.value === "" ? 0 : Number(inp.value); compute(); });
+        return inp;
+      };
+      const isFlex = it.t === "flex" || it.t === "flexgap";
+      sel.addEventListener("change", () => { it.t = sel.value; if (sel.value === "flex" || sel.value === "flexgap") it.v = it.v > 0 && it.v < 10 ? it.v : 1; else if (!it.v || it.v < 10) it.v = 40; renderItems(); compute(); });
+      const rm = el("button", { class: "btn sm ghost", type: "button", title: "빼기", onclick: () => { ST.items.splice(i, 1); renderItems(); compute(); } }, window.LU.icon("EA76"));
+      tb.append(el("tr", null, el("td", { text: String(i + 1) }), el("td", null, sel), el("td", null, num("v", true, "길이 또는 비율")), el("td", null, num("min", it.t === "flex", "하한")), el("td", null, num("max", it.t === "flex", "상한")), el("td", null, num("cross", it.t === "fixed" || it.t === "flex" || it.t === "fit", "교차 길이")), el("td", null, rm)));
+      void isFlex;
+    });
+    itemsT.append(tb);
+    document.getElementById("st-add").disabled = ST.items.length >= 5;
+  }
+
+  function compute() {
+    ST.main = Number(mainIn.value); ST.spacing = Number(spIn.value); ST.padding = Number(padIn.value);
+    document.getElementById("st-main-out").textContent = ST.main;
+    document.getElementById("st-spacing-out").textContent = ST.spacing;
+    document.getElementById("st-padding-out").textContent = ST.padding;
+    const s = ST.scale;
+    const row = ST.dir === "row";
+    const Wl = row ? ST.main : ST.cross, Hl = row ? ST.cross : ST.main;
+    const slot = { x: 0, y: 0, width: Wl * s, height: Hl * s };
+    const entries = ST.items.map((it) => {
+      const base = { child: it.t !== "gap" && it.t !== "flexgap", length: 0, weight: 0, cross_length: it.cross || 0, minimum: 0, maximum: 0, fit: false };
+      if (it.t === "fixed" || it.t === "gap") base.length = it.v || 0;
+      if (it.t === "flex" || it.t === "flexgap") { base.weight = it.v || 0; base.minimum = it.min || 0; base.maximum = it.max || 0; }
+      if (it.t === "fit") { base.fit = true; const pv = it.v || 0; base.preferred = () => ({ width: row ? pv : 40, height: row ? 40 : pv }); }
+      if (it.t === "gap" || it.t === "flexgap") base.cross_length = 0;
+      return base;
+    });
+    const trace = [];
+    const r = arrangeStack(slot, s, { direction: ST.dir, spacing: ST.spacing, padding: { left: ST.padding, top: ST.padding, right: ST.padding, bottom: ST.padding }, cross_alignment: ST.ca, main_alignment: ST.ma }, entries, trace);
+
+    // 그림 (CSS px = 논리 px)
+    wrap.textContent = "";
+    const stage = el("div", { class: "stage", style: { width: Wl + "px", height: Hl + "px", margin: "4px 0" } });
+    stage.append(el("span", { class: "stage-label", text: "slot " + fmt(Wl * s) + " × " + fmt(Hl * s) + " 물리 (" + Wl + " × " + Hl + " 논리)" }));
+    if (r.inner) stage.append(el("div", { class: "pad", style: { left: (r.inner.x / s) + "px", top: (r.inner.y / s) + "px", width: Math.max(0, r.inner.w / s) + "px", height: Math.max(0, r.inner.h / s) + "px" } }));
+    r.slots.forEach((sl, i) => {
+      const it = ST.items[i];
+      const e = entries[i];
+      const mainLen = r.lengths[i];
+      let box;
+      if (sl) box = { x: sl.x / s, y: sl.y / s, w: sl.width / s, h: sl.height / s };
+      else {
+        // gap: 자식은 없고 자리만 차지한다 — 앞 항목의 끝에서 길이만큼
+        let off = 0;
+        for (let k = 0; k < i; k++) off += r.lengths[k] + ST.spacing * s;
+        const inner = r.inner;
+        const free = r.free;
+        const startOff = ST.ma === "center" ? free / 2 : ST.ma === "end" ? free : 0;
+        box = row ? { x: (inner.x + startOff + off) / s, y: inner.y / s, w: mainLen / s, h: inner.h / s } : { x: inner.x / s, y: (inner.y + startOff + off) / s, w: inner.w / s, h: mainLen / s };
+      }
+      const cls = it.t === "fixed" ? "" : it.t === "flex" ? "flex" + (r.why[i] ? " " + r.why[i] : "") : it.t === "fit" ? "fit" : "gap";
+      const over = box.x < -0.01 || box.y < -0.01 || box.x + box.w > Wl + 0.01 || box.y + box.h > Hl + 0.01;
+      const d = el("div", { class: "it " + cls + (over ? " over" : ""), title: "#" + (i + 1) + " " + KIND[it.t] });
+      Object.assign(d.style, { left: box.x + "px", top: box.y + "px", width: Math.max(0, box.w) + "px", height: Math.max(0, box.h) + "px" });
+      if (box.w > 26 && box.h > 18) d.append(el("b", { text: "#" + (i + 1) }), el("span", { text: fmt(mainLen / s) }));
+      stage.append(d);
+      void e;
+    });
+    wrap.append(stage);
+
+    // 결과 표
+    outT.innerHTML = "<thead><tr><th>#</th><th>종류</th><th>상태</th><th class='num'>주축 (논리)</th><th class='num'>x</th><th class='num'>y</th><th class='num'>w</th><th class='num'>h</th></tr></thead>";
+    const tb = el("tbody");
+    r.slots.forEach((sl, i) => {
+      const it = ST.items[i];
+      const state = it.t === "flex" || it.t === "flexgap" ? (r.why[i] === "min" ? "하한에 섬" : r.why[i] === "max" ? "상한에 섬" : "비율 몫") : it.t === "fit" ? "원하는 크기" : it.t === "gap" ? "자리만" : "담을 때 정함";
+      tb.append(el("tr", null, el("td", { text: String(i + 1) }), el("td", { text: KIND[it.t] }), el("td", { text: state }), el("td", { class: "num", text: fmt(r.lengths[i] / s) }),
+        el("td", { class: "num", text: sl ? fmt(sl.x) : "—" }), el("td", { class: "num", text: sl ? fmt(sl.y) : "—" }), el("td", { class: "num", text: sl ? fmt(sl.width) : "—" }), el("td", { class: "num", text: sl ? fmt(sl.height) : "—" })));
+    });
+    tb.append(el("tr", null, el("td", { colspan: "8", class: "small muted", text: "남은 자리 remaining " + fmt(r.remaining) + " · 정렬에 쓰는 free " + fmt(r.free) + " (물리) · slot 좌표는 물리 픽셀, 배율 " + s } )));
+    outT.append(tb);
+
+    // 걸음 표
+    stepsT.textContent = "";
+    if (!trace.length) { stepsT.innerHTML = "<tbody><tr><td class='muted'>유연 항목이 없다 — 분배할 것이 없다.</td></tr></tbody>"; return; }
+    stepsT.innerHTML = "<thead><tr><th>걸음</th><th>남은 자리</th><th>열린 비율</th><th>항목별 몫 → 제한 후</th><th>violation</th><th>이번에 세운 것</th></tr></thead>";
+    const tb2 = el("tbody");
+    const owners = [];
+    entries.forEach((e, i) => { if (!e.fit && e.weight > 0) owners.push(i); });
+    for (const st of trace) {
+      const parts = st.rows.map((rw) => "#" + (owners[rw.i] + 1) + " " + fmt(rw.share / s) + (Math.abs(rw.excess) > 1e-9 ? " → " + fmt(rw.clamped / s) : ""));
+      tb2.append(el("tr", null, el("td", { text: String(st.step + 1) }), el("td", { text: fmt(st.free / s) }), el("td", { text: fmt(st.open) }), el("td", { text: parts.join(" · ") }), el("td", { text: fmt(st.violation / s) }),
+        el("td", { text: st.newly.length ? st.newly.map((k) => "#" + (owners[k] + 1) + (st.rows.find((x) => x.i === k).excess > 0 ? " 하한" : " 상한")).join(", ") : "없음 → 끝" })));
+    }
+    stepsT.append(tb2);
+  }
+  seg("st-preset", loadPreset);
+  seg("st-dir", (v) => { ST.dir = v; compute(); });
+  seg("st-ma", (v) => { ST.ma = v; compute(); });
+  seg("st-ca", (v) => { ST.ca = v; compute(); });
+  seg("st-scale", (v) => { ST.scale = Number(v); compute(); });
+  [mainIn, spIn, padIn].forEach((x) => x.addEventListener("input", compute));
+  document.getElementById("st-add").addEventListener("click", () => { if (ST.items.length < 5) { ST.items.push({ t: "fixed", v: 40 }); renderItems(); compute(); } });
+  document.getElementById("st-lab").addEventListener("lw-reset", () => { setSeg("st-preset", "basic"); loadPreset("basic"); });
+  loadPreset("basic");
+
+  /* ---------- 5.9 가상 목록 (브리프 §5.4~5.6 재현) ---------- */
+  const N = 100000;
+  const VIEW = 240;
+  const VL = { over: 2, variable: false, offset: 0, cursor: null };
+  const lane = document.getElementById("vl-lane");
+  const mini = document.getElementById("vl-mini").querySelector("i");
+  const offIn = document.getElementById("vl-off");
+  const stats = document.getElementById("vl-stats");
+  const note = document.getElementById("vl-note");
+  const builtEl = document.getElementById("vl-built");
+  document.getElementById("vl-n").textContent = N.toLocaleString("ko-KR");
+  const hOf = (i) => (VL.variable && (i + 1) % 10 === 0 ? 48 : 24);
+  const beginOf = (i) => (VL.variable ? 24 * i + 24 * Math.floor(i / 10) : 24 * i);
+  const contentH = () => (VL.variable ? 24 * N + 24 * Math.floor(N / 10) : 24 * N);
+  function clampScroll(content, viewport, offset) { const m = content > viewport ? content - viewport : 0; if (offset < 0) return 0; return offset > m ? m : offset; }
+  function visibleRange(offset) {
+    // virtual_list_visible_range: 반열린 구간. 원문은 모델 전체를 훑는다 — 높이가 모두 양수라 아랫변을 넘으면 멈춰도 답이 같다.
+    const top = offset > 0 ? offset : 0, bottom = top + VIEW;
+    let begin = N, end = 0, y = 0;
+    for (let i = 0; i < N; ++i) {
+      const h = hOf(i);
+      const rb = y + h;
+      if (h > 0 && rb > top && y < bottom) { if (i < begin) begin = i; end = i + 1; }
+      if (y >= bottom) break;
+      y = rb;
+    }
+    if (begin >= end) return { b: 0, e: 0, vb: 0, ve: 0 };
+    const m = VL.over > 0 ? VL.over : 0;
+    return { vb: begin, ve: end, b: begin > m ? begin - m : 0, e: end + m < N ? end + m : N };
+  }
+  function vlRender() {
+    const content = contentH();
+    const maximum = Math.max(0, content - VIEW);
+    offIn.max = String(maximum);
+    VL.offset = clampScroll(content, VIEW, VL.offset);
+    offIn.value = String(Math.round(VL.offset));
+    const R = visibleRange(VL.offset);
+    const cursorOut = VL.cursor != null && (VL.cursor < R.b || VL.cursor >= R.e);
+    const built = R.e - R.b + (cursorOut ? 1 : 0);
+    lane.textContent = "";
+    lane.append(el("div", { class: "vl-mask", style: { top: "0", height: "72px" } }), el("div", { class: "vl-mask", style: { top: "312px", height: "72px" } }), el("div", { class: "vl-win" }));
+    for (let i = R.b; i < R.e; i++) {
+      const y = beginOf(i) - VL.offset + 72;
+      const h = hOf(i);
+      if (y + h < -40 || y > 384 + 40) continue;
+      lane.append(el("div", { class: "vl-row" + (h > 24 ? " tall" : "") + (VL.cursor === i ? " cursor" : ""), style: { top: y + "px", height: h + "px" } }, el("span", { class: "ix", text: "#" + i }), el("span", { text: "항목 " + (i + 1).toLocaleString("ko-KR") })));
+    }
+    lane.append(el("span", { class: "vl-tag", style: { top: "4px" }, text: "overscan 위" }), el("span", { class: "vl-tag", style: { bottom: "4px" }, text: "overscan 아래" }));
+    // 막대 thumb (scrollbar_element.cpp 재현, 트랙 384로 그림)
+    const track = 384 - 4;
+    let th = track * (VIEW / content);
+    if (th < 24) th = 24;
+    const ratio = maximum > 0 ? VL.offset / maximum : 0;
+    mini.style.top = 2 + (track - th) * Math.min(1, Math.max(0, ratio)) + "px";
+    mini.style.height = th + "px";
+    builtEl.textContent = String(built);
+    stats.textContent = "";
+    const st = [["내용 높이", content.toLocaleString("ko-KR")], ["offset (다듬음)", Math.round(VL.offset).toLocaleString("ko-KR")], ["창에 걸침", "[" + R.vb.toLocaleString("ko-KR") + ", " + R.ve.toLocaleString("ko-KR") + ")"], ["실현 (overscan)", "[" + R.b.toLocaleString("ko-KR") + ", " + R.e.toLocaleString("ko-KR") + ")"]];
+    for (const [k, v] of st) stats.append(el("div", null, el("span", { class: "k", text: k }), el("span", { class: "v", text: v })));
+    note.textContent = cursorOut ? "커서 행 #" + VL.cursor.toLocaleString("ko-KR") + "은 창 밖이지만 초점 테와 행 안 컨트롤을 위해 따로 하나 더 지었다. 그 자리는 y = " + (beginOf(VL.cursor) - VL.offset).toLocaleString("ko-KR") + " (창 기준)이라 잘려 보이지 않는다." : "창 구간 " + (R.ve - R.vb) + "행 + overscan " + (R.e - R.b - (R.ve - R.vb)) + "행. 모델이 100만이어도 이 수는 같다.";
+  }
+  lane.addEventListener("wheel", (e) => { e.preventDefault(); VL.offset += e.deltaY; vlRender(); }, { passive: false });
+  let drag = null;
+  lane.addEventListener("pointerdown", (e) => { drag = { y: e.clientY, off: VL.offset }; lane.setPointerCapture(e.pointerId); });
+  lane.addEventListener("pointermove", (e) => { if (!drag) return; VL.offset = drag.off - (e.clientY - drag.y); vlRender(); });
+  lane.addEventListener("pointerup", () => (drag = null));
+  lane.addEventListener("pointercancel", () => (drag = null));
+  offIn.addEventListener("input", () => { VL.offset = Number(offIn.value); vlRender(); });
+  document.querySelectorAll("#vl-lab [data-jump]").forEach((b) => b.addEventListener("click", () => { const c = contentH(); VL.offset = b.dataset.jump === "0" ? 0 : b.dataset.jump === "end" ? c : c / 2 - VIEW / 2; vlRender(); }));
+  seg("vl-over", (v) => { VL.over = Number(v); vlRender(); });
+  seg("vl-h", (v) => { VL.variable = v === "var"; vlRender(); });
+  document.getElementById("vl-cursor").addEventListener("input", (e) => { const v = e.target.value; VL.cursor = v === "" ? null : Math.max(0, Math.min(N - 1, Math.floor(Number(v)))); vlRender(); });
+  document.getElementById("vl-lab").addEventListener("lw-reset", () => { Object.assign(VL, { over: 2, variable: false, offset: 0, cursor: null }); setSeg("vl-over", "2"); setSeg("vl-h", "fixed"); document.getElementById("vl-cursor").value = ""; vlRender(); });
+  vlRender();
+})();
+</script>
+</body>
+</html>

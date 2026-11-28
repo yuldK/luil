@@ -1,0 +1,1042 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>06 입력의 여정 · luil 해부학</title>
+<meta name="description" content="luil 해부학 6강. OS의 raw 입력이 값으로 복사되어 input thread로 건너가고, 시계를 보지 않는 상태 기계가 클릭·끌기·초점 이동·키 라우팅·터치 몸짓으로 바꾸는 과정.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/course.css">
+<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .pipe { display: grid; gap: 8px; }
+  @media (min-width: 900px) { .pipe { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  .pipe .panel { position: relative; }
+  .pipe .panel .who { justify-self: start; }
+  .lab2 { display: grid; gap: 16px; }
+  @media (min-width: 980px) { .lab2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
+  .pad-scene { position: relative; height: 230px; border: 1px solid var(--line-2); border-radius: var(--r-window); background: var(--bg); touch-action: none; user-select: none; -webkit-user-select: none; overflow: hidden; }
+  .pad-scene .tgt { position: absolute; display: grid; place-items: center; border: 1px solid var(--line-3); border-radius: var(--r-control); background: var(--panel); font-size: 13px; }
+  .pad-scene .tgt.pressed { background: var(--line); }
+  .pad-scene .tgt.dropok { box-shadow: 0 0 0 2px var(--accent); }
+  .pad-scene .ring { position: absolute; border-radius: 50%; border: 1px dashed var(--line-3); pointer-events: none; transform: translate(-50%, -50%); }
+  .pad-scene .ring.dbl { border-color: var(--t-ui); }
+  .pad-scene .ghost { position: absolute; padding: 3px 8px; border-radius: 3px; background: var(--accent); color: var(--on-accent); font-size: 12px; pointer-events: none; transform: translate(8px, 8px); }
+  .meter { position: relative; height: 22px; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); overflow: hidden; }
+  .meter i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent-wash-2); }
+  .meter .mk { position: absolute; top: 0; bottom: 0; width: 1px; background: var(--line-3); }
+  .meter .mk span { position: absolute; left: 3px; top: 2px; font-family: var(--font-code); font-size: 10px; color: var(--fg-2); white-space: nowrap; }
+  .meter .lbl { position: absolute; right: 6px; top: 3px; font-family: var(--font-code); font-size: 11px; }
+  .form { position: relative; display: grid; gap: 10px; padding: 14px; border: 1px solid var(--line-2); border-radius: var(--r-window); background: var(--bg); font-size: 13px; }
+  .form .row { display: grid; grid-template-columns: 4.5em minmax(0, 1fr); gap: 10px; align-items: center; }
+  .form .f { min-height: 28px; border: 1px solid var(--line-2); border-radius: var(--r-control); background: var(--panel); padding: 4px 8px; cursor: pointer; display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .form .f.focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .form .f.focus.quiet { outline-style: dotted; outline-color: var(--line-3); }
+  .form .f.text { font-family: var(--font-code); }
+  .form .f.text .caret { width: 1px; height: 14px; background: var(--fg); }
+  .form .bar { flex: 1; height: 4px; background: var(--line-2); border-radius: 2px; position: relative; }
+  .form .bar i { position: absolute; left: 0; top: 0; bottom: 0; background: var(--accent); border-radius: 2px; }
+  .form .radios { display: flex; gap: 6px; }
+  .form .radios .f { flex: 1; justify-content: center; }
+  .form .radios .f.sel { background: var(--accent-wash); border-color: var(--accent); }
+  .form .btns { display: flex; justify-content: flex-end; gap: 8px; }
+  .form .f.def { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
+  .form .list .f.all { background: var(--accent-wash); }
+  .form .modal { position: absolute; inset: 0; background: color-mix(in srgb, var(--bg) 55%, #000 25%); display: grid; place-items: center; border-radius: var(--r-window); }
+  .form .dialog { width: min(260px, 90%); background: var(--panel); border: 1px solid var(--line-3); border-radius: 6px; padding: 12px; display: grid; gap: 10px; box-shadow: 0 8px 24px #00000040; }
+  .keys { display: flex; flex-wrap: wrap; gap: 6px; }
+  .keys .btn { font-family: var(--font-code); }
+  .stages { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .stages li { display: grid; grid-template-columns: 2.2em minmax(0, 1fr) auto; gap: 8px; align-items: baseline; padding: 5px 10px; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); font-size: var(--fs-sm); line-height: 1.5; }
+  .stages li .n { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--fg-3); }
+  .stages li .st { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--fg-3); white-space: nowrap; }
+  .stages li.pass .st { color: var(--fg-2); }
+  .stages li.hit { border-color: var(--accent); background: var(--accent-wash); }
+  .stages li.hit .st { color: var(--accent-ink); font-weight: 600; }
+  .stages li.skip { opacity: 0.45; }
+  .stages li .why { grid-column: 2 / 4; font-size: var(--fs-xs); color: var(--fg-2); }
+  .touch-scene { position: relative; height: 280px; border: 1px solid var(--line-2); border-radius: var(--r-window); background: var(--bg); overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .touch-scene .content { position: absolute; left: 0; right: 0; top: 0; will-change: transform; }
+  .touch-scene .item { height: 44px; border-bottom: 1px solid var(--line); display: flex; align-items: center; padding: 0 14px; font-size: 13px; background: var(--panel); }
+  .touch-scene .item.pressed { background: var(--sunk); }
+  .touch-scene .item.focus { box-shadow: inset 3px 0 0 var(--accent); }
+  .touch-scene .menu { position: absolute; z-index: 3; background: var(--panel); border: 1px solid var(--line-3); border-radius: 4px; box-shadow: 0 8px 22px #0000003a; padding: 4px; font-size: 12.5px; min-width: 120px; }
+  .touch-scene .menu div { padding: 6px 10px; border-radius: 3px; }
+  .touch-scene .dot { position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; border-radius: 50%; background: var(--accent-wash-2); border: 1px solid var(--accent); pointer-events: none; z-index: 4; }
+  .snap-table td:first-child { white-space: nowrap; }
+</style>
+</head>
+<body data-lecture="6">
+<header class="topbar"></header>
+
+<main>
+  <section class="hero" id="s0" data-num="06">
+    <div class="hero-inner">
+      <div class="eyebrow"><span class="lec-no">LECTURE 06</span><span>3부 · 사람과 화면 사이</span></div>
+      <h1>입력의 여정</h1>
+      <div class="hero-cols">
+        <div style="display:grid;gap:22px">
+          <p class="thesis">OS가 준 날것의 사건은 값으로 복사되어 input thread로 건너가고, 시계를 보지 않는 상태 기계가 그것을 클릭·끌기·초점 이동으로 바꾼다. 앱에 닿는 것은 메시지뿐이다.</p>
+          <dl class="meta">
+            <div><dt>예상 시간</dt><dd>60분</dd></div>
+            <div><dt>선수 지식</dt><dd>2~4강</dd></div>
+            <div><dt>다루는 코드</dt><dd><code>ui_interaction.h</code>·<code>ui_interaction.cpp</code></dd></div>
+            <div><dt>실험</dt><dd>클릭·drag 판정, 키 라우팅, 터치 몸짓</dd></div>
+          </dl>
+        </div>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <ol>
+            <li>raw 입력이 앱 메시지가 되기까지의 정거장을 순서대로 말할 수 있다.</li>
+            <li>시계를 보지 않는 상태 기계가 결정적인 테스트를 가능하게 하는 이유를 안다.</li>
+            <li>클릭·더블클릭·drag 판정의 조건(대상·표면·장치·시간·거리)을 안다.</li>
+            <li>키 하나가 10단계 라우팅의 어디에서 소비되는지 예측한다.</li>
+            <li>터치의 탭·쓸기·길게 누르기·관성이 갈리는 기준을 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="lecture-body">
+    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
+    <div class="slides">
+
+      <section class="slide" id="s1" data-num="6.1">
+        <header class="slide-head">
+          <span class="num">6.1</span>
+          <h2>입력의 네 정거장</h2>
+          <p class="lede">UI thread는 받아서 넣기만, input thread는 판정만, 앱은 메시지를 받기만 한다.</p>
+        </header>
+        <div class="pipe">
+          <div class="panel"><span class="thread-chip ui who">UI thread</span><h3>값으로 복사</h3><p>OS 메시지를 플랫폼 구조체 없는 <code>raw_input_event</code>로 옮긴다. 시각·장치·수식 키·표면을 싣는다.</p></div>
+          <div class="panel"><span class="tag who">channel</span><h3>input_inbox</h3><p>4096칸, <code>drop_oldest</code>. 이동의 중간 좌표는 버려도 되지만, 유실은 접수 번호의 구멍으로 드러난다.</p></div>
+          <div class="panel"><span class="thread-chip in who">input thread</span><h3>판정</h3><p><code>run_ui_input_pump</code>가 최신 tree를 대고 <code>interaction_controller</code>에 먹인다. hit test, 클릭·drag, 초점, 키 라우팅, 터치 몸짓.</p></div>
+          <div class="panel"><span class="thread-chip lg who">목적지</span><h3>dispatch</h3><p>앱 메시지는 logic inbox로, 창·클립보드·캡처는 UI callback으로, 햅틱은 플랫폼으로. 그리기용 상태는 snapshot으로 게시한다.</p></div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>raw_input_event 16갈래</th><th>무엇</th></tr></thead>
+            <tbody>
+              <tr><td><code>pointer_moved</code> · <code>pressed</code> · <code>released</code> · <code>left</code> · <code>cancelled</code> · <code>mouse_wheel</code></td><td>포인터 — 마우스·터치·펜이 같은 타입에 장치 필드로 갈린다</td></tr>
+              <tr><td><code>key_pressed</code> · <code>character_typed</code></td><td>키와 글자 — 그냥 친 글자는 키가 아니라 문자 이벤트다</td></tr>
+              <tr><td><code>surface_focus_lost</code> · <code>surface_focus_gained</code></td><td>창의 초점</td></tr>
+              <tr><td><code>file_drag_entered</code> · <code>moved</code> · <code>left</code></td><td>OS에서 끌어온 파일</td></tr>
+              <tr><td><code>access_focus</code> · <code>access_click</code> · <code>focus_reveal</code></td><td>보조 기술의 초점·누름, 초점 자리 드러내기</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">OS의 더블클릭 메시지도 그냥 누름이다</span>Win32의 <code>WM_LBUTTONDBLCLK</code>는 <code>pointer_pressed_event</code>로 옮겨진다. 더블클릭인지는 controller가 직접 판정한다. 판정 규칙이 한 곳에 있어야 마우스·터치·펜, 네 플랫폼이 같은 답을 낸다.</div></div>
+      </section>
+
+      <section class="slide" id="s2" data-num="6.2">
+        <header class="slide-head">
+          <span class="num">6.2</span>
+          <h2>pump 한 바퀴</h2>
+          <p class="lede">기다리고, 새 tree를 받고, 유실을 정리하고, 이벤트의 시각까지 시간을 흘린 뒤 처리하고, 바뀐 것이 있으면 게시한다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/ui/ui_interaction.cpp:4936-5007" data-path="src/ui/ui_interaction.cpp" data-start="4936"><script type="text/plain">
+        while (true)
+        {
+            // 시간이 흘러야 일어날 판정(길게 누르기·관성 스크롤)이 있으면 그 시각까지만 기다린다.
+            std::chrono::milliseconds wait { 250 };
+            if (const auto deadline { controller.next_deadline() }; deadline.has_value())
+            {
+                const auto remaining { std::chrono::ceil<std::chrono::milliseconds>(*deadline - std::chrono::steady_clock::now()) };
+                wait = std::clamp(remaining, std::chrono::milliseconds { 0 }, wait);
+            }
+            const messaging::receive_status status { input_inbox.receive_wait(received, wait) };
+            if (status == messaging::receive_status::closed)
+                return;
+
+            // 이벤트가 없는 턴(타임아웃)에도 최신 tree를 받는다.
+            // set_tree가 마지막 포인터 위치로 hover를 재판정하므로,
+            // 휠을 멈춘 뒤 도착한 tree의 반영이 다음 입력을 기다리지 않는다.
+            if (const auto tree { tree_slot.take_newer(tree_version) }; tree.has_value())
+            {
+                tree_version = tree->version;
+                controller.set_tree(tree->value);
+            }
+            if (auto surfaces { surface_tree_slot.take_newer(surface_version) }; surfaces.has_value())
+            {
+                surface_version = surfaces->version;
+                controller.set_surface_trees(std::move(surfaces->value));
+            }
+            // 편집이 적용된 tree가 왔으면 여러 줄 칸의 caret 줄을 들인다. 바뀐 것이 없으면 아무것도 내지 않는다.
+            dispatch(controller.follow_text_caret());
+            // 포인터가 머문 채 덮개가 서거나 hover 영역이 바뀌었으면 끝·나감·들어옴을 낸다.
+            dispatch(controller.refresh_hover_tracking());
+            // 게시자가 이미 검증했다. 그래도 잘못된 값이면 controller가 거절하고 직전 값이 남는다.
+            if (touch_slot != nullptr)
+                if (const auto touch { touch_slot->take_newer(touch_version) }; touch.has_value())
+                {
+                    touch_version = touch->version;
+                    static_cast<void>(controller.set_touch_config(touch->value));
+                }
+
+            if (status == messaging::receive_status::received)
+            {
+                // drop_oldest 큐는 포화에서 앞을 버린다 — 접수 번호의 건너뜀이 그 흔적이다.
+                // 유실분에 뗌·이탈 같은 상태 전이가 있었을 수 있으므로 몸짓부터 거둔다.
+                if (received.sequence != next_sequence)
+                    dispatch(controller.cancel_dropped_gestures());
+                next_sequence = received.sequence + 1;
+
+                // 큐가 밀렸으면 뒤에 더 이른 뗌·취소가 남아 있다. 벽시계가 아니라 입력 시각까지
+                // 진행해야 짧은 탭이 길게 누르기로 바뀌지 않는다.
+                //  - 판정을 이벤트보다 **먼저** 한다. 기한이 지난 뒤 온 이동이 먼저 처리되면 끌기나
+                //    흘려보기로 바뀌어, 그 전에 열렸어야 할 메뉴가 사라진다.
+                const auto time_of = [](const auto& value) -> std::optional<std::chrono::steady_clock::time_point> {
+                    if constexpr (requires { value.time; })
+                        return value.time;
+                    else
+                        return std::nullopt;
+                };
+                if (const auto time { std::visit(time_of, received.payload) }; time.has_value())
+                    dispatch(controller.advance(*time));
+                dispatch(controller.process(received.payload));
+                // 표를 단 키는 누가 받았는지 플랫폼에 돌려준다. 액션을 내보낸 뒤라 받은 조합의 메시지가 먼저 떠난다.
+                if (const auto* const key { std::get_if<key_pressed_event>(&received.payload) }; key != nullptr && key->report_ticket != 0 && report_key)
+                    report_key(key->report_ticket, controller.last_key_handled());
+            }
+            else
+                dispatch(controller.advance(std::chrono::steady_clock::now()));
+
+            if ((controller.snapshot() == published) == false)
+            {
+                published = controller.snapshot();
+                static_cast<void>(interaction_slot.publish(published));
+            }
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="4938-4945" data-title="얼마나 기다릴까">기본 250ms, 시간이 흘러야 일어날 판정(길게 누르기·관성·자동 스크롤·hover 머무름…)이 있으면 그 시각까지만 기다린다. 250ms 상한은 이벤트가 없어도 새 tree를 받아 hover를 다시 판정하게 한다.</li>
+            <li data-lines="4974-4980" data-title="번호가 건너뛰면 몸짓부터 거둔다">drop_oldest 큐가 앞을 버렸다는 흔적이다. 버려진 것에 뗌이 있었을 수 있으므로 그 이벤트를 처리하기 전에 진행 중인 누름·끌기를 거둔다(6.10).</li>
+            <li data-lines="4982-4993" data-title="벽시계가 아니라 이벤트의 시각으로">큐가 밀렸으면 뒤에 더 이른 뗌이 남아 있다. 벽시계로 시간을 흘리면 짧은 탭이 길게 누르기로 바뀐다. 그래서 이벤트의 시각까지 먼저 진행하고, 그다음 이벤트를 처리한다.</li>
+            <li data-lines="4994-4997" data-title="처리하고 보낸다"><code>process</code>가 돌려준 액션을 목적지별로 보낸다. 표를 단 키는 누가 받았는지 플랫폼에 돌려준다.</li>
+            <li data-lines="4999-5000" data-title="아무것도 안 왔으면 지금 시각으로">타임아웃 바퀴에서만 벽시계 <code>now</code>로 시간을 흘린다. 손을 떼기 전에 길게 누르기 메뉴가 열리는 것이 이 줄 덕이다.</li>
+            <li data-lines="5002-5006" data-title="바뀔 때만 게시한다">snapshot이 직전 게시본과 다를 때만 interaction slot에 게시한다. 같은 element 위의 단순한 이동은 UI를 깨우지 않는다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s3" data-num="6.3">
+        <header class="slide-head">
+          <span class="num">6.3</span>
+          <h2>시계를 보지 않는 상태 기계</h2>
+          <p class="lede">controller는 <code>now()</code>를 부르지 않는다. 쓰는 시각은 이벤트에 실려 온 것뿐이고, 시간이 흘러야 하는 판정은 "다음에 깨워 달라"는 시각만 알린다.</p>
+        </header>
+        <div class="cols two">
+          <div class="panel">
+            <h3><code>next_deadline()</code> · <code>advance(t)</code></h3>
+            <p>controller는 다음 판정 시각만 알리고, pump가 그 시각까지 기다렸다가 <code>advance(t)</code>로 시간을 건넨다. 후보는 다섯 갈래다. 관성(16ms 간격), 터치 길게 누르기, 자동 스크롤, 하위 메뉴 hover 열림, hover 머무름이다.</p>
+          </div>
+          <div class="panel">
+            <h3>그래서 test가 시간을 쥔다</h3>
+            <p>test는 이벤트의 시각과 <code>advance</code>의 인자를 손으로 준다. "600ms에 길게 누르기, 599ms에는 아님"을 잠드는 시간 없이 결정적으로 확인한다. pump의 "밀린 짧은 탭은 탭으로 남는다"도 같은 방법으로 잠근다.</p>
+          </div>
+        </div>
+        <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_interaction.h:405-426" data-path="include/luil/ui/ui_interaction.h" data-start="405"><script type="text/plain">
+    struct interaction_config
+    {
+        // Win32에서는 GetDoubleClickTime()을 주입한다.
+        // test는 고정값을 쓴다.
+        std::chrono::milliseconds double_click_time { 500 };
+        float double_click_distance { 4.0f };
+        // 이 거리(논리 픽셀 × scale 없이 창 좌표)만큼 끌면 클릭 대신 drag다.
+        float drag_start_distance { 6.0f };
+        // 연달아 친 글자를 한 질의로 묶는 한계다 (묶음 안 글자 탐색).
+        // 이 시간이 지나 다시 치면 앞의 글자는 잊고 새 질의가 시작된다.
+        std::chrono::milliseconds typeahead_reset_time { 1000 };
+        // 텍스트 박스가 포인터 x를 글 안의 offset으로 옮길 때 쓰는 측정 함수다.
+        // 앱은 내장 글꼴로 만들고 test는 고정 폭 가짜를 넣는다.
+        // 비어 있으면 caret이 글 끝으로 간다.
+        text_measurer measure_text {};
+        // 터치 몸짓이다. 실행 중 변경은 `interaction_controller::set_touch_config`가 받는다.
+        touch_gesture_config touch {};
+        // 우클릭 동작이 없는 텍스트 칸의 길게 누름에 편집 메뉴를 연다. Android host만 켠다.
+        bool text_edit_menu { false };
+        // 끄는 동안의 가장자리 자동 스크롤이다.
+        drag_auto_scroll_config auto_scroll {};
+    };
+</script></div>
+        <p class="small muted">마우스 거리 4·6은 창 좌표(물리 픽셀)이고, 터치 거리는 누른 표면의 배율로 나눈 논리 픽셀이다. Win32는 <code>GetDoubleClickTime()</code>, macOS는 <code>NSEvent.doubleClickInterval</code>, iOS는 350ms, Android는 시스템의 double tap 시간을 넣는다.</p>
+      </section>
+
+      <section class="slide" id="s4" data-num="6.4">
+        <header class="slide-head">
+          <span class="num">6.4</span>
+          <h2>실험: 클릭·더블클릭·drag</h2>
+          <p class="lede">클릭은 "같은 대상 위의 누름과 뗌"이다. 더블클릭은 그 두 번째 뗌을 대신하고, 6px을 넘게 끌면 클릭 대신 drag다.</p>
+        </header>
+        <div class="lw" data-title="마우스 상태 기계" data-surface="double 500ms·4px · drag 6px" data-reset id="ms-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <label class="field"><input type="checkbox" id="ms-dbl" checked> A에 double_click 액션 등록</label>
+              <label class="field"><input type="checkbox" id="ms-drag" checked> A가 drag source</label>
+            </div>
+            <div class="lab2">
+              <div style="display:grid;gap:10px">
+                <div class="pad-scene" id="ms-scene" aria-label="A와 B 두 대상. 눌러 보고, 두 번 눌러 보고, A를 B로 끌어 보라"></div>
+                <div class="meter" aria-hidden="true"><i id="ms-win"></i><span class="mk" style="left:100%"></span><span class="lbl" id="ms-win-lbl">직전 클릭 뒤 0ms</span></div>
+              </div>
+              <div class="log" id="ms-log" style="max-height:270px" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="lw-foot">해 볼 것: A를 빠르게 두 번 → <b>double_click</b>. 등록을 끄고 다시 → <b>left_click 두 번</b>. A를 누른 채 B 위에서 떼기 → 클릭 아님. A를 조금(6px 미만) 끌다 떼기 → 클릭, 많이 끌어 B에 놓기 → drag & drop. 점선 원은 4px(더블클릭)·6px(drag) 경계다.</div>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/ui_interaction.cpp:679-697,1600-1636" data-path="src/ui/ui_interaction.cpp" data-start="679"><script type="text/plain">
+        // 눌린 채 임계 거리를 넘으면 클릭 대신 drag가 시작된다.
+        if (drag_candidate_ && pressed_button_ == pointer_button::left && distance_between(pressed_x_, pressed_y_, event.x, event.y) >= config_.drag_start_distance)
+        {
+            const ui_element* const source { pressed_tree != nullptr ? pressed_tree->find(pressed_id_) : nullptr };
+            if (source != nullptr && source->enabled() && source->drag() != nullptr && source->drag()->make_payload)
+            {
+                // 자리는 누른 자리이고 수식 키는 끌기가 시작되는 이 이동의 순간이다.
+                const ui_action_context context { action_context(pressed_id_, pressed_x_, pressed_y_, modifiers_of(event)) };
+                // 끌기는 지금 이벤트가 난 표면에서 선다 — 캡처 중이라 누른 표면과 같다.
+                // 그 표면이 사라지면 끌기도 죽는다. 포인터가 다른 창으로 가면 표시는 그 창으로 옮겨 간다
+                // (multi-window-design.md).
+                begin_drag(*source->drag(), context, event.x, event.y, event.surface);
+                clear_press();
+                const drag_location at { locate_drag(event) };
+                update_drag(at);
+                track_auto_scroll(at.surface, at.x, at.y, event.time);
+            }
+            drag_candidate_ = false;
+        }
+⋯@1600
+        const pointer_button pressed_button { pressed_button_ };
+        const std::shared_ptr<const ui_tree> pressed_tree { std::move(pressed_open_tree_) };
+        clear_press();
+
+        // 클릭은 같은 대상 위에서의 누름과 뗌이다.
+        // 누른 뒤 벗어나면 아무 일도 없다.
+        if (hit == nullptr || hit->enabled() == false || (hit->id() == pressed) == false || event.button != pressed_button)
+            return {};
+
+        // 키보드 탐색 초점 등 앱 쪽 입력 상태를 클릭에 잇는다.
+        if (policy_ != nullptr)
+            policy_->on_click(*hit);
+
+        // 더블 클릭: 같은 대상을 임계 시간·거리 안에 다시
+        // 왼쪽 클릭했고 등록된 액션이 있을 때만이다.
+        // 등록이 없으면 왼쪽 클릭 두 번으로 처리한다.
+        //  - **표면도 같아야 한다.** id는 tree 안에서만 안정적이고 좌표는 표면마다
+        //    자기 client 기준이라, 표면을 빼면 A창을 누른 직후 B창의 같은 id를 같은
+        //    자리에서 누르는 것이 연타가 된다 (multi-window-design.md).
+        ui_trigger trigger { event.button == pointer_button::right ? ui_trigger::right_click : ui_trigger::left_click };
+        if (trigger == ui_trigger::left_click && hit->id() == last_click_id_ && event.surface == last_click_surface_ && event.device == last_click_device_
+            && event.time - last_click_time_ <= config_.double_click_time && distance_between(last_click_x_, last_click_y_, event.x, event.y) <= config_.double_click_distance
+            && hit->action(ui_trigger::double_click) != nullptr)
+        {
+            trigger = ui_trigger::double_click;
+            last_click_id_ = {};
+            last_click_surface_.clear();
+        }
+        else if (trigger == ui_trigger::left_click)
+        {
+            last_click_id_ = hit->id();
+            last_click_device_ = event.device;
+            last_click_surface_ = event.surface;
+            last_click_time_ = event.time;
+            last_click_x_ = event.x;
+            last_click_y_ = event.y;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="679-680" data-title="drag는 이동에서 선다">drag 후보(왼쪽 버튼 + drag source)가 누른 자리에서 <code>drag_start_distance</code> 이상 움직이면 클릭 대신 drag다.</li>
+            <li data-lines="682-691" data-title="자리는 누른 자리, 수식 키는 이 순간">payload를 만들 때의 자리는 누른 자리이고, Ctrl 같은 수식 키는 끌기가 시작되는 이 이동의 것이다. drag가 서면 누름은 거둔다. 그 뒤의 뗌은 클릭이 될 수 없다.</li>
+            <li data-lines="1604-1607" data-title="같은 대상, 같은 버튼">뗀 자리의 hit가 활성이고, 누른 id와 같고, 버튼이 같아야 클릭이다. 누른 뒤 벗어나 떼면 아무 일도 없다.</li>
+            <li data-lines="1609-1611" data-title="정책이 먼저 본다">앱 정책의 <code>on_click</code>이 클릭을 관찰한다. 키보드 탐색 초점 같은 앱 쪽 입력 상태를 클릭에 잇는 자리다.</li>
+            <li data-lines="1613-1627" data-title="더블클릭은 두 번째 클릭을 대신한다">같은 id·표면·장치, 500ms 안, 4px 안, 그리고 <code>double_click</code> 액션이 등록되어 있을 때만 트리거가 바뀐다. 표면을 보는 이유는 id가 tree 안에서만 안정적이라, A창 직후 B창의 같은 id·자리가 연타가 되면 안 되기 때문이다.</li>
+            <li data-lines="1628-1636" data-title="이번 클릭을 적어 둔다">더블클릭이 아니면 이번 뗌의 id·장치·표면·시각·자리를 적는다. 다음 뗌이 이것과 견준다.</li>
+          </ol>
+        </div>
+      </section>
+
+      <section class="slide" id="s5" data-num="6.5">
+        <header class="slide-head">
+          <span class="num">6.5</span>
+          <h2>키 라우팅: 가장 작은 단위부터</h2>
+          <p class="lede">키는 초점 컨트롤, 텍스트 칸, 값, 묶음, 조상, dialog, 기본 버튼, 앱 순서로 흐른다. 앞 단계가 <code>nullopt</code>면 다음으로, 빈 벡터라도 돌려주면 거기서 끝이다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code tall" data-lang="cpp" data-src="src/ui/ui_interaction.cpp:3646-3720" data-path="src/ui/ui_interaction.cpp" data-start="3646"><script type="text/plain">
+        // Space와 Enter는 초점을 가진 컨트롤을 실행한다.
+        //  - **초점이 이긴다.** Enter가 초점 테와 다른 자리를 실행하면 테가
+        //    거짓말을 한다 (enter-default-design.md). 기본 버튼은 초점이
+        //    그것을 받지 못할 때만 나선다 — 아래 `process_default_key`다.
+        if (std::optional<std::vector<input_action>> activated { process_activation_key(event) }; activated.has_value())
+            return std::move(*activated);
+
+        // Tab은 초점을 옮긴다.
+        // 텍스트 박스 안에서도 "다음 자리로 나간다"는 뜻이라 박스보다 먼저 본다.
+        //  - 자리가 하나도 없으면 삼키지 않고 앱 정책으로 흘려보낸다.
+        //  - 지금 자리가 **Tab을 자기 것으로 쓰면**(코드 칸) 옮기지 않는다.
+        //    빠져나가는 길은 앱이 만든다 (focus-group-design.md).
+        if (event.key == key_code::tab && event.shortcut_modifier_down() == false && focus_takes_tab() == false && move_focus(event.shift == false, event.surface, event.time))
+            return {};
+
+        // 초점을 가진 텍스트 박스가 먼저 가져간다.
+        // 소비하지 않은 키만 앱 정책의 키 라우팅으로 흐른다.
+        if (std::optional<std::vector<input_action>> handled { process_text_input_key(event) }; handled.has_value())
+            return std::move(*handled);
+
+        // 초점이 값을 가진 element면 화살표·Page·Home/End는 **그 값의 것**이다.
+        // **묶음보다 앞이다** — 값은 초점이 선 자리에서 바뀌고 묶음은 초점을 옮긴다.
+        // 텍스트 박스 다음인 것은 묶음과 같은 이유다 (칸 안의 ←/→는 caret의 것이다).
+        const ui_tree* const zoom_tree { surface_tree(snapshot_.focused_surface) };
+        const ui_element* const zoom_focus { zoom_tree != nullptr ? zoom_tree->find(snapshot_.focused) : nullptr };
+        const zoom_source* const zoom { zoom_focus != nullptr && zoom_focus->focusable() ? zoom_focus->zoom() : nullptr };
+        if (zoom != nullptr && zoom->on_key)
+            if (auto actions { zoom->on_key(event) }; actions.has_value())
+                return std::move(*actions);
+
+        if (std::optional<std::vector<input_action>> stepped { process_step_key(event) }; stepped.has_value())
+            return std::move(*stepped);
+
+        // 초점이 묶음 안이면 방향이 맞는 화살표가 그 안을 돈다.
+        // **텍스트 박스 다음**이다 — 묶음 안의 칸에서 ←/→는 caret의 것이다.
+        if (std::optional<std::vector<input_action>> moved { process_group_key(event) }; moved.has_value())
+            return std::move(*moved);
+
+        // drag 중의 Esc는 취소가 먼저다.
+        // 앱 정책까지 가지 않는다.
+        if (event.key == key_code::escape && snapshot_.drag.has_value())
+        {
+            abandon_drag();
+            return {};
+        }
+
+        // 위의 소비자들이 갖지 않은 키는 초점에서 root 쪽으로 흐른다 (key-propagation-design.md).
+        //  - **가장 작은 단위가 먼저다.** 행 안의 부품에 초점이 있어도 그 부품이 쓰지 않는 Ctrl+A는 목록이 받는다.
+        //  - **가둠의 Esc와 기본 버튼보다 앞이다.** dialog 안에서 목록을 연 콤보는 Esc로 목록만 닫아야 하고,
+        //    그것은 콤보가 소비하는 Esc다. 소비하지 않은 Esc만 dialog로 간다.
+        //  - 끌기 취소 Esc보다는 뒤다. 잡고 있는 손이 언제나 먼저다.
+        if (std::optional<std::vector<input_action>> handled { process_handler_key(event) }; handled.has_value())
+            return std::move(*handled);
+
+        // 가둠(modal dialog)이 떠 있으면 Esc는 그 dialog의 것이다.
+        // **메뉴와 끌기 다음이다** — dialog 안에서 연 드롭다운은 Esc로 메뉴만
+        // 닫히고 dialog는 남아야 하고, 끌고 있는 손이 그보다 우선이다.
+        if (std::optional<std::vector<input_action>> dismissed { process_dismiss_key(event) }; dismissed.has_value())
+            return std::move(*dismissed);
+
+        // 초점이 받지 못한 Enter는 기본 버튼의 것이다.
+        // **가둠의 Esc와 같은 높이에 선다** — 두 키가 같은 자리에서 갈린다
+        // (enter-default-design.md).
+        if (std::optional<std::vector<input_action>> confirmed { process_default_key(event) }; confirmed.has_value())
+            return std::move(*confirmed);
+
+        if (policy_ == nullptr)
+        {
+            key_handled_ = false;
+            return {};
+        }
+        std::vector<input_action> routed { policy_->on_key(tree_.get(), event, snapshot_) };
+        key_handled_ = routed.empty() == false;
+        return routed;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="3646-3651" data-title="1 · Space·Enter는 초점이 이긴다">초점 컨트롤을 실행한다. Enter가 초점 테와 다른 자리를 실행하면 테가 거짓말을 하므로, 기본 버튼은 초점이 받지 못할 때만 나선다. 텍스트 칸의 Space는 삼키고(글자는 문자 이벤트로 들어간다) Enter는 흘린다.</li>
+            <li data-lines="3653-3659" data-title="2 · Tab은 텍스트 칸보다 먼저">텍스트 칸 안에서도 Tab은 "다음 자리로 나간다"는 뜻이다. 코드 칸처럼 Tab을 자기 것으로 쓰는 자리(<code>takes_tab</code>)는 예외다.</li>
+            <li data-lines="3661-3664" data-title="3 · 텍스트 칸의 편집 키">초점 텍스트 칸이 caret 이동·선택·편집 키를 가진다. 쓰지 않는 키(한 줄 칸의 Enter 등)만 흘린다.</li>
+            <li data-lines="3666-3677" data-title="4 · 값 컨트롤은 묶음보다 앞">초점이 슬라이더 같은 값을 가지면 화살표·Page·Home·End는 그 값의 것이다. 뒤에 두면 목록 안의 막대가 Home/End를 통째로 빼앗긴다.</li>
+            <li data-lines="3679-3682" data-title="5 · focus group 안의 화살표">축이 맞는 화살표가 묶음 안을 돈다(끝에서 순환). Home/End는 처음·끝으로 가되 순환하지 않고, 이미 끝이어도 소비한다.</li>
+            <li data-lines="3684-3690" data-title="6 · 끄는 중의 Esc">잡고 있는 손이 언제나 먼저다. 끌기를 버리고 소비한다.</li>
+            <li data-lines="3692-3698" data-title="7 · 초점에서 root까지의 key_handler">가장 작은 단위부터 묻는다. 행 안의 부품에 초점이 있어도 그 부품이 쓰지 않는 Ctrl+A는 목록이 받는다. dialog 안 콤보의 Esc가 목록만 닫으려면 이 단계가 dialog의 Esc보다 앞이어야 한다.</li>
+            <li data-lines="3700-3710" data-title="8·9 · dialog의 Esc, 기본 버튼의 Enter">초점 가둠이 있으면 남은 Esc는 dialog를 닫는다. 초점이 받지 못한 Enter는 기본 버튼의 것이다. 둘은 같은 높이에서 갈린다.</li>
+            <li data-lines="3712-3719" data-title="10 · 앱의 on_key">여기까지 아무도 가져가지 않은 키만 앱 정책에 간다. 앱이 액션을 돌려주지 않으면 "아무도 받지 않음"으로 플랫폼에 알린다.</li>
+          </ol>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">10단계 앞의 관문</span>코드에는 10단계보다 먼저 지나는 관문이 있다. 떠 있는 tooltip의 Esc, 모든 키를 받는 키 잡기 칸, 메뉴 막대(Alt·F10·접근 키), 열린 컨텍스트 메뉴(↑·↓·Enter·Esc, 나머지는 삼킴), Shift+F10이다. 설계 문서 세 곳의 단계 목록이 서로 조금씩 달라, 이 강의는 코드를 정본으로 따랐다.</div></div>
+      </section>
+
+      <section class="slide" id="s6" data-num="6.6">
+        <header class="slide-head">
+          <span class="num">6.6</span>
+          <h2>실험: 키는 어디서 소비되나</h2>
+          <p class="lede">초점을 고르고 키를 눌러 보자. 실험 창을 누른 뒤 실제 키보드로 쳐도 된다.</p>
+        </header>
+        <div class="lw" data-title="키 라우팅" data-surface="process_key · 10단계" data-reset id="kr-lab">
+          <div class="lw-body">
+            <div class="controls">
+              <label class="field"><input type="checkbox" id="kr-modal"> 모달 dialog 띄우기 (초점 가둠)</label>
+              <label class="field"><input type="checkbox" id="kr-drag"> 끄는 중 (drag)</label>
+            </div>
+            <div class="lab2">
+              <div style="display:grid;gap:10px" data-keys tabindex="0" id="kr-focusable" aria-label="키 라우팅 실험. 이 영역에 초점을 두고 키를 누를 수 있다">
+                <div class="form" id="kr-form"></div>
+                <div class="keys" id="kr-keys"></div>
+                <div class="readout" id="kr-focus"></div>
+              </div>
+              <div style="display:grid;gap:10px">
+                <ol class="stages" id="kr-stages"></ol>
+                <div class="callout key" id="kr-result" style="max-width:none"><i class="ci" aria-hidden="true">&#xEA61;</i><div>키를 눌러 보라.</div></div>
+              </div>
+            </div>
+          </div>
+          <div class="lw-foot">해 볼 것: 이름 칸에서 Space와 Enter → 하나는 1단계, 하나는 9단계(저장). 음량에서 → (4단계), 크기 묶음에서 → 와 End (5단계), 파일 목록에서 Ctrl+A (7단계), 아무 데서나 Ctrl+S (10단계). 모달을 띄우고 Esc (8단계), 끄는 중에 Esc (6단계).</div>
+        </div>
+      </section>
+
+      <section class="slide" id="s7" data-num="6.7">
+        <header class="slide-head">
+          <span class="num">6.7</span>
+          <h2>초점의 규칙: Tab, 묶음, 가둠</h2>
+          <p class="lede">초점에 관한 상태는 controller 한 곳에서 함께 바뀐다. 키보드로 옮긴 초점에만 테를 그린다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>규칙</th><th>내용</th></tr></thead>
+            <tbody>
+              <tr><td>Tab 순서</td><td>보이는 tree의 pre-order(4강). 양 끝에서 순환한다. 자리가 하나면 제자리로 돌아오고도 소비한다.</td></tr>
+              <tr><td>focus group</td><td>Tab에서 한 자리로 접힌다. 들어갈 때는 앱이 적어 준 <code>focus_entry</code>(선택된 항목), 없으면 첫 구성원. 축이 맞는 화살표가 안을 돌고(순환), Home/End는 순환하지 않는다.</td></tr>
+              <tr><td>메뉴의 ↑·↓</td><td>묶음과 달리 끝에서 멈추고 비활성 항목을 건너뛴다. 순환 규칙이 셋이다.</td></tr>
+              <tr><td>focus trap 진입</td><td>가둠이 서고 초점이 없으면 <code>focus_entry</code>에 초점을 둔다. <b>테는 끈다</b> — 계기가 tree라, 마우스로 연 dialog에도 테가 미리 서면 안 된다.</td></tr>
+              <tr><td>focus trap 복귀</td><td>가둠이 사라지면 <code>focus_return</code>으로 돌아간다. <b>테는 켠다</b> — 돌아온 자리는 화면이 아무것도 말하지 않아, 테가 없으면 Space가 어디를 실행할지 근거가 없다.</td></tr>
+              <tr><td>포인터 초점</td><td>마우스는 누를 때, 터치 탭은 뗄 때 옮긴다. 스크롤이 될지 모르는 터치가 텍스트 칸의 초점과 IME를 빼앗으면 안 된다.</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">복귀 칸은 스택이 아니다</span>가둠이 돌아갈 자리를 적는 칸은 하나다. 안쪽·바깥 dialog가 한 frame에 함께 닫히면 초점이 아무 데도 서지 않는다. 테스트는 이 동작을 "의도라서가 아니라 바뀌면 알아채려고" 잠가 두었다.</div></div>
+      </section>
+
+      <section class="slide" id="s8" data-num="6.8">
+        <header class="slide-head">
+          <span class="num">6.8</span>
+          <h2>실험: 터치의 탭·쓸기·길게 누르기</h2>
+          <p class="lede">터치는 한 접촉이 한 조작을 한다. 처음 400ms 안의 빠른 쓸기는 스크롤, 움직이지 않고 600ms를 버티면 손을 떼기 전에 메뉴가 열린다.</p>
+        </header>
+        <div class="lw" data-title="터치 몸짓" data-surface="pan 12px·400ms · long press 600ms · 관성" data-reset id="tc-lab">
+          <div class="lw-body">
+            <div class="lab2">
+              <div style="display:grid;gap:10px">
+                <div class="touch-scene" id="tc-scene" aria-label="세로로 흘리는 목록. 손가락이나 마우스로 누르고, 쓸고, 길게 눌러 보라"><div class="content" id="tc-content"></div></div>
+                <div class="meter" aria-hidden="true"><i id="tc-bar"></i><span class="mk" style="left:50%"><span>400 쓸기 창</span></span><span class="mk" style="left:75%"><span>600 길게</span></span><span class="lbl" id="tc-bar-lbl">0ms</span></div>
+              </div>
+              <div class="log" id="tc-log" style="max-height:320px" aria-live="polite"></div>
+            </div>
+          </div>
+          <div class="lw-foot">해 볼 것: 행을 톡 누르기(탭), 빠르게 위로 쓸고 놓기(스크롤 + 관성), 가만히 누르고 버티기(손을 떼기 전에 메뉴), 누른 채 0.5초 기다렸다 쓸기(아무 일도 없음 — 쓸기 창이 닫혔다). 데스크톱에서는 마우스로 같은 규칙을 흉내 낸다.</div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th><code>touch_gesture_config</code></th><th class="num">기본값</th><th>뜻</th></tr></thead>
+            <tbody>
+              <tr><td><code>pan_start_distance</code></td><td class="num">12</td><td>스크롤이 시작되는 거리 (논리 px)</td></tr>
+              <tr><td><code>pan_start_time</code></td><td class="num">400ms</td><td>빠른 쓸기와 오래 잡은 끌기를 가르는 시간 창</td></tr>
+              <tr><td><code>press_move_tolerance</code></td><td class="num">12</td><td>탭·길게 누르기가 허용하는 최대 이동</td></tr>
+              <tr><td><code>long_press_time</code></td><td class="num">600ms</td><td>길게 누르기 — 누르고 있는 동안 우클릭 액션</td></tr>
+              <tr><td>관성 (내부 상수)</td><td class="num">80 · 6000 · 20 · 5</td><td>시작 최소 속도 · 최대 속도 · 멈춤 속도(px/s) · 감쇠(1/s). v(t) = v₀·e<sup>−5t</sup>, 최대 이동 (6000 − 20) / 5 = 1196px</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="slide" id="s9" data-num="6.9">
+        <header class="slide-head">
+          <span class="num">6.9</span>
+          <h2>interaction_snapshot</h2>
+          <p class="lede">그리기에 필요한 입력 상태는 값 하나에 모인다. 앱 상태가 아니므로 logic을 거치지 않는다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t snap-table">
+            <thead><tr><th>필드</th><th>뜻</th></tr></thead>
+            <tbody>
+              <tr><td><code>hovered</code> · <code>pressed</code> (+ 표면)</td><td>hover와 눌림 표시 대상. 값과 표면을 짝으로 세우고 함께 비운다</td></tr>
+              <tr><td><code>hover_started_at</code> · <code>hover_point</code></td><td>tooltip 지연과 자리</td></tr>
+              <tr><td><code>drag</code></td><td>끄는 중의 payload·자리·수락 대상</td></tr>
+              <tr><td><code>focused</code> · <code>focused_input</code> · <code>focused_surface</code> · <code>focus_visible</code></td><td>키보드 초점, 텍스트 대상일 때의 같은 id, 표면, 테를 그릴지</td></tr>
+              <tr><td><code>menu_highlight</code> · <code>menu_surface</code></td><td>컨텍스트 메뉴의 키보드 강조 (일반 초점과 별개)</td></tr>
+              <tr><td><code>tooltip</code> · <code>key_capture</code> · <code>pointer_control</code> · <code>menu_keys</code></td><td>커스텀 tooltip, 키 잡기 중, 마지막 이동의 Ctrl, 메뉴 막대 상태</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>pump는 직전 게시본과 <code>==</code>로 비교해 다를 때만 게시한다. UI thread는 표면마다 <code>interaction_for_surface()</code>로 다른 표면의 값을 지운 뒤 그린다. id는 tree 안에서만 유일하므로, 주 창의 hover가 popup의 같은 id를 칠하면 안 된다.</p>
+        </div>
+      </section>
+
+      <section class="slide" id="s10" data-num="6.10">
+        <header class="slide-head">
+          <span class="num">6.10</span>
+          <h2>잃은 입력 뒤의 정리</h2>
+          <p class="lede">남긴 채 틀리면 유령 선택 확장과 유령 drop이 되고, 거둬서 틀리면 다음 누름이 다시 시작할 뿐이다. 그래서 거둔다.</p>
+        </header>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="src/ui/ui_interaction.cpp:4867-4887" data-path="src/ui/ui_interaction.cpp" data-start="4867"><script type="text/plain">
+    std::vector<input_action> interaction_controller::cancel_dropped_gestures()
+    {
+        dismiss_tooltip();
+        inertia_.reset();
+        // 그리던 획은 받은 표본까지로 닫는다 (`end`+`interrupted`). 유실분에 뗌이 있었을 수 있어 남은 이벤트는 삼킨다.
+        std::vector<input_action> actions { close_ink(ink_phase::end, true) };
+        // 유실분에 뗌이 있었어도 끌던 시트가 그 자리에 남지 않게 끝을 알린다. 터치 손잡이도 `pointer_drag_id_`를 쓰므로
+        // 터치 접촉이 있으면 그쪽으로 한 번만 알린다.
+        for (input_action& action : touch_.has_value() ? end_touch_drag(*touch_, touch_->last_x, touch_->last_y, {}) : end_pointer_drag(pointer_drag_x_, pointer_drag_y_, {}, pointer_drag_modifiers_))
+            actions.push_back(std::move(action));
+        // 터치 접촉도 거둔다. 남은 손가락의 이벤트는 쥔 접촉이 없어 삼켜진다.
+        touch_.reset();
+        last_view_tap_.reset();
+        view_drag_.reset();
+        pointer_contact_.reset();
+        clear_press();
+        text_drag_id_ = {};
+        abandon_drag();
+        auto_scroll_.reset();
+        return actions;
+    }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="4869-4872" data-title="tooltip, 관성, 그리던 획">tooltip을 거두고 관성을 멈춘다. 잉크 획은 받은 표본까지로 닫는다. 유실분에 뗌이 있었을 수 있어 그 접촉의 남은 이벤트는 삼킨다.</li>
+            <li data-lines="4873-4876" data-title="끌던 손잡이에 끝을 알린다">시트를 끌던 중이었다면 그 자리에 남지 않게 속도 0으로 끝을 알린다. 이 액션은 pump가 그대로 보낸다.</li>
+            <li data-lines="4877-4886" data-title="접촉·누름·끌기를 모두 비운다">터치 접촉, 확대 보기의 탭 기록, 포인터 소유권, 누름, 텍스트 끌기, drag, 자동 스크롤을 비운다. drag를 버릴 때 "받는 곳 없이 놓음"은 부르지 않는다.</li>
+          </ol>
+        </div>
+        <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">초점은 그대로 둔다</span>초점과 caret은 건드리지 않는다. 다음 초점 이벤트가 바로잡는다. 3강의 channel 실험에서 본 "번호의 구멍"이 여기서 쓰인다.</div></div>
+      </section>
+
+      <section class="slide" id="s11" data-num="6.11">
+        <header class="slide-head">
+          <span class="num">6.11</span>
+          <h2>정리</h2>
+        </header>
+        <ol class="recap">
+          <li>UI thread는 OS 사건을 <code>raw_input_event</code> 값으로 복사해 drop_oldest 큐에 넣기만 한다. 판정은 input thread의 controller가 한다.</li>
+          <li>controller는 시계를 보지 않는다. 이벤트의 시각과 <code>advance(t)</code>로만 시간을 알고, pump는 이벤트를 처리하기 전에 그 시각까지 시간을 흘린다.</li>
+          <li>클릭은 같은 대상·같은 버튼의 누름과 뗌이다. 더블클릭은 등록된 경우에만 두 번째 클릭을 대신하고, 6px 넘게 끌면 drag가 클릭을 이긴다.</li>
+          <li>키는 초점 컨트롤 → Tab → 텍스트 → 값 → 묶음 → drag Esc → 조상 key_handler → dialog Esc → 기본 버튼 → 앱 순서로 흐른다.</li>
+          <li>터치는 400ms 안의 12px 쓸기가 스크롤, 600ms 버티기가 길게 누르기이고, 탭의 초점은 뗄 때 옮긴다.</li>
+          <li>그리기용 입력 상태는 snapshot 값 하나이고 바뀔 때만 게시한다. 유실이 보이면 몸짓은 거두고 초점은 둔다.</li>
+        </ol>
+      </section>
+
+      <section class="slide" id="s12" data-num="6.12">
+        <header class="slide-head">
+          <span class="num">6.12</span>
+          <h2>확인 문제</h2>
+        </header>
+        <div class="quiz-set">
+          <div class="quiz" data-answer="2">
+            <p class="q">버튼에 <code>left_click</code>과 <code>double_click</code>이 모두 등록되어 있다. 같은 자리를 0ms와 200ms에 눌렀다가 각각 20ms 뒤에 뗐다. 나가는 트리거는?</p>
+            <ol class="choices">
+              <li><code>left_click</code>, <code>left_click</code>, <code>double_click</code></li>
+              <li><code>left_click</code>, <code>double_click</code></li>
+              <li><code>double_click</code> 하나</li>
+              <li><code>left_click</code> 두 번</li>
+            </ol>
+            <div class="explain">첫 뗌은 클릭을 기록한다. 둘째 뗌은 같은 id·표면·장치, 시각 차 200ms ≤ 500, 거리 ≤ 4, 등록됨을 모두 만족해 트리거가 <code>double_click</code>으로 <b>바뀐다</b>. 등록이 없었다면 <code>left_click</code> 두 번이다.</div>
+          </div>
+          <div class="quiz" data-answer="4">
+            <p class="q">한 줄 텍스트 칸에 초점이 있고 폼에 기본 버튼이 있다. Enter는 어디서 처리되는가?</p>
+            <ol class="choices">
+              <li>1단계 — 초점 컨트롤의 실행</li>
+              <li>3단계 — 텍스트 칸의 편집 키</li>
+              <li>10단계 — 앱의 on_key</li>
+              <li>9단계 — 기본 버튼</li>
+            </ol>
+            <div class="explain">1단계는 텍스트 초점의 Enter를 흘리고(Space는 삼킨다), 한 줄 칸은 Enter를 쓰지 않아 3단계도 흘린다. 그래서 "칸에 커서를 둔 채 Enter로 확인"이 선다.</div>
+          </div>
+          <div class="quiz" data-answer="1">
+            <p class="q">세로 목록의 카드를 터치로 눌렀다(0ms). 450ms에 온 이동이 손가락을 30px 위로 옮겼고 500ms에 뗐다. 카드에는 클릭·우클릭 액션이 있고 drag source는 없다. 결과는?</p>
+            <ol class="choices">
+              <li>아무 일도 없다 — 스크롤도 클릭도 아니다</li>
+              <li>30px 스크롤</li>
+              <li>클릭</li>
+              <li>길게 누르기 메뉴</li>
+            </ol>
+            <div class="explain">450 − 0 &gt; 400이라 스크롤 창이 닫혔고, drag source가 없어 끌기도 서지 않는다. 최대 이동 30 &gt; 12라 탭도 아니다. 600ms 전에 움직였으므로 길게 누르기 기한도 사라졌다.</div>
+          </div>
+          <div class="quiz" data-answer="3">
+            <p class="q">pump가 처리 전에 <code>advance(이벤트 시각)</code>을 부르는 이유는?</p>
+            <ol class="choices">
+              <li>벽시계를 읽는 비용을 아끼려고</li>
+              <li>이벤트 순서를 바꾸려고</li>
+              <li>큐가 밀렸을 때 짧은 탭이 길게 누르기로 바뀌지 않게, 그리고 기한이 지난 뒤 온 이동이 열렸어야 할 메뉴를 지우지 않게</li>
+              <li>snapshot을 게시하기 위해</li>
+            </ol>
+            <div class="explain">벽시계로 진행하면 밀린 사이에 흐른 시간이 판정에 섞인다. 입력이 일어난 시각까지만 진행해야 같은 입력이 언제나 같은 판정을 낸다.</div>
+          </div>
+        </div>
+        <nav class="pager" data-auto aria-label="강의 이동"></nav>
+      </section>
+
+    </div>
+  </div>
+</main>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/course.js"></script>
+<script>
+(function () {
+  const { el } = window.LU;
+  function log(box, cls, text, t) {
+    box.append(el("div", { class: "row " + cls }, el("span", { class: "t", text: t != null ? t : "" }), el("span", { class: "m", text })));
+    while (box.childNodes.length > 80) box.firstChild.remove();
+    box.scrollTop = box.scrollHeight;
+  }
+
+  /* ---------- 6.4 마우스 상태 기계 (ui_interaction.cpp 679-697, 1600-1636 규칙) ---------- */
+  const DBL_T = 500, DBL_D = 4, DRAG_D = 6;
+  const scene = document.getElementById("ms-scene");
+  const mlog = document.getElementById("ms-log");
+  const win = document.getElementById("ms-win");
+  const winLbl = document.getElementById("ms-win-lbl");
+  const dblBox = document.getElementById("ms-dbl");
+  const dragBox = document.getElementById("ms-drag");
+  const T = {
+    A: { id: "A", x: 24, y: 40, w: 120, h: 56 },
+    B: { id: "B", x: 0, y: 130, w: 150, h: 64 },
+  };
+  let MS = null;
+  function msReset() {
+    MS = { pressed: null, drag: null, last: null, t0: performance.now() };
+    mlog.textContent = "";
+    log(mlog, "", "A와 B를 눌러 보라. 거리는 창 좌표(물리 px)로 잰다.");
+    drawScene();
+  }
+  function layout() {
+    const w = scene.clientWidth;
+    T.B.x = Math.max(170, w - 170);
+  }
+  function hitAt(x, y) {
+    for (const k of ["B", "A"]) { const t = T[k]; if (x >= t.x && x < t.x + t.w && y >= t.y && y < t.y + t.h) return t; }
+    return null;
+  }
+  const dpr = () => window.devicePixelRatio || 1;
+  const dist = (a, b) => Math.hypot((a.x - b.x) * dpr(), (a.y - b.y) * dpr());
+  function drawScene(cursor) {
+    layout();
+    scene.textContent = "";
+    for (const k of ["A", "B"]) {
+      const t = T[k];
+      const d = el("div", { class: "tgt" + (MS.pressed && MS.pressed.id === k ? " pressed" : "") + (MS.drag && k === "B" && cursor && hitAt(cursor.x, cursor.y) === T.B ? " dropok" : "") }, el("span", { text: k === "A" ? "A" + (dragBox.checked ? " — 끌 수 있음" : "") : "B — 놓을 자리" }));
+      Object.assign(d.style, { left: t.x + "px", top: t.y + "px", width: t.w + "px", height: t.h + "px" });
+      scene.append(d);
+    }
+    if (MS.pressed && !MS.drag && dragBox.checked && MS.pressed.id === "A") scene.append(Object.assign(el("div", { class: "ring" }), { style: `left:${MS.pressed.x}px;top:${MS.pressed.y}px;width:${(DRAG_D / dpr()) * 2}px;height:${(DRAG_D / dpr()) * 2}px` }));
+    if (MS.last) scene.append(Object.assign(el("div", { class: "ring dbl" }), { style: `left:${MS.last.x}px;top:${MS.last.y}px;width:${(DBL_D / dpr()) * 2}px;height:${(DBL_D / dpr()) * 2}px` }));
+    if (MS.drag && cursor) { const g = el("div", { class: "ghost", text: "A 끄는 중" }); g.style.left = cursor.x + "px"; g.style.top = cursor.y + "px"; scene.append(g); }
+  }
+  const rel = (e) => { const b = scene.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top, t: e.timeStamp }; };
+  const ts = (t) => Math.round(t - MS.t0) + "ms";
+  scene.addEventListener("pointerdown", (e) => {
+    if (e.button !== 0) return;
+    scene.setPointerCapture(e.pointerId);
+    const p = rel(e);
+    const h = hitAt(p.x, p.y);
+    if (!h) { log(mlog, "", "누름 — 맞은 대상이 없다", ts(p.t)); return; }
+    MS.pressed = { id: h.id, x: p.x, y: p.y, t: p.t, cand: h.id === "A" && dragBox.checked };
+    log(mlog, "in", "누름 " + h.id + (MS.pressed.cand ? " — drag 후보" : ""), ts(p.t));
+    drawScene(p);
+  });
+  scene.addEventListener("pointermove", (e) => {
+    const p = rel(e);
+    if (MS.pressed && MS.pressed.cand && !MS.drag && dist(MS.pressed, p) >= DRAG_D) {
+      MS.drag = { from: MS.pressed.id };
+      log(mlog, "in", "누른 자리에서 " + dist(MS.pressed, p).toFixed(1) + "px ≥ 6 → drag 시작. 누름은 거둔다 (이제 클릭이 될 수 없다)", ts(p.t));
+      MS.pressed = null;
+    }
+    if (MS.drag || MS.pressed) drawScene(p);
+  });
+  scene.addEventListener("pointerup", (e) => {
+    const p = rel(e);
+    const h = hitAt(p.x, p.y);
+    if (MS.drag) {
+      if (h && h.id === "B") log(mlog, "good", "B 위에서 놓음 → on_drop (클릭 아님)", ts(p.t));
+      else log(mlog, "", "받는 곳 없이 놓음 → on_unclaimed_drop", ts(p.t));
+      MS.drag = null;
+      drawScene();
+      return;
+    }
+    if (!MS.pressed) return;
+    const pressed = MS.pressed;
+    MS.pressed = null;
+    if (!h || h.id !== pressed.id) { log(mlog, "bad", "뗌 — 누른 " + pressed.id + "와 다른 자리에서 뗐다 → 클릭 아님", ts(p.t)); drawScene(); return; }
+    const L = MS.last;
+    const dt = L ? p.t - L.t : Infinity;
+    const dd = L ? dist(L, p) : Infinity;
+    if (L && L.id === h.id && dt <= DBL_T && dd <= DBL_D && h.id === "A" && dblBox.checked) {
+      log(mlog, "good", "뗌 → double_click (직전 클릭과 " + Math.round(dt) + "ms·" + dd.toFixed(1) + "px) — 두 번째 left_click을 대신한다", ts(p.t));
+      MS.last = null;
+    } else {
+      let why = "";
+      if (L && L.id === h.id) why = dt > DBL_T ? " (직전과 " + Math.round(dt) + "ms > 500)" : dd > DBL_D ? " (직전과 " + dd.toFixed(1) + "px > 4)" : h.id === "A" && !dblBox.checked ? " (double_click 미등록 → 왼쪽 클릭 두 번)" : h.id === "B" ? " (B에는 double_click이 없다)" : "";
+      log(mlog, "ui", "뗌 → left_click " + h.id + why, ts(p.t));
+      MS.last = { id: h.id, x: p.x, y: p.y, t: p.t };
+    }
+    drawScene();
+  });
+  (function tick() {
+    if (MS && MS.last) {
+      const age = performance.now() - MS.last.t;
+      win.style.width = Math.max(0, 100 - (age / DBL_T) * 100) + "%";
+      winLbl.textContent = age <= DBL_T ? "더블클릭 창 " + Math.round(DBL_T - age) + "ms 남음" : "창 닫힘";
+    } else { win.style.width = "0%"; winLbl.textContent = "직전 클릭 없음"; }
+    requestAnimationFrame(tick);
+  })();
+  [dblBox, dragBox].forEach((c) => c.addEventListener("change", () => drawScene()));
+  document.getElementById("ms-lab").addEventListener("lw-reset", msReset);
+  window.addEventListener("resize", () => drawScene());
+  msReset();
+
+  /* ---------- 6.6 키 라우팅 (process_key 3646-3720 순서) ---------- */
+  const STAGES = ["실행 키 (Space·Enter)", "Tab 초점 이동", "텍스트 칸 편집 키", "값 컨트롤 (화살표·Home·End)", "focus group 안", "drag 중의 Esc", "초점→root key_handler", "가둠의 Esc", "기본 버튼의 Enter", "앱 on_key"];
+  const K = { focus: "name", visible: false, size: "m", volume: 40, name: "luil", files: false, saved: 0, modal: false, drag: false };
+  const formEl = document.getElementById("kr-form");
+  const stagesEl = document.getElementById("kr-stages");
+  const resultEl = document.getElementById("kr-result");
+  const focusEl = document.getElementById("kr-focus");
+  const modalBox = document.getElementById("kr-modal");
+  const dragBox2 = document.getElementById("kr-drag");
+  const LABEL = { name: "이름 칸", volume: "음량 슬라이더", s: "크기 S", m: "크기 M", l: "크기 L", files: "파일 목록", cancel: "취소 버튼", save: "저장 버튼(기본)", title: "제목 칸", ok: "확인 버튼(기본)", close: "닫기 버튼" };
+  const order = () => (K.modal ? ["title", "ok", "close"] : ["name", "volume", K.size, "files", "cancel", "save"]);
+  const isText = (id) => id === "name" || id === "title";
+  const inGroup = (id) => id === "s" || id === "m" || id === "l";
+  const clickable = (id) => ["s", "m", "l", "cancel", "save", "ok", "close"].includes(id);
+  function drawForm() {
+    formEl.textContent = "";
+    const f = (id, cls, ...kids) => {
+      const d = el("div", { class: "f " + (cls || "") + (K.focus === id ? " focus" + (K.visible ? "" : " quiet") : ""), "data-id": id }, ...kids);
+      d.addEventListener("pointerdown", (e) => { e.preventDefault(); if (K.modal && !["title", "ok", "close"].includes(id)) return; K.focus = id; K.visible = false; drawForm(); document.getElementById("kr-focusable").focus({ preventScroll: true }); });
+      return d;
+    };
+    formEl.append(
+      el("div", { class: "row" }, el("span", { text: "이름" }), f("name", "text", el("span", { text: K.name }), K.focus === "name" ? el("span", { class: "caret" }) : null)),
+      el("div", { class: "row" }, el("span", { text: "음량" }), f("volume", "", el("span", { class: "bar" }, el("i", { style: { width: K.volume + "%" } })), el("span", { class: "readout", text: String(K.volume) }))),
+      el("div", { class: "row" }, el("span", { text: "크기" }), el("div", { class: "radios" }, ["s", "m", "l"].map((k) => f(k, K.size === k ? "sel" : "", k.toUpperCase())))),
+      el("div", { class: "row list" }, el("span", { text: "파일" }), f("files", K.files ? "all" : "", el("span", { text: K.files ? "3개 모두 고름" : "보고서.md · 그림.png · 표.csv" }))),
+      el("div", { class: "btns" }, f("cancel", "", "취소"), f("save", "def", "저장"))
+    );
+    if (K.modal) {
+      const dlg = el("div", { class: "dialog" }, el("b", { text: "새 문서" }), el("div", { class: "row" }, el("span", { text: "제목" }), f("title", "text", el("span", { text: "초안" }), K.focus === "title" ? el("span", { class: "caret" }) : null)), el("div", { class: "btns" }, f("close", "", "닫기"), f("ok", "def", "확인")));
+      formEl.append(el("div", { class: "modal" }, dlg));
+    }
+    focusEl.textContent = "초점: " + (LABEL[K.focus] || "없음") + " · 테 " + (K.visible ? "켜짐 (키보드로 옮김)" : "꺼짐 (포인터로 옮김)") + " · 저장 " + K.saved + "번";
+  }
+  function stageList(results) {
+    stagesEl.textContent = "";
+    STAGES.forEach((name, i) => {
+      const r = results[i];
+      const li = el("li", { class: r ? r.cls : "skip" }, el("span", { class: "n", text: String(i + 1) }), el("span", { text: name }), el("span", { class: "st", text: r ? r.st : "—" }));
+      if (r && r.why) li.append(el("span", { class: "why", text: r.why }));
+      stagesEl.append(li);
+    });
+  }
+  function processKey(key, ctrl, shift) {
+    const res = [];
+    const pass = (why) => res.push({ cls: "pass", st: "nullopt", why });
+    const hit = (why, outcome) => { res.push({ cls: "hit", st: "소비", why }); return outcome; };
+    const shortcut = ctrl;
+    const f = K.focus;
+    let outcome = null;
+    run: {
+      // 1 실행 키
+      if ((key === "Space" || key === "Enter") && !shortcut && f) {
+        if (isText(f)) { if (key === "Space") { outcome = hit("텍스트 초점의 Space는 삼킨다 — 글자는 문자 이벤트로 들어간다", "Space를 소비했다 (빈 벡터). 칸에는 문자 이벤트가 공백을 넣는다."); if (f === "name") K.name += " "; break run; } pass("텍스트 초점의 Enter는 흘린다"); }
+        else if (clickable(f)) { outcome = hit(LABEL[f] + "의 left_click을 가운데 좌표로 실행", activate(f)); break run; }
+        else pass(LABEL[f] + "에는 left_click이 없다");
+      } else pass(key === "Space" || key === "Enter" ? "초점 없음 또는 단축키 수정자" : "Space·Enter가 아니다");
+      // 2 Tab
+      if (key === "Tab" && !shortcut) {
+        const o = order();
+        let i = o.indexOf(inGroup(f) ? K.size : f);
+        i = i < 0 ? (shift ? o.length - 1 : 0) : shift ? (i + o.length - 1) % o.length : (i + 1) % o.length;
+        K.focus = o[i]; K.visible = true;
+        outcome = hit("pre-order 순서에서 " + (shift ? "앞" : "다음") + " 자리로 (양 끝에서 순환, 묶음은 한 자리)", "초점이 " + LABEL[K.focus] + "(으)로 옮겼다. 키보드로 옮겼으니 테가 선다."); break run;
+      }
+      pass(key === "Tab" ? "Ctrl+Tab은 앱 것" : "Tab이 아니다");
+      // 3 텍스트
+      if (isText(f)) {
+        if (["ArrowLeft", "ArrowRight", "Home", "End"].includes(key) && !ctrl) { outcome = hit("caret 이동", "텍스트 칸이 caret을 옮겼다."); break run; }
+        if (key === "a" && ctrl) { outcome = hit("칸 안 전체 선택", "텍스트 칸이 Ctrl+A로 글 전체를 골랐다 — 목록의 Ctrl+A까지 가지 않는다."); break run; }
+        pass("이 칸이 쓰지 않는 키 (한 줄 칸의 Enter·Esc·Ctrl+S)");
+      } else pass("텍스트 초점이 아니다");
+      // 4 값
+      if (f === "volume" && !ctrl && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) {
+        const before = K.volume;
+        K.volume = key === "ArrowLeft" ? Math.max(0, K.volume - 1) : key === "ArrowRight" ? Math.min(100, K.volume + 1) : key === "Home" ? 0 : 100;
+        outcome = hit("on_step: " + ({ ArrowLeft: "decrease", ArrowRight: "increase", Home: "minimum", End: "maximum" }[key]), "음량 " + before + " → " + K.volume + ". 값 컨트롤은 묶음보다 앞이다."); break run;
+      }
+      pass(f === "volume" ? "축이 맞지 않거나 수정자가 있다" : "초점이 값 컨트롤이 아니다");
+      // 5 group
+      if (inGroup(f) && !ctrl && ["ArrowLeft", "ArrowRight", "Home", "End"].includes(key)) {
+        const m = ["s", "m", "l"];
+        let i = m.indexOf(f);
+        const before = f;
+        if (key === "Home") i = 0; else if (key === "End") i = 2; else i = (i + (key === "ArrowRight" ? 1 : 2)) % 3;
+        K.focus = m[i]; K.visible = true;
+        outcome = hit(key === "Home" || key === "End" ? "처음·끝으로 고정 이동 (순환 없음, 이미 끝이어도 소비)" : "가로 묶음의 화살표 — 끝에서 순환", "초점 " + before.toUpperCase() + " → " + m[i].toUpperCase() + (before === m[i] ? " (제자리지만 소비)" : "") + ". 선택은 앱이 정한다 — 이 실험에서는 Space로 고른다."); break run;
+      }
+      pass(inGroup(f) ? "축이 맞지 않는 화살표(↑↓)나 다른 키" : "초점이 묶음 안이 아니다");
+      // 6 drag Esc
+      if (key === "Escape" && K.drag) { K.drag = false; dragBox2.checked = false; outcome = hit("끌기를 버린다", "끄는 중의 Esc — 잡고 있는 손이 언제나 먼저다."); break run; }
+      pass(key === "Escape" ? "끄는 중이 아니다" : "Esc가 아니다");
+      // 7 key_handler
+      if (f === "files" && ctrl && key === "a") { K.files = true; outcome = hit("파일 목록의 key_handler가 Ctrl+A를 받았다", "목록이 항목 3개를 모두 골랐다."); break run; }
+      pass(f === "files" ? "목록의 key_handler가 이 키를 쓰지 않는다" : "초점부터 root까지 이 키를 쓰는 처리기가 없다");
+      // 8 trap Esc
+      if (key === "Escape" && K.modal) { K.modal = false; modalBox.checked = false; K.focus = "save"; K.visible = true; outcome = hit("가둠의 dismiss 액션", "dialog를 닫았다. 초점은 focus_return(저장 버튼)으로 돌아가고 테가 선다."); break run; }
+      pass(key === "Escape" ? "초점 가둠이 없다" : "Esc가 아니다");
+      // 9 default
+      if (key === "Enter" && !shortcut) { const d = K.modal ? "ok" : "save"; outcome = hit(LABEL[d] + "의 left_click", activate(d)); break run; }
+      pass(key === "Enter" ? "단축키 수정자가 있다" : "Enter가 아니다");
+      // 10 app
+      if (ctrl && key === "s") { K.saved++; res.push({ cls: "hit", st: "소비", why: "앱 정책이 save_intent를 돌려준다" }); outcome = "앱의 on_key가 app_message{save_intent}를 돌려줬다 → logic thread로."; }
+      else { res.push({ cls: "pass", st: "빈 결과", why: "앱도 쓰지 않는 키 — 플랫폼에 '아무도 받지 않음'으로 알린다" }); outcome = "아무도 가져가지 않았다. key_handled = false."; }
+    }
+    stageList(res);
+    resultEl.querySelector("div").textContent = (ctrl ? "Ctrl+" : "") + (shift ? "Shift+" : "") + keyName(key) + " → " + outcome;
+    drawForm();
+  }
+  function activate(id) {
+    if (id === "s" || id === "m" || id === "l") { K.size = id; return "크기를 " + id.toUpperCase() + "(으)로 골랐다 (app_message{set_size})."; }
+    if (id === "save") { K.saved++; return "저장했다 (app_message{save_intent})."; }
+    if (id === "cancel") return "취소 액션을 실행했다.";
+    if (id === "ok" || id === "close") { K.modal = false; modalBox.checked = false; K.focus = "save"; K.visible = true; return (id === "ok" ? "확인" : "닫기") + " — dialog를 닫았다. 초점은 저장 버튼으로 돌아가고 테가 선다."; }
+    return "";
+  }
+  const keyName = (k) => ({ ArrowLeft: "←", ArrowRight: "→", Escape: "Esc", a: "A", s: "S", Space: "Space" }[k] || k);
+  const KEYS = [["Tab", 0, 0], ["Tab", 0, 1], ["Space", 0, 0], ["Enter", 0, 0], ["ArrowLeft", 0, 0], ["ArrowRight", 0, 0], ["Home", 0, 0], ["End", 0, 0], ["Escape", 0, 0], ["a", 1, 0], ["s", 1, 0]];
+  const keysEl = document.getElementById("kr-keys");
+  for (const [k, c, s] of KEYS) keysEl.append(el("button", { class: "btn sm", type: "button", text: (c ? "Ctrl+" : "") + (s ? "Shift+" : "") + keyName(k), onclick: () => processKey(k, !!c, !!s) }));
+  document.getElementById("kr-focusable").addEventListener("keydown", (e) => {
+    const map = { " ": "Space", Enter: "Enter", Tab: "Tab", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight", Home: "Home", End: "End", Escape: "Escape" };
+    let k = map[e.key];
+    if (!k && (e.ctrlKey || e.metaKey) && (e.key === "a" || e.key === "s")) k = e.key;
+    if (!k) return;
+    e.preventDefault();
+    e.stopPropagation();
+    processKey(k, e.ctrlKey || e.metaKey, e.shiftKey);
+  });
+  modalBox.addEventListener("change", () => { K.modal = modalBox.checked; K.focus = K.modal ? "title" : "save"; K.visible = false; stageList([]); resultEl.querySelector("div").textContent = K.modal ? "dialog가 섰다. focus_entry(제목 칸)에 초점 — 진입은 테를 끈다." : "dialog를 내렸다."; drawForm(); });
+  dragBox2.addEventListener("change", () => { K.drag = dragBox2.checked; });
+  document.getElementById("kr-lab").addEventListener("lw-reset", () => { Object.assign(K, { focus: "name", visible: false, size: "m", volume: 40, name: "luil", files: false, saved: 0, modal: false, drag: false }); modalBox.checked = false; dragBox2.checked = false; stageList([]); resultEl.querySelector("div").textContent = "키를 눌러 보라."; drawForm(); });
+  stageList([]);
+  drawForm();
+
+  /* ---------- 6.8 터치 몸짓 (touch-pen-input-design · ui_interaction.cpp 상수) ---------- */
+  const PAN_D = 12, PAN_T = 400, TOL = 12, LONG_T = 600, V_MIN = 80, V_MAX = 6000, V_STOP = 20, DECAY = 5;
+  const tscene = document.getElementById("tc-scene");
+  const content = document.getElementById("tc-content");
+  const tlog = document.getElementById("tc-log");
+  const tbar = document.getElementById("tc-bar");
+  const tbarLbl = document.getElementById("tc-bar-lbl");
+  const ITEMS = 30, ROW = 44;
+  for (let i = 0; i < ITEMS; i++) content.append(el("div", { class: "item", "data-i": String(i), text: "메모 " + (i + 1) }));
+  let offset = 0, C = null, inertia = null, menu = null, focusRow = null, startT = performance.now();
+  const maxOff = () => Math.max(0, ITEMS * ROW - tscene.clientHeight);
+  const applyOffset = () => { offset = Math.max(0, Math.min(maxOff(), offset)); content.style.transform = "translateY(" + -offset + "px)"; };
+  const tsT = (t) => Math.round(t - startT) + "ms";
+  const rowAt = (y) => Math.floor((y + offset) / ROW);
+  function setPressed(i) { content.querySelectorAll(".item").forEach((n) => n.classList.toggle("pressed", Number(n.dataset.i) === i)); }
+  function setFocus(i) { focusRow = i; content.querySelectorAll(".item").forEach((n) => n.classList.toggle("focus", Number(n.dataset.i) === i)); }
+  function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+  function relT(e) { const b = tscene.getBoundingClientRect(); return { x: e.clientX - b.left, y: e.clientY - b.top, t: e.timeStamp }; }
+  tscene.addEventListener("pointerdown", (e) => {
+    tscene.setPointerCapture(e.pointerId);
+    closeMenu();
+    if (inertia) { inertia = null; log(tlog, "", "새 누름이 관성을 멈췄다"); }
+    const p = relT(e);
+    const row = rowAt(p.y);
+    C = { x0: p.x, y0: p.y, t0: p.t, max: 0, state: "pending", panOpen: true, row, samples: [{ t: p.t, y: p.y }], lastY: p.y, fired: false };
+    setPressed(row);
+    log(tlog, "in", "누름 — 메모 " + (row + 1) + ". 초점은 아직 옮기지 않는다", tsT(p.t));
+    C.timer = setTimeout(() => {
+      if (!C || C.state !== "pending" || C.max > TOL) return;
+      C.fired = true; C.state = "fired";
+      setPressed(null);
+      setFocus(C.row);
+      menu = el("div", { class: "menu" }, el("div", { text: "고정" }), el("div", { text: "복사" }), el("div", { text: "삭제" }));
+      menu.style.left = Math.min(C.x0, tscene.clientWidth - 130) + "px"; menu.style.top = Math.min(C.y0, tscene.clientHeight - 110) + "px";
+      tscene.append(menu);
+      log(tlog, "good", "600ms 동안 움직이지 않았다 → 길게 누르기: 우클릭 액션 (손을 떼기 전에 열린다). 초점도 이때 옮긴다", tsT(C.t0 + LONG_T));
+    }, LONG_T);
+  });
+  tscene.addEventListener("pointermove", (e) => {
+    if (!C) return;
+    const p = relT(e);
+    const travel = Math.hypot(p.x - C.x0, p.y - C.y0);
+    C.max = Math.max(C.max, travel);
+    C.samples.push({ t: p.t, y: p.y });
+    C.samples = C.samples.filter((s) => p.t - s.t <= 100);
+    if (C.state === "fired") return;
+    if (C.state === "pending") {
+      if (C.max > TOL) setPressed(null);
+      if (C.panOpen && p.t - C.t0 > PAN_T) { C.panOpen = false; log(tlog, "", "400ms가 지났다 — 쓸기 창이 닫혔다", tsT(p.t)); }
+      if (C.panOpen && travel >= PAN_D) {
+        const axis = Math.abs(p.x - C.x0) > Math.abs(p.y - C.y0) ? "가로" : "세로";
+        if (axis === "세로") {
+          C.state = "panning"; clearTimeout(C.timer); setPressed(null);
+          offset += C.y0 - p.y; applyOffset(); C.lastY = p.y;
+          log(tlog, "ui", "12px을 넘었다(세로) → 스크롤. 누른 자리부터 쌓인 이동을 한 번에 흘린다", tsT(p.t));
+          return;
+        }
+        C.panOpen = false;
+        log(tlog, "", "가로로 쓸었다 — 이 목록에는 가로로 흐를 자리가 없다 → 쓸기 아님", tsT(p.t));
+      }
+      if (!C.panOpen && travel >= PAN_D && !C.noted) { C.noted = true; log(tlog, "", "스크롤이 될 수 없게 된 뒤 12px 이동 — 끌 것(drag source)이 없어 아무 조작도 서지 않는다", tsT(p.t)); }
+      return;
+    }
+    if (C.state === "panning") { offset += C.lastY - p.y; C.lastY = p.y; applyOffset(); }
+  });
+  function endContact(e, cancelled) {
+    if (!C) return;
+    const p = relT(e);
+    clearTimeout(C.timer);
+    const c = C;
+    C = null;
+    setPressed(null);
+    if (cancelled) { log(tlog, "bad", "접촉 취소 — 뗌이 아니다", tsT(p.t)); return; }
+    if (c.fired) { log(tlog, "", "메뉴를 연 접촉의 뗌 — 클릭이 아니다", tsT(p.t)); return; }
+    c.max = Math.max(c.max, Math.hypot(p.x - c.x0, p.y - c.y0));
+    if (c.state === "panning") {
+      const s = c.samples.filter((x) => p.t - x.t <= 100);
+      let v = 0;
+      if (s.length >= 2 && s[s.length - 1].t > s[0].t) v = -((s[s.length - 1].y - s[0].y) / ((s[s.length - 1].t - s[0].t) / 1000));
+      const atEnd = v > 0 ? offset >= maxOff() : offset <= 0;
+      if (Math.abs(v) >= V_MIN && !atEnd) {
+        const v0 = Math.max(-V_MAX, Math.min(V_MAX, v));
+        inertia = { v0, start: performance.now(), base: offset, until: Math.log(Math.abs(v0) / V_STOP) / DECAY };
+        log(tlog, "good", "놓는 속도 " + Math.round(v) + " px/s ≥ 80 → 관성. 총 이동 ≈ " + Math.round((Math.abs(v0) - V_STOP) / DECAY) + "px, " + inertia.until.toFixed(2) + "초", tsT(p.t));
+        requestAnimationFrame(stepInertia);
+      } else log(tlog, "", "뗌 — 속도 " + Math.round(v) + " px/s (80 미만이거나 끝) → 관성 없음", tsT(p.t));
+      return;
+    }
+    if (c.max > TOL) { log(tlog, "", "뗌 — 최대 이동 " + Math.round(c.max) + "px > 12 → 탭 아님. 클릭으로 되돌리지 않는다", tsT(p.t)); return; }
+    setFocus(c.row);
+    log(tlog, "good", "탭 → left_click 메모 " + (c.row + 1) + ". 초점은 지금(뗄 때) 옮긴다", tsT(p.t));
+  }
+  function stepInertia(now) {
+    if (!inertia) return;
+    const t = (now - inertia.start) / 1000;
+    const s = Math.min(t, inertia.until);
+    const moved = (inertia.v0 - inertia.v0 * Math.exp(-DECAY * s)) / DECAY;
+    offset = inertia.base + moved;
+    const before = offset;
+    applyOffset();
+    if (offset !== before) { log(tlog, "", "끝에 닿아 관성이 멈췄다"); inertia = null; return; }
+    if (t >= inertia.until) { log(tlog, "", "속도가 20 px/s 아래로 — 관성 끝"); inertia = null; return; }
+    requestAnimationFrame(stepInertia);
+  }
+  tscene.addEventListener("pointerup", (e) => endContact(e, false));
+  tscene.addEventListener("pointercancel", (e) => endContact(e, true));
+  (function bar() {
+    if (C) { const age = performance.now() - C.t0; tbar.style.width = Math.min(100, (age / 800) * 100) + "%"; tbarLbl.textContent = Math.round(age) + "ms · " + ({ pending: C.panOpen ? "대기 — 쓸기 가능" : "대기 — 쓸기 창 닫힘", panning: "스크롤 중", fired: "메뉴 열림" }[C.state]); }
+    requestAnimationFrame(bar);
+  })();
+  document.getElementById("tc-lab").addEventListener("lw-reset", () => { inertia = null; C = null; offset = 0; applyOffset(); closeMenu(); setFocus(null); setPressed(null); tlog.textContent = ""; startT = performance.now(); tbar.style.width = "0%"; tbarLbl.textContent = "0ms"; log(tlog, "", "목록을 누르고, 쓸고, 길게 눌러 보라."); });
+  log(tlog, "", "목록을 누르고, 쓸고, 길게 눌러 보라.");
+})();
+</script>
+</body>
+</html>
