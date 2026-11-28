@@ -589,7 +589,7 @@
 
   function buildSearch() {
     const wrap = el("div", { class: "search", role: "search" });
-    const input = el("input", { type: "search", placeholder: "검색 (예: 트리 뷰, list_config)", "aria-label": "설명서 검색", autocomplete: "off", spellcheck: "false" });
+    const input = el("input", { type: "search", placeholder: "검색 (예: 트리 뷰 만들기, list_config)", "aria-label": "설명서 검색", autocomplete: "off", spellcheck: "false" });
     const pop = el("div", { class: "search-pop", role: "listbox", hidden: true });
     wrap.append(icon("EA6D", "s-ico"), input, el("kbd", { class: "s-key", text: "/" }), pop);
     let results = [];
