@@ -346,7 +346,8 @@
    "dialogs"
   ],
   "include/luil/ui/number_input.h": [
-   "values"
+   "values",
+   "text-input"
   ],
   "include/luil/ui/page_transition.h": [
    "motion"

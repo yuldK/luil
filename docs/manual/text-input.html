@@ -23,8 +23,8 @@
   .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
   @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
   .t kbd, .prose kbd { font-family: var(--font-code); font-size: 0.86em; border: 1px solid var(--line-2); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; color: var(--fg-2); background: var(--panel); white-space: nowrap; }
-  .t td.k { white-space: nowrap; }
-  @media (max-width: 560px) { .t td.k { white-space: normal; } }
+  .t td.k { overflow-wrap: normal; word-break: keep-all; }
+  table.t.wide { min-width: 680px; }
   /* 실습 — 숫자 칸, 주소 찾기 (assets/text-input-lab.js) */
   .ti-cols { display: grid; gap: 14px; }
   @media (min-width: 1100px) { .ti-cols { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
@@ -64,6 +64,7 @@
   .ti-view { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; line-height: 1.7; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); padding: 8px 10px; min-width: 0; }
   .ti-link { color: var(--link); text-decoration: underline; text-underline-offset: 2px; background: var(--accent-wash); border-radius: 2px; }
   .ti-count { font-family: var(--font-code); font-size: 11px; color: var(--fg-3); }
+  table.t.ti-links { min-width: 560px; }
   .ti-links td.ti-num { font-family: var(--font-code); font-size: 12px; white-space: nowrap; }
   .ti-links code { overflow-wrap: anywhere; }
   .ti-none { color: var(--fg-3); }
@@ -81,8 +82,8 @@
       <p class="summary">luil의 글 칸은 둘이다. 한 줄 칸 <code>text_input_element</code>와 여러 줄 칸 <code>text_area_element</code>. 글·caret·선택·칸의 실행 취소 기록은 모두 앱의 <code>text_edit_state</code>에 있고, 칸은 frame마다 그 사본을 받아 그린다. 키와 IME가 만든 편집은 요청 메시지로 앱에 돌아오고, 앱이 <code>apply_text_edit</code>로 고친다. 숫자 칸·코드 편집기·서식 있는 글 편집기는 이 위에 얹는 설정과 도우미다.</p>
       <div class="head-cols">
         <dl class="meta">
-          <div><dt>관련 소스</dt><dd><code>dialog_elements.h</code>·<code>text_area_element.h</code>·<code>text_input_options.h</code>·<code>text_input_state.h</code>·<code>text_document.h</code>·<code>syntax_highlighter.h</code>·<code>rich_text.h</code>·<code>rich_text_commands.h</code>·<code>text_format.h</code>·<code>number_input.h</code></dd></div>
-          <div><dt>실습</dt><dd><a class="xref" href="#lab-number">숫자 칸 — 거르기·검사·증감</a> · <a class="xref" href="#lab-links">주소 찾기 — <code>detect_text_links</code></a></dd></div>
+          <div><dt>관련 소스</dt><dd><code>dialog_elements.h</code>·<code>text_area_element.h</code>·<code>text_document.h</code>·<code>syntax_highlighter.h</code>·<code>rich_text.h</code>·<code>number_input.h</code></dd></div>
+          <div><dt>실습</dt><dd><a class="xref" href="#lab">숫자 칸 — 거르기·검사·증감</a> · <a class="xref" href="#lab-links">주소 찾기 — <code>detect_text_links</code></a></dd></div>
           <div><dt>먼저 읽기</dt><dd><a class="xref" href="text.html">텍스트 처리</a> · <a class="xref" href="input.html">입력과 초점</a> · <a class="xref" href="messaging.html">스레드 경계 메시징</a></dd></div>
         </dl>
         <div class="goals">
@@ -110,7 +111,7 @@
             <ul>
               <li>한 줄 글. Enter·Esc·↑↓를 쓰지 않아서 폼과 대화 상자의 키가 그대로 지나간다.</li>
               <li>암호(<code>secret</code>)·숫자(<code>number</code>)·검색 꼴(돋보기·지우기 단추)·링크·안내 글은 설정 필드다.</li>
-              <li>검증 결과는 칸 아래 오류 줄(<code>invalid</code>·<code>error</code>)로 보인다.</li>
+              <li>검증 결과는 오류색 테두리(<code>invalid</code>)와 칸 아래 오류 줄(<code>error</code>)로 보인다. 판단은 앱이 한다.</li>
               <li>읽기 전용이 없다. 글자 크기 설정도 없다.</li>
             </ul>
           </div>
@@ -579,16 +580,8 @@ namespace sample {
             </tbody>
           </table>
         </div>
-        <div class="prose"><p>OS에서 끌어 온 파일을 놓으면 첫 경로를 칸의 글로 삼는 데모다. 편집 명령 둘로 적어서 Ctrl+Z가 그대로 선다.</p></div>
-        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:554-560,231-243" data-path="examples/demo/basics_page.cpp" data-start="554"><script type="text/plain">
-        // OS에서 끌어 온 파일을 받는 칸이다 (os-dragdrop-design.md).
-        // 수락은 "밖에서 온 끌기인가" 한 줄이고, 놓이면 첫 경로가 칸의 글이 된다.
-        luil::drop_target note_drop {};
-        note_drop.accepts = [](const luil::drag_payload& payload) { return payload.files.empty() == false; };
-        note_drop.on_drop = [](const luil::drag_payload& payload, const luil::ui_action_context&) -> std::vector<luil::input_action> {
-            return { luil::make_app_action(note_file_intent { payload.files.front() }) };
-        };
-⋯@231
+        <div class="prose"><p>OS에서 끌어 온 파일을 놓으면 첫 경로를 칸의 글로 삼는 데모다. 위는 놓기 메시지를 받는 <code>handle</code> 갈래이고, 아래는 칸에 다는 <code>drop_target</code>이다. 편집 명령 둘로 적어서 Ctrl+Z가 그대로 선다.</p></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/basics_page.cpp:231-243,554-560" data-path="examples/demo/basics_page.cpp" data-start="231"><script type="text/plain">
         if (const auto* const file { message.get<note_file_intent>() }; file != nullptr)
         {
             // 드롭은 칸의 글을 통째로 바꾼다.
@@ -602,6 +595,14 @@ namespace sample {
             luil::apply_text_edit(note_, request);
             return true;
         }
+⋯@554
+        // OS에서 끌어 온 파일을 받는 칸이다 (os-dragdrop-design.md).
+        // 수락은 "밖에서 온 끌기인가" 한 줄이고, 놓이면 첫 경로가 칸의 글이 된다.
+        luil::drop_target note_drop {};
+        note_drop.accepts = [](const luil::drag_payload& payload) { return payload.files.empty() == false; };
+        note_drop.on_drop = [](const luil::drag_payload& payload, const luil::ui_action_context&) -> std::vector<luil::input_action> {
+            return { luil::make_app_action(note_file_intent { payload.files.front() }) };
+        };
 </script></div>
         <div class="prose small"><p><code>insert</code>와 <code>replace_all</code>은 앱이 직접 지은 요청이어도 <code>apply_text_edit</code>에 넘긴 거르기를 지난다.</p></div>
       </section>
@@ -717,7 +718,7 @@ namespace sample {
                 if (const auto undo { readonly_undo_key_of(event, snapshot, kind_link_view_input) }; undo.has_value())
                     return { luil::make_app_action(*undo) };
 </script></div>
-        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">초안을 지키는 것은 앱이다</span><code>read_only</code>는 키와 IME를 막을 뿐이고 <code>apply_text_edit</code>는 읽기 전용을 모른다. Windows TSF는 쓰기를 거절하고 Android는 키보드를 띄우지 않지만, macOS 입력기 경로에는 읽기 전용 검사가 보이지 않는다 (<a class="xref" href="#platforms">플랫폼 차이</a>). 글이 장식과 짝인 보기라면 차이 보기처럼 글이 바뀐 요청을 되돌리고 caret만 받는다.</div></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">초안을 지키는 것은 앱이다</span><code>read_only</code>는 키와 IME를 막을 뿐이고 <code>apply_text_edit</code>는 읽기 전용을 모른다. Windows TSF는 쓰기를 거절하고 Android는 키보드를 띄우지 않지만, macOS 입력기 경로에는 읽기 전용 검사가 보이지 않는다 (<a class="xref" href="#platforms">플랫폼 차이</a> — <em>코드에서 확인한 동작, macOS에서 실행해 보지 않았다</em>). 글이 장식과 짝인 보기라면 차이 보기처럼 글이 바뀐 요청을 되돌리고 caret만 받는다.</div></div>
         <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:952-964" data-path="examples/demo/workbench_page.cpp" data-start="952"><script type="text/plain">
             else if (target == target_workbench_diff)
             {
@@ -1021,12 +1022,12 @@ namespace sample {
         </div>
       </section>
 
-      <section class="sec" id="lab-number" data-toc="실습: 숫자 칸">
+      <section class="sec" id="lab" data-toc="실습: 숫자 칸">
         <header class="sec-head">
           <h2>실습: 숫자 칸</h2>
-          <p class="lede">위 숫자 칸의 판정을 브라우저로 옮겼다. 치고, 붙여 넣고, ↑↓·PageUp/PageDown을 누를 때마다 칸이 낸 요청과 앱이 한 일이 오른쪽에 쌓인다.</p>
+          <p class="lede">위 숫자 칸의 판정을 브라우저로 옮겼다. 치고, 붙여 넣고, ↑↓·PageUp/PageDown을 누를 때마다 칸이 낸 요청과 앱이 한 일이 기록에 쌓인다.</p>
         </header>
-        <div class="lw" data-title="숫자 칸" data-surface="text_input_number · number_input_filter · check_number_input · stepped_number_input" data-reset id="ti-number-lab">
+        <div class="lw" data-title="숫자 칸" data-surface="number_input.h" data-reset id="ti-number-lab">
           <div class="lw-body"></div>
           <div class="lw-foot">판정은 원본을 옮긴 함수다 — <code>check_number_input</code>·<code>number_input_filter</code>·<code>stepped_number_input</code>·<code>format_number_input</code>(<code>number_input.cpp</code>). 걸음은 <code>text_input_element::step_number</code>의 규칙을 따른다: ↑가 늘리고, 끝에 닿았거나 조합 중이면 키를 삼키기만 한다. 원본 <code>number_input.cpp</code>·<code>text_document.cpp</code>를 그대로 링크한 C++ 대조기와 무작위·경계 입력 60,114건(숫자 칸 36,074건 — 검사·거르기·걸음 여섯 가지, 값 쓰기 6,053건, 주소 찾기 17,987건)을 견주어 모두 같았다. 칸 자체(caret·선택·IME·그리기)는 브라우저의 입력 칸이다. 타자·붙여넣기는 <code>insert</code>처럼 조각을 거르고, 조합이 끝나면 Windows·Android·iOS의 확정처럼 글 전체를 거른다. 오류 줄의 글은 앱이 정하는 말이라 여기서는 <code>number_input_problem</code>의 이름을 보인다.</div>
         </div>
@@ -1063,7 +1064,7 @@ namespace sample {
         }
 </script></div>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t wide">
             <thead><tr><th>칸</th><th>그냥 누름</th><th>Ctrl+누름 (macOS는 Command+누름도)</th><th>포인터·tooltip</th></tr></thead>
             <tbody>
               <tr><td>편집 칸 (한 줄 칸은 늘 편집 칸)</td><td>caret을 놓고 끌기를 시작한다</td><td>링크를 연다</td><td>평소 글 모양 포인터. Ctrl을 누른 채 올리면 손 모양과 2픽셀 밑줄. tooltip은 주소 뒤에 <code>link_hint</code></td></tr>
@@ -1133,7 +1134,7 @@ namespace sample {
           <h2>실습: 주소 찾기</h2>
           <p class="lede">글을 고치면 <code>detect_text_links</code>가 다시 돈다. 구간이 UTF-8 byte라는 것을 표의 offset으로 확인한다. 한글 한 글자는 3바이트다.</p>
         </header>
-        <div class="lw" data-title="주소 찾기" data-surface="detect_text_links · text_link" data-reset id="ti-links-lab">
+        <div class="lw" data-title="주소 찾기" data-surface="text_document.h" data-reset id="ti-links-lab">
           <div class="lw-body"></div>
           <div class="lw-foot">찾기는 <code>detect_text_links</code>(<code>text_document.cpp</code>)를 옮긴 함수다. 숫자 칸 실습과 같은 대조기로 주소 찾기 입력 17,987건(깨진 UTF-8 바이트 포함)을 견주어 구간과 주소가 모두 같았다. 칠한 글은 브라우저의 그림이다. 칸에서는 이 구간마다 링크 element가 서고, 칠하는 색과 밑줄은 칸이 정한다.</div>
         </div>
@@ -1147,7 +1148,7 @@ namespace sample {
         <h3>렉서는 앱의 것이다</h3>
         <div class="prose"><p>렉서는 줄 하나와 윗줄이 끝난 상태를 받아 구간을 더하고, 이 줄이 끝난 상태를 돌려주는 순수 함수다(<code>syntax_line_lexer</code>). 여러 줄 주석 같은 줄 밖의 문맥은 그 정수 하나에 담는다. 고대비 테마에서는 여섯 구문 색이 창 글자색 하나로 접히므로, 데모는 키워드를 굵게, 주석을 기울여 낸다.</p></div>
         <div class="walk side">
-          <div class="code" data-lang="cpp" data-src="examples/demo/code_lexer.h:66-145" data-path="examples/demo/code_lexer.h" data-start="66"><script type="text/plain">
+          <div class="code tall" data-lang="cpp" data-src="examples/demo/code_lexer.h:66-145" data-path="examples/demo/code_lexer.h" data-start="66"><script type="text/plain">
     // 줄 하나를 칠한다 (`luil::syntax_line_lexer`). (줄 글, 입력 상태)의 순수 함수다.
     inline int lex_code_line(const std::u8string_view line, int state, std::vector<luil::text_span>& spans)
     {
@@ -1723,7 +1724,7 @@ namespace sample {
           <ul>
             <li><code>rich_text_paste</code>는 HTML이 있으면 걸러 읽은 조각을 서식째 넣고, <code>plain</code>이거나 HTML이 없으면 글만 넣는다. 거른 조각이 비면(한도 초과, 깨진 UTF-8) 글로 물러선다. 실행 취소 한 덩어리다.</li>
             <li>HTML을 읽는 <code>rich_text_from_html</code>은 굵게·기울임·밑줄·코드와 http·https·mailto 링크만 남기고 바깥 자원을 읽지 않는다. 내보내는 <code>rich_text_to_html</code>과 짝이다.</li>
-            <li>macOS에서는 이 클립보드 키 경로가 Command와 맞지 않는다. <a class="xref" href="#platforms">플랫폼 차이</a>를 본다.</li>
+            <li>macOS에서는 이 클립보드 키 경로가 Command와 맞지 않는다 (<a class="xref" href="#platforms">플랫폼 차이</a> — <em>코드에서 확인한 동작, macOS에서 실행해 보지 않았다</em>).</li>
           </ul>
         </div>
         <h3>서식 메뉴</h3>
@@ -2589,7 +2590,7 @@ namespace luil {
           <p class="lede">앱이 받는 것은 셋이다. 정책 <code>make_text_edit_action</code>이 싼 편집 요청, <code>make_text_composition_action</code>이 싼 조합 표시, 칸 설정의 factory(<code>clear</code>·<code>submit</code>·<code>change_to</code>·<code>activate_link</code>·<code>scroll</code>…)가 지은 앱 메시지. 셋 다 logic thread의 <code>handle</code>에 온다.</p>
         </header>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t wide">
             <thead><tr><th>사건</th><th>나오는 것</th><th>지어지는 thread</th><th>앱이 할 일</th></tr></thead>
             <tbody>
               <tr><td>글자를 친다</td><td><code>insert</code> 요청 (코드포인트 하나)</td><td>input</td><td><code>apply_text_edit</code></td></tr>
@@ -2630,9 +2631,9 @@ namespace luil {
           <table class="t">
             <thead><tr><th>플랫폼</th><th>주</th><th>낱말</th></tr></thead>
             <tbody>
-              <tr><td>Windows (기본값)</td><td>Ctrl</td><td>Ctrl</td></tr>
-              <tr><td>macOS</td><td>Command (Meta로도 함께 실린다)</td><td>Option</td></tr>
-              <tr><td>Android</td><td>Ctrl</td><td>Ctrl</td></tr>
+              <tr><td>Windows (기본값)</td><td class="k">Ctrl</td><td class="k">Ctrl</td></tr>
+              <tr><td>macOS</td><td>Command (Meta로도 함께 실린다)</td><td class="k">Option</td></tr>
+              <tr><td>Android</td><td class="k">Ctrl</td><td class="k">Ctrl</td></tr>
             </tbody>
           </table>
         </div>
@@ -2739,7 +2740,7 @@ namespace luil {
           </section>
           <section data-tab="보조 기술">
             <div class="table-wrap">
-              <table class="t">
+              <table class="t wide">
                 <thead><tr><th>요소</th><th>역할</th><th>이름</th><th>값·상태</th></tr></thead>
                 <tbody>
                   <tr><td>한 줄 칸</td><td><code>access_role::edit</code></td><td><code>set_access_name</code>, 없으면 <code>placeholder</code></td><td>확정 글 (조합 글이 아니다). 가린 칸은 점. <code>secret</code>·<code>invalid</code>·<code>error</code></td></tr>
@@ -2769,7 +2770,7 @@ namespace luil {
         </header>
         <h3>IME 길 (앱이 보는 것만)</h3>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t wide">
             <thead><tr><th>플랫폼</th><th>조합 중</th><th>확정</th><th>암호 칸</th><th>읽기 전용 칸</th></tr></thead>
             <tbody>
               <tr><td>Windows (TSF)</td><td><code>text_composition_event</code> (UI thread의 그림자 문서)</td><td><code>replace_all</code> — 글 전체와 caret</td><td>TSF에 문서를 넘기지 않고 창의 IMM 문맥도 뗀다. 한글 모드여도 영문 글자로 들어온다</td><td>문서가 읽기 전용이다. 쓰기를 거절하고 조합은 확정 없이 끝내며 편집을 보내지 않는다</td></tr>
@@ -2783,15 +2784,15 @@ namespace luil {
 
         <h3>휴대폰 키보드 (<code>text_input_options</code>, <code>submit</code>)</h3>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t wide">
             <thead><tr><th></th><th>Android</th><th>iOS</th><th>Windows · macOS</th></tr></thead>
             <tbody>
-              <tr><td>키보드 종류</td><td><code>TYPE_CLASS_NUMBER</code>(+<code>TYPE_NUMBER_FLAG_DECIMAL</code>·<code>TYPE_NUMBER_FLAG_SIGNED</code>), <code>TYPE_CLASS_PHONE</code>, <code>TYPE_TEXT_VARIATION_EMAIL_ADDRESS</code>, <code>TYPE_TEXT_VARIATION_URI</code>. 여러 줄 칸은 <code>TYPE_TEXT_FLAG_MULTI_LINE</code></td><td><code>UIKeyboardTypeNumberPad</code>·<code>UIKeyboardTypeDecimalPad</code>(부호면 <code>UIKeyboardTypeNumbersAndPunctuation</code>), <code>UIKeyboardTypePhonePad</code>, <code>UIKeyboardTypeEmailAddress</code>, <code>UIKeyboardTypeURL</code></td><td>쓰지 않는다</td></tr>
-              <tr><td>확정 단추</td><td><code class="free">IME_ACTION_*</code>. 여러 줄 칸은 <code>IME_FLAG_NO_ENTER_ACTION</code>. 늘 <code>IME_FLAG_NO_FULLSCREEN</code>·<code>IME_FLAG_NO_EXTRACT_UI</code></td><td><code class="free">UIReturnKey*</code>. next·previous는 둘 다 <code>UIReturnKeyNext</code>, 여러 줄 칸은 <code>UIReturnKeyDefault</code></td><td>없다</td></tr>
-              <tr><td>확정 단추를 누르면</td><td>IME가 확정한 글을 먼저 초안으로 보낸 뒤 <code>submit</code>, 없으면 Enter·Tab</td><td><code>submit</code>, 없으면 Enter·Tab</td><td><code>submit</code>을 읽지 않는다</td></tr>
-              <tr><td>키보드가 칸을 가릴 때</td><td>키보드 높이를 안전 영역 아래에 더하고 정책 <code>on_focus_moved</code>로 초점을 드러낸다</td><td>같은 길</td><td>—</td></tr>
-              <tr><td>길게 누름 편집 메뉴</td><td>복사·잘라내기·붙여넣기·전체 선택 (+ 링크 열기·주소 복사)</td><td>시스템 편집 메뉴</td><td>없다 (앱이 우클릭 메뉴를 단다)</td></tr>
-              <tr><td>자동 고침·대문자</td><td>코드에서 정하지 않는다</td><td>종류가 <code>text</code>이고 암호 칸이 아닐 때만 켠다</td><td>—</td></tr>
+              <tr><td class="k">키보드 종류</td><td><code>TYPE_CLASS_NUMBER</code>(+<code>TYPE_NUMBER_FLAG_DECIMAL</code>·<code>TYPE_NUMBER_FLAG_SIGNED</code>), <code>TYPE_CLASS_PHONE</code>, <code>TYPE_TEXT_VARIATION_EMAIL_ADDRESS</code>, <code>TYPE_TEXT_VARIATION_URI</code>. 여러 줄 칸은 <code>TYPE_TEXT_FLAG_MULTI_LINE</code></td><td><code>UIKeyboardTypeNumberPad</code>·<code>UIKeyboardTypeDecimalPad</code>(부호면 <code>UIKeyboardTypeNumbersAndPunctuation</code>), <code>UIKeyboardTypePhonePad</code>, <code>UIKeyboardTypeEmailAddress</code>, <code>UIKeyboardTypeURL</code></td><td>쓰지 않는다</td></tr>
+              <tr><td class="k">확정 단추</td><td><code class="free">IME_ACTION_*</code>. 여러 줄 칸은 <code>IME_FLAG_NO_ENTER_ACTION</code>. 늘 <code>IME_FLAG_NO_FULLSCREEN</code>·<code>IME_FLAG_NO_EXTRACT_UI</code></td><td><code class="free">UIReturnKey*</code>. next·previous는 둘 다 <code>UIReturnKeyNext</code>, 여러 줄 칸은 <code>UIReturnKeyDefault</code></td><td>없다</td></tr>
+              <tr><td class="k">확정 단추를 누르면</td><td>IME가 확정한 글을 먼저 초안으로 보낸 뒤 <code>submit</code>, 없으면 Enter·Tab</td><td><code>submit</code>, 없으면 Enter·Tab</td><td><code>submit</code>을 읽지 않는다</td></tr>
+              <tr><td class="k">키보드가 칸을 가릴 때</td><td>키보드 높이를 안전 영역 아래에 더하고 정책 <code>on_focus_moved</code>로 초점을 드러낸다</td><td>같은 길</td><td>—</td></tr>
+              <tr><td class="k">길게 누름 편집 메뉴</td><td>복사·잘라내기·붙여넣기·전체 선택 (+ 링크 열기·주소 복사)</td><td>시스템 편집 메뉴</td><td>없다 (앱이 우클릭 메뉴를 단다)</td></tr>
+              <tr><td class="k">자동 고침·대문자</td><td>코드에서 정하지 않는다</td><td>종류가 <code>text</code>이고 암호 칸이 아닐 때만 켠다</td><td>—</td></tr>
             </tbody>
           </table>
         </div>
@@ -2834,7 +2835,7 @@ namespace luil {
           <li><strong>거르기는 명령마다 다른 글을 받는다.</strong> <code>insert</code>는 넣는 조각을, <code>replace_all</code>은 IME나 <code>SetValue</code>가 보낸 글 전체를 거르기에 넘긴다. 조각을 통째로 거절하는 거르기는 IME 확정 때 칸을 비우고, 글 전체 길이를 봐야 하는 상한은 거르기로 만들 수 없다. IME가 준 caret은 거르기 전 글의 자리라서, 글자를 빼는 거르기는 caret을 끝 쪽으로 밀 수 있다.</li>
           <li><strong>편집 요청을 버리면 휴대폰 IME가 멈춘다.</strong> Android·iOS IME는 자기가 보낸 편집의 번호(<code>sequence</code>)가 view의 <code>applied_sequence</code>로 돌아올 때까지 앱 글을 IME에 넘기지 않는다. 아무 페이지도 그 target을 받지 않거나 검증에 실패한 요청을 그냥 버리면 그 칸은 IME와 동기가 끊긴다. 거절할 때도 번호는 옮긴다.</li>
           <li><strong><code>make_text_edit_action</code>은 UI thread에서도 불린다.</strong> 붙여넣기·IME 확정·UIA 쓰기가 UI thread에서 부른다. 헤더는 이것을 조합 쪽에만 적었다. Android·iOS의 <code>submit</code>과 편집 메뉴의 링크 열기도 UI thread에서 실행된다. 정책과 칸 설정의 함수는 메시지만 짓고 앱 상태를 읽거나 쓰지 않는다.</li>
-          <li><strong><code>read_only</code>는 초안을 지키지 않는다.</strong> <code>apply_text_edit</code>는 읽기 전용을 모른다. 막는 것은 controller의 키 판정과 플랫폼 IME 층인데, macOS 입력기 경로에는 그 검사가 없다 (<em>코드에서 확인한 동작, macOS에서 실행해 보지 않았다</em>). 글이 장식과 짝인 보기는 글이 바뀐 요청을 되돌린다.</li>
+          <li><strong><code>read_only</code>는 초안을 지키지 않는다.</strong> <code>apply_text_edit</code>는 읽기 전용을 모른다. 막는 것은 controller의 키 판정과 플랫폼 IME 층인데, macOS 입력기 경로는 <code>read_only</code>도 <code>secret</code>도 보지 않는다. 읽기 전용 칸에도 입력기의 확정 글이 <code>insert</code> 요청으로 오고, 암호 칸에서도 입력기가 조합한다 (<em>코드에서 확인한 동작, macOS에서 실행해 보지 않았다</em>). 글이 장식과 짝인 보기는 글이 바뀐 요청을 되돌린다.</li>
           <li><strong>데스크톱에서 <code>submit</code>은 불리지 않는다.</strong> Android와 iOS의 확정 단추만 읽는다 (헤더 주석은 Android만 말하지만 iOS host도 <code>submit</code>과 <code>input</code>을 읽는다). Windows·macOS에서 Enter로 확정하려면 칸에 key handler를 달거나 기본 버튼을 둔다.</li>
           <li><strong>한 줄 칸의 여러 줄 붙여넣기는 OS마다 다르다.</strong> Windows는 첫 줄 바꿈·탭 앞에서 자르고, macOS·iOS는 줄 바꿈을 공백으로 바꾸고, Android는 그대로 넣는다. 한 줄이어야 하는 칸은 앱이 거른다.</li>
           <li><strong>칸에 단 Esc 처리기는 대화 상자의 Esc를 가로챈다.</strong> key handler는 가둠의 닫기보다 앞이다. 칸이 Esc를 먹으면 대화 상자가 닫히지 않는다. 닫기까지 바라면 처리기가 <code>std::nullopt</code>를 돌려 흘린다.</li>
@@ -2860,7 +2861,7 @@ namespace luil {
           <details class="faq"><summary>글은 누가 들고 있나? frame마다 칸을 새로 지으면 글이 사라지지 않나?</summary><div class="faq-a"><p class="faq-short">앱 logic의 <code>text_edit_state</code>가 든다. 칸은 그 사본을 받아 그릴 뿐이다.</p><p>칸을 다시 지어도 초안이 그대로라 입력이 이어진다. caret·선택·칸의 실행 취소 기록·서식도 초안에 있다. 초점만 controller의 <code>interaction_snapshot</code>에 있다.</p></div></details>
           <details class="faq"><summary>Enter로 폼을 제출하려면?</summary><div class="faq-a"><p class="faq-short">기본 버튼(<code>text_button_config::default_button = true</code>)을 둔다. 칸마다 뜻이 다르면 칸에 key handler를 단다.</p><p>한 줄 칸은 Enter를 쓰지 않으므로 칸에서 친 Enter가 기본 버튼의 클릭이 된다. Ctrl·Alt·Meta와 함께인 Enter는 가지 않는다. <code>submit</code>은 휴대폰 키보드의 확정 단추 전용이라 데스크톱에서는 불리지 않는다 (<a class="xref" href="#build-single">Enter로 확정하고 Esc로 되돌리기</a>).</p></div></details>
           <details class="faq"><summary>Esc로 입력을 취소하려면?</summary><div class="faq-a"><p class="faq-short">칸에 key handler를 달아 Esc에 되돌리기 메시지를 낸다. Esc 설정 필드는 없다.</p><p>대화 상자 안이면 그 처리기가 대화의 Esc 닫기보다 먼저다. 되돌리기와 닫기를 함께 바라면 처리기가 메시지를 내지 말고 <code>std::nullopt</code>로 흘린 뒤 대화의 닫기에서 초안을 버린다.</p></div></details>
-          <details class="faq"><summary>숫자만 받고, 범위를 넘으면 빨갛게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>apply_text_edit</code>에 <code>number_input_filter(range)</code>를 넘기고, frame마다 <code>check_number_input</code>으로 <code>error</code>를 채운다.</p><p>↑↓ 증감은 <code>number</code>의 <code>change_to</code>로 받는다. 천 단위 쉼표는 받지 않고, 전각 숫자와 U+2212는 ASCII로 읽는다. 거르기는 조각만 보므로 "1..2"는 검사가 잡는다. <a class="xref" href="#lab-number">실습</a>에서 직접 넣어 본다. 슬라이더·별점 같은 다른 값 컨트롤은 <a class="xref" href="values.html">슬라이더·숫자·별점·진행</a>에 있다.</p></div></details>
+          <details class="faq"><summary>숫자만 받고, 범위를 넘으면 빨갛게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>apply_text_edit</code>에 <code>number_input_filter(range)</code>를 넘기고, frame마다 <code>check_number_input</code>으로 <code>error</code>를 채운다.</p><p>↑↓ 증감은 <code>number</code>의 <code>change_to</code>로 받는다. 천 단위 쉼표는 받지 않고, 전각 숫자와 U+2212는 ASCII로 읽는다. 거르기는 조각만 보므로 "1..2"는 검사가 잡는다. <a class="xref" href="#lab">실습</a>에서 직접 넣어 본다. 슬라이더·별점 같은 다른 값 컨트롤은 <a class="xref" href="values.html">슬라이더·숫자·별점·진행</a>에 있다.</p></div></details>
           <details class="faq"><summary>최대 길이를 두려면?</summary><div class="faq-a"><p class="faq-short">적용해 본 뒤 넘치면 버린다. 버려도 <code>applied_sequence</code>는 옮긴다.</p><p>거르기는 넣는 조각만 받고, IME 확정 때는 글 전체를 받아서 길이를 알 수 없다. 글자 수는 글자소로 센다 (<a class="xref" href="#build-validate">길이 제한 견본</a>).</p></div></details>
           <details class="faq"><summary>칸의 기록을 다 되돌린 뒤 Ctrl+Z를 더 누르면 앱의 실행 취소로 가나?</summary><div class="faq-a"><p class="faq-short">가지 않는다. 편집 칸에서는 기록이 비어도 칸의 <code>undo</code>다.</p><p>칸의 기록과 앱 stack은 따로다. 칸 편집을 앱 걸음으로 올리려면 확정 시점(칸 떠남·Enter)에 앞뒤 글을 앱 걸음으로 쌓는다 (<a class="xref" href="undo.html#s1">앱 수준 실행 취소</a>).</p></div></details>
           <details class="faq"><summary>문서 보기(읽기 전용 칸)에 초점이 있을 때 Ctrl+Z로 앱의 실행 취소를 하려면?</summary><div class="faq-a"><p class="faq-short">이미 넘어온다. 읽기 전용 칸은 주+Z·주+Y(Shift 포함)를 삼키지 않고 흘린다.</p><p>키는 조상의 key handler를 거쳐 정책 <code>on_key</code>에 닿는다. 데모의 <code>readonly_undo_key_of</code>처럼 snapshot의 <code>focused_input</code>으로 그 칸인지 확인하고 앱 메시지로 바꾼다 (<a class="xref" href="#build-area">문서 보기</a>).</p></div></details>
@@ -2893,6 +2894,10 @@ namespace luil {
           <div class="hdr">
             <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/dialog_elements.h" target="_blank" rel="noopener">include/luil/ui/dialog_elements.h</a><span class="n">최상위 기호 21</span></div>
             <div class="hdr-syms"><a href="api.html#dialog-move-message-factory" title="별칭"><span class="kb t">=</span>dialog_move_message_factory</a><a href="api.html#dialog-caption-config" title="구조체"><span class="kb t">S</span>dialog_caption_config</a><a href="api.html#dialog-caption-element" title="클래스"><span class="kb t">C</span>dialog_caption_element</a><a href="api.html#text-button-visual" title="열거형"><span class="kb e">E</span>text_button_visual</a><a href="api.html#text-button-config" title="구조체"><span class="kb t">S</span>text_button_config</a><a href="api.html#text-button-fill" title="열거형"><span class="kb e">E</span>text_button_fill</a><a href="api.html#text-button-fill-for" title="함수"><span class="kb f">f</span>text_button_fill_for</a><a href="api.html#text-button-icon-size" title="상수"><span class="kb ">k</span>text_button_icon_size</a><a href="api.html#text-button-icon-gap" title="상수"><span class="kb ">k</span>text_button_icon_gap</a><a href="api.html#text-button-padding" title="상수"><span class="kb ">k</span>text_button_padding</a><a href="api.html#text-button-minimum-width" title="상수"><span class="kb ">k</span>text_button_minimum_width</a><a href="api.html#text-button-height" title="상수"><span class="kb ">k</span>text_button_height</a><a href="api.html#text-button-element" title="클래스"><span class="kb t">C</span>text_button_element</a><a href="api.html#text-input-number" title="구조체"><span class="kb t">S</span>text_input_number</a><a href="api.html#text-input-config" title="구조체"><span class="kb t">S</span>text_input_config</a><a href="api.html#text-input-glyph-size" title="상수"><span class="kb ">k</span>text_input_glyph_size</a><a href="api.html#text-input-clear-size" title="상수"><span class="kb ">k</span>text_input_clear_size</a><a href="api.html#text-input-icon-gap" title="상수"><span class="kb ">k</span>text_input_icon_gap</a><a href="api.html#text-input-spin-width" title="상수"><span class="kb ">k</span>text_input_spin_width</a><a href="api.html#text-input-error-height" title="상수"><span class="kb ">k</span>text_input_error_height</a><a href="api.html#text-input-element" title="클래스"><span class="kb t">C</span>text_input_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/number_input.h" target="_blank" rel="noopener">include/luil/ui/number_input.h</a><span class="n">최상위 기호 7</span></div>
+            <div class="hdr-syms"><a href="api.html#number-input-range" title="구조체"><span class="kb t">S</span>number_input_range</a><a href="api.html#number-input-problem" title="열거형"><span class="kb e">E</span>number_input_problem</a><a href="api.html#number-input-check" title="구조체"><span class="kb t">S</span>number_input_check</a><a href="api.html#check-number-input" title="함수"><span class="kb f">f</span>check_number_input</a><a href="api.html#format-number-input" title="함수"><span class="kb f">f</span>format_number_input</a><a href="api.html#stepped-number-input" title="함수"><span class="kb f">f</span>stepped_number_input</a><a href="api.html#number-input-filter" title="함수"><span class="kb f">f</span>number_input_filter</a></div>
           </div>
           <div class="hdr">
             <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/rich_text.h" target="_blank" rel="noopener">include/luil/ui/rich_text.h</a><span class="n">최상위 기호 12</span></div>
