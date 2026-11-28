@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>03 스레드 경계 메시징 · luil 해부학</title>
-<meta name="description" content="luil 해부학 3강. 사건을 나르는 channel과 최신 상태를 나르는 latest_slot, 넘침 정책과 신호 병합, 타입을 지운 운반체 app_message.">
+<title>스레드 경계 메시징 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — 사건을 나르는 channel과 최신 상태를 나르는 latest_slot, 넘침 정책과 신호 병합, 타입을 지운 운반체 app_message.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
-<link rel="stylesheet" href="assets/course.css">
-<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
   .sim { display: grid; gap: 14px; }
   .sim-row { display: grid; gap: 14px; }
@@ -46,26 +46,24 @@
   .judge .res.miss { border-color: var(--line-2); }
 </style>
 </head>
-<body data-lecture="3">
+<body data-page="messaging">
 <header class="topbar"></header>
 
-<main>
-  <section class="hero" id="s0" data-num="03">
-    <div class="hero-inner">
-      <div class="eyebrow"><span class="lec-no">LECTURE 03</span><span>2부 · 뼈대</span></div>
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
       <h1>스레드 경계 메시징</h1>
-      <div class="hero-cols">
-        <div style="display:grid;gap:22px">
-          <p class="thesis">사건은 순서대로, 상태는 최신 것만. channel과 latest_slot 두 장치가 세 스레드 사이의 모든 이야기를 나른다.</p>
-          <dl class="meta">
-            <div><dt>예상 시간</dt><dd>50분</dd></div>
-            <div><dt>선수 지식</dt><dd>2강, mutex·condition variable</dd></div>
-            <div><dt>다루는 코드</dt><dd><code>include/luil/messaging/</code>, <code>app_message.h</code></dd></div>
-            <div><dt>실험</dt><dd>channel·latest_slot 시뮬레이터, get&lt;T&gt; 판정기</dd></div>
-          </dl>
-        </div>
+      <p class="summary">사건은 순서대로, 상태는 최신 것만. channel과 latest_slot 두 장치가 세 스레드 사이의 모든 이야기를 나른다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>include/luil/messaging/</code>, <code>app_message.h</code></dd></div>
+          <div><dt>실습</dt><dd>channel·latest_slot 시뮬레이터, get&lt;T&gt; 판정기</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="threads.html">스레드 모델</a>, mutex·condition variable</dd></div>
+        </dl>
         <div class="goals">
-          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
           <ol>
             <li>사건과 상태를 서로 다른 장치로 나르는 이유를 설명한다.</li>
             <li>channel의 post·receive·drain·close와 두 넘침 정책의 결과를 예측한다.</li>
@@ -74,16 +72,12 @@
           </ol>
         </div>
       </div>
-    </div>
-  </section>
+    </header>
 
-  <div class="lecture-body">
-    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
-    <div class="slides">
+    <div class="doc-body">
 
-      <section class="slide" id="s1" data-num="3.1">
-        <header class="slide-head">
-          <span class="num">3.1</span>
+      <section class="sec" id="s1">
+        <header class="sec-head">
           <h2>사건과 상태는 다르게 나른다</h2>
           <p class="lede">클릭은 하나도 잃으면 안 되고 순서가 중요하다. frame은 최신 것만 의미가 있다. 둘을 같은 장치로 나르면 어느 한쪽이 망가진다.</p>
         </header>
@@ -124,9 +118,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s2" data-num="3.2">
-        <header class="slide-head">
-          <span class="num">3.2</span>
+      <section class="sec" id="s2">
+        <header class="sec-head">
           <h2>channel 읽기 ① post</h2>
           <p class="lede">post는 절대 블로킹하지 않는다. 잠금은 짧게, 신호는 잠금 밖에서 낸다.</p>
         </header>
@@ -175,7 +168,7 @@
         }
 </script></div>
           <ol class="walk-steps-src">
-            <li data-lines="97-100" data-title="받은 번호를 돌려준다">받아들인 항목만 접수 번호(<code>sequence</code>)를 얻고, 그 번호를 호출자에게 알려 준다. 소비자가 "이 번호까지 처리했다"를 알리면 생산자가 자기 메시지와 맞춰 볼 수 있다(2강의 tree ticket이 이것을 쓴다).</li>
+            <li data-lines="97-100" data-title="받은 번호를 돌려준다">받아들인 항목만 접수 번호(<code>sequence</code>)를 얻고, 그 번호를 호출자에게 알려 준다. 소비자가 "이 번호까지 처리했다"를 알리면 생산자가 자기 메시지와 맞춰 볼 수 있다(<a class="xref" href="threads.html">스레드 모델</a> 문서의 tree ticket이 이것을 쓴다).</li>
             <li data-lines="102-105" data-title="닫힌 채널은 받지 않는다">close 뒤의 게시는 <code>channel_closed</code>다. 번호도 쓰지 않는다.</li>
             <li data-lines="107-117" data-title="넘칠 때의 두 갈래"><code>reject_newest</code>면 새 항목을 거절하고 통계만 센다(<code>channel_full</code>). <code>drop_oldest</code>면 맨 앞을 버리고 받는다(<code>posted_after_drop</code>). 어느 쪽이든 post는 기다리지 않는다.</li>
             <li data-lines="119-127" data-title="봉투에 담는다">접수 번호와 시각을 붙여 <code>envelope</code>에 담는다. 시계는 주입할 수 있어 test가 고정 시계를 넣는다. 최대 깊이(<code>peak_depth</code>)도 센다.</li>
@@ -185,9 +178,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s3" data-num="3.3">
-        <header class="slide-head">
-          <span class="num">3.3</span>
+      <section class="sec" id="s3">
+        <header class="sec-head">
           <h2>channel 실험</h2>
           <p class="lede">입력 사건을 넣고 꺼내 보자. 용량을 넘기면 두 정책이 무엇을 잃는지 갈린다.</p>
         </header>
@@ -234,9 +226,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s4" data-num="3.4">
-        <header class="slide-head">
-          <span class="num">3.4</span>
+      <section class="sec" id="s4">
+        <header class="sec-head">
           <h2>넘칠 때, 무엇을 잃을 것인가</h2>
           <p class="lede">정책은 전달을 보장하지 않는다. 무엇을 잃을지 고를 뿐이고, 잃은 사실을 알아차리는 길을 함께 둔다.</p>
         </header>
@@ -249,7 +240,7 @@
           <div class="panel">
             <h3><code>app_inbox</code> · reject_newest · 1024</h3>
             <p>앱 메시지는 버리면 안 된다. 넘치면 새 것을 거절하고 <code>channel_full</code>을 돌려줘 게시한 쪽이 알게 한다.</p>
-            <p>input pump는 여유가 생길 때까지 짧게 재시도하고, 종료 신호는 종료 예산 안에서 재시도한다(2강). <code>post_app_message</code>는 반환값을 보지 않으므로 거절은 <code>app_inbox_statistics()</code>로 확인한다.</p>
+            <p>input pump는 여유가 생길 때까지 짧게 재시도하고, 종료 신호는 종료 예산 안에서 재시도한다(<a class="xref" href="threads.html">스레드 모델</a>). <code>post_app_message</code>는 반환값을 보지 않으므로 거절은 <code>app_inbox_statistics()</code>로 확인한다.</p>
           </div>
         </div>
         <div class="walk side">
@@ -284,9 +275,8 @@ TEST_CASE("A full drop_oldest channel drops the head and shows a sequence gap", 
         </div>
       </section>
 
-      <section class="slide" id="s5" data-num="3.5">
-        <header class="slide-head">
-          <span class="num">3.5</span>
+      <section class="sec" id="s5">
+        <header class="sec-head">
           <h2>channel 읽기 ② 소비자와 close</h2>
           <p class="lede">꺼내는 쪽은 한 스레드뿐이다. debug 빌드는 그 약속을 assert로 지킨다.</p>
         </header>
@@ -376,7 +366,7 @@ TEST_CASE("A full drop_oldest channel drops the head and shows a sequence gap", 
 </script></div>
           <ol class="walk-steps-src">
             <li data-lines="139-149" data-title="try_receive — 기다리지 않는다">비어 있으면 닫혔는지에 따라 <code>closed</code> 또는 <code>empty</code>다. 닫힌 뒤에도 남은 항목은 끝까지 꺼낼 수 있다(drain 의미론).</li>
-            <li data-lines="151-166" data-title="receive_wait — 상한이 있는 기다림">condition variable로 최대 <code>wait_limit</code>만 잔다. 2강의 logic loop가 250ms나 다음 tick까지로 이 값을 준다. 시간이 다 되면 <code>timed_out</code>이다.</li>
+            <li data-lines="151-166" data-title="receive_wait — 상한이 있는 기다림">condition variable로 최대 <code>wait_limit</code>만 잔다. <a class="xref" href="threads.html">스레드 모델</a> 문서의 logic loop가 250ms나 다음 tick까지로 이 값을 준다. 시간이 다 되면 <code>timed_out</code>이다.</li>
             <li data-lines="168-180" data-title="drain — 한 번의 잠금으로 여러 개">최대 <code>max_count</code>개를 꺼낸다. 상한이 한 번 깰 때 끝없이 소비하는 것을 막아 렌더링 기회를 보존한다. logic loop는 63을 준다.</li>
             <li data-lines="182-207" data-title="close — 한 번만, 그리고 신호">이미 닫혔으면 아무 일도 없다. 닫고, 기다리는 소비자를 모두 깨우고, 신호를 낸다. <code>noexcept</code> 함수라 신호 함수가 계약을 어기고 던져도 삼킨다.</li>
             <li data-lines="226-236" data-title="소비자는 한 스레드">debug 빌드는 첫 수신 스레드의 id를 기억하고, 다른 스레드가 꺼내면 assert한다. MPSC라는 계약을 실행 중에 확인하는 장치다. release 빌드에서는 비용이 없다.</li>
@@ -384,9 +374,8 @@ TEST_CASE("A full drop_oldest channel drops the head and shows a sequence gap", 
         </div>
       </section>
 
-      <section class="slide" id="s6" data-num="3.6">
-        <header class="slide-head">
-          <span class="num">3.6</span>
+      <section class="sec" id="s6">
+        <header class="sec-head">
           <h2>latest_slot 읽기</h2>
           <p class="lede">값 하나, version 하나, 그리고 "아직 가져가지 않은 새 값이 있다"는 표시 하나. 125줄이 전부다.</p>
         </header>
@@ -466,9 +455,8 @@ TEST_CASE("A full drop_oldest channel drops the head and shows a sequence gap", 
         </div>
       </section>
 
-      <section class="slide" id="s7" data-num="3.7">
-        <header class="slide-head">
-          <span class="num">3.7</span>
+      <section class="sec" id="s7">
+        <header class="sec-head">
           <h2>latest_slot 실험</h2>
           <p class="lede">logic이 frame을 여러 번 게시하는 동안 UI가 한 번만 깨어나는 모습을 보자.</p>
         </header>
@@ -547,9 +535,8 @@ TEST_CASE("A failed signal lets the next publish signal again", "[messaging][slo
         </div>
       </section>
 
-      <section class="slide" id="s8" data-num="3.8">
-        <header class="slide-head">
-          <span class="num">3.8</span>
+      <section class="sec" id="s8">
+        <header class="sec-head">
           <h2>타입을 지운 운반체 app_message</h2>
           <p class="lede">라이브러리는 앱의 메시지 타입을 모른다. 그래도 나를 수 있게, 값을 <code>shared_ptr&lt;const void&gt;</code>와 타입 정보 한 쌍으로 싼다.</p>
         </header>
@@ -634,9 +621,8 @@ struct derived_intent : base_intent {};
         </div>
       </section>
 
-      <section class="slide" id="s9" data-num="3.9">
-        <header class="slide-head">
-          <span class="num">3.9</span>
+      <section class="sec" id="s9">
+        <header class="sec-head">
           <h2>input_action — 실행할 스레드는 타입이 정한다</h2>
           <p class="lede">액션이 돌려주는 값은 11갈래 variant다. 프레임워크는 갈래를 보고 그 값을 처리할 스레드로 보낸다.</p>
         </header>
@@ -675,15 +661,14 @@ struct derived_intent : base_intent {};
 </script></div>
           <ol class="walk-steps-src">
             <li data-lines="194-195" data-title="액션의 모양">액션은 문맥(눌린 수식 키·좌표 등)을 받아 <code>input_action</code> 목록을 돌려주는 함수다. 상태를 바꾸지 않고 후속 메시지를 돌려준다.</li>
-            <li data-lines="197-204" data-title="가장 흔한 꼴">"실행되면 이 메시지 하나"인 액션을 만든다. intent를 값으로 캡처하므로 공유 상태에 닿지 않는다. 1강의 hello 버튼이 이것을 쓴다.</li>
+            <li data-lines="197-204" data-title="가장 흔한 꼴">"실행되면 이 메시지 하나"인 액션을 만든다. intent를 값으로 캡처하므로 공유 상태에 닿지 않는다. <a class="xref" href="overview.html">luil 개요</a> 문서의 hello 버튼이 이것을 쓴다.</li>
           </ol>
         </div>
         <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">const가 지켜 주지 못하는 것</span>payload가 <code>const</code>여도, 그 안에 외부 포인터나 mutable 캡처가 있으면 안전하지 않다. 게시된 액션은 공유되는 앱 상태를 직접 바꾸면 안 된다. 바꾸고 싶은 것은 메시지로 말한다.</div></div>
       </section>
 
-      <section class="slide" id="s10" data-num="3.10">
-        <header class="slide-head">
-          <span class="num">3.10</span>
+      <section class="sec" id="s10">
+        <header class="sec-head">
           <h2>lock-free가 아닌 이유</h2>
           <p class="lede">두 장치는 mutex로 내부 저장소를 지키는 평범한 자료구조다. 빠르기보다 맞기를 먼저 골랐다.</p>
         </header>
@@ -699,7 +684,7 @@ struct derived_intent : base_intent {};
           <div class="panel">
             <h3>검증하는 법</h3>
             <ul>
-              <li>header-only라 별도 실행 파일에서 AddressSanitizer로 전체 구현을 검사한다(Release 테스트, 12강).</li>
+              <li>header-only라 별도 실행 파일에서 AddressSanitizer로 전체 구현을 검사한다(Release 테스트, <a class="xref" href="testing.html">시험과 빌드</a>).</li>
               <li>MSVC의 <code>/RTC1</code>과 ASan은 함께 쓰지 않는다.</li>
               <li>여러 생산자의 순서 보존, close와 경쟁하는 생산자, 스트레스 테스트가 있다.</li>
             </ul>
@@ -708,10 +693,9 @@ struct derived_intent : base_intent {};
         <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">신호 함수의 세 가지 약속</span>짧아야 하고, 예외가 없어야 하고, 채널 API를 다시 부르면 안 된다. 조립 순서는 채널·slot 생성 → callback 설정 → 스레드 시작이다. 신호는 잠금 밖에서 불리지만, 신호 안에서 같은 채널에 넣으면 의미론이 꼬인다.</div></div>
       </section>
 
-      <section class="slide" id="s11" data-num="3.11">
-        <header class="slide-head">
-          <span class="num">3.11</span>
-          <h2>정리</h2>
+      <section class="sec" id="s11">
+        <header class="sec-head">
+          <h2>요약</h2>
         </header>
         <ol class="recap">
           <li>사건은 channel(FIFO, 유한 용량, 소비자 하나)로, 상태는 latest_slot(최신 값 하나, version)으로 나른다.</li>
@@ -723,63 +707,78 @@ struct derived_intent : base_intent {};
         </ol>
       </section>
 
-      <section class="slide" id="s12" data-num="3.12">
-        <header class="slide-head">
-          <span class="num">3.12</span>
-          <h2>확인 문제</h2>
+      <section class="sec" id="s12" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
         </header>
-        <div class="quiz-set">
-          <div class="quiz" data-answer="2">
-            <p class="q">용량 2인 <code>drop_oldest</code> 채널에 1, 2, 3을 차례로 post했다. 첫 <code>try_receive</code>가 받는 봉투는?</p>
-            <ol class="choices">
-              <li>payload 1, sequence 0</li>
-              <li>payload 2, sequence 1</li>
-              <li>payload 2, sequence 0</li>
-              <li>payload 3, sequence 2</li>
-            </ol>
-            <div class="explain">셋째 post가 맨 앞(1, 번호 0)을 버린다. 남은 첫 봉투는 payload 2이고 번호는 1이다. 번호 0의 구멍이 유실을 알린다.</div>
-          </div>
-          <div class="quiz" data-answer="3">
-            <p class="q">UI가 잠든 동안 logic이 frame을 다섯 번 게시했다. 신호 함수는 모두 성공했다. 신호는 몇 번 나가는가?</p>
-            <ol class="choices">
-              <li>5번</li>
-              <li>0번</li>
-              <li>1번</li>
-              <li>2번</li>
-            </ol>
-            <div class="explain">첫 게시가 <code>pending_</code>을 세우고 신호한다. UI가 <code>take_newer</code>로 가져가기 전까지 나머지 게시는 신호하지 않는다.</div>
-          </div>
-          <div class="quiz" data-answer="1">
-            <p class="q">latest_slot이 실패한 신호의 <code>pending_</code>을 되돌리는 이유는?</p>
-            <ol class="choices">
-              <li>되돌리지 않으면 다음 게시들이 신호 없이 잠겨 화면이 영영 갱신되지 않을 수 있어서</li>
-              <li>실패한 신호를 즉시 다시 보내기 위해서</li>
-              <li>version 번호를 되돌리기 위해서</li>
-              <li>소비자가 같은 값을 두 번 받게 하려고</li>
-            </ol>
-            <div class="explain">실패가 "이미 신호했음"으로 남으면 소비자는 깨지 않고, 다음 게시도 병합되어 신호하지 않는다. 일시적인 실패 한 번이 영구적인 미갱신으로 굳는다.</div>
-          </div>
-          <div class="quiz" data-answer="4">
-            <p class="q"><code>app_message { derived_intent {} }</code>에 <code>get&lt;base_intent&gt;()</code>를 부르면? (<code>derived_intent</code>는 <code>base_intent</code>를 상속한다)</p>
-            <ol class="choices">
-              <li><code>base_intent</code>로 잘린(slicing) 포인터를 돌려준다</li>
-              <li>컴파일 오류가 난다</li>
-              <li>예외를 던진다</li>
-              <li><code>nullptr</code>를 돌려준다</li>
-            </ol>
-            <div class="explain"><code>get</code>은 저장된 <code>type_info</code>와 묻는 타입을 정확히 비교한다. 계층 변환은 지원하지 않으므로 <code>nullptr</code>다.</div>
-          </div>
+        <div class="faq-list">
+          <details class="faq">
+            <summary>용량 2인 <code>drop_oldest</code> 채널에 1, 2, 3을 차례로 post했다. 첫 <code>try_receive</code>가 받는 봉투는?</summary>
+            <div class="faq-a">
+              <p class="faq-short">payload 2, sequence 1</p>
+              <p>셋째 post가 맨 앞(1, 번호 0)을 버린다. 남은 첫 봉투는 payload 2이고 번호는 1이다. 번호 0의 구멍이 유실을 알린다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>UI가 잠든 동안 logic이 frame을 다섯 번 게시했다. 신호 함수는 모두 성공했다. 신호는 몇 번 나가는가?</summary>
+            <div class="faq-a">
+              <p class="faq-short">1번</p>
+              <p>첫 게시가 <code>pending_</code>을 세우고 신호한다. UI가 <code>take_newer</code>로 가져가기 전까지 나머지 게시는 신호하지 않는다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>latest_slot이 실패한 신호의 <code>pending_</code>을 되돌리는 이유는?</summary>
+            <div class="faq-a">
+              <p class="faq-short">되돌리지 않으면 다음 게시들이 신호 없이 잠겨 화면이 영영 갱신되지 않을 수 있어서</p>
+              <p>실패가 "이미 신호했음"으로 남으면 소비자는 깨지 않고, 다음 게시도 병합되어 신호하지 않는다. 일시적인 실패 한 번이 영구적인 미갱신으로 굳는다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary><code class="free">app_message { derived_intent {} }</code>에 <code class="free">get&lt;base_intent&gt;()</code>를 부르면? (<code class="free">derived_intent</code>는 <code class="free">base_intent</code>를 상속한다)</summary>
+            <div class="faq-a">
+              <p class="faq-short"><code>nullptr</code>를 돌려준다</p>
+              <p><code>get</code>은 저장된 <code>type_info</code>와 묻는 타입을 정확히 비교한다. 계층 변환은 지원하지 않으므로 <code>nullptr</code>다.</p>
+            </div>
+          </details>
         </div>
-        <nav class="pager" data-auto aria-label="강의 이동"></nav>
       </section>
 
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/messaging/channel.h" target="_blank" rel="noopener">include/luil/messaging/channel.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#messaging--overflow-policy" title="열거형"><span class="kb e">E</span>overflow_policy</a><a href="api.html#messaging--post-result" title="열거형"><span class="kb e">E</span>post_result</a><a href="api.html#messaging--receive-status" title="열거형"><span class="kb e">E</span>receive_status</a><a href="api.html#messaging--channel-options" title="구조체"><span class="kb t">S</span>channel_options</a><a href="api.html#messaging--channel-statistics" title="구조체"><span class="kb t">S</span>channel_statistics</a><a href="api.html#messaging--channel" title="클래스"><span class="kb t">C</span>channel</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/messaging/envelope.h" target="_blank" rel="noopener">include/luil/messaging/envelope.h</a><span class="n">최상위 기호 1</span></div>
+            <p class="hdr-desc">범용 스레드 메시지 component다. 어떤 응용 코드에도 의존하지 않으며, 이 디렉터리를 다른 프로젝트에 복사해도 그대로 컴파일되는 것이 분리 기준이다.</p>
+            <div class="hdr-syms"><a href="api.html#messaging--envelope" title="클래스"><span class="kb t">C</span>envelope</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/messaging/latest_slot.h" target="_blank" rel="noopener">include/luil/messaging/latest_slot.h</a><span class="n">최상위 기호 2</span></div>
+            <div class="hdr-syms"><a href="api.html#messaging--versioned" title="클래스"><span class="kb t">C</span>versioned</a><a href="api.html#messaging--latest-slot" title="클래스"><span class="kb t">C</span>latest_slot</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/app_message.h" target="_blank" rel="noopener">include/luil/ui/app_message.h</a><span class="n">최상위 기호 1</span></div>
+            <div class="hdr-syms"><a href="api.html#app-message" title="클래스"><span class="kb t">C</span>app_message</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
     </div>
-  </div>
-</main>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
 <footer class="site-foot"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="assets/course.js"></script>
+<script src="assets/manual.js"></script>
 <script>
 (function () {
   const { el } = window.LU;

@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>07 그리기: frame에서 픽셀까지 · luil 해부학</title>
-<meta name="description" content="luil 해부학 7강. frame_state와 하나뿐인 draw_frame, 층 순서와 웹뷰 구멍, GPU 실패에서 CPU로 물러서는 renderer_host, 예고를 모아 timer 하나로 다시 그리기, 역할 기반 팔레트와 raster test.">
+<title>그리기와 렌더러 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — frame_state와 하나뿐인 draw_frame, 층 순서와 웹뷰 구멍, GPU 실패에서 CPU로 물러서는 renderer_host, 예고를 모아 timer 하나로 다시 그리기, 역할 기반 팔레트와 raster test.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
-<link rel="stylesheet" href="assets/course.css">
-<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
   .lab2 { display: grid; gap: 16px; }
   @media (min-width: 980px) { .lab2 { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
@@ -67,26 +67,24 @@
   .sw i { position: absolute; inset: 0; border-radius: 2px; }
 </style>
 </head>
-<body data-lecture="7">
+<body data-page="rendering">
 <header class="topbar"></header>
 
-<main>
-  <section class="hero" id="s0" data-num="07">
-    <div class="hero-inner">
-      <div class="eyebrow"><span class="lec-no">LECTURE 07</span><span>3부 · 사람과 화면 사이</span></div>
-      <h1>그리기: frame에서 픽셀까지</h1>
-      <div class="hero-cols">
-        <div style="display:grid;gap:22px">
-          <p class="thesis">두 불변 입력을 표면의 크기·DPI·테마와 합쳐 frame_state를 만들고, 하나뿐인 draw_frame이 Skia 캔버스에 그린다. 화면에 내는 길은 플랫폼마다 다르고, GPU가 실패하면 CPU로 물러선다.</p>
-          <dl class="meta">
-            <div><dt>예상 시간</dt><dd>55분</dd></div>
-            <div><dt>선수 지식</dt><dd>4강, GPU·스왑체인이라는 말</dd></div>
-            <div><dt>다루는 코드</dt><dd><code>frame_state.cpp</code>·<code>skia_renderer.cpp</code>·<code>surface_invalidate.cpp</code></dd></div>
-            <div><dt>실험</dt><dd>층 순서, 물러섬, timer 계획, 팔레트</dd></div>
-          </dl>
-        </div>
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>그리기와 렌더러</h1>
+      <p class="summary">두 불변 입력을 표면의 크기·DPI·테마와 합쳐 frame_state를 만들고, 하나뿐인 draw_frame이 Skia 캔버스에 그린다. 화면에 내는 길은 플랫폼마다 다르고, GPU가 실패하면 CPU로 물러선다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>frame_state.cpp</code>·<code>skia_renderer.cpp</code>·<code>surface_invalidate.cpp</code></dd></div>
+          <div><dt>실습</dt><dd>층 순서, 물러섬, timer 계획, 팔레트</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="ui-tree.html">불변 UI tree</a>, GPU·스왑체인이라는 말</dd></div>
+        </dl>
         <div class="goals">
-          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
           <ol>
             <li><code>frame_state</code>가 모으는 것과 <code>draw_frame</code>의 층 순서를 말할 수 있다.</li>
             <li><code>renderer_host</code>의 네 모드와 물러섬 상태 전이를 예측할 수 있다.</li>
@@ -96,16 +94,12 @@
           </ol>
         </div>
       </div>
-    </div>
-  </section>
+    </header>
 
-  <div class="lecture-body">
-    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
-    <div class="slides">
+    <div class="doc-body">
 
-      <section class="slide" id="s1" data-num="7.1">
-        <header class="slide-head">
-          <span class="num">7.1</span>
+      <section class="sec" id="s1">
+        <header class="sec-head">
           <h2>그리는 함수는 하나, 내는 길은 여럿</h2>
           <p class="lede">모든 백엔드가 같은 <code>draw_frame</code>을 부른다. 다른 것은 Skia 표면을 어디에 만들고, 그린 것을 어떻게 화면에 내는가다.</p>
         </header>
@@ -125,9 +119,8 @@
         <p class="small muted">Skia는 157판(<code>b94213a11b3a</code>)을 고정해 쓰고, GPU 백엔드는 모두 Ganesh다.</p>
       </section>
 
-      <section class="slide" id="s2" data-num="7.2">
-        <header class="slide-head">
-          <span class="num">7.2</span>
+      <section class="sec" id="s2">
+        <header class="sec-head">
           <h2>층 순서와 웹뷰 구멍</h2>
           <p class="lede">배경을 칠하고, tree를 그리고, tree가 초점 테·끌기 표시·tooltip을 얹고, 마지막에 웹뷰 자리를 알파 0으로 비운다. 비워야 그 아래 합성된 웹 페이지가 드러난다.</p>
         </header>
@@ -194,16 +187,15 @@
 </script></div>
           <ol class="walk-steps-src">
             <li data-lines="106-109" data-title="배경은 표면 전체에">원점을 옮기기 전에 표면 전체를 칠한다. 배경 효과(mica·acrylic)가 선 표면은 <code>backdrop_background</code>, 투명 표면은 투명이다.</li>
-            <li data-lines="110-120" data-title="tree를 그린다">원점만큼 옮긴 뒤 tree를 그리고 검사기를 얹는다. tree 안에서는 root와 자식, 초점 테, 끌기 표시, tooltip 순서다(4강 4.9).</li>
+            <li data-lines="110-120" data-title="tree를 그린다">원점만큼 옮긴 뒤 tree를 그리고 검사기를 얹는다. tree 안에서는 root와 자식, 초점 테, 끌기 표시, tooltip 순서다(<a class="xref" href="ui-tree.html#s9">불변 UI tree</a>).</li>
             <li data-lines="121-126" data-title="모바일 popup 층">Android처럼 표면이 하나인 플랫폼에서는 popup이 같은 캔버스 위의 층이다. 뒤의 것이 위다.</li>
             <li data-lines="148-165" data-title="마지막에 구멍">사각형마다 <code>kClear</code>로 칠해 알파 0으로 비운다. 알파 0이 합성에서 뜻을 가지려면 스왑체인이 premultiplied여야 하고, 아니면 비운 자리가 불투명한 검정이 된다.</li>
           </ol>
         </div>
       </section>
 
-      <section class="slide" id="s3" data-num="7.3">
-        <header class="slide-head">
-          <span class="num">7.3</span>
+      <section class="sec" id="s3">
+        <header class="sec-head">
           <h2>렌더러 물러섬: renderer_host</h2>
           <p class="lede">플랫폼은 GPU·CPU 렌더러를 만드는 함수만 넘긴다. 무엇을 언제 바꿀지는 플랫폼을 모르는 정책 객체 하나가 정한다.</p>
         </header>
@@ -251,9 +243,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s4" data-num="7.4">
-        <header class="slide-head">
-          <span class="num">7.4</span>
+      <section class="sec" id="s4">
+        <header class="sec-head">
           <h2>물러섬 코드 읽기</h2>
           <p class="lede">CPU를 먼저 만들고, 옛 렌더러를 놓고, 같은 frame을 다시 그린다. 이 순서 하나하나가 화면의 정확성이다.</p>
         </header>
@@ -318,9 +309,8 @@
         <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">이 순서가 틀리면</span>오류 하나 없이 화면이 마지막 frame에 얼어붙는다. Win32 설정이 생성 실패와 실행 중 손실을 따로 주입할 수 있게 둔 것도 그 경로를 재현하기 위해서다. Android는 물러서는 단위가 창이 아니라 Activity 전체다. 창이 홈·화면 끄기마다 다시 생기므로, 창 단위로 두면 손실 뒤에도 매번 GPU를 다시 시도하게 된다.</div></div>
       </section>
 
-      <section class="slide" id="s5" data-num="7.5">
-        <header class="slide-head">
-          <span class="num">7.5</span>
+      <section class="sec" id="s5">
+        <header class="sec-head">
           <h2>Direct3D의 한 frame</h2>
           <p class="lede">back buffer의 fence를 기다리고, 그리고, flush·submit, Present, Signal. GPU와 CPU가 같은 버퍼를 동시에 쓰지 않게 하는 순서다.</p>
         </header>
@@ -388,7 +378,7 @@
 </script></div>
           <ol class="walk-steps-src">
             <li data-lines="239-256" data-title="구멍이 있으면 LCD 글자를 끈다">알파 0 배경에 채널별 커버리지가 섞이면 경계에 잘못된 색이 생긴다. 구멍 유무가 바뀔 때만 같은 back buffer를 다른 픽셀 배치로 다시 감싼다.</li>
-            <li data-lines="258-266" data-title="이 버퍼가 비었나">버퍼 두 장(<code>FLIP_DISCARD</code>) 중 이번 것의 fence를 기다린다. 대기에는 상한(10초, 500ms 조각)이 있다. 무기한 대기는 CPU 물러섬을 포함한 모든 복구 코드보다 앞에 선 관문이 되기 때문이다.</li>
+            <li data-lines="258-266" data-title="이 버퍼가 비었나">버퍼 두 장(<code>DXGI_SWAP_EFFECT_FLIP_DISCARD</code>) 중 이번 것의 fence를 기다린다. 대기에는 상한(10초, 500ms 조각)이 있다. 무기한 대기는 CPU 물러섬을 포함한 모든 복구 코드보다 앞에 선 관문이 되기 때문이다.</li>
             <li data-lines="268-274" data-title="같은 draw_frame">UI 글꼴을 묻고(cache됨) 다른 백엔드와 같은 <code>draw_frame</code>을 부른 뒤 Skia가 쌓은 명령을 GPU로 보낸다.</li>
             <li data-lines="276-284" data-title="Present">수직 동기 1로 제시한다. 동영상처럼 최신 장이 중요한 frame은 기다리지 않는 제시를 쓰고 "아직 그리는 중"은 건너뛴다.</li>
             <li data-lines="286-294" data-title="Signal로 다음 차례를 표시">이 버퍼를 쓴 GPU 작업의 끝을 fence 값으로 남긴다. 다음에 같은 버퍼를 쓸 frame이 이 값을 기다린다.</li>
@@ -396,9 +386,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s6" data-num="7.6">
-        <header class="slide-head">
-          <span class="num">7.6</span>
+      <section class="sec" id="s6">
+        <header class="sec-head">
           <h2>메모리는 모드가, 크기는 빌드가 정한다</h2>
           <p class="lede">2026-09-29, RTX 4080에서 Release hello로 잰 값이다. Direct3D의 상주 메모리는 대부분 드라이버가 장치·큐·스왑체인에 잡는 몫이다.</p>
         </header>
@@ -415,9 +404,8 @@
         <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">CPU 렌더러로 충분한 경우</span>문서는 "CPU 렌더러는 FHD 이하에서 한 frame에 수 ms 안쪽이다. 4K에서 계속 움직이는 화면처럼 프레임 예산이 빠듯한 앱에만 Direct3D가 필요하다"고 적는다. 960×540 표면의 spinner 하나는 평균 렌더 0.68ms, 2880×1620은 3.44ms였다(Debug CPU 렌더러).</div></div>
       </section>
 
-      <section class="slide" id="s7" data-num="7.7">
-        <header class="slide-head">
-          <span class="num">7.7</span>
+      <section class="sec" id="s7">
+        <header class="sec-head">
           <h2>언제 다시 그리나: 사건과 예고</h2>
           <p class="lede">게시·크기·DPI·테마가 바뀌면 그린다. 시간이 흘러야 바뀌는 그림은 element가 예고한 시각을 모아 timer 하나로 깨운다. 예고가 없으면 timer도 없다.</p>
         </header>
@@ -490,9 +478,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s8" data-num="7.8">
-        <header class="slide-head">
-          <span class="num">7.8</span>
+      <section class="sec" id="s8">
+        <header class="sec-head">
           <h2>색은 역할로만 말한다</h2>
           <p class="lede">element는 구체 색을 받지 않는다. "기본 버튼", "고른 행"처럼 뜻을 고르면, 그리는 순간 팔레트가 그 뜻을 색으로 바꾼다. 테마를 바꾸면 화면 전체가 손대지 않고 따라온다.</p>
         </header>
@@ -522,9 +509,8 @@
         <p class="small muted"><code>with_alpha</code>는 알파를 곱하지 않고 바꿔 끼운다. <code>ui_color</code>는 <code>0xAARRGGBB</code>다. 그리기·DWM 창 테두리·웹뷰의 바닥색이 같은 <code>frame_palette</code>를 보므로, 어두운 화면에서 흰 웹뷰 판이 번쩍이지 않는다.</p>
       </section>
 
-      <section class="slide" id="s9" data-num="7.9">
-        <header class="slide-head">
-          <span class="num">7.9</span>
+      <section class="sec" id="s9">
+        <header class="sec-head">
           <h2>그림을 테스트하는 법: raster test</h2>
           <p class="lede">빠진 draw 호출, 잘못된 clip, 조기 return, 채움과 테두리의 혼동. 순수 geometry test가 잡지 못하는 결함을 창과 GPU 없이 잡는다.</p>
         </header>
@@ -548,14 +534,13 @@
           </div>
         </div>
         <div class="prose">
-          <p>예를 들어 기본 버튼 test는 가운데 픽셀이 <code>palette.accent</code>이고 accent 픽셀이 상자 넓이의 절반을 넘는지, 초점 테의 획 중심이 몸 밖 2×배율 자리에 있고 몸 안쪽에는 accent가 없는지, <code>focus_visible=false</code>면 테 영역의 accent가 0인지 본다. <code>[raster]</code> 태그 test만 50개다. 렌더러 정책과 timer 계획도 가짜 렌더러와 순수 함수로 창 없이 test한다(12강).</p>
+          <p>예를 들어 기본 버튼 test는 가운데 픽셀이 <code>palette.accent</code>이고 accent 픽셀이 상자 넓이의 절반을 넘는지, 초점 테의 획 중심이 몸 밖 2×배율 자리에 있고 몸 안쪽에는 accent가 없는지, <code>focus_visible=false</code>면 테 영역의 accent가 0인지 본다. <code>[raster]</code> 태그 test만 50개다. 렌더러 정책과 timer 계획도 가짜 렌더러와 순수 함수로 창 없이 test한다(<a class="xref" href="testing.html">시험과 빌드</a>).</p>
         </div>
       </section>
 
-      <section class="slide" id="s10" data-num="7.10">
-        <header class="slide-head">
-          <span class="num">7.10</span>
-          <h2>정리</h2>
+      <section class="sec" id="s10">
+        <header class="sec-head">
+          <h2>요약</h2>
         </header>
         <ol class="recap">
           <li>UI thread는 frame·interaction·표면 상태를 <code>frame_state</code>로 모으고, 모든 백엔드가 같은 <code>draw_frame</code>을 부른다.</li>
@@ -567,63 +552,74 @@
         </ol>
       </section>
 
-      <section class="slide" id="s11" data-num="7.11">
-        <header class="slide-head">
-          <span class="num">7.11</span>
-          <h2>확인 문제</h2>
+      <section class="sec" id="s11" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
         </header>
-        <div class="quiz-set">
-          <div class="quiz" data-answer="3">
-            <p class="q">automatic 모드에서 둘째 frame을 그리다 GPU 장치를 잃었다. 그 뒤 일어나는 일의 순서는?</p>
-            <ol class="choices">
-              <li>GPU 소멸 → CPU 생성 → CPU로 같은 frame</li>
-              <li>오류를 돌려주고 다음 frame부터 CPU</li>
-              <li>CPU 생성 → GPU 소멸 → CPU로 같은 frame (성공, error에는 GPU 실패 글)</li>
-              <li>GPU를 다시 만들어 같은 frame을 다시 시도</li>
-            </ol>
-            <div class="explain">test가 고정한 순서는 "gpu created, gpu rendered, cpu created, gpu destroyed, cpu rendered after fallback"이다. CPU를 만들 수 있는지 먼저 확인하고, 옛 렌더러를 놓은 뒤 같은 frame을 그린다.</div>
-          </div>
-          <div class="quiz" data-answer="2">
-            <p class="q">주 창이 500ms 뒤를, 보조 창이 "지금"을 예고했다. Win32 timer의 지연과 깨우는 표면은?</p>
-            <ol class="choices">
-              <li>515ms, 둘 다</li>
-              <li>33ms, 보조 창만</li>
-              <li>33ms, 둘 다</li>
-              <li>0ms, 보조 창만</li>
-            </ol>
-            <div class="explain">가장 이른 예고가 지금 이하라 연속 주기 33ms다. 그 tick(지금 + 33ms)까지 시각이 되는 것은 보조 창뿐이다. 주 창이 +20ms였다면 둘 다 깨어났다.</div>
-          </div>
-          <div class="quiz" data-answer="4">
-            <p class="q">웹뷰 구멍을 frame의 맨 마지막에 비우는 이유는?</p>
-            <ol class="choices">
-              <li>GPU가 마지막 명령을 가장 빨리 처리해서</li>
-              <li>구멍을 비우는 비용이 가장 크기 때문에</li>
-              <li>웹뷰가 tree보다 위에 있어야 해서</li>
-              <li>도중에 비우면 뒤에 그려지는 것이 그 자리를 도로 덮기 때문에</li>
-            </ol>
-            <div class="explain">대신 끝에 비우면 그 자리에 그린 것이 모두 지워진다. 그래서 무언가가 웹뷰 위를 덮어야 하는 frame에서는 그 사각형을 구멍 목록에서 아예 뺀다.</div>
-          </div>
-          <div class="quiz" data-answer="1">
-            <p class="q">기본 빌드를 <code>cpu</code> 모드로 돌리면 Private 메모리는 대략 얼마였나?</p>
-            <ol class="choices">
-              <li>약 7MB — CPU 전용 빌드와 같다</li>
-              <li>약 161MB — 빌드에 D3D가 들어 있으므로</li>
-              <li>약 80MB — 둘의 중간</li>
-              <li>약 5MB — 실행 파일 크기와 같다</li>
-            </ol>
-            <div class="explain">메모리 차이는 렌더러 모드에서 나고 빌드 옵션에서 나지 않는다. 빌드 옵션이 줄이는 것은 실행 파일 크기(8.07 → 5.17MB)와 올라오는 DLL이다.</div>
-          </div>
+        <div class="faq-list">
+          <details class="faq">
+            <summary>automatic 모드에서 둘째 frame을 그리다 GPU 장치를 잃었다. 그 뒤 일어나는 일의 순서는?</summary>
+            <div class="faq-a">
+              <p class="faq-short">CPU 생성 → GPU 소멸 → CPU로 같은 frame (성공, error에는 GPU 실패 글)</p>
+              <p>test가 고정한 순서는 "gpu created, gpu rendered, cpu created, gpu destroyed, cpu rendered after fallback"이다. CPU를 만들 수 있는지 먼저 확인하고, 옛 렌더러를 놓은 뒤 같은 frame을 그린다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>주 창이 500ms 뒤를, 보조 창이 "지금"을 예고했다. Win32 timer의 지연과 깨우는 표면은?</summary>
+            <div class="faq-a">
+              <p class="faq-short">33ms, 보조 창만</p>
+              <p>가장 이른 예고가 지금 이하라 연속 주기 33ms다. 그 tick(지금 + 33ms)까지 시각이 되는 것은 보조 창뿐이다. 주 창이 +20ms였다면 둘 다 깨어났다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>웹뷰 구멍을 frame의 맨 마지막에 비우는 이유는?</summary>
+            <div class="faq-a">
+              <p class="faq-short">도중에 비우면 뒤에 그려지는 것이 그 자리를 도로 덮기 때문에</p>
+              <p>대신 끝에 비우면 그 자리에 그린 것이 모두 지워진다. 그래서 무언가가 웹뷰 위를 덮어야 하는 frame에서는 그 사각형을 구멍 목록에서 아예 뺀다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>기본 빌드를 <code>cpu</code> 모드로 돌리면 Private 메모리는 대략 얼마인가?</summary>
+            <div class="faq-a">
+              <p class="faq-short">약 7MB — CPU 전용 빌드와 같다</p>
+              <p>메모리 차이는 렌더러 모드에서 나고 빌드 옵션에서 나지 않는다. 빌드 옵션이 줄이는 것은 실행 파일 크기(8.07 → 5.17MB)와 올라오는 DLL이다.</p>
+            </div>
+          </details>
         </div>
-        <nav class="pager" data-auto aria-label="강의 이동"></nav>
       </section>
 
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/renderer_policy.h" target="_blank" rel="noopener">include/luil/app/renderer_policy.h</a><span class="n">최상위 기호 8</span></div>
+            <div class="hdr-syms"><a href="api.html#renderer-mode" title="열거형"><span class="kb e">E</span>renderer_mode</a><a href="api.html#renderer-backend" title="열거형"><span class="kb e">E</span>renderer_backend</a><a href="api.html#renderer-selection-status" title="열거형"><span class="kb e">E</span>renderer_selection_status</a><a href="api.html#renderer-selection" title="구조체"><span class="kb t">S</span>renderer_selection</a><a href="api.html#parse-renderer-mode" title="함수"><span class="kb f">f</span>parse_renderer_mode</a><a href="api.html#renderer-mode-name" title="함수"><span class="kb f">f</span>renderer_mode_name</a><a href="api.html#renderer-backend-name" title="함수"><span class="kb f">f</span>renderer_backend_name</a><a href="api.html#select-renderer-backend" title="함수"><span class="kb f">f</span>select_renderer_backend</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/draw_primitives.h" target="_blank" rel="noopener">include/luil/ui/draw_primitives.h</a><span class="n">최상위 기호 31</span></div>
+            <p class="hdr-desc">대체 typeface는 소유권을 함께 건네므로 `sk_sp`의 정의가 필요하다. (전방 선언으로 끝나던 `SkTypeface`와 달리 값으로 담긴다.)</p>
+            <div class="hdr-syms"><a href="api.html#solid-paint" title="함수"><span class="kb f">f</span>solid_paint</a><a href="api.html#drawable-text" title="함수"><span class="kb f">f</span>drawable_text</a><a href="api.html#font-fallback" title="구조체"><span class="kb t">S</span>font_fallback</a><a href="api.html#set-font-fallback" title="함수"><span class="kb f">f</span>set_font_fallback</a><a href="api.html#text-render-quality" title="열거형"><span class="kb e">E</span>text_render_quality</a><a href="api.html#set-text-render-quality" title="함수"><span class="kb f">f</span>set_text_render_quality</a><a href="api.html#set-single-line-break" title="함수"><span class="kb f">f</span>set_single_line_break</a><a href="api.html#single-line-break-mode" title="함수"><span class="kb f">f</span>single_line_break_mode</a><a href="api.html#font-style-of" title="함수"><span class="kb f">f</span>font_style_of</a><a href="api.html#apply-font-style" title="함수"><span class="kb f">f</span>apply_font_style</a><a href="api.html#text-run" title="구조체"><span class="kb t">S</span>text_run</a><a href="api.html#split-text-runs" title="함수"><span class="kb f">f</span>split_text_runs</a><a href="api.html#draw-text" title="함수"><span class="kb f">f</span>draw_text</a><a href="api.html#draw-hover-fill" title="함수"><span class="kb f">f</span>draw_hover_fill</a><a href="api.html#measure-text" title="함수"><span class="kb f">f</span>measure_text</a><a href="api.html#elide-text" title="함수"><span class="kb f">f</span>elide_text</a><a href="api.html#elide-text-middle" title="함수"><span class="kb f">f</span>elide_text_middle</a><a href="api.html#elide-text-start" title="함수"><span class="kb f">f</span>elide_text_start</a><a href="api.html#draw-text-within" title="함수"><span class="kb f">f</span>draw_text_within</a><a href="api.html#draw-downward-shadow" title="함수"><span class="kb f">f</span>draw_downward_shadow</a><a href="api.html#draw-upward-shadow" title="함수"><span class="kb f">f</span>draw_upward_shadow</a><a href="api.html#draw-surface-shadow" title="함수"><span class="kb f">f</span>draw_surface_shadow</a><a href="api.html#scroll-edge-fade-distance" title="상수"><span class="kb ">k</span>scroll_edge_fade_distance</a><a href="api.html#scroll-edge-strength" title="함수"><span class="kb f">f</span>scroll_edge_strength</a><a href="api.html#draw-scroll-edges" title="함수"><span class="kb f">f</span>draw_scroll_edges</a><a href="api.html#draw-row-selection" title="함수"><span class="kb f">f</span>draw_row_selection</a><a href="api.html#draw-centered-glyph" title="함수"><span class="kb f">f</span>draw_centered_glyph</a><a href="api.html#spinner-period" title="상수"><span class="kb ">k</span>spinner_period</a><a href="api.html#draw-spinning-glyph" title="함수"><span class="kb f">f</span>draw_spinning_glyph</a><a href="api.html#spinner-angle" title="함수"><span class="kb f">f</span>spinner_angle</a><a href="api.html#centered-text-baseline" title="함수"><span class="kb f">f</span>centered_text_baseline</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/win32/renderer_policy.h" target="_blank" rel="noopener">include/luil/win32/renderer_policy.h</a><span class="n">최상위 기호 0</span></div>
+            <p class="hdr-desc">옛 경로다. 렌더러 정책은 플랫폼을 가리지 않으므로 `luil/app/renderer_policy.h`로 옮겼다. 타입은 처음부터 네임스페이스 `luil`에 있었으므로 별칭이 필요 없다.</p>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
     </div>
-  </div>
-</main>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
 <footer class="site-foot"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="assets/course.js"></script>
+<script src="assets/manual.js"></script>
 <script>
 (function () {
   const { el } = window.LU;

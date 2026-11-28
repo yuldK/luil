@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>08 글자의 과학 · luil 해부학</title>
-<meta name="description" content="luil 해부학 8강. 좌표는 UTF-8 byte 하나, caret은 글자소로, Backspace만의 예외, 내장 UAX #14 규칙기와 한국어 어절 정책, 폭 안의 마지막 후보로 접기, 길이를 바꾸지 않는 대소문자 접기, 초안에 넣지 않는 IME 조합.">
+<title>텍스트 처리 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — 좌표는 UTF-8 byte 하나, caret은 글자소로, Backspace만의 예외, 내장 UAX #14 규칙기와 한국어 어절 정책, 폭 안의 마지막 후보로 접기, 길이를 바꾸지 않는 대소문자 접기, 초안에 넣지 않는 IME 조합.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
-<link rel="stylesheet" href="assets/course.css">
-<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
   .lab-stack { display: grid; gap: 14px; }
   .field.wide { display: flex; width: 100%; }
@@ -155,26 +155,24 @@
   .jamo { font-size: 18px; letter-spacing: 2px; }
 </style>
 </head>
-<body data-lecture="8">
+<body data-page="text">
 <header class="topbar"></header>
 
-<main>
-  <section class="hero" id="s0" data-num="08">
-    <div class="hero-inner">
-      <div class="eyebrow"><span class="lec-no">LECTURE 08</span><span>3부 · 사람과 화면 사이</span></div>
-      <h1>글자의 과학</h1>
-      <div class="hero-cols">
-        <div style="display:grid;gap:22px">
-          <p class="thesis">화면의 한 글자는 바이트도 코드포인트도 아니다. luil은 편집 좌표를 UTF-8 byte offset 하나로 통일하고, 그 위에 네 겹을 얹는다. caret은 글자소로, 줄 나눔은 내장 UAX #14 규칙기로, 찾기는 길이를 바꾸지 않는 접기로 처리한다. IME 조합 글은 확정될 때까지 초안에 넣지 않는다.</p>
-          <dl class="meta">
-            <div><dt>예상 시간</dt><dd>60분</dd></div>
-            <div><dt>선수 지식</dt><dd>6강, Unicode·UTF-8이라는 말</dd></div>
-            <div><dt>다루는 코드</dt><dd><code>grapheme.cpp</code>·<code>line_break.cpp</code>·<code>line_fold.cpp</code>·<code>case_fold.cpp</code>·<code>win32_tsf_input.cpp</code></dd></div>
-            <div><dt>실험</dt><dd>글자 해부, 깨진 바이트, caret과 지우기, 줄 나눔과 접기, 찾기, 한글 조합</dd></div>
-          </dl>
-        </div>
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>텍스트 처리</h1>
+      <p class="summary">화면의 한 글자는 바이트도 코드포인트도 아니다. luil은 편집 좌표를 UTF-8 byte offset 하나로 통일하고, 그 위에 네 겹을 얹는다. caret은 글자소로, 줄 나눔은 내장 UAX #14 규칙기로, 찾기는 길이를 바꾸지 않는 접기로 처리한다. IME 조합 글은 확정될 때까지 초안에 넣지 않는다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>grapheme.cpp</code>·<code>line_break.cpp</code>·<code>line_fold.cpp</code>·<code>case_fold.cpp</code>·<code>win32_tsf_input.cpp</code></dd></div>
+          <div><dt>실습</dt><dd>글자 해부, 깨진 바이트, caret과 지우기, 줄 나눔과 접기, 찾기, 한글 조합</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="input.html">입력과 초점</a>, Unicode·UTF-8이라는 말</dd></div>
+        </dl>
         <div class="goals">
-          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
           <ol>
             <li>같은 "한 글자"를 byte·코드포인트·UTF-16·글자소로 셀 수 있다.</li>
             <li>caret 이동과 Backspace가 쓰는 단위와 Backspace만의 예외를 설명한다.</li>
@@ -184,16 +182,12 @@
           </ol>
         </div>
       </div>
-    </div>
-  </section>
+    </header>
 
-  <div class="lecture-body">
-    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
-    <div class="slides">
+    <div class="doc-body">
 
-      <section class="slide" id="s1" data-num="8.1">
-        <header class="slide-head">
-          <span class="num">8.1</span>
+      <section class="sec" id="s1">
+        <header class="sec-head">
           <h2>"한 글자"는 몇 개인가</h2>
           <p class="lede">사용자에게는 모두 한 글자다. 그런데 바이트로 세면 1에서 25까지, 코드포인트로 세면 1에서 7까지 간다. 편집기는 이 가운데 무엇으로 세야 할까.</p>
         </header>
@@ -218,9 +212,8 @@
         <p class="small muted">행을 누르면 위의 해부기에 올라간다. 숫자는 이 페이지가 글에서 직접 셌다.</p>
       </section>
 
-      <section class="slide" id="s2" data-num="8.2">
-        <header class="slide-head">
-          <span class="num">8.2</span>
+      <section class="sec" id="s2">
+        <header class="sec-head">
           <h2>좌표는 UTF-8 byte 하나</h2>
           <p class="lede">caret, 선택, 줄 나눔 후보, 찾은 구간, IME 경계가 모두 같은 단위를 쓴다. 단위를 바꾸는 일은 플랫폼 경계에서 한 번만 한다.</p>
         </header>
@@ -252,9 +245,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s3" data-num="8.3">
-        <header class="slide-head">
-          <span class="num">8.3</span>
+      <section class="sec" id="s3">
+        <header class="sec-head">
           <h2>caret은 글자소로 움직인다</h2>
           <p class="lede">←·→·Delete, 클릭 위치, 낱말 선택은 모두 확장 글자소 경계를 따른다. 끝에서 ←를 한 번 누르면 가족 이모지도 통째로 건넌다.</p>
         </header>
@@ -357,9 +349,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s4" data-num="8.4">
-        <header class="slide-head">
-          <span class="num">8.4</span>
+      <section class="sec" id="s4">
+        <header class="sec-head">
           <h2>Backspace만의 예외</h2>
           <p class="lede">Backspace도 글자소 하나를 지운다. 단 그 글자소의 마지막 코드포인트가 결합 부호(Mn·Mc·Me)면 그 부호 하나만 지운다. <code>e</code>+U+0301에서 악센트만 지워 <code>e</code>가 남는다.</p>
         </header>
@@ -415,9 +406,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s5" data-num="8.5">
-        <header class="slide-head">
-          <span class="num">8.5</span>
+      <section class="sec" id="s5">
+        <header class="sec-head">
           <h2>줄은 어디서 바꿀 수 있나</h2>
           <p class="lede">영어는 공백에서, 일본어는 글자 사이에서, 한국어는 띄어쓰기 단위인 어절에서 바꾼다. luil은 플랫폼과 상관없는 내장 UAX #14 규칙기 하나로 셋을 다룬다.</p>
         </header>
@@ -452,9 +442,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s6" data-num="8.6">
-        <header class="slide-head">
-          <span class="num">8.6</span>
+      <section class="sec" id="s6">
+        <header class="sec-head">
           <h2>실험: 줄 나눔과 접기</h2>
           <p class="lede">아래 규칙기와 접기는 luil의 <code>line_break.cpp</code>와 <code>line_fold.cpp</code>를 그대로 옮긴 것이다. 같은 글을 넣으면 luil과 같은 후보, 같은 줄이 나온다.</p>
         </header>
@@ -490,9 +479,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s7" data-num="8.7">
-        <header class="slide-head">
-          <span class="num">8.7</span>
+      <section class="sec" id="s7">
+        <header class="sec-head">
           <h2><code>hangul_words</code>가 바꾸는 단 하나</h2>
           <p class="lede">분류를 매긴 직후 한글 다섯 분류(H2·H3·JL·JV·JT)를 AL로 바꾼다. 그것이 정책의 전부다. 뒤의 규칙기는 정책을 모른다.</p>
         </header>
@@ -572,9 +560,8 @@ TEST_CASE("Hangul words keep syllables together unless the unicode policy is cho
         </div>
       </section>
 
-      <section class="slide" id="s8" data-num="8.8">
-        <header class="slide-head">
-          <span class="num">8.8</span>
+      <section class="sec" id="s8">
+        <header class="sec-head">
           <h2>접기: 폭 안의 마지막 후보</h2>
           <p class="lede">글자소를 폭이 허락하는 데까지 담고, 그 안의 마지막 후보에서 자른다. 후보가 없으면 그 자리에서 자른다. 줄 끝의 공백은 윗줄에 매단다.</p>
         </header>
@@ -677,9 +664,8 @@ TEST_CASE("Hangul words keep syllables together unless the unicode policy is cho
         </div>
       </section>
 
-      <section class="slide" id="s9" data-num="8.9">
-        <header class="slide-head">
-          <span class="num">8.9</span>
+      <section class="sec" id="s9">
+        <header class="sec-head">
           <h2>대소문자 무시 찾기</h2>
           <p class="lede">목록에 초점을 두고 "d"를 치면 "Documents"로 가야 한다. luil은 로캘과 상관없는 <b>단순</b> 접기만 한다. 접어도 길이가 그대로라서, 찾은 자리를 언제나 원문 구간으로 돌려줄 수 있다.</p>
         </header>
@@ -758,9 +744,8 @@ TEST_CASE("Hangul words keep syllables together unless the unicode policy is cho
         <p class="small">쓰이는 곳: 묶음의 글자 찾기(typeahead, <code>starts_with_folded</code>), 가상 목록 찾기, 명령 팔레트의 걸러내기(이름 시작 → 낱말 시작 → 이름에 듦 → id에 듦 순서; "SAVE"로 "저장(Save)"을 찾는다), UIA <code>FindText</code>의 대소문자 무시.</p>
       </section>
 
-      <section class="slide" id="s10" data-num="8.10">
-        <header class="slide-head">
-          <span class="num">8.10</span>
+      <section class="sec" id="s10">
+        <header class="sec-head">
           <h2>편집 상태는 순수 모델이다</h2>
           <p class="lede"><code>text_edit_state</code>는 글꼴도 화면도 모른다. 그래서 logic thread가 그대로 쥔다. 입력 thread는 요청을 만들고, logic이 그 요청을 상태에 적용한다.</p>
         </header>
@@ -799,7 +784,7 @@ TEST_CASE("Hangul words keep syllables together unless the unicode policy is cho
           <ol class="walk-steps-src">
             <li data-lines="56-58" data-title="글과 두 offset">글은 UTF-8이고 caret과 anchor는 byte offset이다. 둘이 같으면 선택이 없다.</li>
             <li data-lines="59-62" data-title="affinity">접은 자리의 offset 하나는 윗줄 끝이자 아랫줄 처음이다. caret을 윗줄 끝에 그릴지 고르는 표시이고, caret 놓기만 세운다.</li>
-            <li data-lines="64-71" data-title="실행 취소 묶음">시점마다 글 전체를 쌓는다. 같은 종류의 편집이 직전 편집이 끝난 자리(<code>group_caret</code>)에서 이어질 때만 묶는다. 묶음의 자세한 규칙은 10강에서 다룬다.</li>
+            <li data-lines="64-71" data-title="실행 취소 묶음">시점마다 글 전체를 쌓는다. 같은 종류의 편집이 직전 편집이 끝난 자리(<code>group_caret</code>)에서 이어질 때만 묶는다. 묶음의 자세한 규칙은 <a class="xref" href="undo.html">앱 수준 실행 취소</a> 문서에서 다룬다.</li>
             <li data-lines="72-73" data-title="비동기 IME 편집 번호">IME가 보낸 편집이 어디까지 적용됐는지다. 이 번호가 돌아오기 전의 중간 snapshot은 무시해, 빠른 타이핑이 되돌아가지 않게 한다.</li>
             <li data-lines="74-81" data-title="서식">서식(rich text)과, 다음에 넣을 글의 서식이다. IME 조합 중에 누른 서식 명령은 확정 글이 받는다.</li>
           </ol>
@@ -843,9 +828,8 @@ TEST_CASE("Hangul words keep syllables together unless the unicode policy is cho
         </div>
       </section>
 
-      <section class="slide" id="s11" data-num="8.11">
-        <header class="slide-head">
-          <span class="num">8.11</span>
+      <section class="sec" id="s11">
+        <header class="sec-head">
           <h2>IME 조합: 아직 사용자의 글이 아니다</h2>
           <p class="lede">한글을 치면 글자가 완성되기 전에 ㅎ→하→한을 거친다. luil은 이 중간 단계를 초안에 넣지 않는다. 화면에만 보이다가 확정될 때 한 번에 들어간다.</p>
         </header>
@@ -958,10 +942,9 @@ TEST_CASE("Hangul words keep syllables together unless the unicode policy is cho
         </div>
       </section>
 
-      <section class="slide" id="s12" data-num="8.12">
-        <header class="slide-head">
-          <span class="num">8.12</span>
-          <h2>정리</h2>
+      <section class="sec" id="s12">
+        <header class="sec-head">
+          <h2>요약</h2>
         </header>
         <ol class="recap">
           <li>편집 좌표는 UTF-8 byte offset 하나다. UTF-16 ACP나 index는 플랫폼 경계에서 옮긴다. 깨진 UTF-8은 Skia 앞에서 바이트마다 U+FFFD 하나로 바꾼다.</li>
@@ -973,83 +956,99 @@ TEST_CASE("Hangul words keep syllables together unless the unicode policy is cho
         </ol>
       </section>
 
-      <section class="slide" id="s13" data-num="8.13">
-        <header class="slide-head">
-          <span class="num">8.13</span>
-          <h2>확인 문제</h2>
+      <section class="sec" id="s13" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
         </header>
-        <div class="quiz-set">
-          <div class="quiz" data-answer="2">
-            <p class="q">끝에 caret이 있는 <code>e</code>+U+0301(NFD <code>é</code>), 조합형 <code>각</code>(ᄀ+ᅡ+ᆨ), 가족 이모지에서 각각 Backspace를 한 번 누르면 남는 글은?</p>
-            <ol class="choices">
-              <li><code>e</code> / <code>가</code> / 아이 하나가 빠진 가족</li>
-              <li><code>e</code> / 빈 글 / 빈 글</li>
-              <li>빈 글 / 빈 글 / 빈 글</li>
-              <li><code>e</code> / <code>가</code> / 빈 글</li>
-            </ol>
-            <div class="explain">마지막 코드포인트가 결합 부호이고 이모지·RI·자모 표식이 없을 때만 그 부호 하나를 벗긴다. U+0301은 Mn이라 벗겨진다. <code>ᆨ</code>(U+11A8)은 결합 부호가 아니라 통째로 지워진다. 가족 이모지는 마지막이 그림 문자라 통째로 지워진다.</div>
-          </div>
-          <div class="quiz" data-answer="3">
-            <p class="q">폭이 여섯 글자인 칸에서 <code>설정을 저장했습니다</code>는 두 정책에서 각각 어떻게 접히나?</p>
-            <ol class="choices">
-              <li>둘 다 <code>설정을</code> / <code>저장했습니다</code></li>
-              <li><code>hangul_words</code> <code>설정을 저장</code> / <code>했습니다</code>, <code>unicode</code> <code>설정을</code> / <code>저장했습니다</code></li>
-              <li><code>hangul_words</code> <code>설정을</code> / <code>저장했습니다</code>, <code>unicode</code> <code>설정을 저장</code> / <code>했습니다</code></li>
-              <li>둘 다 <code>설정을 저장</code> / <code>했습니다</code></li>
-            </ol>
-            <div class="explain"><code>hangul_words</code>는 한글 분류를 AL로 바꿔 음절 사이 후보를 없앤다(LB28). 순수 UAX #14는 음절 사이마다 후보가 있어 폭을 꽉 채운다. 설계는 순수 규칙을 기본으로 하면 "한국어 UI 전부가 회귀"한다며 그 길을 거절했다.</div>
-          </div>
-          <div class="quiz" data-answer="4">
-            <p class="q"><code>hangul_words</code> 정책에서 어절 안(글 끝 말고)에 후보가 <b>하나도</b> 없는 글은?</p>
-            <ol class="choices">
-              <li><code>안녕😀하세요</code></li>
-              <li><code>ㅋㅋㅋ</code></li>
-              <li><code>“네”라고</code></li>
-              <li><code>"네"라고</code></li>
-            </ol>
-            <div class="explain">이모지와 호환 자모(U+3131–318E)는 ID라 앞뒤에서 바뀐다. 곡선 따옴표 <code>”</code>는 닫는 따옴표(Pf)이고, 양옆이 동아시아 글자라 LB19a가 막지 않는다. ASCII <code>"</code>는 방향이 없어서 LB19가 양쪽을 붙인다.</div>
-          </div>
-          <div class="quiz" data-answer="3">
-            <p class="q"><code>find_folded("Straße", "STRASSE")</code>와 <code>find_folded("Maſter Plan", "MASTER")</code>의 결과는?</p>
-            <ol class="choices">
-              <li>[0, 6) / [0, 6)</li>
-              <li>없음 / 없음</li>
-              <li>없음 / [0, 7)</li>
-              <li>[0, 7) / [0, 7)</li>
-            </ol>
-            <div class="explain">luil은 1:1 단순 접기만 해서 <code>ß</code>를 <code>ss</code>로 펴지 않는다. <code>ſ</code>는 단순 접기로 <code>s</code>가 된다. 비교는 원문을 코드포인트씩 걸으므로 2 byte짜리 <code>ſ</code>를 포함한 원문 구간 [0, 7)을 돌려준다.</div>
-          </div>
-          <div class="quiz" data-answer="1">
-            <p class="q">Windows에서 한글 IME로 <code>한</code>을 조합하는 동안 앱의 <code>text_edit_state.text</code>에는 무엇이 있고, 확정되면 실행 취소 기록은 몇 걸음 늘어나나?</p>
-            <ol class="choices">
-              <li>조합 전의 글 그대로 / 한 걸음</li>
-              <li><code>ㅎ</code>·<code>하</code>·<code>한</code>이 차례로 들어간다 / 세 걸음</li>
-              <li>조합 전의 글 그대로 / 세 걸음</li>
-              <li><code>한</code>이 바로 들어간다 / 늘지 않는다</li>
-            </ol>
-            <div class="explain">조합 단계는 <code>text_composition_event</code>로 화면에만 보인다. 확정은 <code>OnEndComposition</code>이 보내는 <code>replace_all</code> 하나다. <code>replace_all</code>은 <code>replace</code> 묶음이라 다른 편집과 이어지지 않는다. 조합 중의 <code>WM_CHAR</code>는 버린다.</div>
-          </div>
-          <div class="quiz" data-answer="4">
-            <p class="q"><code>a한😀b</code>의 UTF-8 길이와 TSF ACP 길이는? 그리고 ACP 2를 UTF-8 offset으로 바꾸면?</p>
-            <ol class="choices">
-              <li>9 / 4 / 2</li>
-              <li>5 / 5 / 2</li>
-              <li>9 / 5 / 2</li>
-              <li>9 / 5 / 4</li>
-            </ol>
-            <div class="explain">ACP는 UTF-16 코드 단위라 JS 문자열 index와 같다. <code>a</code>(1)+<code>한</code>(3) = 4 byte가 ACP 2다. <code>a😀b</code>에서 ACP 2는 surrogate 쌍의 한가운데라서, <code>utf8_from_acp</code>가 글자 시작(byte 1)으로 되돌린다.</div>
-          </div>
+        <div class="faq-list">
+          <details class="faq">
+            <summary>끝에 caret이 있는 <code>e</code>+U+0301(NFD <code>é</code>), 조합형 <code>각</code>(ᄀ+ᅡ+ᆨ), 가족 이모지에서 각각 Backspace를 한 번 누르면 남는 글은?</summary>
+            <div class="faq-a">
+              <p class="faq-short"><code>e</code> / 빈 글 / 빈 글</p>
+              <p>마지막 코드포인트가 결합 부호이고 이모지·RI·자모 표식이 없을 때만 그 부호 하나를 벗긴다. U+0301은 Mn이라 벗겨진다. <code>ᆨ</code>(U+11A8)은 결합 부호가 아니라 통째로 지워진다. 가족 이모지는 마지막이 그림 문자라 통째로 지워진다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>폭이 여섯 글자인 칸에서 <code>설정을 저장했습니다</code>는 두 정책에서 각각 어떻게 접히나?</summary>
+            <div class="faq-a">
+              <p class="faq-short"><code>hangul_words</code> <code>설정을</code> / <code>저장했습니다</code>, <code>unicode</code> <code>설정을 저장</code> / <code>했습니다</code></p>
+              <p><code>hangul_words</code>는 한글 분류를 AL로 바꿔 음절 사이 후보를 없앤다(LB28). 순수 UAX #14는 음절 사이마다 후보가 있어 폭을 꽉 채운다. 설계는 순수 규칙을 기본으로 하면 "한국어 UI 전부가 회귀"한다며 그 길을 거절했다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary><code>hangul_words</code> 정책에서 어절 안(글 끝 말고)에 후보가 <b>하나도</b> 없는 글은?</summary>
+            <div class="faq-a">
+              <p class="faq-short"><code>"네"라고</code></p>
+              <p>이모지와 호환 자모(U+3131–318E)는 ID라 앞뒤에서 바뀐다. 곡선 따옴표 <code>”</code>는 닫는 따옴표(Pf)이고, 양옆이 동아시아 글자라 LB19a가 막지 않는다. ASCII <code>"</code>는 방향이 없어서 LB19가 양쪽을 붙인다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary><code>find_folded("Straße", "STRASSE")</code>와 <code>find_folded("Maſter Plan", "MASTER")</code>의 결과는?</summary>
+            <div class="faq-a">
+              <p class="faq-short">없음 / [0, 7)</p>
+              <p>luil은 1:1 단순 접기만 해서 <code>ß</code>를 <code>ss</code>로 펴지 않는다. <code>ſ</code>는 단순 접기로 <code>s</code>가 된다. 비교는 원문을 코드포인트씩 걸으므로 2 byte짜리 <code>ſ</code>를 포함한 원문 구간 [0, 7)을 돌려준다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>Windows에서 한글 IME로 <code>한</code>을 조합하는 동안 앱의 <code>text_edit_state.text</code>에는 무엇이 있고, 확정되면 실행 취소 기록은 몇 걸음 늘어나나?</summary>
+            <div class="faq-a">
+              <p class="faq-short">조합 전의 글 그대로 / 한 걸음</p>
+              <p>조합 단계는 <code>text_composition_event</code>로 화면에만 보인다. 확정은 <code>OnEndComposition</code>이 보내는 <code>replace_all</code> 하나다. <code>replace_all</code>은 <code>replace</code> 묶음이라 다른 편집과 이어지지 않는다. 조합 중의 <code>WM_CHAR</code>는 버린다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary><code>a한😀b</code>의 UTF-8 길이와 TSF ACP 길이는? 그리고 ACP 2를 UTF-8 offset으로 바꾸면?</summary>
+            <div class="faq-a">
+              <p class="faq-short">9 / 5 / 4</p>
+              <p>ACP는 UTF-16 코드 단위라 JS 문자열 index와 같다. <code>a</code>(1)+<code>한</code>(3) = 4 byte가 ACP 2다. <code>a😀b</code>에서 ACP 2는 surrogate 쌍의 한가운데라서, <code>utf8_from_acp</code>가 글자 시작(byte 1)으로 되돌린다.</p>
+            </div>
+          </details>
         </div>
-        <nav class="pager" data-auto aria-label="강의 이동"></nav>
       </section>
 
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/case_fold.h" target="_blank" rel="noopener">include/luil/text/case_fold.h</a><span class="n">최상위 기호 4</span></div>
+            <div class="hdr-syms"><a href="api.html#text--fold-case" title="함수"><span class="kb f">f</span>fold_case</a><a href="api.html#text--starts-with-folded" title="함수"><span class="kb f">f</span>starts_with_folded</a><a href="api.html#text--folded-match" title="구조체"><span class="kb t">S</span>folded_match</a><a href="api.html#text--find-folded" title="함수"><span class="kb f">f</span>find_folded</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/grapheme.h" target="_blank" rel="noopener">include/luil/text/grapheme.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#text--grapheme-previous" title="함수"><span class="kb f">f</span>grapheme_previous</a><a href="api.html#text--grapheme-next" title="함수"><span class="kb f">f</span>grapheme_next</a><a href="api.html#text--grapheme-boundaries" title="함수"><span class="kb f">f</span>grapheme_boundaries</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/line_break.h" target="_blank" rel="noopener">include/luil/text/line_break.h</a><span class="n">최상위 기호 4</span></div>
+            <div class="hdr-syms"><a href="api.html#text--line-break-policy" title="열거형"><span class="kb e">E</span>line_break_policy</a><a href="api.html#text--line-break-opportunity" title="구조체"><span class="kb t">S</span>line_break_opportunity</a><a href="api.html#text--line-break-opportunities" title="함수"><span class="kb f">f</span>line_break_opportunities</a><a href="api.html#text--line-break-hangs" title="함수"><span class="kb f">f</span>line_break_hangs</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/text_change.h" target="_blank" rel="noopener">include/luil/text/text_change.h</a><span class="n">최상위 기호 2</span></div>
+            <div class="hdr-syms"><a href="api.html#text--text-change" title="구조체"><span class="kb t">S</span>text_change</a><a href="api.html#text--text-change-between" title="함수"><span class="kb f">f</span>text_change_between</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/text_edit.h" target="_blank" rel="noopener">include/luil/text/text_edit.h</a><span class="n">최상위 기호 31</span></div>
+            <div class="hdr-syms"><a href="api.html#text--text-edit-revision" title="구조체"><span class="kb t">S</span>text_edit_revision</a><a href="api.html#text--text-edit-group" title="열거형"><span class="kb e">E</span>text_edit_group</a><a href="api.html#text--text-edit-history-limit" title="상수"><span class="kb ">k</span>text_edit_history_limit</a><a href="api.html#text--text-edit-history-byte-limit" title="상수"><span class="kb ">k</span>text_edit_history_byte_limit</a><a href="api.html#text--text-edit-state" title="구조체"><span class="kb t">S</span>text_edit_state</a><a href="api.html#text--text-edit-motion" title="열거형"><span class="kb e">E</span>text_edit_motion</a><a href="api.html#text--text-edit-command" title="열거형"><span class="kb e">E</span>text_edit_command</a><a href="api.html#text--text-edit-encode-utf8" title="함수"><span class="kb f">f</span>text_edit_encode_utf8</a><a href="api.html#text--text-edit-selection-begin" title="함수"><span class="kb f">f</span>text_edit_selection_begin</a><a href="api.html#text--text-edit-selection-end" title="함수"><span class="kb f">f</span>text_edit_selection_end</a><a href="api.html#text--text-edit-has-selection" title="함수"><span class="kb f">f</span>text_edit_has_selection</a><a href="api.html#text--text-edit-selected-text" title="함수"><span class="kb f">f</span>text_edit_selected_text</a><a href="api.html#text--text-edit-clamp-offset" title="함수"><span class="kb f">f</span>text_edit_clamp_offset</a><a href="api.html#text--text-edit-erase-selection" title="함수"><span class="kb f">f</span>text_edit_erase_selection</a><a href="api.html#text--text-edit-insert" title="함수"><span class="kb f">f</span>text_edit_insert</a><a href="api.html#text--text-edit-backspace" title="함수"><span class="kb f">f</span>text_edit_backspace</a><a href="api.html#text--text-edit-delete-forward" title="함수"><span class="kb f">f</span>text_edit_delete_forward</a><a href="api.html#text--text-edit-delete-word-left" title="함수"><span class="kb f">f</span>text_edit_delete_word_left</a><a href="api.html#text--text-edit-delete-word-right" title="함수"><span class="kb f">f</span>text_edit_delete_word_right</a><a href="api.html#text--text-edit-undo" title="함수"><span class="kb f">f</span>text_edit_undo</a><a href="api.html#text--text-edit-redo" title="함수"><span class="kb f">f</span>text_edit_redo</a><a href="api.html#text--text-edit-move" title="함수"><span class="kb f">f</span>text_edit_move</a><a href="api.html#text--text-edit-select-all" title="함수"><span class="kb f">f</span>text_edit_select_all</a><a href="api.html#text--text-edit-select-word" title="함수"><span class="kb f">f</span>text_edit_select_word</a><a href="api.html#text--text-edit-place-caret" title="함수"><span class="kb f">f</span>text_edit_place_caret</a><a href="api.html#text--text-edit-replace-all" title="함수"><span class="kb f">f</span>text_edit_replace_all</a><a href="api.html#text--text-edit-set-text" title="함수"><span class="kb f">f</span>text_edit_set_text</a><a href="api.html#text--text-edit-typing-marks" title="함수"><span class="kb f">f</span>text_edit_typing_marks</a><a href="api.html#text--text-edit-set-format" title="함수"><span class="kb f">f</span>text_edit_set_format</a><a href="api.html#text--text-edit-insert-formatted" title="함수"><span class="kb f">f</span>text_edit_insert_formatted</a><a href="api.html#text--text-edit-set-formatted-text" title="함수"><span class="kb f">f</span>text_edit_set_formatted_text</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/text/utf8_text.h" target="_blank" rel="noopener">include/luil/text/utf8_text.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#text--utf8-replacement-character" title="상수"><span class="kb ">k</span>utf8_replacement_character</a><a href="api.html#text--utf8-is-valid" title="함수"><span class="kb f">f</span>utf8_is_valid</a><a href="api.html#text--utf8-replace-invalid" title="함수"><span class="kb f">f</span>utf8_replace_invalid</a><a href="api.html#text--utf8-encode" title="함수"><span class="kb f">f</span>utf8_encode</a><a href="api.html#text--utf8-decoded" title="구조체"><span class="kb t">S</span>utf8_decoded</a><a href="api.html#text--utf8-decode" title="함수"><span class="kb f">f</span>utf8_decode</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
     </div>
-  </div>
-</main>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
 <footer class="site-foot"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="assets/course.js"></script>
+<script src="assets/manual.js"></script>
 <script src="assets/linebreak-data.js"></script>
 <script src="assets/linebreak.js"></script>
 <script src="assets/textlab.js"></script>

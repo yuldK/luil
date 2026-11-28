@@ -1,40 +1,60 @@
-/* luil 해부학 — 강의 사이트 공용 스크립트
+/* luil 설명서 — 공용 스크립트
  *
- * 모든 페이지가 쓰는 것만 둔다: caption 막대와 강의 메뉴, 슬라이드 목차, 코드 강조와
- * 줄 단위 해설(코드 읽기), 확인 문제, 용어 풍선, 탭, 실험 창 틀, 발표 모드.
- * 강의마다의 실험은 그 페이지의 스크립트가 아래 LU 도우미를 써서 만든다.
+ * 모든 문서가 쓰는 것만 둔다: caption 막대와 검색, 왼쪽 설명서 목차(지금 문서의 차례 포함),
+ * 코드 강조와 줄 단위 해설(코드 읽기), 탭, 용어 풍선, 실습 창 틀, 앞뒤 문서.
+ * 문서마다의 실습은 그 페이지의 스크립트가 아래 LU 도우미를 써서 만든다.
  */
 (function () {
   "use strict";
 
-  const COURSE = {
-    title: "luil 해부학",
+  // 왼쪽 목차와 앞뒤 문서의 차례. 문서를 더하면 여기에 한 줄을 더한다.
+  const DOCS = {
+    title: "luil 설명서",
     repo: "https://github.com/yuldK/luil",
     commit: "563a8552f11b4b9f3067f01ce2855bd107590ba5",
     commitShort: "563a855",
     commitDate: "2026-11-25",
-    parts: [
-      { id: "p1", name: "1부 · 큰 그림", lectures: [1, 2] },
-      { id: "p2", name: "2부 · 뼈대", lectures: [3, 4, 5] },
-      { id: "p3", name: "3부 · 사람과 화면 사이", lectures: [6, 7, 8] },
-      { id: "p4", name: "4부 · 앱다운 앱", lectures: [9, 10] },
-      { id: "p5", name: "5부 · 바깥 세계", lectures: [11, 12] },
-    ],
-    lectures: [
-      { n: 1, file: "01-orientation.html", title: "luil이라는 프레임워크" },
-      { n: 2, file: "02-threads.html", title: "세 스레드와 한 방향 흐름" },
-      { n: 3, file: "03-messaging.html", title: "스레드 경계 메시징" },
-      { n: 4, file: "04-tree.html", title: "불변 UI tree" },
-      { n: 5, file: "05-layout.html", title: "배치: 자리를 나눠 주는 법" },
-      { n: 6, file: "06-input.html", title: "입력의 여정" },
-      { n: 7, file: "07-rendering.html", title: "그리기: frame에서 픽셀까지" },
-      { n: 8, file: "08-text.html", title: "글자의 과학" },
-      { n: 9, file: "09-motion.html", title: "움직임의 물리" },
-      { n: 10, file: "10-undo.html", title: "되돌리기의 설계" },
-      { n: 11, file: "11-platforms.html", title: "하나의 앱, 네 플랫폼" },
-      { n: 12, file: "12-quality.html", title: "품질과 빌드" },
+    sections: [
+      {
+        id: "start",
+        name: "시작하기",
+        pages: [
+          { id: "home", file: "index.html", title: "설명서 홈" },
+          { id: "overview", file: "overview.html", title: "luil 개요" },
+        ],
+      },
+      {
+        id: "concepts",
+        name: "핵심 개념",
+        pages: [
+          { id: "threads", file: "threads.html", title: "스레드 모델" },
+          { id: "messaging", file: "messaging.html", title: "스레드 경계 메시징" },
+          { id: "ui-tree", file: "ui-tree.html", title: "불변 UI tree" },
+          { id: "layout", file: "layout.html", title: "배치" },
+          { id: "input", file: "input.html", title: "입력과 초점" },
+          { id: "rendering", file: "rendering.html", title: "그리기와 렌더러" },
+          { id: "text", file: "text.html", title: "텍스트 처리" },
+          { id: "motion", file: "motion.html", title: "애니메이션" },
+          { id: "undo", file: "undo.html", title: "앱 수준 실행 취소" },
+          { id: "platforms", file: "platforms.html", title: "플랫폼과 host" },
+          { id: "testing", file: "testing.html", title: "시험과 빌드" },
+        ],
+      },
+      {
+        id: "ui",
+        name: "컴포넌트",
+        pages: [{ id: "lists", file: "lists.html", title: "목록과 트리 뷰" }],
+      },
+      {
+        id: "ref",
+        name: "레퍼런스",
+        pages: [{ id: "api", file: "api.html", title: "API 찾아보기" }],
+      },
     ],
   };
+  // 이전 이름. 실습 스크립트가 LU.COURSE.repo 따위를 읽어도 그대로 돈다.
+  const COURSE = DOCS;
+  const ALL_PAGES = DOCS.sections.flatMap((s) => s.pages.map((p) => Object.assign({ section: s }, p)));
 
   const pad2 = (n) => String(n).padStart(2, "0");
 
@@ -106,9 +126,9 @@
 
   function store(key, value) {
     try {
-      if (value === undefined) return localStorage.getItem("luil-lecture:" + key);
-      if (value === null) localStorage.removeItem("luil-lecture:" + key);
-      else localStorage.setItem("luil-lecture:" + key, value);
+      if (value === undefined) return localStorage.getItem("luil-manual:" + key);
+      if (value === null) localStorage.removeItem("luil-manual:" + key);
+      else localStorage.setItem("luil-manual:" + key, value);
     } catch (e) {
       return null;
     }
@@ -158,21 +178,25 @@
 
   /* ---------- caption 막대 ---------- */
 
+  function currentPage() {
+    const id = document.body.dataset.page || "home";
+    return ALL_PAGES.find((p) => p.id === id) || ALL_PAGES[0];
+  }
+
   function buildTopbar() {
     const bar = document.querySelector("header.topbar");
     if (!bar) return;
-    const n = Number(document.body.dataset.lecture || 0);
-    const lec = COURSE.lectures.find((l) => l.n === n);
+    const page = currentPage();
     bar.textContent = "";
-    // DOM append는 null을 글 "null"로 넣으므로 빈 자리를 걸러 낸다 (강의가 아닌 쪽: 홈)
+    // DOM append는 null을 글 "null"로 넣으므로 빈 자리를 걸러 낸다
     const parts = [
-      el("a", { class: "brand", href: "index.html", title: "강의 홈" }, icon("EB21"), el("span", { text: COURSE.title })),
-      lec ? el("span", { class: "crumb", text: pad2(lec.n) + " " + lec.title }) : null,
+      el("button", { class: "cap-btn only-narrow", type: "button", "data-act": "nav", title: "설명서 목차", "aria-label": "설명서 목차" }, icon("EB94")),
+      el("a", { class: "brand", href: "index.html", title: "설명서 홈" }, icon("EAA4"), el("span", { class: "brand-name", text: DOCS.title })),
+      page.id !== "home" ? el("span", { class: "crumb", text: page.title }) : null,
       el("span", { class: "spacer" }),
-      lec ? el("button", { class: "cap-btn only-narrow", type: "button", "data-act": "toc", title: "이 강의의 슬라이드 목차" }, icon("EB86"), el("span", { class: "label", text: "목차" })) : null,
-      el("button", { class: "cap-btn", type: "button", "data-act": "lectures", "aria-haspopup": "true", "aria-expanded": "false", title: "강의 목록" }, icon("EB9C"), el("span", { class: "label", text: "강의" })),
+      buildSearch(),
       el("button", { class: "cap-btn", type: "button", "data-act": "theme" }, icon("EAC6"), el("span", { class: "label", text: "시스템" })),
-      lec ? el("button", { class: "cap-btn", type: "button", "data-act": "present", title: "발표 모드 (슬라이드를 한 장씩, ← → 로 넘김)" }, icon("EB4C"), el("span", { class: "label", text: "발표" })) : null,
+      el("a", { class: "cap-btn", href: DOCS.repo, target: "_blank", rel: "noopener", title: "GitHub 저장소", "aria-label": "GitHub 저장소" }, icon("EA84")),
     ];
     bar.append(...parts.filter(Boolean));
     updateThemeButton();
@@ -182,100 +206,291 @@
       if (!btn) return;
       const act = btn.dataset.act;
       if (act === "theme") setTheme(THEMES[(THEMES.indexOf(currentTheme()) + 1) % THEMES.length]);
-      else if (act === "lectures") toggleLectureMenu(btn);
-      else if (act === "toc") openTocDrawer();
-      else if (act === "present") enterPresent();
+      else if (act === "nav") openNavDrawer();
     });
   }
 
-  let menuEl = null;
-  function closeLectureMenu() {
-    if (!menuEl) return;
-    menuEl.remove();
-    menuEl = null;
-    const btn = document.querySelector('.topbar [data-act="lectures"]');
-    if (btn) btn.setAttribute("aria-expanded", "false");
+  /* ---------- 검색 ---------- */
+
+  // 색인은 tools/gen_search.py가 만든 assets/search-index.js다. 처음 검색 칸에 들어올 때 싣는다.
+  let searchLoading = null;
+  let searchEntries = null;
+
+  // API 기호의 주소. luil:: 를 떼고 :: 는 --, _ 는 - 로 쓴다. 겹치면 차례대로 -2, -3 …을 붙인다.
+  // 차례가 같아야 주소가 같으므로 api.html과 검색이 이 함수 하나를 쓴다.
+  function apiSlugs(qnames) {
+    const used = new Set();
+    return qnames.map((q, i) => {
+      let base = q.replace(/^luil::/, "").replace(/::/g, "--").replace(/_/g, "-").replace(/[^A-Za-z0-9-]/g, "");
+      if (!base) base = "sym-" + i;
+      let slug = base;
+      let k = 2;
+      while (used.has(slug)) slug = base + "-" + k++;
+      used.add(slug);
+      return slug;
+    });
   }
 
-  function toggleLectureMenu(btn) {
-    if (menuEl) {
-      closeLectureMenu();
-      return;
-    }
-    const n = Number(document.body.dataset.lecture || 0);
-    menuEl = el("nav", { class: "menu-pop", "aria-label": "강의 목록" });
-    menuEl.append(el("a", { href: "index.html", "aria-current": n === 0 ? "page" : null }, el("span", { class: "n", text: "홈" }), el("span", { text: "강의 소개와 기능 지도" })));
-    for (const part of COURSE.parts) {
-      menuEl.append(el("div", { class: "part", text: part.name }));
-      for (const ln of part.lectures) {
-        const l = COURSE.lectures.find((x) => x.n === ln);
-        menuEl.append(el("a", { href: l.file, "aria-current": l.n === n ? "page" : null }, el("span", { class: "n", text: pad2(l.n) }), el("span", { text: l.title })));
+  const API_KIND = { S: "구조체", C: "클래스", U: "공용체", E: "열거형", e: "열거값", f: "함수", m: "멤버 함수", c: "생성자", v: "필드", a: "별칭", k: "상수", K: "개념" };
+
+  function expandSearch(raw) {
+    if (!raw || !raw.docs) return [];
+    const out = raw.docs.map((r) => ({ k: r[0], p: r[1], s: r[2], pt: r[3], st: r[4], t: r[5] }));
+    const slugs = apiSlugs(raw.api.map((r) => r[0]));
+    raw.api.forEach((r, i) => {
+      out.push({ k: "api", p: "api.html", s: slugs[i], pt: (API_KIND[r[1]] || "기호") + " · " + String(raw.headers[r[2]] || "").replace(/^include\//, ""), st: r[0].replace(/^luil::/, ""), t: r[3] });
+    });
+    return out;
+  }
+
+  function loadSearch() {
+    if (searchEntries) return Promise.resolve(searchEntries);
+    if (searchLoading) return searchLoading;
+    searchLoading = new Promise((resolve) => {
+      const done = () => {
+        searchEntries = expandSearch(window.LUIL_SEARCH);
+        resolve(searchEntries);
+      };
+      if (window.LUIL_SEARCH) return done();
+      const s = document.createElement("script");
+      s.src = "assets/search-index.js";
+      s.onload = done;
+      s.onerror = () => resolve([]);
+      document.head.append(s);
+    });
+    return searchLoading;
+  }
+
+  function norm(s) {
+    return String(s || "").normalize("NFC").toLowerCase();
+  }
+
+  // 낱말마다 제목·본문에서 찾는다. 한국어는 띄어쓰기가 흔들리므로 공백을 지운 글에서도 찾는다.
+  function searchIndex(data, query) {
+    const q = norm(query).trim();
+    if (!q) return [];
+    const words = q.split(/\s+/).filter(Boolean);
+    const qJoined = q.replace(/\s+/g, "");
+    const out = [];
+    for (const d of data) {
+      const title = d._t || (d._t = norm(d.st + " " + (d.pt || "")));
+      const text = d._x || (d._x = norm(d.t));
+      const textJ = d._j || (d._j = text.replace(/\s+/g, ""));
+      const titleJ = d._tj || (d._tj = title.replace(/\s+/g, ""));
+      let score = 0;
+      let ok = true;
+      for (const w of words) {
+        const inTitle = title.includes(w) || titleJ.includes(w);
+        const inText = text.includes(w) || textJ.includes(w);
+        if (!inTitle && !inText) {
+          ok = false;
+          break;
+        }
+        score += inTitle ? 10 : 1;
       }
+      if (!ok) {
+        // 낱말로 나누면 놓치는 "트리뷰" 같은 붙여 쓴 질의
+        if (words.length > 1 && (titleJ.includes(qJoined) || textJ.includes(qJoined))) score = titleJ.includes(qJoined) ? 12 : 3;
+        else continue;
+      }
+      if (norm(d.st).startsWith(words[0])) score += 6;
+      if (d.k === "api" && norm(d.st).split("::").pop() === q) score += 30;
+      if (d.k === "page") score += 2;
+      out.push({ d, score });
     }
-    btn.setAttribute("aria-expanded", "true");
-    document.querySelector("header.topbar").append(menuEl);
-    const first = menuEl.querySelector('[aria-current="page"]') || menuEl.querySelector("a");
-    if (first) first.focus({ preventScroll: true });
+    out.sort((a, b) => b.score - a.score);
+    return out.slice(0, 24).map((r) => r.d);
   }
 
-  document.addEventListener("click", (e) => {
-    if (menuEl && !e.target.closest(".menu-pop") && !e.target.closest('[data-act="lectures"]')) closeLectureMenu();
-  });
-
-  /* ---------- 슬라이드 목차 ---------- */
-
-  function slideList() {
-    return Array.from(document.querySelectorAll("section.slide[id]"));
+  function snippet(text, query) {
+    const t = String(text || "");
+    const words = norm(query).split(/\s+/).filter(Boolean);
+    const lower = norm(t);
+    let at = -1;
+    for (const w of words) {
+      at = lower.indexOf(w);
+      if (at >= 0) break;
+    }
+    const start = Math.max(0, at - 36);
+    const piece = (start > 0 ? "…" : "") + t.slice(start, start + 120) + (start + 120 < t.length ? "…" : "");
+    let html = escapeHtml(piece);
+    for (const w of words) {
+      if (!w) continue;
+      const re = new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+      html = html.replace(re, (m) => "<mark>" + m + "</mark>");
+    }
+    return html;
   }
 
-  function slideTitle(s) {
-    const h = s.querySelector(".slide-head h2, h2");
+  const KIND_LABEL = { page: "문서", sec: "문서", faq: "질문", api: "API" };
+
+  function buildSearch() {
+    const wrap = el("div", { class: "search", role: "search" });
+    const input = el("input", { type: "search", placeholder: "검색 (예: 트리 뷰, list_config)", "aria-label": "설명서 검색", autocomplete: "off", spellcheck: "false" });
+    const pop = el("div", { class: "search-pop", role: "listbox", hidden: true });
+    wrap.append(icon("EA6D", "s-ico"), input, el("kbd", { class: "s-key", text: "/" }), pop);
+    let results = [];
+    let sel = -1;
+    let timer = 0;
+
+    const close = () => {
+      pop.hidden = true;
+      sel = -1;
+    };
+    const mark = () => {
+      pop.querySelectorAll("a").forEach((a, i) => a.setAttribute("aria-selected", i === sel ? "true" : "false"));
+      const a = pop.querySelectorAll("a")[sel];
+      if (a) a.scrollIntoView({ block: "nearest" });
+    };
+    const render = async () => {
+      const q = input.value;
+      if (!q.trim()) {
+        close();
+        return;
+      }
+      const data = await loadSearch();
+      if (q !== input.value) return;
+      results = searchIndex(data, q);
+      pop.textContent = "";
+      if (!results.length) {
+        pop.append(el("div", { class: "s-empty", text: data.length ? "찾은 것이 없습니다. 다른 낱말이나 API 이름으로 찾아 보세요." : "검색 색인을 싣지 못했습니다." }));
+      }
+      for (const r of results) {
+        const href = r.p + (r.s ? "#" + r.s : "");
+        const a = el("a", { href, role: "option" });
+        a.append(
+          el("span", { class: "s-head" }, el("span", { class: "s-kind", text: KIND_LABEL[r.k] || "문서" }), el("span", { class: "s-title", text: r.st })),
+          el("span", { class: "s-where", text: r.pt }),
+          el("span", { class: "s-snip", html: snippet(r.t, q) })
+        );
+        pop.append(a);
+      }
+      sel = results.length ? 0 : -1;
+      pop.hidden = false;
+      mark();
+    };
+
+    input.addEventListener("focus", () => {
+      loadSearch();
+      if (input.value.trim()) render();
+    });
+    input.addEventListener("input", () => {
+      clearTimeout(timer);
+      timer = setTimeout(render, 80);
+    });
+    input.addEventListener("keydown", (e) => {
+      const links = pop.querySelectorAll("a");
+      if (e.key === "ArrowDown" && links.length) {
+        e.preventDefault();
+        sel = (sel + 1) % links.length;
+        mark();
+      } else if (e.key === "ArrowUp" && links.length) {
+        e.preventDefault();
+        sel = (sel - 1 + links.length) % links.length;
+        mark();
+      } else if (e.key === "Enter" && sel >= 0 && links[sel]) {
+        e.preventDefault();
+        const href = links[sel].getAttribute("href");
+        close();
+        input.blur();
+        location.href = href;
+      } else if (e.key === "Escape") {
+        if (!pop.hidden) {
+          e.stopPropagation();
+          close();
+        } else input.blur();
+      }
+    });
+    pop.addEventListener("click", (e) => {
+      if (e.target.closest("a")) close();
+    });
+    document.addEventListener("click", (e) => {
+      if (!wrap.contains(e.target)) close();
+    });
+    document.addEventListener("keydown", (e) => {
+      const t = e.target;
+      const typing = t && t.closest && t.closest("input, textarea, select, [contenteditable]");
+      if ((e.key === "/" && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) || ((e.ctrlKey || e.metaKey) && (e.key === "k" || e.key === "K"))) {
+        e.preventDefault();
+        input.focus();
+        input.select();
+      }
+    });
+    return wrap;
+  }
+
+  /* ---------- 설명서 목차 (왼쪽) ---------- */
+
+  function sectionList() {
+    return Array.from(document.querySelectorAll(".doc-body > section.sec[id]"));
+  }
+
+  function sectionTitle(s) {
+    const h = s.querySelector(".sec-head h2, h2");
     return s.dataset.toc || (h ? h.textContent.trim() : s.id);
   }
 
-  function buildToc(container) {
-    const slides = slideList();
-    if (!slides.length) return null;
-    container.textContent = "";
-    container.append(el("div", { class: "toc-title", text: "이 강의의 슬라이드" }));
-    const ol = el("ol");
-    for (const s of slides) {
-      const num = s.dataset.num || "";
-      ol.append(el("li", null, el("a", { href: "#" + s.id, "data-slide": s.id }, el("span", { class: "n", text: num }), el("span", { text: slideTitle(s) }))));
+  function fillNav(nav) {
+    const page = currentPage();
+    nav.textContent = "";
+    for (const sec of DOCS.sections) {
+      const box = el("div", { class: "nav-sec" }, el("div", { class: "nav-sec-title", text: sec.name }));
+      const ul = el("ul");
+      for (const p of sec.pages) {
+        const cur = p.id === page.id;
+        const li = el("li", null, el("a", { href: p.file, "aria-current": cur ? "page" : null, text: p.title }));
+        if (cur) {
+          const secs = sectionList();
+          if (secs.length) {
+            const sub = el("ul", { class: "page-toc", "aria-label": "이 문서의 차례" });
+            for (const s of secs) sub.append(el("li", null, el("a", { href: "#" + s.id, "data-sec": s.id, text: sectionTitle(s) })));
+            li.append(sub);
+          }
+        }
+        ul.append(li);
+      }
+      box.append(ul);
+      nav.append(box);
     }
-    container.append(ol);
-    return container;
   }
 
-  function setupToc() {
-    const toc = document.querySelector("nav.toc");
-    if (!toc) return;
-    buildToc(toc);
-    const slides = slideList();
-    if (!("IntersectionObserver" in window) || !slides.length) return;
+  let currentSection = null;
+  function markSection(id) {
+    currentSection = id;
+    document.querySelectorAll("a[data-sec]").forEach((a) => a.classList.toggle("current", a.dataset.sec === id));
+    const nav = document.querySelector("nav.sitenav:not(.in-drawer)");
+    const a = nav && nav.querySelector("a[data-sec].current");
+    if (a && nav.scrollHeight > nav.clientHeight) {
+      const r = a.getBoundingClientRect();
+      const nr = nav.getBoundingClientRect();
+      if (r.top < nr.top + 32 || r.bottom > nr.bottom - 32) nav.scrollTop += r.top - nr.top - nav.clientHeight / 3;
+    }
+  }
+
+  function setupSitenav() {
+    const nav = document.querySelector("nav.sitenav");
+    if (nav) fillNav(nav);
+    const secs = sectionList();
+    if (!secs.length || !("IntersectionObserver" in window)) return;
     const visible = new Map();
     const io = new IntersectionObserver(
       (entries) => {
         for (const en of entries) visible.set(en.target.id, en.isIntersecting);
-        const cur = slides.find((s) => visible.get(s.id));
-        if (cur) markToc(cur.id);
+        const cur = secs.find((s) => visible.get(s.id));
+        if (cur) markSection(cur.id);
       },
-      { rootMargin: "-30% 0px -60% 0px" }
+      { rootMargin: "-20% 0px -70% 0px" }
     );
-    slides.forEach((s) => io.observe(s));
+    secs.forEach((s) => io.observe(s));
   }
 
-  function markToc(id) {
-    document.querySelectorAll(".toc a[data-slide]").forEach((a) => a.classList.toggle("current", a.dataset.slide === id));
-  }
-
-  function openTocDrawer() {
-    const drawer = el("div", { class: "toc-drawer", role: "dialog", "aria-modal": "true", "aria-label": "슬라이드 목차" });
-    const sheet = el("div", { class: "sheet" });
-    const close = el("button", { class: "cap-btn", type: "button", title: "닫기" }, icon("EA76"));
-    const nav = el("nav", { class: "toc" });
-    buildToc(nav);
-    sheet.append(el("div", { class: "sheet-head" }, el("span", { text: "목차" }), close), nav);
+  function openNavDrawer() {
+    const drawer = el("div", { class: "nav-drawer", role: "dialog", "aria-modal": "true", "aria-label": "설명서 목차" });
+    const close = el("button", { class: "cap-btn", type: "button", title: "닫기", "aria-label": "닫기" }, icon("EA76"));
+    const nav = el("nav", { class: "sitenav in-drawer", "aria-label": "설명서 목차" });
+    fillNav(nav);
+    if (currentSection) nav.querySelectorAll("a[data-sec]").forEach((a) => a.classList.toggle("current", a.dataset.sec === currentSection));
+    const sheet = el("div", { class: "sheet" }, el("div", { class: "sheet-head" }, el("span", { text: DOCS.title }), close), nav);
     drawer.append(sheet);
     const done = () => {
       drawer.remove();
@@ -292,9 +507,18 @@
     });
     document.addEventListener("keydown", onKey, true);
     document.body.append(drawer);
+    const cur = nav.querySelector("a[data-sec].current") || nav.querySelector('a[aria-current="page"]');
+    if (cur) cur.scrollIntoView({ block: "center" });
     close.focus();
   }
 
+  function setupCrumbs() {
+    const c = document.querySelector(".crumbs[data-auto]");
+    if (!c) return;
+    const page = currentPage();
+    c.textContent = "";
+    c.append(el("a", { href: "index.html", text: DOCS.title }), el("span", { class: "sep", text: "/" }), el("span", { text: page.section.name }));
+  }
   /* ---------- 코드 ---------- */
 
   const GAP = /^\s*⋯(?:@(\d+))?\s*$/;
@@ -397,6 +621,8 @@
         );
     } else head.append(el("span", { class: "path" }, el("bdi", { text: box.dataset.label || lang })));
     const tools = el("div", { class: "tools" });
+    // tools/check_samples.py가 공개 헤더에 대고 컴파일해 본 예제다
+    if (box.dataset.compile) tools.append(el("span", { class: "compiled", title: "tools/check_samples.py가 기준 커밋의 공개 헤더에 대고 컴파일해 확인한 예제 (-fsyntax-only)" }, icon("EAB2"), el("span", { text: "컴파일 확인" })));
     const copy = el("button", { type: "button", title: "코드 복사" }, icon("EBCC"), el("span", { text: "복사" }));
     copy.addEventListener("click", () => {
       const text = lines.map((l, i) => (gapInfo[i] ? "// ..." : l)).join("\n");
@@ -500,63 +726,6 @@
     show(0, false);
   }
 
-  /* ---------- 확인 문제 ---------- */
-
-  function setupQuizzes() {
-    const sets = document.querySelectorAll(".quiz-set");
-    sets.forEach((set) => {
-      const quizzes = Array.from(set.querySelectorAll(".quiz"));
-      const score = el("p", { class: "quiz-score", "aria-live": "polite" });
-      let answered = 0;
-      let right = 0;
-      const update = () => {
-        score.textContent = answered === 0 ? quizzes.length + "문제입니다. 고르면 바로 해설이 열립니다." : quizzes.length + "문제 중 " + answered + "문제를 풀었고 " + right + "문제를 맞혔습니다.";
-      };
-      quizzes.forEach((q, qi) => {
-        const ans = Number(q.dataset.answer);
-        const qp = q.querySelector(".q");
-        if (qp && !qp.querySelector(".qn")) {
-          const inner = qp.innerHTML;
-          qp.innerHTML = "";
-          qp.append(el("span", { class: "qn", text: "Q" + (qi + 1) }), el("span", { html: inner }));
-        }
-        const items = Array.from(q.querySelectorAll(".choices > li"));
-        const explain = q.querySelector(".explain");
-        if (explain) explain.hidden = true;
-        const buttons = items.map((li, k) => {
-          const b = el("button", { type: "button" }, el("span", { class: "mk", text: "①②③④⑤⑥"[k] || String(k + 1) }), el("span", { html: li.innerHTML }), el("span", { class: "res ci", "aria-hidden": "true" }));
-          li.textContent = "";
-          li.append(b);
-          return b;
-        });
-        let done = false;
-        buttons.forEach((b, k) => {
-          b.addEventListener("click", () => {
-            if (done) return;
-            done = true;
-            answered++;
-            const ok = k + 1 === ans;
-            if (ok) right++;
-            b.classList.add(ok ? "right" : "wrong");
-            b.querySelector(".res").textContent = ok ? "" : "";
-            b.setAttribute("aria-label", (ok ? "정답: " : "오답: ") + b.textContent);
-            if (!ok && buttons[ans - 1]) {
-              buttons[ans - 1].classList.add("right");
-              buttons[ans - 1].querySelector(".res").textContent = "";
-            }
-            if (explain) {
-              explain.hidden = false;
-              if (!explain.querySelector(".verdict")) explain.prepend(el("b", { class: "verdict", text: ok ? "맞았습니다. " : "정답은 " + "①②③④⑤⑥"[ans - 1] + "입니다. " }));
-            }
-            update();
-          });
-        });
-      });
-      update();
-      set.prepend(score);
-    });
-  }
-
   /* ---------- 탭 ---------- */
 
   function setupTabs() {
@@ -636,7 +805,7 @@
     window.addEventListener("scroll", hideTerm, { passive: true });
   }
 
-  /* ---------- 실험 창 틀 ---------- */
+  /* ---------- 실습 창 틀 ---------- */
 
   function setupWindows() {
     document.querySelectorAll(".lw[data-title]").forEach((w) => {
@@ -665,120 +834,19 @@
     });
   }
 
-  /* ---------- 발표 모드 ---------- */
-
-  let presentIndex = 0;
-  let presentBar = null;
-
-  function presentSlides() {
-    const hero = document.querySelector(".hero");
-    return [hero, ...slideList()].filter(Boolean);
-  }
-
-  function enterPresent() {
-    const slides = presentSlides();
-    if (!slides.length) return;
-    // 지금 화면 위쪽에 걸린 슬라이드부터 시작한다.
-    let start = 0;
-    const hashId = location.hash.slice(1);
-    const byHash = slides.findIndex((s) => s.id && s.id === hashId);
-    if (byHash >= 0) start = byHash;
-    else {
-      for (let i = 0; i < slides.length; i++) {
-        if (slides[i].getBoundingClientRect().top <= window.innerHeight * 0.4) start = i;
-      }
-    }
-    document.documentElement.classList.add("presenting");
-    if (!presentBar) {
-      presentBar = el("div", { class: "present-bar", role: "toolbar", "aria-label": "발표 모드" });
-      const prev = el("button", { class: "btn sm ghost", type: "button", title: "이전 (←)", onclick: () => showPresent(presentIndex - 1) }, icon("EAB5"));
-      const next = el("button", { class: "btn sm soft", type: "button", title: "다음 (→)", onclick: () => showPresent(presentIndex + 1) }, el("span", { text: "다음" }), icon("EAB6"));
-      const exit = el("button", { class: "btn sm ghost", type: "button", title: "발표 끝내기 (Esc)", onclick: exitPresent }, icon("EB4D"), el("span", { text: "끝내기" }));
-      presentBar.append(prev, el("span", { class: "where" }), el("span", { class: "progress" }, el("i")), next, exit);
-      document.body.append(presentBar);
-    }
-    presentBar.hidden = false;
-    showPresent(start);
-    if (document.documentElement.requestFullscreen && !document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(() => {});
-    }
-    document.addEventListener("keydown", presentKeys);
-  }
-
-  function exitPresent() {
-    const slides = presentSlides();
-    const cur = slides[presentIndex];
-    document.documentElement.classList.remove("presenting");
-    slides.forEach((s) => s.classList.remove("current"));
-    if (presentBar) presentBar.hidden = true;
-    document.removeEventListener("keydown", presentKeys);
-    if (document.fullscreenElement === document.documentElement) document.exitFullscreen().catch(() => {});
-    if (cur) cur.scrollIntoView({ block: "start" });
-  }
-
-  function showPresent(k) {
-    const slides = presentSlides();
-    presentIndex = Math.max(0, Math.min(slides.length - 1, k));
-    slides.forEach((s, i) => s.classList.toggle("current", i === presentIndex));
-    const cur = slides[presentIndex];
-    cur.scrollTop = 0;
-    const where = presentBar.querySelector(".where");
-    const num = cur.dataset.num || pad2(Number(document.body.dataset.lecture || 0));
-    where.textContent = num + " · " + (cur.classList.contains("hero") ? "표지" : slideTitle(cur)) + "  (" + (presentIndex + 1) + "/" + slides.length + ")";
-    presentBar.querySelector(".progress i").style.width = ((presentIndex + 1) / slides.length) * 100 + "%";
-    if (cur.id) {
-      try {
-        history.replaceState(null, "", "#" + cur.id);
-      } catch (e) {
-        /* 액자 안에서는 막힐 수 있다 */
-      }
-    }
-  }
-
-  function presentKeys(e) {
-    if (e.defaultPrevented) return;
-    const t = e.target;
-    if (t && (t.closest("input, textarea, select, [contenteditable], [data-keys]") || (t.closest && t.closest(".lw") && e.key === " "))) return;
-    if (e.altKey || e.ctrlKey || e.metaKey) return;
-    const k = e.key;
-    if (k === "ArrowRight" || k === "PageDown" || (k === " " && !e.shiftKey)) {
-      e.preventDefault();
-      showPresent(presentIndex + 1);
-    } else if (k === "ArrowLeft" || k === "PageUp" || (k === " " && e.shiftKey)) {
-      e.preventDefault();
-      showPresent(presentIndex - 1);
-    } else if (k === "Home") {
-      e.preventDefault();
-      showPresent(0);
-    } else if (k === "End") {
-      e.preventDefault();
-      showPresent(presentSlides().length - 1);
-    } else if (k === "Escape") {
-      e.preventDefault();
-      exitPresent();
-    }
-  }
-
-  document.addEventListener("fullscreenchange", () => {
-    // 브라우저의 Esc가 전체 화면만 끝낸 경우에도 발표는 이어 간다 — 다시 Esc를 누르면 끝난다.
-  });
-
-  /* ---------- 강의 끝의 이전·다음 ---------- */
+  /* ---------- 앞뒤 문서 ---------- */
 
   function setupPager() {
     const pager = document.querySelector(".pager[data-auto]");
     if (!pager) return;
-    const n = Number(document.body.dataset.lecture || 0);
-    const prev = COURSE.lectures.find((l) => l.n === n - 1);
-    const next = COURSE.lectures.find((l) => l.n === n + 1);
+    const page = currentPage();
+    const i = ALL_PAGES.findIndex((p) => p.id === page.id);
+    const prev = ALL_PAGES[i - 1];
+    const next = ALL_PAGES[i + 1];
     pager.textContent = "";
     pager.append(
-      prev
-        ? el("a", { class: "prev", href: prev.file }, el("span", { class: "dir" }, icon("EA9B"), "이전 강의"), el("span", { class: "ttl", text: pad2(prev.n) + " " + prev.title }))
-        : el("a", { class: "prev", href: "index.html" }, el("span", { class: "dir" }, icon("EA9B"), "강의 홈"), el("span", { class: "ttl", text: "강의 소개와 기능 지도" })),
-      next
-        ? el("a", { class: "next", href: next.file }, el("span", { class: "dir" }, "다음 강의", icon("EA9C")), el("span", { class: "ttl", text: pad2(next.n) + " " + next.title }))
-        : el("a", { class: "next", href: "index.html#atlas" }, el("span", { class: "dir" }, "마무리", icon("EA9C")), el("span", { class: "ttl", text: "기능 지도에서 더 둘러보기" }))
+      prev ? el("a", { class: "prev", href: prev.file }, el("span", { class: "dir" }, icon("EA9B"), "이전 문서"), el("span", { class: "ttl", text: prev.title })) : el("span"),
+      next ? el("a", { class: "next", href: next.file }, el("span", { class: "dir" }, "다음 문서", icon("EA9C")), el("span", { class: "ttl", text: next.title })) : el("span")
     );
   }
 
@@ -792,14 +860,13 @@
       el(
         "div",
         null,
-        el("div", null, "luil 해부학 — C++20 UI 프레임워크 luil을 읽는 강의. 코드 발췌는 ", el("a", { href: COURSE.repo + "/tree/" + COURSE.commit, target: "_blank", rel: "noopener", text: "main " + COURSE.commitShort }), " (" + COURSE.commitDate + ") 기준입니다."),
-        el("div", null, "luil 소스와 문서는 MIT 라이선스입니다. 아이콘은 Microsoft의 Codicons(CC BY 4.0)를 이 사이트에 쓰는 글리프만 남겨 실었습니다.")
+        el("div", null, "luil 설명서 — C++20 UI 프레임워크 luil의 사용 설명서. 코드 발췌와 줄 번호는 ", el("a", { href: DOCS.repo + "/tree/" + DOCS.commit, target: "_blank", rel: "noopener", text: "main " + DOCS.commitShort }), " (" + DOCS.commitDate + ") 기준입니다."),
+        el("div", null, "luil 소스와 문서는 MIT 라이선스입니다. 아이콘은 Microsoft의 Codicons(CC BY 4.0)를 이 설명서에 쓰는 글리프만 남겨 실었습니다.")
       ),
-      el("div", null, el("a", { href: COURSE.repo, target: "_blank", rel: "noopener", text: "github.com/yuldK/luil" }))
+      el("div", null, el("a", { href: DOCS.repo, target: "_blank", rel: "noopener", text: "github.com/yuldK/luil" }))
     );
     foot.append(inner);
   }
-
   /* ---------- 흐름도: 세 스레드를 가로지르는 사건 ----------
    *
    * 넓은 화면에서는 스레드가 가로 띠(시간은 왼쪽 → 오른쪽), 좁은 화면에서는 세로 칸
@@ -1031,24 +1098,21 @@
 
   function boot() {
     buildTopbar();
-    setupToc();
+    setupCrumbs();
+    setupSitenav();
     document.querySelectorAll(".walk").forEach(setupWalk);
     document.querySelectorAll(".code").forEach(renderCode);
-    setupQuizzes();
     setupTabs();
     setupTerms();
     setupWindows();
     setupPager();
     setupFooter();
     document.addEventListener("keydown", (e) => {
-      if (e.key === "Escape") {
-        closeLectureMenu();
-        hideTerm();
-      }
+      if (e.key === "Escape") hideTerm();
     });
   }
 
-  window.LU = { COURSE, el, svg, icon, cssVar, onTheme, reduced, store, sourceUrl, highlightLines, renderCode, pad2, flow };
+  window.LU = { DOCS, COURSE, PAGES: ALL_PAGES, apiSlugs, el, svg, icon, cssVar, onTheme, reduced, store, sourceUrl, highlightLines, renderCode, escapeHtml, pad2, flow };
 
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", boot);
   else boot();

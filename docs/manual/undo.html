@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>10 되돌리기의 설계 · luil 해부학</title>
-<meta name="description" content="luil 해부학 10강. 앱 메시지 쌍으로 만드는 앱 수준 실행 취소 stack. 칸 기록과의 분리, 절대 값 메시지와 병합 키, 재생 중 재진입 막기, 묶음과 저장 지점, 걸음 수와 무게의 상한, 명령표와 키 경로.">
+<title>앱 수준 실행 취소 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — 앱 메시지 쌍으로 만드는 앱 수준 실행 취소 stack. 칸 기록과의 분리, 절대 값 메시지와 병합 키, 재생 중 재진입 막기, 묶음과 저장 지점, 걸음 수와 무게의 상한, 명령표와 키 경로.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
-<link rel="stylesheet" href="assets/course.css">
-<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
   .lab-stack { display: grid; gap: 14px; }
   .ue-grid { display: grid; gap: 16px; }
@@ -76,26 +76,24 @@
   .sc-state .sw { width: 22px; height: 22px; border-radius: 5px; box-shadow: inset 0 0 0 1px #0000001f; }
 </style>
 </head>
-<body data-lecture="10">
+<body data-page="undo">
 <header class="topbar"></header>
 
-<main>
-  <section class="hero" id="s0" data-num="10">
-    <div class="hero-inner">
-      <div class="eyebrow"><span class="lec-no">LECTURE 10</span><span>4부 · 앱다운 앱</span></div>
-      <h1>되돌리기의 설계</h1>
-      <div class="hero-cols">
-        <div style="display:grid;gap:22px">
-          <p class="thesis">되돌리기의 한 걸음은 앱이 정의한 메시지 두 개의 쌍이다. stack은 메시지를 열어 보지도, 앱 상태를 건드리지도 않는다. 그래서 되돌림도 앱의 <code>handle</code> 길을 탄다.</p>
-          <dl class="meta">
-            <div><dt>예상 시간</dt><dd>50분</dd></div>
-            <div><dt>선수 지식</dt><dd>3강(<code>app_message</code>), 8강(<code>text_edit_state</code>)</dd></div>
-            <div><dt>다루는 코드</dt><dd><code>undo_stack.h</code>·<code>undo_stack.cpp</code>·<code>undo_commands.cpp</code>·<code>workbench_page.cpp</code></dd></div>
-            <div><dt>실험</dt><dd>색 편집기, 시나리오 재생 둘</dd></div>
-          </dl>
-        </div>
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>앱 수준 실행 취소</h1>
+      <p class="summary">되돌리기의 한 걸음은 앱이 정의한 메시지 두 개의 쌍이다. stack은 메시지를 열어 보지도, 앱 상태를 건드리지도 않는다. 그래서 되돌림도 앱의 <code>handle</code> 길을 탄다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>undo_stack.h</code>·<code>undo_stack.cpp</code>·<code>undo_commands.cpp</code>·<code>workbench_page.cpp</code></dd></div>
+          <div><dt>실습</dt><dd>색 편집기, 시나리오 재생 둘</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="messaging.html">스레드 경계 메시징</a>(<code>app_message</code>), <a class="xref" href="text.html">텍스트 처리</a>(<code>text_edit_state</code>)</dd></div>
+        </dl>
         <div class="goals">
-          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
           <ol>
             <li>칸 기록과 앱 stack이 맡는 범위를 가를 수 있다.</li>
             <li>걸음을 메시지 쌍으로 표현한 이유와 거절한 두 길을 말한다.</li>
@@ -105,16 +103,12 @@
           </ol>
         </div>
       </div>
-    </div>
-  </section>
+    </header>
 
-  <div class="lecture-body">
-    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
-    <div class="slides">
+    <div class="doc-body">
 
-      <section class="slide" id="s1" data-num="10.1">
-        <header class="slide-head">
-          <span class="num">10.1</span>
+      <section class="sec" id="s1">
+        <header class="sec-head">
           <h2>두 개의 되돌리기</h2>
           <p class="lede">luil에는 텍스트 칸 하나의 글을 시점마다 복사해 두는 기록이 이미 있었다. 하지만 항목 삭제, 체크, 순서 바꿈처럼 칸 밖에서 바뀌는 앱 상태는 되돌릴 길이 없었다.</p>
         </header>
@@ -146,9 +140,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s2" data-num="10.2">
-        <header class="slide-head">
-          <span class="num">10.2</span>
+      <section class="sec" id="s2">
+        <header class="sec-head">
           <h2>한 걸음은 메시지 쌍이다</h2>
           <p class="lede">걸음에는 실행 코드가 들어 있지 않다. 앱이 정의한 메시지 두 개, 곧 되돌림 메시지와 다시 실행 메시지가 들어 있다. 여기에 메뉴에 보일 이름, 병합 키, 무게가 붙는다.</p>
         </header>
@@ -218,9 +211,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s3" data-num="10.3">
-        <header class="slide-head">
-          <span class="num">10.3</span>
+      <section class="sec" id="s3">
+        <header class="sec-head">
           <h2>실험: 색 편집기</h2>
           <p class="lede">앱 상태는 채우기 색과 굵게, 둘이다. 아래 stack은 <code>undo_stack.cpp</code>를 그대로 옮긴 것이다. 컴파일한 원본과 무작위 연산열 4,000개에서 같은 결과를 냈다.</p>
         </header>
@@ -271,9 +263,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s4" data-num="10.4">
-        <header class="slide-head">
-          <span class="num">10.4</span>
+      <section class="sec" id="s4">
+        <header class="sec-head">
           <h2><code>push</code>의 네 갈래</h2>
           <p class="lede">막힘, 묶음에 담기, 합치기, 새 걸음. 합치기는 시계가 아니라 앱이 붙인 병합 키로 한다.</p>
         </header>
@@ -348,9 +339,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s5" data-num="10.5">
-        <header class="slide-head">
-          <span class="num">10.5</span>
+      <section class="sec" id="s5">
+        <header class="sec-head">
           <h2>먼저 옮기고, 재생 표시 아래에서 넘긴다</h2>
           <p class="lede"><code>undo</code>와 <code>redo</code>는 대칭이다. 막힘 조건 넷을 본 뒤 걸음을 반대쪽으로 옮기고, 그다음에야 재생 표시를 세우고 메시지를 넘긴다.</p>
         </header>
@@ -401,9 +391,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s6" data-num="10.6">
-        <header class="slide-head">
-          <span class="num">10.6</span>
+      <section class="sec" id="s6">
+        <header class="sec-head">
           <h2>묶음과 저장 지점</h2>
           <p class="lede">저장 지점은 어느 걸음에 붙은 표시가 아니다. "되돌릴 수 있는 걸음 수"라는 숫자다. 그래서 커서가 그 수에 오면 "저장됨"이고, 그 수로 돌아갈 길이 끊기면 사라진다.</p>
         </header>
@@ -457,9 +446,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s7" data-num="10.7">
-        <header class="slide-head">
-          <span class="num">10.7</span>
+      <section class="sec" id="s7">
+        <header class="sec-head">
           <h2>용량, 그리고 커지는 합친 걸음</h2>
           <p class="lede">상한은 걸음 수와 무게의 합이고, 되돌릴 쪽만 센다. 넘치면 가장 오래된 걸음부터 버리되 가장 새 걸음 하나는 남긴다. "한 번은 되돌린다."</p>
         </header>
@@ -558,9 +546,8 @@ TEST_CASE("A growing merged step trims older records and keeps its original undo
         </div>
       </section>
 
-      <section class="slide" id="s8" data-num="10.8">
-        <header class="slide-head">
-          <span class="num">10.8</span>
+      <section class="sec" id="s8">
+        <header class="sec-head">
           <h2>명령표와 키 경로</h2>
           <p class="lede">실행 취소·다시 실행 두 명령은 <code>make_undo_commands</code>가 짓는다. 키 판정에 쓰는 표는 정적이고, 메뉴에 그리는 표는 stack 상태를 따른다.</p>
         </header>
@@ -647,10 +634,9 @@ TEST_CASE("A growing merged step trims older records and keeps its original undo
         </div>
       </section>
 
-      <section class="slide" id="s9" data-num="10.9">
-        <header class="slide-head">
-          <span class="num">10.9</span>
-          <h2>정리</h2>
+      <section class="sec" id="s9">
+        <header class="sec-head">
+          <h2>요약</h2>
         </header>
         <ol class="recap">
           <li>칸 기록(<code>text_edit_state</code>)은 칸 하나의 글을, 앱 stack(<code>undo_stack</code>)은 칸 밖의 앱 상태를 되돌린다. 둘은 따로 가고, 키는 칸이 먼저다.</li>
@@ -662,83 +648,83 @@ TEST_CASE("A growing merged step trims older records and keeps its original undo
         </ol>
       </section>
 
-      <section class="slide" id="s10" data-num="10.10">
-        <header class="slide-head">
-          <span class="num">10.10</span>
-          <h2>확인 문제</h2>
+      <section class="sec" id="s10" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
         </header>
-        <div class="quiz-set">
-          <div class="quiz" data-answer="2">
-            <p class="q">같은 키로 걸음 셋을 쌓는다. 되돌림/다시 실행 값과 무게는 (1→2, 10), (2→3, 30), (3→4, 20)이다. <code>undo_count()</code>, <code>bytes()</code>, 되돌릴 때 적용되는 값, 다시 실행할 때 적용되는 값은?</p>
-            <ol class="choices">
-              <li>3 / 60 / {3} / {4}</li>
-              <li>1 / 30 / {1} / {4}</li>
-              <li>1 / 60 / {1} / {4}</li>
-              <li>1 / 30 / {3} / {2}</li>
-            </ol>
-            <div class="explain">무장된 같은 키의 연속 push는 맨 위 걸음에 합쳐진다. 첫 걸음의 되돌림과 마지막 걸음의 다시 실행만 남고, 무게는 합(60)이 아니라 큰 쪽(30)이다.</div>
-          </div>
-          <div class="quiz" data-answer="1">
-            <p class="q"><code>begin("바깥")</code> → push(1→2) → <code>begin("안쪽")</code> → push(3→4) → <code>end()</code> → push(5→6) → <code>end()</code>. 안쪽 <code>end()</code> 직후의 <code>undo_count()</code>, 확정된 걸음의 이름, 되돌림 차례, 다시 실행 차례는?</p>
-            <ol class="choices">
-              <li>0 / "바깥" / {5, 3, 1} / {2, 4, 6}</li>
-              <li>1 / "안쪽" / {1, 3, 5} / {2, 4, 6}</li>
-              <li>1 / "바깥" / {5, 3, 1} / {6, 4, 2}</li>
-              <li>0 / "안쪽" / {5, 3, 1} / {2, 4, 6}</li>
-            </ol>
-            <div class="explain">확정은 가장 바깥 <code>end</code>에서만 일어나고 이름도 바깥 <code>begin</code>의 것이다. 걸음 안에서 되돌림은 쌓은 반대 차례, 다시 실행은 쌓은 차례다.</div>
-          </div>
-          <div class="quiz" data-answer="4">
-            <p class="q">push a → push b → <code>set_clean()</code> → undo → push c → undo → undo. 마지막의 <code>clean()</code>과, "저장됨"으로 돌아가는 방법은?</p>
-            <ol class="choices">
-              <li>참 — 걸음 수가 저장 때와 같아졌다</li>
-              <li>참 — 되돌리기 두 번이면 처음으로 돌아간다</li>
-              <li>거짓 — 다시 실행을 두 번 부르면 돌아간다</li>
-              <li>거짓 — <code>set_clean()</code>이나 <code>clear()</code>를 다시 불러야 한다</li>
-            </ol>
-            <div class="explain">저장 지점 2가 redo 쪽에 있는 채로 새 걸음 c가 쌓여, <code>discard_redo</code>가 저장 지점을 지웠다. 걸음 수가 다시 같아져도 상태가 다르므로 저장 지점이 아니다.</div>
-          </div>
-          <div class="quiz" data-answer="3">
-            <p class="q">되돌리는 도중, <code>apply</code> 안에서 앱이 <code>push</code>, <code>undo</code>, <code>clear</code>를 부르면?</p>
-            <ol class="choices">
-              <li>셋 다 평소처럼 동작한다</li>
-              <li><code>push</code>만 거짓이고 나머지는 동작한다</li>
-              <li><code>push</code>·<code>undo</code>는 거짓, <code>clear</code>는 아무 일도 하지 않는다</li>
-              <li>예외를 던진다</li>
-            </ol>
-            <div class="explain">위치를 먼저 옮기고 <code>replay_guard</code>가 재생 표시를 세운 뒤 <code>apply</code>를 부른다. 질의는 옮긴 자리를 보고, 바꾸는 호출은 모두 막힌다. 그래서 기록하는 <code>handle</code>을 <code>apply</code>로 넘겨도 걸음이 두 번 쌓이거나 redo가 지워지지 않는다.</div>
-          </div>
-          <div class="quiz" data-answer="2">
-            <p class="q">상한 <code>{ steps: 0, bytes: 100 }</code>에서 old(1→2, 무게 40, 키 없음) → drag(3→4, 40, 키 drag) → drag end(5→6, 90, 키 drag)를 쌓았다. <code>undo_count()</code>, <code>bytes()</code>, 되돌릴 때 적용되는 값은?</p>
-            <ol class="choices">
-              <li>2 / 130 / {5}</li>
-              <li>1 / 90 / {3}</li>
-              <li>2 / 90 / {3}</li>
-              <li>1 / 130 / {1}</li>
-            </ol>
-            <div class="explain">합치면 무게가 max(40, 90)=90으로 커져 합계가 130이 된다. 합치기 갈래의 <code>trim()</code>이 그 자리에서 old를 버린다. 되돌림은 첫 drag의 것(3)이 남는다.</div>
-          </div>
-          <div class="quiz" data-answer="1">
-            <p class="q">편집할 수 있는 텍스트 칸에 초점이 있고 칸의 기록은 비었다. Ctrl+Z를 누르면?</p>
-            <ol class="choices">
-              <li>칸이 받고 끝난다. 앱 stack으로 넘어가지 않는다</li>
-              <li>칸 기록이 비었으므로 앱 stack이 되돌린다</li>
-              <li>칸과 앱 stack이 함께 되돌린다</li>
-              <li>판정용 표가 꺼져 있어 아무 일도 없다</li>
-            </ol>
-            <div class="explain">키는 칸이 먼저이고, 칸 기록이 비어도 넘어가지 않는다. 읽기 전용 칸만 이 키를 앱에 넘긴다. 판정용 표는 정적이라 꺼지지 않는다.</div>
-          </div>
+        <div class="faq-list">
+          <details class="faq">
+            <summary>같은 키로 걸음 셋을 쌓는다. 되돌림/다시 실행 값과 무게는 (1→2, 10), (2→3, 30), (3→4, 20)이다. <code>undo_count()</code>, <code>bytes()</code>, 되돌릴 때 적용되는 값, 다시 실행할 때 적용되는 값은?</summary>
+            <div class="faq-a">
+              <p class="faq-short">1 / 30 / {1} / {4}</p>
+              <p>무장된 같은 키의 연속 push는 맨 위 걸음에 합쳐진다. 첫 걸음의 되돌림과 마지막 걸음의 다시 실행만 남고, 무게는 합(60)이 아니라 큰 쪽(30)이다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary><code>begin("바깥")</code> → push(1→2) → <code>begin("안쪽")</code> → push(3→4) → <code>end()</code> → push(5→6) → <code>end()</code>. 안쪽 <code>end()</code> 직후의 <code>undo_count()</code>, 확정된 걸음의 이름, 되돌림 차례, 다시 실행 차례는?</summary>
+            <div class="faq-a">
+              <p class="faq-short">0 / "바깥" / {5, 3, 1} / {2, 4, 6}</p>
+              <p>확정은 가장 바깥 <code>end</code>에서만 일어나고 이름도 바깥 <code>begin</code>의 것이다. 걸음 안에서 되돌림은 쌓은 반대 차례, 다시 실행은 쌓은 차례다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>push a → push b → <code>set_clean()</code> → undo → push c → undo → undo. 마지막의 <code>clean()</code>과, "저장됨"으로 돌아가는 방법은?</summary>
+            <div class="faq-a">
+              <p class="faq-short">거짓 — <code>set_clean()</code>이나 <code>clear()</code>를 다시 불러야 한다</p>
+              <p>저장 지점 2가 redo 쪽에 있는 채로 새 걸음 c가 쌓여, <code>discard_redo</code>가 저장 지점을 지웠다. 걸음 수가 다시 같아져도 상태가 다르므로 저장 지점이 아니다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>되돌리는 도중, <code>apply</code> 안에서 앱이 <code>push</code>, <code>undo</code>, <code>clear</code>를 부르면?</summary>
+            <div class="faq-a">
+              <p class="faq-short"><code>push</code>·<code>undo</code>는 거짓, <code>clear</code>는 아무 일도 하지 않는다</p>
+              <p>위치를 먼저 옮기고 <code>replay_guard</code>가 재생 표시를 세운 뒤 <code>apply</code>를 부른다. 질의는 옮긴 자리를 보고, 바꾸는 호출은 모두 막힌다. 그래서 기록하는 <code>handle</code>을 <code>apply</code>로 넘겨도 걸음이 두 번 쌓이거나 redo가 지워지지 않는다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>상한 <code>{ steps: 0, bytes: 100 }</code>에서 old(1→2, 무게 40, 키 없음) → drag(3→4, 40, 키 drag) → drag end(5→6, 90, 키 drag)를 쌓았다. <code>undo_count()</code>, <code>bytes()</code>, 되돌릴 때 적용되는 값은?</summary>
+            <div class="faq-a">
+              <p class="faq-short">1 / 90 / {3}</p>
+              <p>합치면 무게가 max(40, 90)=90으로 커져 합계가 130이 된다. 합치기 갈래의 <code>trim()</code>이 그 자리에서 old를 버린다. 되돌림은 첫 drag의 것(3)이 남는다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>편집할 수 있는 텍스트 칸에 초점이 있고 칸의 기록은 비었다. Ctrl+Z를 누르면?</summary>
+            <div class="faq-a">
+              <p class="faq-short">칸이 받고 끝난다. 앱 stack으로 넘어가지 않는다</p>
+              <p>키는 칸이 먼저이고, 칸 기록이 비어도 넘어가지 않는다. 읽기 전용 칸만 이 키를 앱에 넘긴다. 판정용 표는 정적이라 꺼지지 않는다.</p>
+            </div>
+          </details>
         </div>
-        <nav class="pager" data-auto aria-label="강의 이동"></nav>
       </section>
 
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/undo_commands.h" target="_blank" rel="noopener">include/luil/ui/undo_commands.h</a><span class="n">최상위 기호 4</span></div>
+            <div class="hdr-syms"><a href="api.html#undo-command-id" title="상수"><span class="kb ">k</span>undo_command_id</a><a href="api.html#redo-command-id" title="상수"><span class="kb ">k</span>redo_command_id</a><a href="api.html#undo-command-state" title="구조체"><span class="kb t">S</span>undo_command_state</a><a href="api.html#make-undo-commands" title="함수"><span class="kb f">f</span>make_undo_commands</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/undo_stack.h" target="_blank" rel="noopener">include/luil/ui/undo_stack.h</a><span class="n">최상위 기호 7</span></div>
+            <div class="hdr-syms"><a href="api.html#undo-stack-default-steps" title="상수"><span class="kb ">k</span>undo_stack_default_steps</a><a href="api.html#undo-stack-default-bytes" title="상수"><span class="kb ">k</span>undo_stack_default_bytes</a><a href="api.html#undo-step" title="구조체"><span class="kb t">S</span>undo_step</a><a href="api.html#undo-stack-limits" title="구조체"><span class="kb t">S</span>undo_stack_limits</a><a href="api.html#undo-apply" title="별칭"><span class="kb t">=</span>undo_apply</a><a href="api.html#undo-stack" title="클래스"><span class="kb t">C</span>undo_stack</a><a href="api.html#undo-macro" title="클래스"><span class="kb t">C</span>undo_macro</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
     </div>
-  </div>
-</main>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
 <footer class="site-foot"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="assets/course.js"></script>
+<script src="assets/manual.js"></script>
 <script src="assets/undo.js"></script>
 <script>
 (function () {

@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>01 luil이라는 프레임워크 · luil 해부학</title>
-<meta name="description" content="luil 해부학 1강. Skia로 직접 그리고, 화면을 frame마다 새로 짓고, 상태는 스레드 하나가 쥐는 C++20 UI 프레임워크 luil의 큰 그림.">
+<title>luil 개요 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — Skia로 직접 그리고, 화면을 frame마다 새로 짓고, 상태는 스레드 하나가 쥐는 C++20 UI 프레임워크 luil의 큰 그림.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
-<link rel="stylesheet" href="assets/course.css">
-<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
   .bars { display: grid; gap: 4px; }
   .bar-row { display: grid; grid-template-columns: 7.5em minmax(0, 1fr); gap: 4px 14px; align-items: center; padding: 6px 0; border-bottom: 1px solid var(--line); }
@@ -31,26 +31,24 @@
   .cmp tr.luil td { background: var(--accent-wash); }
 </style>
 </head>
-<body data-lecture="1">
+<body data-page="overview">
 <header class="topbar"></header>
 
-<main>
-  <section class="hero" id="s0" data-num="01">
-    <div class="hero-inner">
-      <div class="eyebrow"><span class="lec-no">LECTURE 01</span><span>1부 · 큰 그림</span></div>
-      <h1>luil이라는 프레임워크</h1>
-      <div class="hero-cols">
-        <div style="display:grid;gap:22px">
-          <p class="thesis">Skia로 직접 그리고, 화면을 frame마다 새로 짓고, 앱 상태는 스레드 하나가 쥔다. 이 세 가지 결정이 luil의 나머지를 거의 다 설명한다.</p>
-          <dl class="meta">
-            <div><dt>예상 시간</dt><dd>40분</dd></div>
-            <div><dt>선수 지식</dt><dd>C++ 클래스·람다, 스레드의 기본</dd></div>
-            <div><dt>다루는 코드</dt><dd><code>examples/hello</code></dd></div>
-            <div><dt>실험</dt><dd>클릭 한 번이 지나가는 길</dd></div>
-          </dl>
-        </div>
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>luil 개요</h1>
+      <p class="summary">Skia로 직접 그리고, 화면을 frame마다 새로 짓고, 앱 상태는 스레드 하나가 쥔다. 이 세 가지 결정이 luil의 나머지를 거의 다 설명한다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>examples/hello</code></dd></div>
+          <div><dt>실습</dt><dd>클릭 한 번이 지나가는 길</dd></div>
+          <div><dt>먼저 읽기</dt><dd>C++ 클래스·람다, 스레드의 기본</dd></div>
+        </dl>
         <div class="goals">
-          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
           <ol>
             <li>luil이 무엇을 하는 프레임워크인지 한 문단으로 설명할 수 있다.</li>
             <li>세 가지 설계 결정과 각각이 얻는 것·치르는 것을 말할 수 있다.</li>
@@ -59,16 +57,12 @@
           </ol>
         </div>
       </div>
-    </div>
-  </section>
+    </header>
 
-  <div class="lecture-body">
-    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
-    <div class="slides">
+    <div class="doc-body">
 
-      <section class="slide" id="s1" data-num="1.1">
-        <header class="slide-head">
-          <span class="num">1.1</span>
+      <section class="sec" id="s1">
+        <header class="sec-head">
           <h2>luil은 무엇인가</h2>
           <p class="lede">창을 열고, 그 안의 모든 것을 직접 그리고, 입력을 받아 앱 상태를 바꾸는 C++20 애플리케이션 프레임워크다.</p>
         </header>
@@ -84,12 +78,11 @@
           <div role="listitem"><span class="v">4</span><span class="k">플랫폼 host — Win32·Android·macOS·iOS</span></div>
           <div role="listitem"><span class="v">138</span><span class="k">설계·사용 문서 (docs/)</span></div>
         </div>
-        <p class="small muted">수치는 이 강의가 기준으로 삼은 main <code>563a855</code>(2026-11-25)에서 센 값이다. 테스트 케이스는 <code>TEST_CASE</code> 선언의 수다.</p>
+        <p class="small muted">수치는 이 설명서가 기준으로 삼은 main <code>563a855</code>(2026-11-25)에서 센 값이다. 테스트 케이스는 <code>TEST_CASE</code> 선언의 수다.</p>
       </section>
 
-      <section class="slide" id="s2" data-num="1.2">
-        <header class="slide-head">
-          <span class="num">1.2</span>
+      <section class="sec" id="s2">
+        <header class="sec-head">
           <h2>클릭 한 번이 지나가는 길</h2>
           <p class="lede">luil의 가장 작은 예제 hello를 눌러 보자. 숫자 하나가 바뀌기까지 세 스레드를 건넌다.</p>
         </header>
@@ -129,38 +122,36 @@
         </div>
       </section>
 
-      <section class="slide" id="s3" data-num="1.3">
-        <header class="slide-head">
-          <span class="num">1.3</span>
+      <section class="sec" id="s3">
+        <header class="sec-head">
           <h2>세 가지 큰 결정</h2>
-          <p class="lede">luil의 구조는 세 결정에서 나온다. 각각이 무엇을 얻고 무엇을 치르는지가 이 강의 전체의 줄기다.</p>
+          <p class="lede">luil의 구조는 세 결정에서 나온다. 각각이 무엇을 얻고 무엇을 치르는지가 이 설명서 전체의 줄기다.</p>
         </header>
         <div class="cols three">
           <div class="panel">
             <span class="tag accent"><i class="ci" aria-hidden="true">&#xEB2A;</i>결정 1</span>
             <h3>모든 것을 Skia로 직접 그린다</h3>
             <p><b>얻는 것</b> — 네 플랫폼에서 같은 모양, custom caption·배경 효과 같은 자유, OS 위젯 툴킷에 기대지 않는 코드.</p>
-            <p><b>치르는 것</b> — OS 컨트롤이 공짜로 주던 것을 직접 이어야 한다. 접근성(UIA·VoiceOver), 텍스트 입력과 IME, 클립보드가 그렇다. luil은 이것들을 플랫폼마다 다리로 잇는다(6·8·11강).</p>
+            <p><b>치르는 것</b> — OS 컨트롤이 공짜로 주던 것을 직접 이어야 한다. 접근성(UIA·VoiceOver), 텍스트 입력과 IME, 클립보드가 그렇다. luil은 이것들을 플랫폼마다 다리로 잇는다(<a class="xref" href="input.html">입력과 초점</a> · <a class="xref" href="text.html">텍스트 처리</a> · <a class="xref" href="platforms.html">플랫폼과 host</a>).</p>
           </div>
           <div class="panel">
             <span class="tag accent"><i class="ci" aria-hidden="true">&#xEB86;</i>결정 2</span>
             <h3>화면은 frame마다 새로 짓는 불변 tree다</h3>
             <p><b>얻는 것</b> — 게시한 tree를 아무도 고치지 않으므로 세 스레드가 잠금 없이 함께 읽는다. 부분 갱신 경로가 없어 화면 구조와 앱 상태가 섞이지 않는다.</p>
-            <p><b>치르는 것</b> — 매 frame 다시 짓는 비용. 그래서 긴 목록은 보이는 행만 tree에 넣고(가상화, 5강), element는 주소가 아닌 값인 id로 frame을 넘어 이어진다(4강).</p>
+            <p><b>치르는 것</b> — 매 frame 다시 짓는 비용. 그래서 긴 목록은 보이는 행만 tree에 넣고(가상화, <a class="xref" href="layout.html">배치</a>), element는 주소가 아닌 값인 id로 frame을 넘어 이어진다(<a class="xref" href="ui-tree.html">불변 UI tree</a>).</p>
           </div>
           <div class="panel">
             <span class="tag accent"><i class="ci" aria-hidden="true">&#xEB09;</i>결정 3</span>
             <h3>앱 상태는 logic thread 하나가 쥔다</h3>
-            <p><b>얻는 것</b> — 앱 상태에 경쟁 조건이 없다. 앱 코드가 오래 걸려도 창과 입력은 멎지 않는다. 메시지만 넣으면 창 없이도 테스트할 수 있다(12강).</p>
-            <p><b>치르는 것</b> — 모든 동작이 메시지를 거친다. 상태에서 나오는 화면 변화는 다음 frame에 보인다(2·3강).</p>
+            <p><b>얻는 것</b> — 앱 상태에 경쟁 조건이 없다. 앱 코드가 오래 걸려도 창과 입력은 멎지 않는다. 메시지만 넣으면 창 없이도 테스트할 수 있다(<a class="xref" href="testing.html">시험과 빌드</a>).</p>
+            <p><b>치르는 것</b> — 모든 동작이 메시지를 거친다. 상태에서 나오는 화면 변화는 다음 frame에 보인다(<a class="xref" href="threads.html">스레드 모델</a> · <a class="xref" href="messaging.html">스레드 경계 메시징</a>).</p>
           </div>
         </div>
         <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">한 줄로 줄이면</span>입력 → element 액션 → 앱 메시지 → logic의 상태 변경 → 새 frame과 불변 tree 게시 → UI의 그리기. 데이터는 이 한 방향으로만 흐른다.</div></div>
       </section>
 
-      <section class="slide" id="s4" data-num="1.4">
-        <header class="slide-head">
-          <span class="num">1.4</span>
+      <section class="sec" id="s4">
+        <header class="sec-head">
           <h2>익숙한 프레임워크와 견주기</h2>
           <p class="lede">상태가 어디 살고, 화면을 어떻게 바꾸는지로 나란히 놓으면 luil의 자리가 보인다.</p>
         </header>
@@ -177,13 +168,12 @@
           </table>
         </div>
         <div class="prose">
-          <p>luil은 Elm·React 계열의 <strong>단방향 데이터 흐름</strong>을 따르지만 두 곳에서 갈린다. 첫째, 새 tree를 이전 tree와 비교(diff)하지 않는다. 게시본을 통째로 바꾸고, 표면 전체를 다시 그린다. 둘째, hover·눌림·초점 같은 <strong>상호작용 상태는 앱 상태가 아니다.</strong> input thread가 따로 쥐고 값(<code>interaction_snapshot</code>)으로 게시하며, element는 그 안의 id를 자기 id와 비교할 뿐이다. 그래서 1.2의 실험에서 눌린 모양은 logic을 거치지 않고 먼저 보였다.</p>
+          <p>luil은 Elm·React 계열의 <strong>단방향 데이터 흐름</strong>을 따르지만 두 곳에서 갈린다. 첫째, 새 tree를 이전 tree와 비교(diff)하지 않는다. 게시본을 통째로 바꾸고, 표면 전체를 다시 그린다. 둘째, hover·눌림·초점 같은 <strong>상호작용 상태는 앱 상태가 아니다.</strong> input thread가 따로 쥐고 값(<code>interaction_snapshot</code>)으로 게시하며, element는 그 안의 id를 자기 id와 비교할 뿐이다. 그래서 <a class="xref" href="#s2">클릭 한 번이 지나가는 길</a> 실험에서 눌린 모양은 logic을 거치지 않고 먼저 보였다.</p>
         </div>
       </section>
 
-      <section class="slide" id="s5" data-num="1.5">
-        <header class="slide-head">
-          <span class="num">1.5</span>
+      <section class="sec" id="s5">
+        <header class="sec-head">
           <h2>앱과 라이브러리의 경계</h2>
           <p class="lede">앱은 세 조각을 꽂는다. 셋 모두 상태를 직접 바꾸지 않고 메시지만 만든다.</p>
         </header>
@@ -223,9 +213,8 @@
         </figure>
       </section>
 
-      <section class="slide" id="s6" data-num="1.6">
-        <header class="slide-head">
-          <span class="num">1.6</span>
+      <section class="sec" id="s6">
+        <header class="sec-head">
           <h2>hello 읽기 ① 조립하는 main</h2>
           <p class="lede">Windows 진입점은 창의 겉모습을 정하고 앱의 조각을 꽂은 뒤, 메시지 루프에 들어간다.</p>
         </header>
@@ -278,9 +267,8 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
         </div>
       </section>
 
-      <section class="slide" id="s7" data-num="1.7">
-        <header class="slide-head">
-          <span class="num">1.7</span>
+      <section class="sec" id="s7">
+        <header class="sec-head">
           <h2>hello 읽기 ② 상태와 화면</h2>
           <p class="lede">앱의 전부는 두 함수다. 메시지로 상태를 바꾸는 <code>handle</code>, 상태로 화면을 짓는 <code>make_frame</code>.</p>
         </header>
@@ -374,9 +362,9 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
     }
 </script></div>
           <ol class="walk-steps-src">
-            <li data-lines="29-49" data-title="상태를 바꾸는 유일한 자리">메시지는 앱이 정의한 평범한 구조체(<code>close_intent</code>, <code>metrics_intent</code>, <code>increment_intent</code>)다. 라이브러리는 이 타입을 모른 채 불투명 상자 <code>app_message</code>에 담아 나르고, 앱은 <code>get&lt;T&gt;()</code>로 꺼낸다. 타입이 다르면 <code>nullptr</code>라 순서대로 물으면 된다(3강).</li>
-            <li data-lines="33-38" data-title="종료 신호도 메시지다">창을 닫으면 라이브러리가 <code>make_close_message()</code>가 준 메시지를 inbox에 넣는다. 앱은 여기서 종료 저장을 제출하고, <code>closed_</code>를 세워 "처리했다"고 답한다. 이 값은 UI thread도 읽으므로 <code>std::atomic</code>이다(2강).</li>
-            <li data-lines="53-57" data-title="논리 픽셀과 물리 픽셀">delegate가 보내 온 창 크기·배율을 쓴다. 설정 길이(24px 여백, 14px 글자)는 논리 픽셀이고, <code>arrange</code>에 넘기는 slot은 물리 픽셀이다. <code>scale</code>이 둘을 잇는다(5강).</li>
+            <li data-lines="29-49" data-title="상태를 바꾸는 유일한 자리">메시지는 앱이 정의한 평범한 구조체(<code>close_intent</code>, <code>metrics_intent</code>, <code>increment_intent</code>)다. 라이브러리는 이 타입을 모른 채 불투명 상자 <code>app_message</code>에 담아 나르고, 앱은 <code>get&lt;T&gt;()</code>로 꺼낸다. 타입이 다르면 <code>nullptr</code>라 순서대로 물으면 된다(<a class="xref" href="messaging.html">스레드 경계 메시징</a>).</li>
+            <li data-lines="33-38" data-title="종료 신호도 메시지다">창을 닫으면 라이브러리가 <code>make_close_message()</code>가 준 메시지를 inbox에 넣는다. 앱은 여기서 종료 저장을 제출하고, <code>closed_</code>를 세워 "처리했다"고 답한다. 이 값은 UI thread도 읽으므로 <code>std::atomic</code>이다(<a class="xref" href="threads.html">스레드 모델</a>).</li>
+            <li data-lines="53-57" data-title="논리 픽셀과 물리 픽셀">delegate가 보내 온 창 크기·배율을 쓴다. 설정 길이(24px 여백, 14px 글자)는 논리 픽셀이고, <code>arrange</code>에 넘기는 slot은 물리 픽셀이다. <code>scale</code>이 둘을 잇는다(<a class="xref" href="layout.html">배치</a>).</li>
             <li data-lines="59-81" data-title="tree를 위에서부터 짓는다">root를 창 전체에 배치하고, 그 위에 caption(데스크톱) 또는 앱 바(모바일)를 얹는다. 어느 쪽인지는 <code>current_ui_platform()</code>이 알려 주므로 같은 코드가 네 플랫폼에서 돈다.</li>
             <li data-lines="83-95" data-title="stack에 라벨을 쌓는다">세로 <code>stack_element</code>가 자식의 자리를 나눠 준다. 라벨의 글은 <code>clicks_</code>에서 나온다. 상태가 바뀌면 이 함수가 다시 불려 새 글을 가진 새 라벨이 생긴다.</li>
             <li data-lines="97-103" data-title="액션은 메시지를 돌려줄 뿐">버튼의 왼쪽 클릭에 <code>make_message_action(increment_intent {})</code>를 단다. 클릭되면 input thread에서 이 액션이 실행되어 메시지 하나를 돌려준다. 앱 상태를 건드리는 캡처가 없으니, 여러 스레드가 이 tree를 동시에 읽어도 안전하다.</li>
@@ -385,9 +373,8 @@ int WINAPI wWinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPWSTR, _In_ int)
         </div>
       </section>
 
-      <section class="slide" id="s8" data-num="1.8">
-        <header class="slide-head">
-          <span class="num">1.8</span>
+      <section class="sec" id="s8">
+        <header class="sec-head">
           <h2>같은 앱, 네 진입점</h2>
           <p class="lede">hello_app.h·.cpp는 네 플랫폼이 같은 파일이다. 다른 것은 진입점 몇 줄뿐이다.</p>
         </header>
@@ -503,23 +490,21 @@ int main(const int argc, char** const argv)
             </tbody>
           </table>
         </div>
-        <p class="small muted">네 플랫폼 모두 GPU를 먼저 쓰고, 만들거나 그리다 실패하면 CPU 렌더러로 물러선다(7강).</p>
+        <p class="small muted">네 플랫폼 모두 GPU를 먼저 쓰고, 만들거나 그리다 실패하면 CPU 렌더러로 물러선다(<a class="xref" href="rendering.html">그리기와 렌더러</a>).</p>
       </section>
 
-      <section class="slide" id="s9" data-num="1.9">
-        <header class="slide-head">
-          <span class="num">1.9</span>
+      <section class="sec" id="s9">
+        <header class="sec-head">
           <h2>저장소 지도</h2>
           <p class="lede">구현의 절반쯤은 플랫폼을 모르는 core이고, 나머지 절반이 네 플랫폼에 OS를 잇는 host다.</p>
         </header>
         <div class="legend" aria-hidden="true"><span><i style="background:var(--accent)"></i>플랫폼을 모르는 core</span><span><i style="background:var(--t-ui)"></i>플랫폼 host</span><span><i style="background:var(--t-lg)"></i>공통 + 플랫폼별</span><span><i style="background:var(--line-3)"></i>구현 밖</span></div>
         <div class="bars" id="repo-bars" role="table" aria-label="디렉터리별 줄 수"></div>
-        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">core와 host의 경계</span>core(<code>src/ui</code>·<code>src/host</code>·<code>src/text</code>·<code>src/theme</code>)는 50,351줄, 네 플랫폼 host(<code>src/win32</code>·<code>src/macos</code>·<code>src/android</code>·<code>src/ios</code>)는 합쳐 58,043줄이다. host는 창·입력·렌더러 표면·OS 기능을 잇고, 화면에 무엇을 어떻게 그릴지는 core가 정한다. 경계의 계약은 11강에서 읽는다.</div></div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">core와 host의 경계</span>core(<code>src/ui</code>·<code>src/host</code>·<code>src/text</code>·<code>src/theme</code>)는 50,351줄, 네 플랫폼 host(<code>src/win32</code>·<code>src/macos</code>·<code>src/android</code>·<code>src/ios</code>)는 합쳐 58,043줄이다. host는 창·입력·렌더러 표면·OS 기능을 잇고, 화면에 무엇을 어떻게 그릴지는 core가 정한다. 경계의 계약은 <a class="xref" href="platforms.html">플랫폼과 host</a> 문서에서 읽는다.</div></div>
       </section>
 
-      <section class="slide" id="s10" data-num="1.10">
-        <header class="slide-head">
-          <span class="num">1.10</span>
+      <section class="sec" id="s10">
+        <header class="sec-head">
           <h2>빌드하고 실행하기</h2>
           <p class="lede">의존성의 버전과 체크섬은 저장소에 고정되어 있고, CMake configure는 네트워크를 쓰지 않는다.</p>
         </header>
@@ -577,13 +562,12 @@ target_link_libraries(my_app PRIVATE luil::luil)
 find_package(luil 0.1 REQUIRED)
 target_link_libraries(my_app PRIVATE luil::luil)
 </script></div>
-        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">실행 파일에 필요한 것</span>앱과 Skia의 CRT 설정이 같아야 하고, 실행 파일에는 Codicons 글꼴과 제3자 고지를 담은 리소스 스크립트가 들어가야 한다. <code>luil_generate_third_party_notices</code>와 <code>luil_configure_resource_script</code>로 만든다(12강).</div></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">실행 파일에 필요한 것</span>앱과 Skia의 CRT 설정이 같아야 하고, 실행 파일에는 Codicons 글꼴과 제3자 고지를 담은 리소스 스크립트가 들어가야 한다. <code>luil_generate_third_party_notices</code>와 <code>luil_configure_resource_script</code>로 만든다(<a class="xref" href="testing.html">시험과 빌드</a>).</div></div>
       </section>
 
-      <section class="slide" id="s11" data-num="1.11">
-        <header class="slide-head">
-          <span class="num">1.11</span>
-          <h2>정리</h2>
+      <section class="sec" id="s11">
+        <header class="sec-head">
+          <h2>요약</h2>
         </header>
         <ol class="recap">
           <li>luil은 Skia로 모든 것을 직접 그리는 C++20 애플리케이션 프레임워크다. 같은 앱 코드가 Windows·Android·macOS·iOS에서 돈다.</li>
@@ -595,65 +579,72 @@ target_link_libraries(my_app PRIVATE luil::luil)
         </ol>
       </section>
 
-      <section class="slide" id="s12" data-num="1.12">
-        <header class="slide-head">
-          <span class="num">1.12</span>
-          <h2>확인 문제</h2>
+      <section class="sec" id="s12" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
         </header>
-        <div class="quiz-set">
-          <div class="quiz" data-answer="3">
-            <p class="q">hello에서 "하나 더"를 누르면 <code>clicks_</code>를 실제로 늘리는 코드는 어느 스레드에서 실행되는가?</p>
-            <ol class="choices">
-              <li>UI thread — 버튼을 그리는 스레드이므로</li>
-              <li>input thread — 클릭을 판정하고 액션을 실행하는 스레드이므로</li>
-              <li>logic thread — <code>handle()</code>이 메시지를 받아 바꾼다</li>
-              <li>정해져 있지 않다 — 먼저 잡은 스레드가 바꾼다</li>
-            </ol>
-            <div class="explain">액션은 input thread에서 실행되지만 상태를 바꾸지 않고 <code>increment_intent</code> 메시지를 돌려줄 뿐이다. 상태를 바꾸는 곳은 logic thread의 <code>handle()</code> 하나다.</div>
-          </div>
-          <div class="quiz" data-answer="2">
-            <p class="q">상태가 바뀐 뒤 luil이 화면을 갱신하는 방법으로 맞는 것은?</p>
-            <ol class="choices">
-              <li>바뀐 element의 setter를 불러 그 자리를 고친다</li>
-              <li>새 tree를 통째로 지어 게시하고, 이전 tree와 비교하지 않는다</li>
-              <li>새 tree를 이전 tree와 비교해 다른 부분만 다시 그린다</li>
-              <li>UI thread가 앱 상태를 직접 읽어 다시 그린다</li>
-            </ol>
-            <div class="explain">게시된 element는 수정하지 않는다. <code>make_frame()</code>이 새 tree를 지어 latest_slot에 게시하고, 부분 갱신 경로는 없다. 지금은 표면 전체를 다시 그린다.</div>
-          </div>
-          <div class="quiz" data-answer="4">
-            <p class="q">1.2의 실험에서 버튼의 눌린 모양이 숫자보다 먼저 보인 까닭은?</p>
-            <ol class="choices">
-              <li>UI thread가 버튼을 미리 그려 두기 때문에</li>
-              <li>logic thread가 눌림 메시지를 먼저 처리하기 때문에</li>
-              <li>버튼 element가 스스로 눌림 상태를 저장하기 때문에</li>
-              <li>눌림은 input thread가 게시하는 interaction snapshot이고, 앱 상태를 거치지 않기 때문에</li>
-            </ol>
-            <div class="explain">hover·press·focus는 input thread의 <code>interaction_snapshot</code>에 값으로 들어 있다. element는 그 안의 id와 자기 id를 비교해 그린다. 그래서 logic을 기다리지 않는다.</div>
-          </div>
-          <div class="quiz" data-answer="1">
-            <p class="q">iOS 진입점에서 driver와 delegate를 <code>static</code>으로 만든 이유는?</p>
-            <ol class="choices">
-              <li><code>run_application</code>이 UIApplicationMain을 불러 돌아오지 않으므로, 프로세스가 끝날 때까지 살아야 해서</li>
-              <li>iOS는 스택에 큰 객체를 둘 수 없어서</li>
-              <li>static이어야 다른 스레드가 읽을 수 있어서</li>
-              <li>iOS에서는 driver가 여러 개 생기기 때문에</li>
-            </ol>
-            <div class="explain">다른 플랫폼은 종료 절차가 끝나면 진입 함수가 돌아오지만, iOS의 <code>UIApplicationMain</code>은 돌아오지 않는다. 지역 변수의 수명에 기대면 안 되므로 정적 수명을 준다.</div>
-          </div>
+        <div class="faq-list">
+          <details class="faq">
+            <summary>hello에서 "하나 더"를 누르면 <code>clicks_</code>를 실제로 늘리는 코드는 어느 스레드에서 실행되는가?</summary>
+            <div class="faq-a">
+              <p class="faq-short">logic thread — <code>handle()</code>이 메시지를 받아 바꾼다</p>
+              <p>액션은 input thread에서 실행되지만 상태를 바꾸지 않고 <code>increment_intent</code> 메시지를 돌려줄 뿐이다. 상태를 바꾸는 곳은 logic thread의 <code>handle()</code> 하나다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>상태가 바뀌면 luil은 화면을 어떻게 갱신하나?</summary>
+            <div class="faq-a">
+              <p class="faq-short">새 tree를 통째로 지어 게시하고, 이전 tree와 비교하지 않는다</p>
+              <p>게시된 element는 수정하지 않는다. <code>make_frame()</code>이 새 tree를 지어 latest_slot에 게시하고, 부분 갱신 경로는 없다. 지금은 표면 전체를 다시 그린다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>"클릭 한 번이 지나가는 길" 실험에서 버튼의 눌린 모양이 숫자보다 먼저 보이는 까닭은?</summary>
+            <div class="faq-a">
+              <p class="faq-short">눌림은 input thread가 게시하는 interaction snapshot이고, 앱 상태를 거치지 않기 때문에</p>
+              <p>hover·press·focus는 input thread의 <code>interaction_snapshot</code>에 값으로 들어 있다. element는 그 안의 id와 자기 id를 비교해 그린다. 그래서 logic을 기다리지 않는다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>iOS 진입점에서 driver와 delegate를 <code>static</code>으로 만든 이유는?</summary>
+            <div class="faq-a">
+              <p class="faq-short"><code>run_application</code>이 UIApplicationMain을 불러 돌아오지 않으므로, 프로세스가 끝날 때까지 살아야 해서</p>
+              <p>다른 플랫폼은 종료 절차가 끝나면 진입 함수가 돌아오지만, iOS의 <code>UIApplicationMain</code>은 돌아오지 않는다. 지역 변수의 수명에 기대면 안 되므로 정적 수명을 준다.</p>
+            </div>
+          </details>
         </div>
-        <nav class="pager" data-auto aria-label="강의 이동"></nav>
       </section>
 
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/luil.h" target="_blank" rel="noopener">include/luil/luil.h</a><span class="n">최상위 기호 0</span></div>
+            <p class="hdr-desc">라이브러리 공개 API 전체를 한 번에 들이는 umbrella header다. 빌드 시간을 아끼려면 필요한 header만 골라 include해도 된다 — 어느 쪽이든 경로는 항상 `luil/` 접두로 시작한다.</p>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/version.h" target="_blank" rel="noopener">include/luil/version.h</a><span class="n">최상위 기호 1</span></div>
+            <p class="hdr-desc">판번 매크로(LUIL_VERSION_MAJOR 등)다. 근원은 CMake의 project VERSION 하나이고 configure가 생성한다. 소비자는 매크로로 `#if` 분기를 하고, 런타임 표시는 아래 함수를 쓴다.</p>
+            <div class="hdr-syms"><a href="api.html#library-version" title="함수"><span class="kb f">f</span>library_version</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
     </div>
-  </div>
-</main>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
 <footer class="site-foot"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/cmake.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/languages/powershell.min.js"></script>
-<script src="assets/course.js"></script>
+<script src="assets/manual.js"></script>
 <script>
 (function () {
   const { el, flow } = window.LU;
@@ -806,7 +797,7 @@ target_link_libraries(my_app PRIVATE luil::luil)
     { dir: "src/text", lines: 5269, files: 15, kind: "core", role: "UTF-8·자소 묶음·줄 나눔·텍스트 편집" },
     { dir: "src/theme", lines: 573, files: 3, kind: "core", role: "테마·팔레트·앱 스타일" },
     { dir: "include/luil", lines: 21383, files: 149, kind: "other", role: "공개 헤더 — 주석이 곧 계약서다" },
-    { dir: "tests", lines: 103912, files: 264, kind: "other", role: "Catch2 TEST_CASE 2,852개 — 12강" },
+    { dir: "tests", lines: 103912, files: 264, kind: "other", role: "Catch2 TEST_CASE 2,852개 — 시험과 빌드" },
     { dir: "examples", lines: 28669, files: null, kind: "other", role: "hello·widgets·demo·mobile_demo 등 (C++ 소스만 셈)" },
   ];
   const max = Math.max(...rows.map((r) => r.lines));

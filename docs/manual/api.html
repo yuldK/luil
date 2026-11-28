@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>API 찾아보기 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — 공개 헤더 149개의 형식·함수·필드·열거값을 원문 주석과 선언 그대로 찾아본다.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .api { display: grid; gap: 0; border: 1px solid var(--line); border-radius: var(--r-window); background: var(--panel); min-height: 70vh; margin-top: 28px; }
+  @media (min-width: 900px) { .api { grid-template-columns: minmax(250px, 320px) minmax(0, 1fr); } }
+  .api-list { border-bottom: 1px solid var(--line); display: grid; grid-template-rows: auto minmax(0, 1fr); min-width: 0; }
+  @media (min-width: 900px) { .api-list { border-bottom: 0; border-right: 1px solid var(--line); position: sticky; top: calc(var(--cap-h) + env(safe-area-inset-top, 0px)); align-self: start; height: calc(100vh - var(--cap-h) - env(safe-area-inset-top, 0px) - 24px); } }
+  .api-tools { padding: 10px; display: grid; gap: 8px; border-bottom: 1px solid var(--line); background: var(--panel-2); border-radius: var(--r-window) 0 0 0; }
+  .api-tools input[type="search"] { width: 100%; }
+  .api-tools .row { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; font-size: var(--fs-xs); color: var(--fg-2); }
+  .api-tools label { display: inline-flex; gap: 5px; align-items: center; cursor: pointer; }
+  .api-count { font-family: var(--font-code); font-size: 11px; color: var(--fg-3); }
+  .api-scroll { overflow: auto; min-height: 0; max-height: 46vh; padding: 4px 0 12px; overscroll-behavior: contain; }
+  @media (min-width: 900px) { .api-scroll { max-height: none; } }
+  .api-group > summary { list-style: none; cursor: pointer; padding: 7px 12px 5px; font-family: var(--font-code); font-size: 11.5px; color: var(--fg-2); display: flex; gap: 6px; align-items: baseline; position: sticky; top: 0; background: var(--panel); z-index: 1; }
+  .api-group > summary::-webkit-details-marker { display: none; }
+  .api-group > summary::before { content: "\EAB6"; font-family: codicon; font-size: 13px; color: var(--fg-3); transition: transform .12s; }
+  .api-group[open] > summary::before { transform: rotate(90deg); }
+  .api-group > summary .n { margin-left: auto; color: var(--fg-3); font-size: 10.5px; }
+  .api-item { display: flex; gap: 8px; align-items: baseline; padding: 4px 12px 4px 26px; text-decoration: none; color: var(--fg); font-size: 13px; line-height: 1.35; min-width: 0; }
+  .api-item:hover { background: var(--sunk); }
+  .api-item[aria-current="true"] { background: var(--accent-wash); color: var(--accent-ink); }
+  .api-item .nm { font-family: var(--font-code); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .api-item .pa { color: var(--fg-3); }
+  .kb { flex: none; font-family: var(--font-code); font-size: 9.5px; line-height: 15px; min-width: 22px; text-align: center; border-radius: 3px; padding: 0 3px; background: var(--sunk); color: var(--fg-2); }
+  .kb.t { background: var(--accent-wash); color: var(--accent-ink); }
+  .kb.f { background: #7f5af01f; color: var(--t-logic, var(--fg-2)); }
+  .kb.e { background: #b4690e1f; color: var(--t-input, var(--fg-2)); }
+  .api-detail { padding: clamp(16px, 2.6vw, 28px); min-width: 0; display: grid; gap: 18px; align-content: start; }
+  .api-detail h2 { font-family: var(--font-code); font-size: clamp(1.15rem, 0.9rem + 1vw, 1.5rem); font-weight: 600; overflow-wrap: anywhere; display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; }
+  .api-detail h2 .kb { font-size: 11px; line-height: 20px; padding: 0 7px; }
+  .api-where { display: flex; flex-wrap: wrap; gap: 6px 16px; font-size: var(--fs-xs); color: var(--fg-3); align-items: center; }
+  .api-where a { color: var(--fg-2); }
+  .api-where code { font-size: 11.5px; }
+  .api-doc { display: grid; gap: 8px; font-size: var(--fs-sm); line-height: 1.75; max-width: 76ch; }
+  .api-doc p, .api-doc ul { margin: 0; }
+  .api-doc ul { padding-left: 1.2em; display: grid; gap: 3px; }
+  .api-doc.none { color: var(--fg-3); font-style: italic; }
+  .api-sub { font-size: var(--fs-sm); font-weight: 600; color: var(--fg-2); margin-top: 6px; }
+  .mem { display: grid; gap: 0; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .mem > a { display: grid; gap: 3px; padding: 9px 12px; border-top: 1px solid var(--line); text-decoration: none; color: var(--fg); min-width: 0; }
+  .mem > a:first-child { border-top: 0; }
+  .mem > a:hover { background: var(--sunk); }
+  .mem .sig { font-family: var(--font-code); font-size: 12px; color: var(--fg); overflow-wrap: anywhere; }
+  .mem .sig b { color: var(--accent-ink); font-weight: 600; }
+  .mem .cm { font-size: 12.5px; color: var(--fg-2); line-height: 1.6; }
+  .api-empty { color: var(--fg-3); font-size: var(--fs-sm); padding: 24px 12px; }
+  .api-back { display: none; }
+  .crumb-path { font-family: var(--font-code); font-size: 12px; color: var(--fg-3); display: flex; flex-wrap: wrap; gap: 4px; }
+  .crumb-path a { color: var(--fg-2); text-decoration: none; }
+  .crumb-path a:hover { text-decoration: underline; }
+  .api-stats { display: flex; flex-wrap: wrap; gap: 8px 18px; font-size: var(--fs-sm); color: var(--fg-2); }
+  .api-stats b { font-family: var(--font-code); color: var(--fg); font-weight: 600; }
+  .api-detail .code { margin: 0; }
+  .doc-links { display: flex; flex-wrap: wrap; gap: 6px; }
+  .doc-links a { font-size: var(--fs-xs); border: 1px solid var(--line-2); border-radius: 3px; padding: 2px 8px; text-decoration: none; color: var(--accent-ink); background: var(--accent-wash); }
+</style>
+</head>
+<body data-page="api">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>API 찾아보기</h1>
+      <p class="summary">공개 헤더의 모든 형식·함수·필드·열거값을 헤더의 주석과 선언 원문 그대로 보인다. 문서가 개념과 쓰는 법을 말한다면, 여기는 "이 필드의 기본값은?", "이 함수는 무엇을 돌려주나?"에 답한다.</p>
+      <div class="api-stats" id="api-stats"></div>
+    </header>
+
+    <div class="api" id="api">
+      <div class="api-list">
+        <div class="api-tools">
+          <input type="search" id="api-q" placeholder="이름으로 찾기 (예: list_config, row_height)" aria-label="API 이름으로 찾기" autocomplete="off" spellcheck="false">
+          <div class="row">
+            <label><input type="checkbox" id="api-members" checked> 멤버까지</label>
+            <label><input type="checkbox" id="api-comments"> 주석에서도</label>
+            <span class="api-count" id="api-count"></span>
+          </div>
+        </div>
+        <div class="api-scroll" id="api-scroll"></div>
+      </div>
+      <div class="api-detail" id="api-detail" aria-live="polite"></div>
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<script src="assets/api-index.js"></script>
+<script src="assets/doc-map.js"></script>
+<script>
+(function () {
+  const { el, sourceUrl, escapeHtml, renderCode } = LU;
+  const A = window.LUIL_API;
+  const S = A.symbols;
+  const H = A.headers;
+  const KIND = { struct: "구조체", class: "클래스", union: "공용체", enum: "열거형", enumerator: "열거값", function: "함수", method: "멤버 함수", constructor: "생성자", field: "필드", alias: "별칭", constant: "상수", concept: "개념" };
+  const KB = { struct: ["S", "t"], class: ["C", "t"], union: ["U", "t"], enum: ["E", "e"], enumerator: ["e", "e"], function: ["f", "f"], method: ["m", "f"], constructor: ["c", "f"], field: ["v", ""], alias: ["=", "t"], constant: ["k", ""], concept: ["K", "t"] };
+  const $ = (id) => document.getElementById(id);
+
+  // 기호 하나의 주소 (규칙은 manual.js의 apiSlugs — 검색 결과도 같은 주소로 온다)
+  const slugOf = new Map();
+  const bySlug = new Map();
+  LU.apiSlugs(S.map((s) => s.q)).forEach((slug, i) => {
+    slugOf.set(S[i].i, slug);
+    bySlug.set(slug, S[i]);
+  });
+
+  const kb = (k) => el("span", { class: "kb " + (KB[k] ? KB[k][1] : ""), title: KIND[k] || k, text: KB[k] ? KB[k][0] : "?" });
+
+  // 주석: 문단, " - " 목록, `코드`, **굵게**
+  function inline(t) {
+    return escapeHtml(t)
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  }
+  function renderComment(c) {
+    const box = el("div", { class: "api-doc" + (c ? "" : " none") });
+    if (!c) {
+      box.textContent = "헤더에 이 선언의 주석이 없다. 선언과 이웃 기호의 설명을 함께 본다.";
+      return box;
+    }
+    const lines = c.split("\n");
+    let para = [];
+    let list = null;
+    const flush = () => {
+      if (para.length) box.append(el("p", { html: inline(para.join(" ")) }));
+      para = [];
+    };
+    for (const raw of lines) {
+      const ln = raw.replace(/\s+$/, "");
+      const m = ln.match(/^\s*[-•]\s+(.*)$/);
+      if (m) {
+        flush();
+        if (!list) {
+          list = el("ul");
+          box.append(list);
+        }
+        list.append(el("li", { html: inline(m[1]) }));
+      } else if (!ln.trim()) {
+        flush();
+        list = null;
+      } else if (list && /^\s{2,}/.test(raw)) {
+        const last = list.lastElementChild;
+        last.innerHTML += " " + inline(ln.trim());
+      } else {
+        list = null;
+        para.push(ln.trim());
+      }
+    }
+    flush();
+    return box;
+  }
+
+  // 관련 문서: 설명서 페이지가 이 헤더를 다루면 그 페이지를 잇는다 (tools/gen_search.py가 doc-map.js에 채운다).
+  const pageOfHeader = (window.LUIL_DOCMAP && window.LUIL_DOCMAP.headerPages) || {};
+
+  function pathOf(s) {
+    const out = [];
+    let p = s;
+    while (p) {
+      out.unshift(p);
+      p = p.p != null ? S[p.p] : null;
+    }
+    return out;
+  }
+
+  let srcLoading = null;
+  function loadSrc() {
+    if (window.LUIL_API_SRC) return Promise.resolve(window.LUIL_API_SRC);
+    if (srcLoading) return srcLoading;
+    srcLoading = new Promise((resolve) => {
+      const sc = document.createElement("script");
+      sc.src = "assets/api-src.js";
+      sc.onload = () => resolve(window.LUIL_API_SRC || {});
+      sc.onerror = () => resolve({});
+      document.head.append(sc);
+    });
+    return srcLoading;
+  }
+
+  function memberRow(m) {
+    const a = el("a", { href: "#" + slugOf.get(m.i) });
+    const sig = escapeHtml(m.s[0] || m.n).replace(new RegExp("\\b(" + m.n.replace(/[^A-Za-z0-9_~]/g, "") + ")\\b"), "<b>$1</b>");
+    a.append(el("span", { class: "sig", html: sig + (m.s.length > 1 ? ' <span class="pa">외 오버로드 ' + (m.s.length - 1) + "개</span>" : "") }));
+    if (m.c) a.append(el("span", { class: "cm", html: inline(m.c.split("\n").join(" ").slice(0, 220)) + (m.c.length > 220 ? "…" : "") }));
+    if (m.x === "protected") a.querySelector(".sig").append(el("span", { class: "pa", text: "  (protected)" }));
+    return a;
+  }
+
+  function showDetail(s, push) {
+    const d = $("api-detail");
+    d.textContent = "";
+    if (!s) {
+      d.append(el("div", { class: "api-empty", text: "왼쪽에서 기호를 고르거나 이름으로 찾는다. 위 검색 칸(/)은 문서와 API를 함께 찾는다." }));
+      return;
+    }
+    const h = H[s.h];
+    const chain = pathOf(s);
+    if (chain.length > 1) {
+      const cp = el("div", { class: "crumb-path" });
+      chain.slice(0, -1).forEach((p, i) => {
+        if (i) cp.append(el("span", { text: "::" }));
+        cp.append(el("a", { href: "#" + slugOf.get(p.i), text: p.n }));
+      });
+      d.append(cp);
+    }
+    d.append(el("h2", null, el("span", { text: s.n }), el("span", { class: "kb " + (KB[s.k] ? KB[s.k][1] : ""), text: KIND[s.k] || s.k })));
+    const where = el("div", { class: "api-where" });
+    where.append(
+      el("code", { text: s.q }),
+      el("a", { href: sourceUrl(h.p, s.l, s.e), target: "_blank", rel: "noopener", text: h.p + ":" + s.l + (s.e > s.l ? "–" + s.e : "") }),
+      el("code", { text: '#include "' + h.p.replace(/^include\//, "") + '"' })
+    );
+    d.append(where);
+    const docs = pageOfHeader[h.p];
+    if (docs && docs.length) {
+      const dl = el("div", { class: "doc-links" });
+      dl.append(el("span", { class: "api-sub", style: { margin: "0 6px 0 0", fontWeight: 500 }, text: "이 헤더를 다루는 문서" }));
+      for (const p of docs) dl.append(el("a", { href: p.file, text: p.title }));
+      d.append(dl);
+    }
+    d.append(renderComment(s.c));
+
+    // 선언 원문
+    if (["struct", "class", "union", "enum"].includes(s.k) || s.e - s.l < 40) {
+      const box = el("div", { class: "code" + (s.e - s.l > 50 ? " tall" : ""), "data-lang": "cpp", "data-path": h.p, "data-start": String(s.l) });
+      const pre = el("script", { type: "text/plain" });
+      pre.textContent = (s.s || []).join("\n");
+      box.append(pre);
+      d.append(el("div", { class: "api-sub", text: s.s.length > 1 ? "선언 (오버로드 " + s.s.length + "개)" : "선언" }), box);
+      loadSrc().then((src) => {
+        const text = src[h.p];
+        if (!text || !box.isConnected) return;
+        const lines = text.split("\n").slice(s.l - 1, s.e);
+        const fresh = el("div", { class: box.className, "data-lang": "cpp", "data-path": h.p, "data-start": String(s.l) });
+        const sc = el("script", { type: "text/plain" });
+        sc.textContent = lines.join("\n");
+        fresh.append(sc);
+        box.replaceWith(fresh);
+        renderCode(fresh);
+      });
+      renderCode(box);
+    } else {
+      const box = el("div", { class: "code", "data-lang": "cpp", "data-nolink": "" });
+      const pre = el("script", { type: "text/plain" });
+      pre.textContent = s.s.join("\n\n");
+      box.append(pre);
+      d.append(el("div", { class: "api-sub", text: "선언" }), box);
+      renderCode(box);
+    }
+
+    if (s.m && s.m.length) {
+      const groups = [
+        ["field", "필드"],
+        ["constructor", "생성자"],
+        ["method", "멤버 함수"],
+        ["enumerator", "열거값"],
+        ["struct", "중첩 형식"],
+        ["class", "중첩 형식"],
+        ["enum", "중첩 열거형"],
+        ["alias", "별칭"],
+        ["constant", "상수"],
+      ];
+      const done = new Set();
+      for (const [k, label] of groups) {
+        const ms = s.m.map((i) => S[i]).filter((m) => m.k === k);
+        if (!ms.length) continue;
+        const key = label;
+        const list = done.has(key) ? d.querySelector('[data-group="' + key + '"]') : null;
+        if (!list) {
+          d.append(el("div", { class: "api-sub", text: label + " " + ms.length }));
+          const mem = el("div", { class: "mem", "data-group": key });
+          d.append(mem);
+          ms.forEach((m) => mem.append(memberRow(m)));
+          done.add(key);
+        } else ms.forEach((m) => list.append(memberRow(m)));
+      }
+    }
+
+    // 같은 헤더의 다른 최상위 기호
+    const sibs = S.filter((x) => x.h === s.h && x.p == null && x.i !== (chain[0] && chain[0].i));
+    if (sibs.length) {
+      d.append(el("div", { class: "api-sub", text: "같은 헤더의 다른 기호 " + sibs.length }));
+      const mem = el("div", { class: "mem" });
+      sibs.slice(0, 40).forEach((m) => mem.append(memberRow(m)));
+      d.append(mem);
+    }
+
+    document.querySelectorAll(".api-item[aria-current]").forEach((a) => a.removeAttribute("aria-current"));
+    const cur = document.querySelector('.api-item[data-i="' + s.i + '"]');
+    if (cur) {
+      cur.setAttribute("aria-current", "true");
+      const g = cur.closest("details");
+      if (g && !g.open) g.open = true;
+      const sc = $("api-scroll");
+      const r = cur.getBoundingClientRect();
+      const sr = sc.getBoundingClientRect();
+      if (r.top < sr.top || r.bottom > sr.bottom) sc.scrollTop += r.top - sr.top - sc.clientHeight / 3;
+    }
+    if (push && location.hash !== "#" + slugOf.get(s.i)) history.replaceState(null, "", "#" + slugOf.get(s.i));
+    if (window.innerWidth < 900 && push) $("api-detail").scrollIntoView({ block: "start" });
+  }
+
+  // 목록
+  const DIR = { ui: "ui — 화면 요소와 배치", app: "app — 앱·창·OS 서비스", text: "text — 글자 처리", theme: "theme — 색·스타일", messaging: "messaging — 스레드 사이", net: "net — 네트워크", win32: "win32 — Windows host", macos: "macos — macOS host", ios: "ios — iOS host", android: "android — Android host" };
+  function render() {
+    const q = $("api-q").value.trim().toLowerCase();
+    const withMembers = $("api-members").checked;
+    const inComments = $("api-comments").checked;
+    const box = $("api-scroll");
+    box.textContent = "";
+    let shown = 0;
+    if (!q) {
+      // 헤더별 묶음 (최상위 기호만)
+      const byHeader = new Map();
+      for (const s of S) {
+        if (s.p != null) continue;
+        if (!byHeader.has(s.h)) byHeader.set(s.h, []);
+        byHeader.get(s.h).push(s);
+      }
+      let lastDir = "";
+      for (const [hi, list] of [...byHeader.entries()].sort((a, b) => H[a[0]].p.localeCompare(H[b[0]].p))) {
+        const p = H[hi].p;
+        const dir = p.split("/")[2];
+        if (dir !== lastDir && DIR[dir]) {
+          box.append(el("div", { class: "api-count", style: { padding: "12px 12px 2px", display: "block" }, text: DIR[dir] }));
+          lastDir = dir;
+        }
+        const g = el("details", { class: "api-group" });
+        g.append(el("summary", { title: H[hi].d || p }, el("span", { text: p.replace(/^include\/luil\//, "") }), el("span", { class: "n", text: String(list.length) })));
+        g.addEventListener("toggle", () => {
+          if (g.open && !g.dataset.filled) {
+            g.dataset.filled = "1";
+            for (const s of list) g.append(itemLink(s, false));
+          }
+        }, { once: false });
+        box.append(g);
+        shown += list.length;
+      }
+      $("api-count").textContent = "헤더 " + byHeader.size + " · 최상위 기호 " + shown;
+      return;
+    }
+    const words = q.split(/\s+/);
+    const hits = [];
+    for (const s of S) {
+      if (!withMembers && s.p != null) continue;
+      const hay = (s.q + " " + (inComments ? s.c : "")).toLowerCase();
+      if (!words.every((w) => hay.includes(w))) continue;
+      let score = 0;
+      const n = s.n.toLowerCase();
+      if (n === q) score += 100;
+      else if (n.startsWith(q)) score += 40;
+      else if (n.includes(q)) score += 20;
+      if (s.p == null) score += 8;
+      if (["struct", "class", "enum", "function"].includes(s.k)) score += 4;
+      hits.push([score, s]);
+    }
+    hits.sort((a, b) => b[0] - a[0] || a[1].q.localeCompare(b[1].q));
+    for (const [, s] of hits.slice(0, 400)) box.append(itemLink(s, true));
+    if (!hits.length) box.append(el("div", { class: "api-empty", text: "맞는 기호가 없다. \"주석에서도\"를 켜거나 낱말을 줄여 본다." }));
+    $("api-count").textContent = "찾은 기호 " + hits.length + (hits.length > 400 ? " (앞 400개)" : "");
+  }
+
+  function itemLink(s, withParent) {
+    const a = el("a", { class: "api-item", href: "#" + slugOf.get(s.i), "data-i": String(s.i) });
+    const parent = s.p != null ? S[s.p] : null;
+    a.append(kb(s.k), el("span", { class: "nm" }, parent && withParent ? el("span", { class: "pa", text: parent.n + "::" }) : null, s.n));
+    return a;
+  }
+
+  function fromHash() {
+    const slug = decodeURIComponent(location.hash.replace(/^#/, ""));
+    const s = bySlug.get(slug);
+    if (s) {
+      // 목록에서 보이게: 묶음을 채워 둔다
+      const top = pathOf(s)[0];
+      const groups = document.querySelectorAll(".api-group");
+      for (const g of groups) {
+        if (g.querySelector("summary span").textContent === H[top.h].p.replace(/^include\/luil\//, "")) {
+          if (!g.open) g.open = true;
+          if (!g.dataset.filled) {
+            g.dataset.filled = "1";
+            for (const x of S.filter((x) => x.h === top.h && x.p == null)) g.append(itemLink(x, false));
+          }
+        }
+      }
+    }
+    showDetail(s || null, false);
+  }
+
+  const counts = {};
+  for (const s of S) counts[s.k] = (counts[s.k] || 0) + 1;
+  $("api-stats").append(
+    el("span", null, "헤더 ", el("b", { text: String(H.length) })),
+    el("span", null, "형식 ", el("b", { text: String((counts.struct || 0) + (counts.class || 0) + (counts.enum || 0) + (counts.union || 0)) })),
+    el("span", null, "함수 ", el("b", { text: String(counts.function || 0) })),
+    el("span", null, "필드 ", el("b", { text: String(counts.field || 0) })),
+    el("span", null, "멤버 함수 ", el("b", { text: String(counts.method || 0) })),
+    el("span", null, "열거값 ", el("b", { text: String(counts.enumerator || 0) })),
+    el("span", null, "기준 커밋 ", el("a", { href: LU.DOCS.repo + "/tree/" + LU.DOCS.commit, target: "_blank", rel: "noopener" }, el("code", { text: LU.DOCS.commitShort })))
+  );
+
+  let t = 0;
+  $("api-q").addEventListener("input", () => {
+    clearTimeout(t);
+    t = setTimeout(render, 100);
+  });
+  $("api-members").addEventListener("change", render);
+  $("api-comments").addEventListener("change", render);
+  $("api-scroll").addEventListener("click", (e) => {
+    const a = e.target.closest(".api-item");
+    if (!a) return;
+    e.preventDefault();
+    const s = S[Number(a.dataset.i)];
+    history.replaceState(null, "", "#" + slugOf.get(s.i));
+    showDetail(s, true);
+  });
+  $("api-detail").addEventListener("click", (e) => {
+    const a = e.target.closest('a[href^="#"]');
+    if (!a) return;
+    const s = bySlug.get(a.getAttribute("href").slice(1));
+    if (!s) return;
+    e.preventDefault();
+    history.replaceState(null, "", "#" + slugOf.get(s.i));
+    showDetail(s, true);
+    $("api-detail").scrollIntoView({ block: "start" });
+  });
+  window.addEventListener("hashchange", fromHash);
+  render();
+  fromHash();
+  // 처음 연 화면이면 원문을 미리 싣는다
+  setTimeout(loadSrc, 400);
+})();
+</script>
+</body>
+</html>

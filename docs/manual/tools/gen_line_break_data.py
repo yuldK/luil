@@ -1,6 +1,6 @@
 """src/text/line_break_data.h의 분류 표를 강의 사이트용 JS로 옮긴다.
 
-    python3 docs/lecture/tools/gen_line_break_data.py
+    python3 docs/manual/tools/gen_line_break_data.py
 
 assets/linebreak-data.js를 쓴다. 8강의 줄 나눔 실험이 이 표로 luil의 UAX #14 규칙기
 (src/text/line_break.cpp를 옮긴 assets/linebreak.js)를 돌린다.
@@ -10,7 +10,7 @@ import re
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 SOURCE = ROOT / "src" / "text" / "line_break_data.h"
-OUT = ROOT / "docs" / "lecture" / "assets" / "linebreak-data.js"
+OUT = ROOT / "docs" / "manual" / "assets" / "linebreak-data.js"
 
 text = SOURCE.read_text(encoding="utf-8-sig")
 ascii_block = re.search(r"ascii_line_break_classes\[128\] \{([\s\S]*?)\};", text).group(1)

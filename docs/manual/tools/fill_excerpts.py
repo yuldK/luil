@@ -4,8 +4,8 @@
 <script type="text/plain"> 내용을 저장소의 해당 줄로 바꾸고 data-path·data-start를
 맞춘다. 범위 사이에는 생략 줄(⋯@다음 줄 번호)을 넣는다.
 
-    python3 docs/lecture/tools/fill_excerpts.py            # 채운다
-    python3 docs/lecture/tools/fill_excerpts.py --check    # 바뀔 것이 있으면 1로 끝난다
+    python3 docs/manual/tools/fill_excerpts.py            # 채운다
+    python3 docs/manual/tools/fill_excerpts.py --check    # 바뀔 것이 있으면 1로 끝난다
 
 발췌는 강의가 기준으로 삼은 커밋(assets/course.js의 COURSE.commit)의 줄 번호와
 맞아야 GitHub 링크가 같은 줄을 가리킨다. 소스가 바뀐 뒤 다시 채울 때는 그 커밋도 함께 올린다.
@@ -15,7 +15,7 @@ import re
 import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[3]
-LECTURE = ROOT / "docs" / "lecture"
+MANUAL = ROOT / "docs" / "manual"
 
 BOX = re.compile(
     r'(<div class="code[^"]*"(?P<attrs>[^>]*?)data-src="(?P<src>[^"]+)"(?P<rest>[^>]*)>\s*<script type="text/plain">)(?P<body>.*?)(</script>)',
@@ -63,7 +63,7 @@ def fill(html):
 def main():
     check = "--check" in sys.argv
     changed = []
-    for page in sorted(LECTURE.glob("*.html")):
+    for page in sorted(MANUAL.glob("*.html")):
         before = page.read_text(encoding="utf-8")
         after = fill(before)
         if after != before:

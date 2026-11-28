@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>luil 해부학</title>
-<meta name="description" content="C++20 UI 프레임워크 luil을 처음 보는 사람을 위한 열두 강의. 개념에서 핵심 코드까지, 실험으로 확인하며 읽는다. 157개 기능의 지도 포함.">
+<title>luil 설명서</title>
+<meta name="description" content="C++20 UI 프레임워크 luil의 사용 설명서. 핵심 개념, 컴포넌트를 만드는 법, 모든 공개 API를 원문 그대로 찾는다.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
-<link rel="stylesheet" href="assets/course.css">
-<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
   .hero-eyebrow { font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); letter-spacing: 0.06em; }
   .hero-copy { display: grid; gap: 18px; align-content: center; }
@@ -27,29 +27,44 @@
   .atlas-tools { display: grid; gap: 10px; }
   .atlas-row { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; }
   .atlas-count { font-size: var(--fs-xs); color: var(--fg-3); font-family: var(--font-code); }
+  .guide-map { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+  .guide-col { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--panel); padding: 16px 18px 14px; display: grid; gap: 10px; align-content: start; }
+  .guide-col h3 { font-size: var(--fs-base); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .guide-col h3 .ci { color: var(--accent-ink); }
+  .guide-col > p { font-size: var(--fs-sm); color: var(--fg-2); line-height: 1.6; margin: 0; }
+  .guide-col ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+  .guide-col li a { display: grid; gap: 1px; padding: 6px 8px; margin: 0 -8px; border-radius: var(--r-control); text-decoration: none; color: var(--fg); }
+  .guide-col li a:hover { background: var(--sunk); }
+  .guide-col li a .t { font-weight: 500; font-size: var(--fs-sm); }
+  .guide-col li a .d { font-size: var(--fs-xs); color: var(--fg-3); line-height: 1.5; }
+  .find-btn { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 460px; height: 44px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--bg); color: var(--fg-3); font: inherit; font-size: var(--fs-sm); cursor: text; text-align: left; }
+  .find-btn:hover { border-color: var(--accent); }
+  .find-btn .ci { font-size: 17px; }
+  .find-btn kbd { margin-left: auto; font-family: var(--font-code); font-size: 11px; border: 1px solid var(--line-2); border-radius: 3px; padding: 0 6px; color: var(--fg-3); }
   .atlas-item .lec-chip { display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-code); font-size: 10.5px; padding: 1px 6px; border-radius: 3px; background: var(--accent-wash); color: var(--accent-ink); text-decoration: none; }
   .atlas-item.core { box-shadow: inset 3px 0 0 var(--accent); }
   mark { background: var(--accent-wash-2); color: inherit; border-radius: 2px; }
 </style>
 </head>
-<body data-lecture="0">
+<body data-page="home">
 <header class="topbar"></header>
 
 <main>
   <section class="home-hero" id="top">
     <div class="inner">
       <div class="hero-copy">
-        <span class="hero-eyebrow">12강 · 5부 · 157개 기능의 지도</span>
-        <h1>luil 해부학</h1>
-        <p class="sub">C++20으로 쓴 UI 프레임워크 luil을 처음 보는 사람을 위한 강의다. 개념에서 시작해 핵심 코드 한 줄 한 줄까지 내려가고, 읽은 것을 그 자리의 실험으로 확인한다.</p>
+        <span class="hero-eyebrow">C++20 · Skia · Windows·macOS·Android·iOS</span>
+        <h1>luil 설명서</h1>
+        <p class="sub">C++20으로 쓴 UI 프레임워크 luil의 사용 설명서다. 핵심 개념, 컴포넌트를 만드는 법, 공개 API 전부를 한곳에서 찾는다. 설명마다 원문 코드의 줄로 이어진다.</p>
+        <button type="button" class="find-btn" id="find"><i class="ci" aria-hidden="true">&#xEA6D;</i><span>무엇을 찾나요? 예: 트리 뷰, 실행 취소, list_config</span><kbd>/</kbd></button>
         <div class="hero-actions">
-          <a class="btn primary" href="01-orientation.html">1강부터 시작</a>
-          <a class="btn" href="#curriculum">커리큘럼</a>
-          <a class="btn ghost" href="#atlas">기능 지도</a>
+          <a class="btn primary" href="overview.html">개요부터 읽기</a>
+          <a class="btn" href="#guide">설명서 구성</a>
+          <a class="btn ghost" href="api.html">API 찾아보기</a>
         </div>
         <div class="hero-meta">
           <span>기준 커밋 <a id="hero-commit" href="#" target="_blank" rel="noopener"><code>563a855</code></a> (2026-11-25)</span>
-          <span>원문 코드는 이 커밋에서 그대로 옮겼다</span>
+          <span>코드 발췌와 API는 이 커밋에서 기계적으로 옮겼다</span>
         </div>
       </div>
       <div class="lw" data-title="한 번의 클릭" data-surface="세 스레드의 한 방향 흐름" data-reset id="demo">
@@ -60,61 +75,61 @@
           </div>
           <div class="flow" id="demo-flow"></div>
         </div>
-        <div class="lw-foot">UI thread가 받은 입력은 input thread가 클릭으로 판정하고, 앱 메시지가 되어 logic thread로 간다. logic은 상태를 바꾸고 새 불변 tree를 지어 게시한다. 그러면 UI thread가 그것을 그린다. 흐름은 한 방향이다 — 1강과 2강이 이 그림을 풀어 쓴다.</div>
+        <div class="lw-foot">UI thread가 받은 입력은 input thread가 클릭으로 판정하고, 앱 메시지가 되어 logic thread로 간다. logic은 상태를 바꾸고 새 불변 tree를 지어 게시한다. 그러면 UI thread가 그것을 그린다. 흐름은 한 방향이다 — <a class="xref" href="overview.html">luil 개요</a>와 <a class="xref" href="threads.html">스레드 모델</a> 문서가 이 그림을 풀어 쓴다.</div>
       </div>
+    </div>
+  </section>
+
+  <section class="home-section" id="guide">
+    <div class="inner">
+      <div class="sec-head">
+        <h2>설명서 구성</h2>
+        <p>처음이라면 개요와 핵심 개념을 차례로 읽는다. 무엇을 만들려는지 알고 있다면 컴포넌트 문서로 바로 가고, 필드 하나·함수 하나가 궁금하면 API 찾아보기나 위 검색 칸(/)을 쓴다.</p>
+      </div>
+      <div class="guide-map" id="guide-map"></div>
     </div>
   </section>
 
   <section class="home-section" id="about">
     <div class="inner">
       <div class="sec-head">
-        <h2>이 강의는</h2>
-        <p>대학 강의의 슬라이드처럼 한 화면에 한 가지 생각을 담았다. 각 강의는 개념, 설계 결정과 거절한 길, 원문 코드 읽기, 실험, 정리, 확인 문제 순서다.</p>
+        <h2>읽는 법</h2>
+        <p>문서는 개념 → 만드는 법 → 설정과 메시지 → 키보드·접근성 → 플랫폼 차이 → 함정 → 자주 묻는 질문 차례로 쓴다. 필요한 칸만 골라 읽어도 되도록 칸마다 홀로 선다.</p>
       </div>
       <div class="how">
         <div class="panel">
           <h4><i class="ci" aria-hidden="true">&#xEA67;</i>누구를 위한가</h4>
           <ul>
-            <li>luil을 처음 보고, 어디서부터 읽을지 막막한 사람</li>
+            <li>luil로 앱을 만들려는 C++ 개발자 — 화면을 짓고, 입력을 받고, 상태를 바꾸는 법</li>
+            <li>특정 컴포넌트를 쓰다 막힌 사람 — 트리 뷰의 펼침 상태, 여러 개 선택, 끌어 옮기기</li>
             <li>불변 tree, 스레드 경계 메시징, UAX #14, 닫힌 해 스프링 같은 기술이 궁금한 사람</li>
-            <li>C++ UI 프레임워크를 직접 짜 보려는 사람 — 고른 길만큼 거절한 길을 적었다</li>
           </ul>
         </div>
         <div class="panel">
-          <h4><i class="ci" aria-hidden="true">&#xEB20;</i>어떻게 읽나</h4>
+          <h4><i class="ci" aria-hidden="true">&#xEB20;</i>무엇이 들어 있나</h4>
           <ul>
             <li><b>코드 읽기</b>: 오른쪽 해설의 차례를 넘기면 왼쪽 원문에서 그 줄이 밝아진다</li>
-            <li><b>실험 창</b>: 대부분 luil 코드를 브라우저로 옮긴 것이다. 왼쪽 위 단추로 처음 상태로 돌린다</li>
-            <li><b>발표 모드</b>: 위 막대의 단추로 켠다. ← → 로 넘기고 Esc로 나온다</li>
+            <li><b>실습 창</b>: luil의 규칙을 브라우저로 옮겨 직접 눌러 본다. 왼쪽 위 단추로 처음 상태로 돌린다</li>
+            <li><b>API 찾아보기</b>: 공개 헤더의 기호 5,581개를 주석과 선언 원문 그대로 보인다</li>
           </ul>
         </div>
         <div class="panel">
           <h4><i class="ci" aria-hidden="true">&#xEB21;</i>무엇을 믿어도 되나</h4>
           <ul>
             <li>원문 발췌는 기준 커밋의 파일에서 줄 번호로 기계적으로 채웠다. 머리의 링크가 GitHub의 그 줄이다</li>
-            <li>줄 나눔·스프링·실행 취소 실험의 이식본은 원본 C++을 컴파일해 무작위 입력으로 대조했다</li>
-            <li>숫자는 세는 법을 함께 적었다. 이 강의를 쓰며 네 플랫폼을 실행하지는 않았다</li>
+            <li>줄 나눔·스프링·실행 취소 실습의 이식본은 원본 C++을 컴파일해 무작위 입력으로 대조했다</li>
+            <li>헤더가 설계 문서보다 앞선다. 이 설명서를 쓰며 네 플랫폼을 실행하지는 않았다</li>
           </ul>
         </div>
       </div>
       <div class="figures" role="list">
         <div role="listitem"><span class="v">120,776</span><span class="k">구현 소스 줄 (src/)</span></div>
         <div role="listitem"><span class="v">149</span><span class="k">공개 헤더 (include/luil/)</span></div>
+        <div role="listitem"><span class="v">5,581</span><span class="k">API 기호 (형식·함수·필드·열거값)</span></div>
         <div role="listitem"><span class="v">2,852</span><span class="k">Catch2 TEST_CASE (tests/)</span></div>
         <div role="listitem"><span class="v">4</span><span class="k">플랫폼 — Windows·Android·macOS·iOS</span></div>
-        <div role="listitem"><span class="v">138</span><span class="k">설계·사용 문서 (docs/)</span></div>
         <div role="listitem"><span class="v">157</span><span class="k">기능 지도의 항목</span></div>
       </div>
-    </div>
-  </section>
-
-  <section class="home-section" id="curriculum">
-    <div class="inner">
-      <div class="sec-head">
-        <h2>커리큘럼</h2>
-        <p>앞 강의가 뒤 강의의 바탕이 되도록 묶었다. 처음이라면 1부부터, 궁금한 기술이 있다면 그 강의로 바로 가도 된다. 강의마다 앞에 선수 지식을 적었다.</p>
-      </div>
-      <div class="parts" id="parts"></div>
     </div>
   </section>
 
@@ -122,7 +137,7 @@
     <div class="inner">
       <div class="sec-head">
         <h2>기능 지도</h2>
-        <p>luil의 기능을 서로 겹치지 않게 157개로 나눈 지도다. 23개는 뼈대 개념이고 134개는 기능이다. 항목마다 대표 공개 헤더와 설계 문서로 이어지고, 강의에서 깊이 다룬 것은 그 강의로 이어진다.</p>
+        <p>luil의 기능을 서로 겹치지 않게 157개로 나눈 지도다. 23개는 뼈대 개념이고 134개는 기능이다. 항목마다 대표 공개 헤더와 설계 문서로 이어지고, 이 설명서가 다루는 것은 그 문서로 이어진다.</p>
       </div>
       <div class="atlas-tools">
         <div class="atlas-row">
@@ -139,7 +154,7 @@
           <div class="chips" id="atlas-cats" aria-label="카테고리"></div>
         </div>
         <div class="atlas-row">
-          <label class="field"><input type="checkbox" id="atlas-lec"> 강의에서 다룬 것만</label>
+          <label class="field"><input type="checkbox" id="atlas-lec"> 설명서 문서가 있는 것만</label>
           <label class="field"><input type="checkbox" id="atlas-core"> 뼈대 개념만</label>
           <span class="atlas-count" id="atlas-count" aria-live="polite"></span>
         </div>
@@ -151,15 +166,18 @@
 <footer class="site-foot"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="assets/course.js"></script>
+<script src="assets/manual.js"></script>
 <script src="assets/atlas.js"></script>
 <script>
 (function () {
   "use strict";
-  const { el, flow, sourceUrl, COURSE } = window.LU;
+  const { el, icon, flow, sourceUrl, DOCS, PAGES } = window.LU;
   const $ = (id) => document.getElementById(id);
-  $("hero-commit").href = COURSE.repo + "/tree/" + COURSE.commit;
-
+  $("hero-commit").href = DOCS.repo + "/tree/" + DOCS.commit;
+  $("find").addEventListener("click", () => {
+    const q = document.querySelector(".topbar .search input");
+    if (q) { q.focus(); q.select(); }
+  });
   /* ---------- 한 번의 클릭 ---------- */
   const f = flow($("demo-flow"), {
     label: "클릭이 UI, input, logic 세 스레드를 지나는 길",
@@ -205,45 +223,39 @@
   $("demo-go").addEventListener("click", go);
   $("demo").addEventListener("lw-reset", () => { f.clear(); clicks = 0; busy = false; $("demo-cap").textContent = "버튼을 누르면 점이 세 스레드를 지나간다."; });
 
-  /* ---------- 커리큘럼 ---------- */
-  const PART_DESC = {
-    p1: "luil이 무엇이고, 일이 어느 스레드에서 어떻게 흐르는가.",
-    p2: "스레드 사이를 잇는 메시지, 불변 tree, 배치 — 화면의 골격.",
-    p3: "입력이 들어와 픽셀이 되어 나가기까지, 그리고 글자.",
-    p4: "앱이 상태를 들고 시간과 실수를 다루는 법.",
-    p5: "네 플랫폼과 접근성, 그리고 품질을 지키는 빌드.",
+  /* ---------- 설명서 구성 ---------- */
+  const SEC_DESC = {
+    start: ["EAA4", "luil이 무엇이고 앱이 어떻게 짜이는지. hello 앱 하나로 전체를 훑는다."],
+    concepts: ["EB20", "모든 컴포넌트가 기대는 뼈대: 스레드, 메시지, 불변 tree, 배치, 입력, 그리기, 글자, 움직임."],
+    ui: ["EB86", "화면을 짓는 요소들. 만드는 법, 설정, 메시지, 키보드, 접근성, 플랫폼 차이를 한 문서에."],
+    ref: ["EAE9", "공개 헤더의 모든 기호를 주석과 선언 원문으로."],
   };
-  const LEC = {
-    1: ["C++20, Skia로 직접 그리기, 불변 tree, 세 스레드. hello 앱 하나로 전체를 훑고 저장소 지도를 펼친다.", ["hello 클릭", "저장소 지도"]],
-    2: ["UI·input·logic 세 스레드가 소유를 나누고 한 방향으로 흐른다. 조립 순서와 멈추지 않는 종료.", ["묶음 처리", "종료 시나리오"]],
-    3: ["channel과 latest_slot, 그리고 app_message. 넘침 정책, 순번의 구멍, 신호 병합.", ["채널", "최신 값 slot"]],
-    4: ["frame마다 새로 짓는 불변 tree. id로 이어지는 정체성, hit test, 초점 순서, 그리기 순서.", ["할 일 tree", "hit test"]],
-    5: ["부모가 자리를 나눠 주는 배치. stack의 유연한 길이와 십만 행의 가상 목록.", ["stack 놀이터", "가상 목록"]],
-    6: ["입력 pump, 클릭·더블 클릭·끌기 판정, 10단계 키 전달, 터치 제스처와 관성.", ["마우스", "키 전달", "터치"]],
-    7: ["frame_state와 하나뿐인 draw_frame, 층 순서와 웹뷰 구멍, GPU에서 CPU로 물러서기, timer 하나.", ["층", "렌더러", "timer", "팔레트"]],
-    8: ["UTF-8 byte 좌표, 글자소와 Backspace, UAX #14 줄 나눔과 한국어 어절, 대소문자 접기, IME 조합.", ["글자 해부", "줄 나눔", "한글 조합"]],
-    9: ["시각만의 함수인 움직임. 닫힌 해 스프링, 시계 없는 라이브러리와 두 시계, 화면 전환의 덮개.", ["스프링", "두 시계", "화면 전환"]],
-    10: ["앱 메시지 쌍으로 만드는 실행 취소. 절대 값과 병합 키, 재생 중 재진입, 묶음, 저장 지점, 상한.", ["색 편집기", "시나리오"]],
-    11: ["플랫폼을 모르는 core와 얇은 host 넷. 깨우기, 링크로 묶는 hook, 접근성 어휘의 번역.", ["깨우기", "매트릭스", "역할 번역"]],
-    12: ["창 없이 도는 core test, 픽셀 넓이로 잠그는 raster test, 핀과 체크섬, 소비자 계약.", ["raster 탐침", "파이프라인", "json 함정"]],
+  const PAGE_DESC = {
+    home: "이 페이지",
+    overview: "세 가지 설계 결정, 앱이 꽂는 세 조각, 저장소 지도, 빌드",
+    threads: "UI·input·logic 세 스레드, 조립 순서, 종료와 시간 예산",
+    messaging: "channel·latest_slot·app_message, 넘침 정책, 신호 병합",
+    "ui-tree": "frame마다 새로 짓는 tree, id로 잇는 정체성, hit test, Tab 순서",
+    layout: "논리·물리 픽셀, arrange 계약, stack·비율 분배, 가상 목록",
+    input: "입력 pump, 클릭·더블 클릭·끌기 판정, 키 라우팅, 초점, 터치",
+    rendering: "draw_frame, 층 순서와 웹뷰, GPU→CPU 물러섬, timer, 색 역할",
+    text: "UTF-8 좌표, 글자소, UAX #14 줄 나눔, 대소문자 접기, IME",
+    motion: "길이 곡선과 스프링, 두 시계, 화면 전환, 움직임 줄이기",
+    undo: "메시지 쌍으로 만드는 실행 취소, 합치기, 묶음, 저장 지점",
+    platforms: "core와 네 host, 깨우기, 플랫폼 매트릭스, 접근성 번역",
+    testing: "창 없는 core test, raster test, ASan, 고정된 의존성",
+    lists: "list_element로 평평한 목록과 트리 뷰, 선택·펼침·끌어 옮기기, 가상 목록",
+    api: "헤더 149개, 기호 5,581개를 주석·선언 원문으로",
   };
-  const parts = $("parts");
-  COURSE.parts.forEach((p, i) => {
-    const cards = el("div", { class: "lec-cards" });
-    for (const n of p.lectures) {
-      const lec = COURSE.lectures.find((x) => x.n === n);
-      const [desc, tags] = LEC[n];
-      cards.append(el("a", { class: "lec-card", href: lec.file },
-        el("span", { class: "no", text: "LECTURE " + String(n).padStart(2, "0") }),
-        el("h4", { text: lec.title }),
-        el("p", { text: desc }),
-        el("span", { class: "tags" }, tags.map((t) => el("span", { class: "tag", text: t })))));
+  for (const sec of DOCS.sections) {
+    const [ic, desc] = SEC_DESC[sec.id] || ["EB20", ""];
+    const ul = el("ul");
+    for (const p of sec.pages) {
+      if (p.id === "home") continue;
+      ul.append(el("li", null, el("a", { href: p.file }, el("span", { class: "t", text: p.title }), PAGE_DESC[p.id] ? el("span", { class: "d", text: PAGE_DESC[p.id] }) : null)));
     }
-    const [pn, name] = p.name.split(" · ");
-    parts.append(el("div", { class: "part" },
-      el("div", { class: "part-head" }, el("span", { class: "pn", text: pn.toUpperCase() }), el("h3", { text: name }), el("p", { text: PART_DESC[p.id] })),
-      cards));
-  });
+    $("guide-map").append(el("div", { class: "guide-col" }, el("h3", null, icon(ic), sec.name), el("p", { text: desc }), ul));
+  }
 
   /* ---------- 기능 지도 ---------- */
   const A = window.LUIL_ATLAS;
@@ -269,9 +281,9 @@
   function card(it, q) {
     const pf = el("span", { class: "pf", "aria-label": "플랫폼: " + PF.filter(([k]) => it.platforms.includes(k)).map((x) => x[2]).join(", ") }, PF.map(([k, s, name]) => el("span", { class: it.platforms.includes(k) ? "on" : "", title: name + (it.platforms.includes(k) ? " — 있다" : " — 없다"), text: s })));
     const links = el("span", { class: "lk" });
-    for (const n of it.lec) {
-      const lec = COURSE.lectures.find((x) => x.n === n);
-      links.append(el("a", { class: "lec-chip", href: lec.file, title: lec.title, text: String(n).padStart(2, "0") + "강" }));
+    for (const id of it.docs || []) {
+      const pg = PAGES.find((x) => x.id === id);
+      if (pg) links.append(el("a", { class: "lec-chip", href: pg.file, title: pg.section.name + " · " + pg.title, text: pg.title }));
     }
     if (it.header) links.append(el("a", { href: sourceUrl(it.header), target: "_blank", rel: "noopener", text: it.header.replace(/^include\//, "") }));
     if (it.doc) links.append(el("a", { href: sourceUrl(it.doc), target: "_blank", rel: "noopener", text: it.doc.replace(/^docs\//, "docs/") }));
@@ -290,7 +302,7 @@
       if (st.cat !== "all" && st.cat !== c.key) continue;
       const items = A.items.filter((it) => it.category === c.key
         && (st.pf === "all" || it.platforms.includes(st.pf))
-        && (!st.lec || it.lec.length)
+        && (!st.lec || (it.docs || []).length)
         && (!st.core || it.depth === "core")
         && (!q || norm(it.name).includes(q) || norm(it.summary).includes(q) || norm(it.id).includes(q) || (it.api || []).some((a) => norm(a).includes(q))));
       if (!items.length) continue;

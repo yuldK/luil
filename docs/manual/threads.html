@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="claude:viewport-fit-sides" content="cover">
-<title>02 세 스레드와 한 방향 흐름 · luil 해부학</title>
-<meta name="description" content="luil 해부학 2강. UI·input·logic 세 스레드의 소유권, app_host의 조립, logic loop의 묶음 처리, 게시 순서, 종료 절차와 시간 예산.">
+<title>스레드 모델 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — UI·input·logic 세 스레드의 소유권, app_host의 조립, logic loop의 묶음 처리, 게시 순서, 종료 절차와 시간 예산.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
-<link rel="stylesheet" href="assets/course.css">
-<script>try{var t=localStorage.getItem("luil-lecture:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
   .own { display: grid; gap: 12px; }
   @media (min-width: 860px) { .own { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -53,26 +53,24 @@
   .timeline .now { position: absolute; right: 8px; bottom: 4px; font-family: var(--font-code); font-size: 11px; color: var(--fg); }
 </style>
 </head>
-<body data-lecture="2">
+<body data-page="threads">
 <header class="topbar"></header>
 
-<main>
-  <section class="hero" id="s0" data-num="02">
-    <div class="hero-inner">
-      <div class="eyebrow"><span class="lec-no">LECTURE 02</span><span>1부 · 큰 그림</span></div>
-      <h1>세 스레드와 한 방향 흐름</h1>
-      <div class="hero-cols">
-        <div style="display:grid;gap:22px">
-          <p class="thesis">UI는 그리기만, input은 판정만, logic은 상태만 맡는다. 세 스레드는 서로를 기다리지 않고, 사건은 channel로, 상태는 latest_slot으로 건넌다.</p>
-          <dl class="meta">
-            <div><dt>예상 시간</dt><dd>45분</dd></div>
-            <div><dt>선수 지식</dt><dd>1강, mutex·condition variable</dd></div>
-            <div><dt>다루는 코드</dt><dd><code>app_host.h</code>·<code>app_host.cpp</code></dd></div>
-            <div><dt>실험</dt><dd>스레드 사이의 다리, 묶음 처리, 종료 절차</dd></div>
-          </dl>
-        </div>
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>스레드 모델</h1>
+      <p class="summary">UI는 그리기만, input은 판정만, logic은 상태만 맡는다. 세 스레드는 서로를 기다리지 않고, 사건은 channel로, 상태는 latest_slot으로 건넌다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>app_host.h</code>·<code>app_host.cpp</code></dd></div>
+          <div><dt>실습</dt><dd>스레드 사이의 다리, 묶음 처리, 종료 절차</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="overview.html">luil 개요</a>, mutex·condition variable</dd></div>
+        </dl>
         <div class="goals">
-          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 강의를 마치면</h2>
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
           <ol>
             <li>UI·input·logic 세 스레드가 각각 무엇을 소유하는지 말할 수 있다.</li>
             <li>app_host가 채널·slot·명령 큐로 세 스레드를 잇는 모양을 그릴 수 있다.</li>
@@ -81,16 +79,12 @@
           </ol>
         </div>
       </div>
-    </div>
-  </section>
+    </header>
 
-  <div class="lecture-body">
-    <nav class="toc" aria-label="이 강의의 슬라이드"></nav>
-    <div class="slides">
+    <div class="doc-body">
 
-      <section class="slide" id="s1" data-num="2.1">
-        <header class="slide-head">
-          <span class="num">2.1</span>
+      <section class="sec" id="s1">
+        <header class="sec-head">
           <h2>왜 스레드를 셋으로 나누나</h2>
           <p class="lede">한 스레드가 모든 일을 하면, 가장 느린 일이 화면과 입력을 함께 멈춘다.</p>
         </header>
@@ -129,9 +123,8 @@
         <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">읽기와 쓰기의 규칙</span>UI와 input은 불변 tree를 <b>읽기만</b> 하고, logic은 새 frame과 tree를 <b>만들기만</b> 한다. 앱 상태는 logic에서만 바뀌고, 다른 스레드는 메시지를 보낼 뿐이다. 이 규칙이 지켜지면 tree에는 잠금이 필요 없다.</div></div>
       </section>
 
-      <section class="slide" id="s2" data-num="2.2">
-        <header class="slide-head">
-          <span class="num">2.2</span>
+      <section class="sec" id="s2">
+        <header class="sec-head">
           <h2>스레드 사이의 다리</h2>
           <p class="lede">세 스레드는 공유 변수가 아니라 정해진 다리로만 이야기한다. 다리를 눌러 무엇이 건너가는지 보자.</p>
         </header>
@@ -142,13 +135,12 @@
           </div>
         </div>
         <div class="prose">
-          <p>다리는 세 종류다. <strong>channel</strong>은 사건을 순서대로 나르는 큐(실선), <strong>latest_slot</strong>은 최신 상태 하나만 두는 칸(점선), <strong>명령 큐</strong>는 UI thread에서만 할 수 있는 일을 부탁하는 목록과 깨우기 신호(점점선)다. 두 메시징 장치는 3강에서 코드 한 줄까지 읽는다.</p>
+          <p>다리는 세 종류다. <strong>channel</strong>은 사건을 순서대로 나르는 큐(실선), <strong>latest_slot</strong>은 최신 상태 하나만 두는 칸(점선), <strong>명령 큐</strong>는 UI thread에서만 할 수 있는 일을 부탁하는 목록과 깨우기 신호(점점선)다. 두 메시징 장치는 <a class="xref" href="messaging.html">스레드 경계 메시징</a> 문서에서 코드 한 줄까지 읽는다.</p>
         </div>
       </section>
 
-      <section class="slide" id="s3" data-num="2.3">
-        <header class="slide-head">
-          <span class="num">2.3</span>
+      <section class="sec" id="s3">
+        <header class="sec-head">
           <h2>조립체 assembly 읽기</h2>
           <p class="lede">세 스레드가 나눠 쓰는 것은 전부 구조체 하나에 들어 있다. 선언 순서까지 설계다.</p>
         </header>
@@ -203,7 +195,7 @@
 </script></div>
           <ol class="walk-steps-src">
             <li data-lines="76-79" data-title="선언 순서가 곧 파괴의 역순">C++은 멤버를 선언의 역순으로 파괴한다. 스레드(맨 아래)가 가장 먼저, 채널(맨 위)이 가장 나중에 사라진다. 스레드가 아직 쓰는 채널이 먼저 사라지는 일이 구조적으로 막힌다. 스레드 자체는 <code>shutdown()</code>이 먼저 멈춘다.</li>
-            <li data-lines="80-81" data-title="두 channel의 용량과 정책">raw 입력은 4096칸에 <code>drop_oldest</code>다. 포인터 이동이 몰리면 오래된 것을 버린다. 앱 메시지는 1024칸에 <code>reject_newest</code>다. 넘치면 새 것을 거절해 게시한 쪽이 알게 한다. 사건의 성격이 정책을 고른다(3강).</li>
+            <li data-lines="80-81" data-title="두 channel의 용량과 정책">raw 입력은 4096칸에 <code>drop_oldest</code>다. 포인터 이동이 몰리면 오래된 것을 버린다. 앱 메시지는 1024칸에 <code>reject_newest</code>다. 넘치면 새 것을 거절해 게시한 쪽이 알게 한다. 사건의 성격이 정책을 고른다(<a class="xref" href="messaging.html">스레드 경계 메시징</a>).</li>
             <li data-lines="86-87,97-98" data-title="네 개의 latest_slot">frame(UI가 읽음), 주 tree와 표면 tree 목록(input이 읽음), interaction snapshot(UI가 읽음). 새 값이 옛 값을 덮으므로 소비자가 느려도 쌓이지 않는다.</li>
             <li data-lines="88-94" data-title="tree와 처리 표를 한 자물쇠로">logic이 처리한 메시지의 번호(ticket)를 tree와 함께 게시한다. UI는 "이 tree가 내가 보낸 창 크기 메시지를 반영했는가"를 이 번호로 판단한다. 둘을 따로 게시하면 옛 tree에 새 번호가 붙을 수 있어 한 자물쇠로 묶었다.</li>
             <li data-lines="116-122" data-title="UI thread에 부탁하는 명령 큐">창 최소화·클립보드처럼 UI thread만 할 수 있는 일은 큐에 넣고 깨우기 신호를 보낸다. 신호(창 메시지)는 유실될 수 있어도 내용은 큐에 남아 다음 신호에 실행된다.</li>
@@ -212,9 +204,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s4" data-num="2.4">
-        <header class="slide-head">
-          <span class="num">2.4</span>
+      <section class="sec" id="s4">
+        <header class="sec-head">
           <h2>조립 순서: 채널 → callback → 스레드</h2>
           <p class="lede">던질 수 있는 준비는 모두 스레드를 시작하기 전에 끝낸다.</p>
         </header>
@@ -281,9 +272,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s5" data-num="2.5">
-        <header class="slide-head">
-          <span class="num">2.5</span>
+      <section class="sec" id="s5">
+        <header class="sec-head">
           <h2>logic loop: 묶어서 처리하고, 한 번 게시한다</h2>
           <p class="lede">메시지가 몰려와도 frame은 묶음마다 한 번만 짓는다. 상한 64가 렌더링 기회를 지킨다.</p>
         </header>
@@ -394,9 +384,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s6" data-num="2.6">
-        <header class="slide-head">
-          <span class="num">2.6</span>
+      <section class="sec" id="s6">
+        <header class="sec-head">
           <h2>게시 순서: tree 먼저, frame은 마지막</h2>
           <p class="lede">UI를 깨우는 신호는 frame slot에만 달려 있다. 그래서 frame을 맨 나중에 게시한다.</p>
         </header>
@@ -429,7 +418,7 @@
     }
 </script></div>
           <ol class="walk-steps-src">
-            <li data-lines="680-682" data-title="앱이 frame을 짓는다"><code>make_frame()</code>은 앱 코드다. 1강의 hello처럼 tree를 새로 지어 <code>shared_ptr&lt;const ui_frame&gt;</code>으로 돌려준다.</li>
+            <li data-lines="680-682" data-title="앱이 frame을 짓는다"><code>make_frame()</code>은 앱 코드다. <a class="xref" href="overview.html">luil 개요</a> 문서의 hello처럼 tree를 새로 지어 <code>shared_ptr&lt;const ui_frame&gt;</code>으로 돌려준다.</li>
             <li data-lines="683-689" data-title="주 tree를 먼저">tree slot에는 깨우기 신호가 없다. input thread는 입력을 처리하기 직전에 이 slot에서 새 tree를 집는다. 처리한 메시지 번호도 같은 자물쇠 안에서 적는다.</li>
             <li data-lines="690-700" data-title="popup·보조 창·도킹 표면의 tree">주 창 밖 표면들의 tree를 (id, tree) 목록 하나로 모아 게시한다. input의 controller에게는 표면만 있고 셋의 구분이 없다.</li>
             <li data-lines="701" data-title="마지막으로 frame — 이것이 UI를 깨운다">frame 게시가 깨우기 신호를 낸다. 깨어난 UI thread가 무엇을 읽든 이미 새 tree가 게시되어 있다. 순서를 바꾸면 UI가 새 frame에 옛 tree를 짝지을 수 있다.</li>
@@ -438,9 +427,8 @@
         <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">원자적 transaction은 아니다</span>세 slot은 따로 게시되므로 모든 조회가 한 frame의 transaction은 아니다. input이 새 tree를 받기 전에는 옛 tree로 이벤트를 처리하므로 tree와 interaction이 서로 다른 frame일 수 있다. 그래도 어느 쪽도 수정되지 않으므로 읽는 쪽이 망가진 값을 보는 일은 없다.</div></div>
       </section>
 
-      <section class="slide" id="s7" data-num="2.7">
-        <header class="slide-head">
-          <span class="num">2.7</span>
+      <section class="sec" id="s7">
+        <header class="sec-head">
           <h2>시간이 흐르는 두 길</h2>
           <p class="lede">"3초 뒤에 토스트를 지운다"와 "caret을 깜박인다"는 다른 일이다. 하나는 상태가 바뀌고, 하나는 그림만 바뀐다.</p>
         </header>
@@ -456,13 +444,12 @@
           </table>
         </div>
         <div class="prose">
-          <p>둘 다 같은 원칙을 따른다. <strong>시계를 읽는 쪽이 아니라 시각을 예고하는 쪽</strong>이다. element와 driver는 "다음에 언제 깨워 달라"만 답하고, 기다림은 루프가 맡는다. 앱은 스레드를 만들지 않고도 "3초 뒤 지운다"를 표현할 수 있다. element는 전환의 소유자가 아니다. 움직임과 시간은 9강에서 다시 다룬다.</p>
+          <p>둘 다 같은 원칙을 따른다. <strong>시계를 읽는 쪽이 아니라 시각을 예고하는 쪽</strong>이다. element와 driver는 "다음에 언제 깨워 달라"만 답하고, 기다림은 루프가 맡는다. 앱은 스레드를 만들지 않고도 "3초 뒤 지운다"를 표현할 수 있다. element는 전환의 소유자가 아니다. 움직임과 시간은 <a class="xref" href="motion.html">애니메이션</a> 문서에서 다시 다룬다.</p>
         </div>
       </section>
 
-      <section class="slide" id="s8" data-num="2.8">
-        <header class="slide-head">
-          <span class="num">2.8</span>
+      <section class="sec" id="s8">
+        <header class="sec-head">
           <h2>종료 절차와 시간 예산</h2>
           <p class="lede">창을 닫을 때 앱은 저장을 끝내야 하고, 프로세스는 영원히 매달리면 안 된다. 두 요구를 시간 예산으로 맞춘다.</p>
         </header>
@@ -585,9 +572,8 @@
         </div>
       </section>
 
-      <section class="slide" id="s9" data-num="2.9">
-        <header class="slide-head">
-          <span class="num">2.9</span>
+      <section class="sec" id="s9">
+        <header class="sec-head">
           <h2>예외는 오류 전달 수단이 아니다</h2>
           <p class="lede">스레드 진입 함수를 벗어난 예외는 곧 <code>std::terminate</code>다. luil은 그것을 잡아 "고장"으로 기록한다.</p>
         </header>
@@ -628,9 +614,8 @@
         <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">오류는 값으로 나른다</span>파일을 열지 못했다, 요청이 실패했다 같은 앱 오류는 메시지나 frame의 상태 값으로 전달한다. 예외로 logic이 멈추면 frame 게시와 메시지 처리가 함께 멎는다. UI는 <code>faulted()</code>를 보고 앱을 끝낼 수 있다.</div></div>
       </section>
 
-      <section class="slide" id="s10" data-num="2.10">
-        <header class="slide-head">
-          <span class="num">2.10</span>
+      <section class="sec" id="s10">
+        <header class="sec-head">
           <h2>창 없이 조립하고 시험하기</h2>
           <p class="lede">깨우기 신호를 비워 두면 app_host는 창 없이 선다. 종료의 경계 조건을 테스트로 잠글 수 있다.</p>
         </header>
@@ -681,10 +666,9 @@ TEST_CASE("The close message survives a saturated app inbox", "[win32][host][shu
         </div>
       </section>
 
-      <section class="slide" id="s11" data-num="2.11">
-        <header class="slide-head">
-          <span class="num">2.11</span>
-          <h2>정리</h2>
+      <section class="sec" id="s11">
+        <header class="sec-head">
+          <h2>요약</h2>
         </header>
         <ol class="recap">
           <li>UI는 OS 자원과 그리기, input은 상호작용 상태 기계, logic은 앱 상태를 소유한다. 앱 상태를 바꾸는 곳은 logic 하나다.</li>
@@ -696,63 +680,69 @@ TEST_CASE("The close message survives a saturated app inbox", "[win32][host][shu
         </ol>
       </section>
 
-      <section class="slide" id="s12" data-num="2.12">
-        <header class="slide-head">
-          <span class="num">2.12</span>
-          <h2>확인 문제</h2>
+      <section class="sec" id="s12" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
         </header>
-        <div class="quiz-set">
-          <div class="quiz" data-answer="2">
-            <p class="q">inbox에 메시지 200건이 미리 쌓여 있다. 처리하는 동안 새 메시지가 없다면 logic은 frame을 몇 번 게시하는가?</p>
-            <ol class="choices">
-              <li>1번</li>
-              <li>4번</li>
-              <li>200번</li>
-              <li>63번</li>
-            </ol>
-            <div class="explain">한 번 깰 때 <code>receive_wait</code>로 1건, <code>drain</code>으로 최대 63건, 합쳐 64건을 처리하고 frame을 한 번 게시한다. 200 = 64 + 64 + 64 + 8이므로 4번이다.</div>
-          </div>
-          <div class="quiz" data-answer="3">
-            <p class="q"><code>publish_frame()</code>이 frame slot을 tree slot보다 나중에 게시하는 이유는?</p>
-            <ol class="choices">
-              <li>frame이 tree보다 크기 때문에</li>
-              <li>input thread가 frame을 먼저 읽기 때문에</li>
-              <li>UI를 깨우는 신호가 frame slot에 달려 있어, 깨어난 UI가 새 tree를 보게 하려고</li>
-              <li>순서는 상관없고 관례일 뿐이다</li>
-            </ol>
-            <div class="explain">wake 신호는 frame slot에만 붙어 있다. tree를 먼저 게시해야 신호를 받고 깨어난 UI thread가 이미 게시된 새 tree를 읽는다.</div>
-          </div>
-          <div class="quiz" data-answer="1">
-            <p class="q">종료 절차에서 inbox를 닫은 뒤 1초를 기다려도 logic thread가 나오지 않으면?</p>
-            <ol class="choices">
-              <li><code>platform_fail_fast()</code>로 즉시 끝낸다</li>
-              <li>스레드를 <code>detach</code>하고 계속 진행한다</li>
-              <li>나올 때까지 무기한 join한다</li>
-              <li>logic thread를 강제로 죽이고 다시 시작한다</li>
-            </ol>
-            <div class="explain">cancel과 close에도 나오지 않는 logic은 회복할 수 없다. 보이지 않는 무기한 hang 대신 즉시 실패를 고른다. detach는 assembly의 수명을 깨므로 금지다.</div>
-          </div>
-          <div class="quiz" data-answer="4">
-            <p class="q">"3초 뒤에 토스트를 지운다"를 luil 앱에서 표현하는 올바른 방법은?</p>
-            <ol class="choices">
-              <li>토스트 element가 3초를 세다가 스스로 사라진다</li>
-              <li>앱이 타이머 스레드를 만들어 3초 뒤 상태를 지운다</li>
-              <li>UI thread의 <code>next_update</code>가 3초 뒤 토스트를 지운다</li>
-              <li><code>next_tick()</code>이 만료 시각을 답하고, <code>tick(now)</code>에서 토스트를 상태에서 뺀다</li>
-            </ol>
-            <div class="explain">토스트가 사라지는 것은 앱 상태의 변화다. logic의 <code>next_tick</code>이 시각을 예고하면 루프가 그때 <code>tick</code>을 부르고 새 frame을 게시한다. <code>next_update</code>는 그림만 다시 그리는 길이다.</div>
-          </div>
+        <div class="faq-list">
+          <details class="faq">
+            <summary>inbox에 메시지 200건이 미리 쌓여 있다. 처리하는 동안 새 메시지가 없다면 logic은 frame을 몇 번 게시하는가?</summary>
+            <div class="faq-a">
+              <p class="faq-short">4번</p>
+              <p>한 번 깰 때 <code>receive_wait</code>로 1건, <code>drain</code>으로 최대 63건, 합쳐 64건을 처리하고 frame을 한 번 게시한다. 200 = 64 + 64 + 64 + 8이므로 4번이다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary><code>publish_frame()</code>이 frame slot을 tree slot보다 나중에 게시하는 이유는?</summary>
+            <div class="faq-a">
+              <p class="faq-short">UI를 깨우는 신호가 frame slot에 달려 있어, 깨어난 UI가 새 tree를 보게 하려고</p>
+              <p>wake 신호는 frame slot에만 붙어 있다. tree를 먼저 게시해야 신호를 받고 깨어난 UI thread가 이미 게시된 새 tree를 읽는다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>종료 절차에서 inbox를 닫은 뒤 1초를 기다려도 logic thread가 나오지 않으면?</summary>
+            <div class="faq-a">
+              <p class="faq-short"><code>platform_fail_fast()</code>로 즉시 끝낸다</p>
+              <p>cancel과 close에도 나오지 않는 logic은 회복할 수 없다. 보이지 않는 무기한 hang 대신 즉시 실패를 고른다. detach는 assembly의 수명을 깨므로 금지다.</p>
+            </div>
+          </details>
+          <details class="faq">
+            <summary>"3초 뒤에 토스트를 지운다"를 luil 앱에서 표현하는 올바른 방법은?</summary>
+            <div class="faq-a">
+              <p class="faq-short"><code>next_tick()</code>이 만료 시각을 답하고, <code>tick(now)</code>에서 토스트를 상태에서 뺀다</p>
+              <p>토스트가 사라지는 것은 앱 상태의 변화다. logic의 <code>next_tick</code>이 시각을 예고하면 루프가 그때 <code>tick</code>을 부르고 새 frame을 게시한다. <code>next_update</code>는 그림만 다시 그리는 길이다.</p>
+            </div>
+          </details>
         </div>
-        <nav class="pager" data-auto aria-label="강의 이동"></nav>
       </section>
 
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/app_host.h" target="_blank" rel="noopener">include/luil/app/app_host.h</a><span class="n">최상위 기호 24</span></div>
+            <div class="hdr-syms"><a href="api.html#window-placement" title="구조체"><span class="kb t">S</span>window_placement</a><a href="api.html#popup-dismiss-reason" title="열거형"><span class="kb e">E</span>popup_dismiss_reason</a><a href="api.html#window-backdrop" title="열거형"><span class="kb e">E</span>window_backdrop</a><a href="api.html#ui-popup" title="구조체"><span class="kb t">S</span>ui_popup</a><a href="api.html#popup-corner-radius" title="함수"><span class="kb f">f</span>popup_corner_radius</a><a href="api.html#window-screen-anchor" title="구조체"><span class="kb t">S</span>window_screen_anchor</a><a href="api.html#ui-window" title="구조체"><span class="kb t">S</span>ui_window</a><a href="api.html#screen-rect" title="구조체"><span class="kb t">S</span>screen_rect</a><a href="api.html#display-info" title="구조체"><span class="kb t">S</span>display_info</a><a href="api.html#screen-edge" title="열거형"><span class="kb e">E</span>screen_edge</a><a href="api.html#edge-alignment" title="열거형"><span class="kb e">E</span>edge_alignment</a><a href="api.html#docked-edge-placement" title="구조체"><span class="kb t">S</span>docked_edge_placement</a><a href="api.html#ui-docked-surface" title="구조체"><span class="kb t">S</span>ui_docked_surface</a><a href="api.html#screen-orientation" title="열거형"><span class="kb e">E</span>screen_orientation</a><a href="api.html#system-bars-mode" title="열거형"><span class="kb e">E</span>system_bars_mode</a><a href="api.html#device-request" title="구조체"><span class="kb t">S</span>device_request</a><a href="api.html#app-permission" title="열거형"><span class="kb e">E</span>app_permission</a><a href="api.html#permission-state" title="열거형"><span class="kb e">E</span>permission_state</a><a href="api.html#focus-request" title="구조체"><span class="kb t">S</span>focus_request</a><a href="api.html#focus-request-outcome" title="열거형"><span class="kb e">E</span>focus_request_outcome</a><a href="api.html#ui-frame" title="구조체"><span class="kb t">S</span>ui_frame</a><a href="api.html#background-work" title="클래스"><span class="kb t">C</span>background_work</a><a href="api.html#logic-driver" title="클래스"><span class="kb t">C</span>logic_driver</a><a href="api.html#app-host" title="클래스"><span class="kb t">C</span>app_host</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/win32/app_host.h" target="_blank" rel="noopener">include/luil/win32/app_host.h</a><span class="n">최상위 기호 0</span></div>
+            <p class="hdr-desc">옛 경로다. host API는 플랫폼을 가리지 않으므로 `luil/app/app_host.h`와 네임스페이스 `luil`로 옮겼다 (docs/android-port-plan.md 결정 1).  이 헤더는 한 판 동안 옛 이름을 그대로 쓰게 하는 다리다. 아래 별칭은 새 타입 **그 자체**를 가리키므로 `luil::win32::logic_driver`를 상속한 구동기, `luil::win32::ui_frame`을 만드는 코드가 고치지 않고 빌드된다. - 깨지는 것은 `namespace luil::win32 { class logic_driver; }` 같은 전방 선언뿐이다. 별칭은 다시 선언할 수 없어서다. 새 경로의 헤더를 include하면 된다. - 새 코드는 `luil/app/app_host.h`와 `luil::` 이름을 쓴다.</p>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
     </div>
-  </div>
-</main>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
 <footer class="site-foot"></footer>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
-<script src="assets/course.js"></script>
+<script src="assets/manual.js"></script>
 <script>
 (function () {
   const { el, svg, icon } = window.LU;

@@ -1,0 +1,537 @@
+{
+ "_doc": "설명서의 차례와 덮는 범위. headers: 공개 헤더 → 그 헤더를 설명하는 문서 id. planned: 아직 쓰지 않은 컴포넌트 문서. tools/check_coverage.py가 읽는다.",
+ "planned": {
+  "table": {
+   "file": "table.html",
+   "title": "표"
+  },
+  "containers": {
+   "file": "containers.html",
+   "title": "배치 요소"
+  },
+  "scrolling": {
+   "file": "scrolling.html",
+   "title": "스크롤과 확대"
+  },
+  "buttons": {
+   "file": "buttons.html",
+   "title": "단추와 명령"
+  },
+  "choices": {
+   "file": "choices.html",
+   "title": "체크·라디오·선택 묶음"
+  },
+  "values": {
+   "file": "values.html",
+   "title": "슬라이더·숫자·별점·진행"
+  },
+  "text-display": {
+   "file": "text-display.html",
+   "title": "글 표시와 글꼴"
+  },
+  "text-input": {
+   "file": "text-input.html",
+   "title": "텍스트 입력과 서식 글"
+  },
+  "menus": {
+   "file": "menus.html",
+   "title": "메뉴와 메뉴 막대"
+  },
+  "popups": {
+   "file": "popups.html",
+   "title": "드롭다운·콤보·팝업"
+  },
+  "dialogs": {
+   "file": "dialogs.html",
+   "title": "대화 상자와 시트"
+  },
+  "notifications": {
+   "file": "notifications.html",
+   "title": "알림"
+  },
+  "tabs": {
+   "file": "tabs.html",
+   "title": "탭"
+  },
+  "pickers": {
+   "file": "pickers.html",
+   "title": "날짜·시간·색 고르기"
+  },
+  "media": {
+   "file": "media.html",
+   "title": "이미지·영상·웹·잉크"
+  },
+  "window": {
+   "file": "window.html",
+   "title": "창과 셸 통합"
+  },
+  "theming": {
+   "file": "theming.html",
+   "title": "테마와 스타일"
+  },
+  "accessibility": {
+   "file": "accessibility.html",
+   "title": "접근성"
+  },
+  "i18n": {
+   "file": "i18n.html",
+   "title": "다국어"
+  },
+  "services": {
+   "file": "services.html",
+   "title": "플랫폼 서비스와 네트워크"
+  }
+ },
+ "headers": {
+  "include/luil/android/android_app.h": [
+   "platforms"
+  ],
+  "include/luil/app/app_delegate.h": [
+   "window"
+  ],
+  "include/luil/app/app_host.h": [
+   "threads"
+  ],
+  "include/luil/app/color_picker_popup.h": [
+   "pickers"
+  ],
+  "include/luil/app/date_picker_popup.h": [
+   "pickers"
+  ],
+  "include/luil/app/file_dialog.h": [
+   "dialogs"
+  ],
+  "include/luil/app/file_watcher.h": [
+   "services"
+  ],
+  "include/luil/app/global_hotkey.h": [
+   "window"
+  ],
+  "include/luil/app/menu_popup.h": [
+   "menus"
+  ],
+  "include/luil/app/notification.h": [
+   "notifications"
+  ],
+  "include/luil/app/platform_services.h": [
+   "services"
+  ],
+  "include/luil/app/renderer_policy.h": [
+   "rendering"
+  ],
+  "include/luil/app/secret_store.h": [
+   "services"
+  ],
+  "include/luil/app/taskbar.h": [
+   "window"
+  ],
+  "include/luil/app/tray_icon.h": [
+   "window"
+  ],
+  "include/luil/app/webview.h": [
+   "media"
+  ],
+  "include/luil/ios/ios_app.h": [
+   "platforms"
+  ],
+  "include/luil/luil.h": [
+   "overview"
+  ],
+  "include/luil/macos/macos_app.h": [
+   "platforms"
+  ],
+  "include/luil/messaging/channel.h": [
+   "messaging"
+  ],
+  "include/luil/messaging/envelope.h": [
+   "messaging"
+  ],
+  "include/luil/messaging/latest_slot.h": [
+   "messaging"
+  ],
+  "include/luil/net/http_body.h": [
+   "services"
+  ],
+  "include/luil/net/http_client.h": [
+   "services"
+  ],
+  "include/luil/net/http_media_type.h": [
+   "services"
+  ],
+  "include/luil/net/http_message.h": [
+   "services"
+  ],
+  "include/luil/net/smb_client.h": [
+   "services"
+  ],
+  "include/luil/net/websocket_client.h": [
+   "services"
+  ],
+  "include/luil/text/case_fold.h": [
+   "text"
+  ],
+  "include/luil/text/font_style.h": [
+   "text-display"
+  ],
+  "include/luil/text/fonts.h": [
+   "text-display"
+  ],
+  "include/luil/text/grapheme.h": [
+   "text"
+  ],
+  "include/luil/text/line_break.h": [
+   "text"
+  ],
+  "include/luil/text/srt.h": [
+   "media"
+  ],
+  "include/luil/text/string_table.h": [
+   "i18n"
+  ],
+  "include/luil/text/text_change.h": [
+   "text"
+  ],
+  "include/luil/text/text_edit.h": [
+   "text"
+  ],
+  "include/luil/text/text_format.h": [
+   "text-input"
+  ],
+  "include/luil/text/utf8_text.h": [
+   "text"
+  ],
+  "include/luil/theme/appearance.h": [
+   "theming"
+  ],
+  "include/luil/theme/ui_style.h": [
+   "theming"
+  ],
+  "include/luil/theme/ui_theme.h": [
+   "theming"
+  ],
+  "include/luil/ui/accessibility.h": [
+   "accessibility"
+  ],
+  "include/luil/ui/app_bar_element.h": [
+   "window"
+  ],
+  "include/luil/ui/app_message.h": [
+   "messaging"
+  ],
+  "include/luil/ui/badge_element.h": [
+   "text-display"
+  ],
+  "include/luil/ui/breadcrumb_element.h": [
+   "text-display"
+  ],
+  "include/luil/ui/button_element.h": [
+   "buttons"
+  ],
+  "include/luil/ui/calendar_date.h": [
+   "pickers"
+  ],
+  "include/luil/ui/calendar_element.h": [
+   "pickers"
+  ],
+  "include/luil/ui/caption_element.h": [
+   "window"
+  ],
+  "include/luil/ui/caption_metrics.h": [
+   "window"
+  ],
+  "include/luil/ui/check_element.h": [
+   "choices"
+  ],
+  "include/luil/ui/choice_group_element.h": [
+   "choices"
+  ],
+  "include/luil/ui/clipboard_image.h": [
+   "media"
+  ],
+  "include/luil/ui/color_picker_element.h": [
+   "pickers"
+  ],
+  "include/luil/ui/color_space.h": [
+   "pickers"
+  ],
+  "include/luil/ui/combo_box_element.h": [
+   "popups"
+  ],
+  "include/luil/ui/command_palette.h": [
+   "buttons"
+  ],
+  "include/luil/ui/commands.h": [
+   "buttons"
+  ],
+  "include/luil/ui/dialog_elements.h": [
+   "buttons",
+   "text-input"
+  ],
+  "include/luil/ui/dock_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/draw_primitives.h": [
+   "rendering"
+  ],
+  "include/luil/ui/dropdown_element.h": [
+   "popups"
+  ],
+  "include/luil/ui/field_popup.h": [
+   "popups"
+  ],
+  "include/luil/ui/font_scale.h": [
+   "text-display"
+  ],
+  "include/luil/ui/glyph_element.h": [
+   "text-display"
+  ],
+  "include/luil/ui/grid_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/group_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/grouped_list_element.h": [
+   "lists"
+  ],
+  "include/luil/ui/image_decode.h": [
+   "media"
+  ],
+  "include/luil/ui/image_element.h": [
+   "media"
+  ],
+  "include/luil/ui/image_encode.h": [
+   "media"
+  ],
+  "include/luil/ui/info_bar_element.h": [
+   "notifications"
+  ],
+  "include/luil/ui/ink.h": [
+   "media"
+  ],
+  "include/luil/ui/ink_canvas_element.h": [
+   "media"
+  ],
+  "include/luil/ui/item_model.h": [
+   "lists"
+  ],
+  "include/luil/ui/label_element.h": [
+   "text-display"
+  ],
+  "include/luil/ui/layer_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/layout_metrics.h": [
+   "layout",
+   "containers"
+  ],
+  "include/luil/ui/list_element.h": [
+   "lists"
+  ],
+  "include/luil/ui/markdown_element.h": [
+   "text-display"
+  ],
+  "include/luil/ui/menu_bar_element.h": [
+   "menus"
+  ],
+  "include/luil/ui/menu_element.h": [
+   "menus"
+  ],
+  "include/luil/ui/message_box.h": [
+   "dialogs"
+  ],
+  "include/luil/ui/modal_host_element.h": [
+   "dialogs"
+  ],
+  "include/luil/ui/number_input.h": [
+   "values"
+  ],
+  "include/luil/ui/page_transition.h": [
+   "motion"
+  ],
+  "include/luil/ui/page_transition_element.h": [
+   "motion"
+  ],
+  "include/luil/ui/pager_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/palette_scope_element.h": [
+   "theming"
+  ],
+  "include/luil/ui/panel_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/progress_element.h": [
+   "values"
+  ],
+  "include/luil/ui/rating_element.h": [
+   "values"
+  ],
+  "include/luil/ui/rich_text.h": [
+   "text-input"
+  ],
+  "include/luil/ui/rich_text_commands.h": [
+   "text-input"
+  ],
+  "include/luil/ui/root_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/scroll_area_element.h": [
+   "scrolling"
+  ],
+  "include/luil/ui/scroll_view_element.h": [
+   "scrolling"
+  ],
+  "include/luil/ui/scrollbar_element.h": [
+   "scrolling"
+  ],
+  "include/luil/ui/selection_model.h": [
+   "lists"
+  ],
+  "include/luil/ui/severity.h": [
+   "notifications"
+  ],
+  "include/luil/ui/sheet_host_element.h": [
+   "dialogs"
+  ],
+  "include/luil/ui/sidebar_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/slider_element.h": [
+   "values"
+  ],
+  "include/luil/ui/spinner_element.h": [
+   "values"
+  ],
+  "include/luil/ui/split_button_element.h": [
+   "buttons"
+  ],
+  "include/luil/ui/split_handle_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/spring.h": [
+   "motion"
+  ],
+  "include/luil/ui/stack_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/strip_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/syntax_highlighter.h": [
+   "text-input"
+  ],
+  "include/luil/ui/tab_bar_element.h": [
+   "tabs"
+  ],
+  "include/luil/ui/table_element.h": [
+   "table"
+  ],
+  "include/luil/ui/teaching_tip_element.h": [
+   "popups"
+  ],
+  "include/luil/ui/text_area_element.h": [
+   "text-input"
+  ],
+  "include/luil/ui/text_block.h": [
+   "text-display"
+  ],
+  "include/luil/ui/text_document.h": [
+   "text-input"
+  ],
+  "include/luil/ui/text_input_options.h": [
+   "text-input"
+  ],
+  "include/luil/ui/text_input_state.h": [
+   "text-input"
+  ],
+  "include/luil/ui/text_layout.h": [
+   "text-display"
+  ],
+  "include/luil/ui/theme_picker_element.h": [
+   "choices"
+  ],
+  "include/luil/ui/time_picker_element.h": [
+   "pickers"
+  ],
+  "include/luil/ui/toast_element.h": [
+   "notifications"
+  ],
+  "include/luil/ui/transition.h": [
+   "motion"
+  ],
+  "include/luil/ui/ui_cursor.h": [
+   "input"
+  ],
+  "include/luil/ui/ui_element.h": [
+   "ui-tree"
+  ],
+  "include/luil/ui/ui_element_id.h": [
+   "ui-tree"
+  ],
+  "include/luil/ui/ui_events.h": [
+   "input"
+  ],
+  "include/luil/ui/ui_image.h": [
+   "media"
+  ],
+  "include/luil/ui/ui_inspect.h": [
+   "testing"
+  ],
+  "include/luil/ui/ui_interaction.h": [
+   "input"
+  ],
+  "include/luil/ui/ui_platform.h": [
+   "platforms"
+  ],
+  "include/luil/ui/ui_tree.h": [
+   "ui-tree"
+  ],
+  "include/luil/ui/undo_commands.h": [
+   "undo"
+  ],
+  "include/luil/ui/undo_stack.h": [
+   "undo"
+  ],
+  "include/luil/ui/video_element.h": [
+   "media"
+  ],
+  "include/luil/ui/virtual_list_element.h": [
+   "lists"
+  ],
+  "include/luil/ui/webview_element.h": [
+   "media"
+  ],
+  "include/luil/ui/wrap_element.h": [
+   "containers"
+  ],
+  "include/luil/ui/zoom_view_element.h": [
+   "scrolling"
+  ],
+  "include/luil/version.h": [
+   "overview"
+  ],
+  "include/luil/win32/app_host.h": [
+   "threads"
+  ],
+  "include/luil/win32/drop_data.h": [
+   "window"
+  ],
+  "include/luil/win32/media_player.h": [
+   "media"
+  ],
+  "include/luil/win32/renderer_policy.h": [
+   "rendering"
+  ],
+  "include/luil/win32/video_frame_player.h": [
+   "media"
+  ],
+  "include/luil/win32/webview.h": [
+   "media"
+  ],
+  "include/luil/win32/win32_window.h": [
+   "platforms",
+   "window"
+  ]
+ }
+}
