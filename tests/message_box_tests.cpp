@@ -706,3 +706,45 @@ TEST_CASE("A message box hands the host its entry, return slot, and fit settings
     broken.width = std::numeric_limits<float>::quiet_NaN();
     REQUIRE(must_find(*shown(std::move(broken)), box_id()).bounds().width == Catch::Approx(luil::message_box_default_width));
 }
+
+TEST_CASE("A destructive button is never the fallback first focus nor the lone button Esc presses", "[ui][message-box][focus]")
+{
+    const luil::message_box_button erase { .key = u8"erase", .text = u8"Erase", .role = luil::message_box_role::destructive };
+    const luil::message_box_button later { .key = u8"later", .text = u8"Later" };
+
+    // 역할로 가를 수 없을 때의 첫 초점은 destructive를 건너뛴다. destructive뿐이면 서지 않는다 (design 결정 9).
+    const std::array mixed { erase, later };
+    REQUIRE(luil::message_box_entry_index(mixed) == std::optional<std::size_t> { 1u });
+    const std::array only { erase, erase };
+    REQUIRE(luil::message_box_entry_index(only).has_value() == false);
+    // 단추 하나뿐인 규칙은 destructive에 응하지 않는다. 보통 단추 하나는 그대로 닫는 길이다.
+    const std::array lone { erase };
+    REQUIRE(luil::message_box_dismiss_index(lone).has_value() == false);
+    const std::array lone_plain { later };
+    REQUIRE(luil::message_box_dismiss_index(lone_plain) == std::optional<std::size_t> { 0u });
+
+    flowing_policy policy {};
+    luil::interaction_controller controller { &policy };
+
+    // 뜨자마자 친 Enter는 위험한 첫 단추가 아니라 보통 단추를 누른다.
+    luil::message_box_config first_destructive { sample() };
+    first_destructive.buttons = { erase, later };
+    controller.set_tree(shown(first_destructive));
+    REQUIRE(controller.snapshot().focused == button(u8"later"));
+    REQUIRE(result_keys(controller.process(key(luil::key_code::enter))) == std::vector<std::u8string> { u8"later" });
+
+    // 하나뿐인 단추가 destructive면 Esc도 바깥 누름도 닫지 않는다. Esc는 앱으로 흐른다. 초점도 서지 않아 Enter가 누르지 않는다.
+    luil::message_box_config single { sample() };
+    single.buttons = { erase };
+    REQUIRE(luil::message_box_dismiss_message(single).has_value() == false);
+    const std::shared_ptr<const luil::ui_tree> tree { shown(single) };
+    REQUIRE(tree->root()->dismiss_action() == nullptr);
+    REQUIRE(must_find(*tree, luil::ui_element_id { luil::ui_element_kind::modal_scrim, u8"reset" }).action(luil::ui_trigger::left_click) == nullptr);
+    controller.set_tree(tree);
+    REQUIRE(controller.snapshot().focused == luil::ui_element_id {});
+    REQUIRE(result_keys(controller.process(key(luil::key_code::enter))).empty());
+    REQUIRE(result_keys(controller.process(key(luil::key_code::escape))).empty());
+    // Tab 한 번이면 그 단추에 선다.
+    static_cast<void>(controller.process(key(luil::key_code::tab)));
+    REQUIRE(controller.snapshot().focused == button(u8"erase"));
+}

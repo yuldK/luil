@@ -125,8 +125,8 @@ root.add(std::move(host));
 | --- | --- |
 | Enter | 초점이 선 element를 실행한다. 첫 초점이 Enter의 대상이라 뜨자마자 친 Enter는 그 대상이다 |
 | Enter의 대상 | 마지막 accept 단추(`default_button`, 강조 채움). destructive는 되지 않는다 |
-| 첫 초점(`focus_entry`) | 마지막 accept. 없으면 마지막 reject, 그것도 없으면 첫 단추(역할이 모두 normal이거나 destructive뿐일 때). 테는 첫 Tab에서 선다 |
-| Esc | reject 단추(여럿이면 마지막)의 key를 `result`에 넘긴다. reject가 없고 단추가 하나면 그 단추. 둘 다 없으면 Esc는 앱으로 흐른다 |
+| 첫 초점(`focus_entry`) | 마지막 accept. 없으면 마지막 reject, 그것도 없으면 destructive가 아닌 첫 단추. destructive뿐이면 첫 초점이 없다(결정 9). 테는 첫 Tab에서 선다 |
+| Esc | reject 단추(여럿이면 마지막)의 key를 `result`에 넘긴다. reject가 없고 단추가 하나면 그 단추(destructive면 아니다). 둘 다 없으면 Esc는 앱으로 흐른다 |
 | 바깥 누름 | `outside_dismisses`가 참이고 Esc의 결과가 있으면 같은 결과. 아니면 흡수만 한다 |
 | 단추 눌림 | `result(그 key)` 하나다 |
 
@@ -197,7 +197,7 @@ root.add(std::move(host));
 
 **8. 글 열의 시작.** 글리프 칸(24 + 12)은 `severity`가 있을 때만 폭을 잡는다. 없으면 제목·본문·칸이 안쪽 여백(20)에서 시작한다. 있으면 셋 모두 36 오른쪽에서 시작하고 단추 영역만 안쪽 폭 전체를 쓴다. 위 치수 표의 "글 폭은 안쪽 폭에서 글리프 몫을 뺀 값"이 `severity`가 없을 때도 빼는지 모호했다. 글리프가 없는 상자가 빈 36을 남길 까닭이 없다.
 
-**9. 여럿일 때와 모두 위험할 때.** reject가 여럿이면 Esc·바깥 누름·첫 초점은 마지막 reject를 따른다(accept의 "마지막"과 같은 규칙으로 맞췄다). destructive만 있는 상자는 첫 단추에 초점이 서고 Enter의 대상은 없다. 결정 3의 "destructive는 첫 초점이 되지 않는다"는 다른 역할이 있을 때의 규칙이고, 역할이 하나뿐일 때 초점을 아예 두지 않으면 키보드 사용자가 Tab을 한 번 더 쳐야 해서 택하지 않았다.
+**9. 여럿일 때와 모두 위험할 때.** reject가 여럿이면 Esc·바깥 누름·첫 초점은 마지막 reject를 따른다(accept의 "마지막"과 같은 규칙으로 맞췄다). destructive만 있는 상자는 첫 초점도 Enter의 대상도 없다. 처음 판은 이때 첫 단추에 초점을 두었다(초점을 두지 않으면 키보드 사용자가 Tab을 한 번 더 쳐야 해서). 그러면 뜨자마자 친 Enter가 되돌릴 수 없는 일을 해 결정 3과 어긋나므로, Tab 한 번의 대가를 받고 초점을 두지 않기로 바꿨다(2026-11-28). normal과 destructive가 섞이고 reject·accept가 없으면 destructive가 아닌 첫 단추에 선다. 처음 판은 이때도 0번을 골라 첫 단추가 destructive면 뜨자마자 친 Enter가 그것을 눌렀다(2026-11-28 고침). 단추가 destructive 하나뿐이면 Esc·바깥 누름의 결과가 되지 않는다. 처음 판은 단추 하나 규칙이 역할을 보지 않아 Esc가 되돌릴 수 없는 일을 했다(같은 날 고침).
 
 **10. 확인 칸의 줄.** 칸은 글 열의 왼쪽에 서고 `control_size` 줄 안에서 세로 가운데에 선다. `check_element`가 자기 높이(24)를 고정하므로 터치 앱이 44를 주어도 칸은 24이고 줄만 44가 된다. 칸의 누르는 자리가 줄 전체가 되게 하려면 `check_element`를 고쳐야 해서 이 노드의 범위 밖이다.
 

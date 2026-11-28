@@ -181,10 +181,13 @@ namespace luil {
                 reject = index;
         if (reject.has_value())
             return reject;
-        // 역할로 가를 수 없으면 첫 단추다. 단추가 없으면 서지 않는다.
-        if (buttons.empty())
-            return std::nullopt;
-        return 0u;
+        // 역할로 가를 수 없으면 위험하지 않은 첫 단추다. 뜨자마자 친 Enter가 되돌릴 수 없는 일을 하지 않게 한다.
+        for (std::size_t index { 0 }; index < buttons.size(); ++index)
+            if (buttons[index].role != message_box_role::destructive)
+                return index;
+        // destructive뿐이거나 단추가 없으면 서지 않는다 — 뜨자마자 친 Enter가 되돌릴 수 없는 일을 하지 않는다.
+        // 키보드 사용자는 Tab을 한 번 쳐서 단추에 선다 (docs/message-box-design.md 결정 9).
+        return std::nullopt;
     }
 
     std::optional<std::size_t> message_box_dismiss_index(const std::span<const message_box_button> buttons) noexcept
@@ -196,7 +199,8 @@ namespace luil {
         if (reject.has_value())
             return reject;
         // 거절이 없어도 단추가 하나면 그 단추가 닫는 길이다 (안내만 하는 대화의 확인).
-        if (buttons.size() == 1u)
+        //  - 그 단추가 destructive면 아니다. Esc·바깥 누름이 되돌릴 수 없는 일을 하지 않고 Esc는 앱으로 흐른다.
+        if (buttons.size() == 1u && buttons.front().role != message_box_role::destructive)
             return 0u;
         return std::nullopt;
     }

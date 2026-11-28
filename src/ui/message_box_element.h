@@ -14,9 +14,10 @@ namespace luil {
 
     // 마지막 accept 단추다. Enter의 대상(기본 버튼)이다. destructive는 되지 않는다.
     [[nodiscard]] std::optional<std::size_t> message_box_default_index(std::span<const message_box_button> buttons) noexcept;
-    // 뜨는 순간 초점이 설 단추다. 마지막 accept, 없으면 마지막 reject, 그것도 없으면 첫 단추다.
+    // 뜨는 순간 초점이 설 단추다. 마지막 accept, 없으면 마지막 reject, 그것도 없으면 destructive가 아닌 첫 단추다.
+    // destructive뿐이면 서지 않는다.
     [[nodiscard]] std::optional<std::size_t> message_box_entry_index(std::span<const message_box_button> buttons) noexcept;
-    // Esc와 바깥 누름이 누르는 단추다. 마지막 reject이고, reject가 없으면서 단추가 하나이면 그 단추다.
+    // Esc와 바깥 누름이 누르는 단추다. 마지막 reject이고, reject가 없으면서 단추가 하나이면(destructive가 아니면) 그 단추다.
     [[nodiscard]] std::optional<std::size_t> message_box_dismiss_index(std::span<const message_box_button> buttons) noexcept;
 
     // 단추 폭들(논리 픽셀)을 사이 간격과 함께 한 행에 놓을 수 없어 쌓아야 하는가다. 폭의 합이 안쪽 폭과 같으면 한 행이다.

@@ -33,8 +33,9 @@ namespace luil {
         accept,
         // 거절이다. Esc, 바깥 누름, 뒤로 가기의 결과가 된다 (여럿이면 마지막).
         reject,
-        // 되돌릴 수 없는 일이다. 오류색이고 Enter의 대상도 첫 초점도 되지 않는다.
+        // 되돌릴 수 없는 일이다. 오류색이고 Enter의 대상도, 첫 초점도, Esc·바깥 누름의 결과도 되지 않는다.
         //  - 한 번의 Enter가 되돌릴 수 없는 일을 하지 않게 한다. 그런 대화가 필요하면 앱이 `modal_host`로 직접 짓는다.
+        //  - destructive뿐인 상자는 첫 초점이 없다. Tab을 한 번 쳐야 단추에 선다.
         destructive,
     };
 
@@ -84,9 +85,11 @@ namespace luil {
     // 크기는 내용에서 나온다. host의 `fit_height`와 `edge_margin`이 배치할 때 내용에게 높이를 묻고 자리 안으로 자르므로,
     // 앱은 높이도 창 크기도 넘기지 않고 `host->arrange`(또는 root에 담기)만 한다.
     //  - 열림은 앱 상태다. 앱이 이 함수를 부르는 때가 열려 있는 때이고, 닫기는 `result`가 낸 메시지를 받아 다음 frame에 짓지 않는 것이다.
-    //  - 첫 초점은 마지막 accept, 없으면 마지막 reject, 그것도 없으면 첫 단추다. 뜨자마자 친 Enter는 그 단추를 누른다
-    //    (초점이 이긴다). 마지막 accept만 기본 버튼(강조색 채움)이고 destructive는 되지 않는다.
-    //  - Esc는 마지막 reject의 key를, reject가 없고 단추가 하나면 그 단추의 key를 `result`에 넘긴다. 둘 다 없으면 Esc는 앱으로 흐른다.
+    //  - 첫 초점은 마지막 accept, 없으면 마지막 reject, 그것도 없으면 destructive가 아닌 첫 단추다. 뜨자마자 친 Enter는
+    //    그 단추를 누른다 (초점이 이긴다). destructive뿐이면 첫 초점이 없다 (Tab을 쳐야 선다).
+    //    마지막 accept만 기본 버튼(강조색 채움)이고 destructive는 되지 않는다.
+    //  - Esc는 마지막 reject의 key를, reject가 없고 단추가 하나면(destructive가 아니면) 그 단추의 key를 `result`에 넘긴다.
+    //    둘 다 없으면 Esc는 앱으로 흐른다.
     [[nodiscard]] std::unique_ptr<modal_host_element> make_message_box(message_box_config config);
 
     // Esc가 낼 결과다. 닫는 길이 없으면 `result`가 비었거나 Esc에 응할 단추가 없으면 nullopt다.
