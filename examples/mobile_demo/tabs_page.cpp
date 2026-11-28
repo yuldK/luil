@@ -75,11 +75,15 @@ namespace mobile_demo {
                 return tabs_.end();
             };
             const auto moved { find(reorder->moved) };
-            if (moved == tabs_.end())
+            const auto target { find(reorder->target) };
+            if (moved == tabs_.end() || target == tabs_.end())
                 return true;
+            // 대상 탭이 있던 자리로 옮긴다 (`tab_reorder_message_factory`). 오른쪽으로 옮기면 대상의 뒤, 왼쪽으로 옮기면
+            // 앞이 된다. 지운 뒤 대상의 앞에 끼우면 오른쪽으로는 한 칸 모자라고 바로 오른쪽 이웃에 놓으면 제자리다.
+            const auto to { target - tabs_.begin() };
             const tab_entry entry { *moved };
             tabs_.erase(moved);
-            tabs_.insert(find(reorder->target), entry);
+            tabs_.insert(tabs_.begin() + to, entry);
             return true;
         }
         if (const auto* const scroll { message.get<tab_scroll_intent>() }; scroll != nullptr)
