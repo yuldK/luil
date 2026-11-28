@@ -171,8 +171,7 @@
             </tbody>
           </table>
         </div>
-        <div class="code" data-lang="cpp" data-src="include/luil/app/tray_icon.h:33-39" data-path="include/luil/app/tray_icon.h" data-start="33"><script type="text/plain">
-
+        <div class="code" data-lang="cpp" data-src="include/luil/app/tray_icon.h:34-39" data-path="include/luil/app/tray_icon.h" data-start="34"><script type="text/plain">
     // 알림 영역의 아이콘 하나다. `ui_frame::tray`에 실으면 서고 빼면 사라진다.
     //  - 앱 상태다. 매 frame 지금 바라는 값을 싣고, UI thread가 바뀐 것만 셸에 옮긴다 (`taskbar_request`와 같다).
     //  - 그림은 몸통(`ui_image::backing`)으로, 툴팁은 값으로 견준다. 같은 `ui_image` 복사본을 frame마다 실으면 되고,
@@ -732,7 +731,7 @@ namespace sample {
             return luil::make_app_action(std::move(intent));
         };
 </script></div>
-        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:560-579" data-path="examples/demo/tabs_page.cpp" data-start="560"><script type="text/plain">
+        <div class="code" data-lang="cpp" data-src="examples/demo/tabs_page.cpp:560-579,607-611" data-path="examples/demo/tabs_page.cpp" data-start="560"><script type="text/plain">
         std::vector<luil::ui_window> windows {};
         for (const detached_tab& item : detached_)
         {
@@ -753,6 +752,12 @@ namespace sample {
             window.screen_anchor = item.anchor;
             window.close = [key] { return luil::make_app_action(tab_attach_intent { key }); };
             window.metrics = [key](const float width, const float height, const float scale) { return luil::app_message { tab_window_metrics_intent { key, width, height, scale } }; };
+⋯@607
+            window.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, item.width * scale, item.height * scale }, scale, {}, nullptr, &style_));
+            windows.push_back(std::move(window));
+        }
+        return windows;
+    }
 </script></div>
         <div class="prose">
           <p>받는 대상 없이 창 밖에 놓은 탭은 탭 막대의 <code>unclaimed_drop</code>이 놓은 화면 점과 함께 알린다. 앱은 그 점에 <code>window_screen_anchor</code>로 새 독립 창을 세운다. 닻은 "새 창 client의 논리 점 (<code>client_x</code>, <code>client_y</code>)이 화면의 물리 점 <code>screen</code>에 오게" 놓는다. 배율은 그 화면 점이 있는 모니터의 것이고, 그 뒤 작업 영역 안으로 밀려 점이 어긋날 수 있다. 탭 막대 쪽은 <a class="xref" href="tabs.html">탭</a> 문서에 있다.</p>
@@ -1759,6 +1764,1167 @@ namespace sample {
 </script></div>
         <div class="prose">
           <p>안쪽 화면일 때만 <code>ui_frame::back</code>을 싣고 맨 앞 화면이면 비워 플랫폼의 기본 동작(Activity 끝내기)을 받는다. popup이 떠 있으면 host가 popup을 먼저 닫고 이 함수는 부르지 않는다. Windows·macOS·iOS host는 이 칸을 읽지 않는다 — 데스크톱에서는 앱 바의 뒤로 단추가 같은 일을 한다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 필드는 <a class="xref" href="api.html#win32--window-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="window_config">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/win32/win32_window.h:310-391" data-path="include/luil/win32/win32_window.h" data-start="310"><script type="text/plain">
+    // 창의 겉모습과 정책이다.
+    // 값만 바꾸면 되도록 한곳에 모아 둔다 (단위를 별도로 적지 않은 크기는 논리 96 DPI 기준 px).
+    struct window_config
+    {
+        std::wstring class_name { L"Luil.Window" };
+        // caption의 제목·아이콘·툴팁이다.
+        // Win32 창 제목도 title에서 만든다.
+        caption_config caption {};
+        int initial_width { 1280 };
+        int initial_height { 720 };
+        // 비어 있으면 OS가 자리를 정한다 (`CW_USEDEFAULT`) — 지금까지의 동작이다.
+        //  - 없음을 말하는 법은 이 `optional` 하나다. x·y를 따로 optional로 두면
+        //    "x만 정한 창"이라는 불가능한 조합이 생긴다.
+        std::optional<window_position> initial_position {};
+        // 사용자가 이보다 작게 줄일 수 없는 client 영역 크기다.
+        int minimum_client_width { 480 };
+        int minimum_client_height { 320 };
+        // 창 가장자리에서 크기 조절로 잡히는 두께다.
+        // 좁을수록 가장자리에 붙은 UI(스크롤 막대)를 잡기 쉽다.
+        // 모서리는 가장자리보다 넓게 두어야 잡기 쉽다.
+        int resize_border_thickness { 4 };
+        int resize_corner_thickness { 10 };
+        // 실행 파일 resource의 창 아이콘 id다.
+        // 0이면 시스템 기본 아이콘이다.
+        int icon_resource { 0 };
+        renderer_mode renderer { renderer_mode::automatic };
+        // 주 창의 표시 방식이다. 기본값은 지금까지의 방식이다.
+        window_presentation presentation { window_presentation::standard };
+        // 레이어드 창에서 알파 0인 픽셀이 마우스를 뒤 창으로 통과시키게 둔다 (`layered` 전용).
+        //  - 레이어드 창은 알파 0인 픽셀을 마우스 판정에서 투명하게 본다. 이 값이 거짓(기본값)이면 그린 바탕이
+        //    알파 0인 frame에서 알파 0 픽셀을 1로 올려 낸다 — 창 안의 빈 자리 클릭이 창에 온다.
+        //  - 바탕 알파가 0이 아닌 테마(기본 테마, 배경 효과의 옅은 바탕)에서는 알파 0 픽셀이 없어 어느 쪽이든 같다.
+        bool layered_click_through { false };
+        // accent acrylic을 거는 값이다 (`acrylic_accent_style`). 레이어드 주 창과 popup의 `acrylic`이 이 길로 선다.
+        //  - 시작할 때 정하고 실행 중에는 바꾸지 않는다.
+        acrylic_accent_style acrylic_accent {};
+        // 설정 > 접근성 > 텍스트 크기를 글자 크기에 싣는가다 (docs/concepts/fonts.md).
+        //  - 끄면 앱의 글자 크기가 설정과 상관없이 그대로다. 고정 높이로 지은 화면을 아직 옮기지 못한 앱의 물러설 자리다.
+        //  - 시작할 때 정하고 실행 중에는 바꾸지 않는다.
+        bool follow_text_scale { true };
+        // Direct3D를 **만들 때** 실패시킨다. 그러면 스왑체인이 아예 없는 채로
+        // 처음부터 CPU로 시작한다.
+        bool simulate_direct3d_failure { false };
+        // Direct3D를 **성공적으로 그린 뒤** 실패시킨다 (0이면 하지 않는다).
+        // 이 frame 수만큼 그리고 나서 다음 `render`가 실패해 CPU로 물러선다.
+        //
+        // 위의 생성 시점 실패와 갈라 두는 이유: 두 경로가 화면에서 하는 일이
+        // 다르다. 생성 시점 실패는 창이 제시에 붙기 전이라 CPU가 곧바로 그리지만,
+        // 런타임 물러섬은 이미 제시에 붙은 창을 **놓고** 나서야 CPU가 화면에 닿는다.
+        // 그 순서가 틀리면 오류 하나 없이 화면이 마지막 frame에 얼어붙으므로,
+        // 재현할 길이 있어야 한다.
+        int simulate_direct3d_loss_after_frames { 0 };
+        // 한 frame만 그리고 끝낸다 (renderer smoke test).
+        // host를 조립하지 않는다.
+        // 위의 런타임 손실을 주입하면 그 손실이 실제로 오는 frame까지 그린다.
+        bool smoke_test { false };
+        // 시작 실패 메시지 상자의 제목과 앞글이다.
+        startup_error_config startup_error {};
+        // 주 창·보조 창이 OS 파일 끌기를 받는다 (표면마다 IDropTarget 하나).
+        // 놓인 자리의 drop 대상 element가 받고, 없으면 delegate의
+        // `on_file_dropped`가 본다 (os-dragdrop-design.md).
+        bool accept_file_drop { false };
+        // `ui_cursor`를 실제 커서로 옮긴다.
+        // 비어 있으면 라이브러리의 기본 매핑(시스템 커서)을 쓴다.
+        // 앱이 정의한 모양(`application_cursor`)이나 자기 커서 리소스를 여기서 준다
+        // (`load_system_cursor`·`load_cursor_resource`로 얻는다).
+        //  - 빈 핸들을 돌려주면 그 값도 기본 매핑으로 물러선다.
+        std::function<cursor_handle(ui_cursor)> resolve_cursor {};
+        // 터치 몸짓의 시작 설정이다 (touch-pen-input-design.md).
+        // 잘못된 값(`valid_touch_gesture_config`)이면 창이 시작하지 않고 시작 실패로 알린다.
+        // 실행 중에는 `app_host::set_touch_gesture_config`로 바꾼다.
+        touch_gesture_config touch {};
+        // 저장 배치를 첫 표시·첫 frame 전에 적용한다. initial_position과 초기 논리 크기보다 우선한다.
+        // x·y는 GetWindowPlacement로 보고한 작업 영역 좌표, 크기는 물리 픽셀이다.
+        // 대상 모니터의 DPI로 최소 크기를 검사하며, 잘못된 값·화면 밖 배치는 전체를 무시한다.
+        // 비어 있거나 무시된 배치는 기존 initial_position·initial_width·initial_height를 따른다.
+        // STARTUPINFO의 비활성·최소화·숨김 실행 정책은 유지한다.
+        std::optional<window_placement> initial_placement {};
+        // 앱 식별이다. 비어 있으면 지금처럼 세우지 않고, OS 알림은 `unsupported`다.
+        //  - smoke test(`smoke_test`)는 id를 검사만 하고 적용하지 않는다.
+        app_identity identity {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>뜻 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>caption</code></td><td><code>{}</code></td><td>주 창의 판정용 버튼 집합·치수와 OS 제목. <strong>창을 만들 때 한 번</strong> 실린다. tree의 caption과 같은 값을 준다</td></tr>
+                  <tr><td><code>initial_width</code> · <code>initial_height</code></td><td>1280 · 720</td><td>논리 크기. 만든 뒤 그 모니터의 배율로 다시 잡는다</td></tr>
+                  <tr><td><code>initial_position</code></td><td>없음 (OS가 정한다)</td><td><strong>물리 픽셀·가상 화면 좌표</strong>. 크기와 단위가 다르다</td></tr>
+                  <tr><td><code>initial_placement</code></td><td>없음</td><td>저장 배치. x·y는 작업 영역 좌표, 크기는 물리 픽셀. 위 둘보다 앞선다. 잘못되거나 화면 밖이면 통째로 무시</td></tr>
+                  <tr><td><code>minimum_client_width</code> · <code>minimum_client_height</code></td><td>480 · 320</td><td>사용자가 줄일 수 없는 client 크기 (논리)</td></tr>
+                  <tr><td><code>resize_border_thickness</code> · <code>resize_corner_thickness</code></td><td>4 · 10</td><td>가장자리·모서리의 크기 조절 두께 (논리). 판정은 배율을 곱한 값, 가장자리는 최소 1px, 모서리는 가장자리보다 좁지 않다</td></tr>
+                  <tr><td><code>icon_resource</code></td><td>0</td><td>실행 파일 리소스의 창 아이콘 id. 0이면 시스템 기본. 트레이 그림이 비었을 때도 이것이다</td></tr>
+                  <tr><td><code>accept_file_drop</code></td><td>거짓</td><td>주 창·보조 창·도킹 표면이 OS 파일 끌기를 받는다</td></tr>
+                  <tr><td><code>presentation</code></td><td><code>standard</code></td><td><code>layered</code>는 CPU 렌더러·주 창 전용. 크기 변경이 한두 frame 늦게 따라온다</td></tr>
+                  <tr><td><code>identity</code></td><td>비어 있음</td><td>앱 식별(AUMID). 비면 OS 알림이 <code>unsupported</code>다. 이 프로세스의 창이 모두 이 id로 작업 표시줄에 묶인다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="window_environment">
+            <div class="code" data-lang="cpp" data-src="include/luil/win32/win32_window.h:509-528" data-path="include/luil/win32/win32_window.h" data-start="509"><script type="text/plain">
+    // 창을 만들고 메시지 루프를 돈다.
+    // driver가 null이면 smoke 모드처럼 host 없이 caption만 있는 화면을 그린다.
+    // 반환값은 프로세스 종료 코드다.
+    //  - smoke에서 Direct3D가 없으면 77이다.
+    //  - CTest의 SKIP_RETURN_CODE와 짝이다.
+    struct window_environment
+    {
+        logic_driver* driver { nullptr };
+        interaction_policy* policy { nullptr };
+        window_delegate* delegate { nullptr };
+        // 이 프로세스의 단일 인스턴스다. 첫째(`primary()`)이면 주 창이 같은 이름의 둘째가 보낸 인자를 받는다
+        // (`window_delegate::on_instance_arguments`). 창보다 오래 살아야 한다.
+        //  - 비었거나 둘째이거나 host가 없는 smoke 모드이거나 delegate가 없으면 받지 않는다. 보내는 쪽은 `not_found`를 본다.
+        const single_instance* instance { nullptr };
+        // 관리자 권한으로 도는 첫째가 낮은 권한 프로세스(일반 권한의 탐색기에서 연 파일)의 인자도 받는다 (UIPI를 연다).
+        //  - 기본은 닫힘이다. 인자가 높은 권한 앱의 입력이 되므로 앱이 그 위험을 알고 켠다.
+        //    닫힌 채 낮은 권한 둘째가 보내면 `send_to_primary`가 접근 거부로 `failed`다.
+        //  - 샌드박스 안의 프로세스를 포함해 낮은 권한 프로세스가 인자를 먹일 수 있다.
+        bool instance_from_lower_integrity { false };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>driver</code></td><td><code>nullptr</code></td><td>host 없이 caption만 그리는 smoke 화면이다</td></tr>
+                  <tr><td><code>delegate</code></td><td><code>nullptr</code></td><td>UI thread 훅이 없다. 크기 메시지도 오지 않는다. 둘째 인스턴스의 인자도 받지 않는다</td></tr>
+                  <tr><td><code>instance</code></td><td><code>nullptr</code></td><td>둘째의 인자를 받지 않는다. 보낸 쪽은 <code>not_found</code>. 달면 <strong>창보다 오래 살아야 한다</strong></td></tr>
+                  <tr><td><code>instance_from_lower_integrity</code></td><td>거짓</td><td>관리자 권한 첫째가 낮은 권한 프로세스의 인자를 받지 않는다 (보낸 쪽 <code>failed</code>)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="window_delegate">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/win32/win32_window.h:393-507" data-path="include/luil/win32/win32_window.h" data-start="393"><script type="text/plain">
+    // 앱이 UI thread에 꽂는 훅이다.
+    // 플랫폼을 가리지 않는 훅(시작, 앱 UI 명령, 크기·배율, 수명 주기)은 `app_delegate`에 있고,
+    // 여기는 데스크톱 창만 갖는 것(배치, 파일 드롭)을 더한다. Android host는 `app_delegate`를
+    // 받으므로, 이것을 구현한 앱 delegate를 그대로 넘길 수 있다.
+    // 모든 메서드는 UI thread에서 불리고 기본 구현은 "아무 일도 하지 않음"이다.
+    class window_delegate : public app_delegate
+    {
+    public:
+        // 주 창의 네이티브 표면을 앱이 소유할 자리다 (media_player). HWND(macOS는 `NSWindow*`)를 void*로 받으며 보관은 UI thread만 한다.
+        // on_started 앞에 한 번 오고, on_native_window_destroying에서 반드시 놓는다.
+        virtual void on_native_window_created(app_host& host, void* window)
+        {
+            static_cast<void>(host);
+            static_cast<void>(window);
+        }
+        // 새 frame을 UI thread가 반영한다. 게시된 tree는 읽기만 하고 native 자식 창의 자리·가시성만 맞춘다.
+        virtual void on_native_frame(app_host& host, const ui_frame& frame)
+        {
+            static_cast<void>(host);
+            static_cast<void>(frame);
+        }
+        // host의 shutdown 앞에 한 번 온다. worker callback의 배달과 native 자식 창을 여기서 끝낸다.
+        virtual void on_native_window_destroying(app_host& host)
+        {
+            static_cast<void>(host);
+        }
+
+        // 끌기 끝과 끌기 밖의 이동·크기 변경, 전체 화면 전환, 종료 직전의 배치를 보고한다.
+        // 빈 메시지는 게시하지 않는다.
+        [[nodiscard]] virtual app_message make_window_placement_message(const window_placement& placement)
+        {
+            static_cast<void>(placement);
+            return {};
+        }
+
+        // 사용자가 caption을 잡고 주 창을 끄는 동안, 창이 갈 자리를 앱이 고친다 (Win32 `WM_MOVING`의 자리).
+        // `bounds`는 이번 포인터 이동으로 창 바깥 사각형이 갈 자리다. 고쳐 두면 창이 그 자리로 간다. 크기는 바꾸지 않는다
+        // (너비·높이를 바꾸면 왼쪽 위만 쓴다).
+        //  - 화면 작업 영역 안으로 맞추기(`ui_frame::displays`의 `work_area`), 머릿줄의 자리를 기준으로 한 끌기 같은 데 쓴다.
+        //  - 끌기의 포인터 이동마다 UI thread에서 불린다. 곧 돌아와야 하고, 메시지를 게시하지 않는다 (배치는 끌기 끝에 한 번 알린다).
+        //  - macOS host가 테두리 없는 주 창(`macos::application_config::borderless`)의 caption 끌기에서 부른다. 좌표는 그 host의
+        //    화면 좌표 약속(주 화면 왼쪽 위 원점, 점 × 주 화면 배율)이다. Win32는 아직 부르지 않는다.
+        virtual void on_window_moving(app_host& host, screen_rect& bounds)
+        {
+            static_cast<void>(host);
+            static_cast<void>(bounds);
+        }
+
+        // 주 창이나 보조 창의 배경 효과 상태가 바뀌었다 (앱이 고른 효과가 바뀌었거나, OS 설정·고대비가 바뀌었다).
+        // 어느 표면인지는 `report.surface`다. 빈 메시지는 게시하지 않는다. 설정 화면이 "이 표시 방식에서는 mica를 쓸 수
+        // 없다" 같은 까닭을 보일 때 쓴다.
+        [[nodiscard]] virtual app_message make_backdrop_message(const backdrop_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+
+        // 주 창이나 독립 창의 작업 표시줄 단추 상태가 바뀌었다 (`make_backdrop_message`와 같은 모양이다).
+        // 어느 창인지는 `report.surface`다. 빈 메시지는 게시하지 않는다. 앱이 "셸이 요청을 받았는가"를 화면에 보일 때 쓴다.
+        [[nodiscard]] virtual app_message make_taskbar_message(const taskbar_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+
+        // 점프 목록을 셸에 냈다 (짓기·지우기마다 한 번). 빈 메시지는 게시하지 않는다. UI thread에서 불린다.
+        [[nodiscard]] virtual app_message make_jump_list_message(const jump_list_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+
+        // 드롭된 파일 경로다 (절대 경로 아님 — 셸이 준 그대로).
+        // true면 소비했다는 뜻이라 다음 파일을 보지 않는다.
+        //  - 수락한 drop 대상 element가 없는 드롭의 물러섬이다.
+        //    자리가 뜻을 갖는 드롭은 element의 `drop_target`이 좌표와 함께 받는다.
+        [[nodiscard]] virtual bool on_file_dropped(app_host& host, const std::u8string& path)
+        {
+            static_cast<void>(host);
+            static_cast<void>(path);
+            return false;
+        }
+
+        // 같은 이름의 둘째 인스턴스가 보낸 인자와 작업 폴더다 (`single_instance::send_to_primary`,
+        // docs/single-instance-args-design.md). `window_environment::instance`를 단 첫째의 주 창이 받는다.
+        // true면 앱이 받았다는 뜻이고 보낸 쪽은 `ok`를 본다. false는 보낸 쪽의 `failed`다.
+        //  - UI thread의 주 창 프로시저 안에서 불린다. 보낸 쪽이 끝나기를 기다리므로 곧 돌아와야 한다:
+        //    `host.post_app_message_ticketed`로 게시하고 표가 0이 아닌지를 답한다. 대화 상자나 막는 호출을 하지 않는다.
+        //  - 던진 예외는 삼키고 false로 본다.
+        //  - 인자는 명령 줄과 같이 믿을 수 없는 입력이다. 파일 연결이나 URL 프로토콜로 뜬 둘째의 인자는 문서와 웹 링크에서 온다.
+        //  - 콜백 뒤 보낸 쪽이 `activate`를 켰고 주 창이 보이면 라이브러리가 주 창을 앞으로 세운다 (최소화는 되살린다).
+        //    답이 true든 false든 같다.
+        [[nodiscard]] virtual bool on_instance_arguments(app_host& host, const instance_arguments& arguments)
+        {
+            static_cast<void>(host);
+            static_cast<void>(arguments);
+            return false;
+        }
+
+        // 알림 영역 아이콘의 상태가 바뀌었다 (`make_taskbar_message`와 같은 모양이다). 빈 메시지는 게시하지 않는다.
+        // 아이콘의 사건(누름·메뉴)은 여기가 아니라 `tray_icon::activate`로 온다.
+        [[nodiscard]] virtual app_message make_tray_message(const tray_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+
+        // 전역 단축키 하나를 걸어 본 결과가 정해졌다 (`make_tray_message`와 같은 모양이다). 빈 메시지는 게시하지 않는다.
+        // 항목마다 한 번씩 불린다. 눌림은 여기가 아니라 `global_hotkey::pressed`로 온다.
+        [[nodiscard]] virtual app_message make_hotkey_message(const hotkey_report& report)
+        {
+            static_cast<void>(report);
+            return {};
+        }
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>훅</th><th>언제</th><th>돌려주는 것 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>make_window_metrics_message</code></td><td>주 창 크기·배율이 정해지거나 바뀔 때</td><td>앱 메시지. 값은 물리 픽셀 (<code>app_delegate</code>에서 물려받는다)</td></tr>
+                  <tr><td><code>make_window_placement_message</code></td><td>첫 표시, 끌기 끝, 끌기 밖 이동·크기·최대화, 전체 화면 전환, 종료 직전</td><td>앱 메시지. 저장할 값</td></tr>
+                  <tr><td><code>on_window_moving</code></td><td>caption 끌기 걸음마다</td><td>자리를 고친다. 게시하지 않는다. <strong>Windows는 부르지 않는다</strong> (macOS borderless만)</td></tr>
+                  <tr><td><code>make_taskbar_message</code> · <code>make_jump_list_message</code></td><td>단추 상태가 바뀔 때 · 점프 목록을 셸에 낼 때마다</td><td>앱 메시지</td></tr>
+                  <tr><td><code>make_tray_message</code> · <code>make_hotkey_message</code></td><td>트레이 상태가 바뀔 때 · 단축키 항목마다 결과가 정해질 때</td><td>앱 메시지. 아이콘 사건과 눌림은 여기가 아니라 frame의 함수로 온다</td></tr>
+                  <tr><td><code>make_backdrop_message</code></td><td>배경 효과 상태가 바뀔 때 (주 창·보조 창)</td><td>앱 메시지</td></tr>
+                  <tr><td><code>on_file_dropped</code></td><td>받는 element가 없는 파일 드롭, 경로마다</td><td><code>true</code>면 나머지 경로를 보지 않는다. 앱이 직접 게시한다</td></tr>
+                  <tr><td><code>on_instance_arguments</code></td><td>같은 이름의 둘째가 보냈을 때</td><td><code>true</code>면 보낸 쪽 <code>ok</code>. 막지 않는다. 예외는 <code>false</code>로 본다</td></tr>
+                  <tr><td><code>on_native_window_created</code> · <code>on_native_window_destroying</code></td><td><code>on_started</code> 앞에 한 번 · host 종료 앞에 한 번</td><td>네이티브 창 핸들. 받은 것은 destroying에서 놓는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="caption_config">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/caption_element.h:13-51" data-path="include/luil/ui/caption_element.h" data-start="13"><script type="text/plain">
+    // caption 안에 앱이 두는 단추다 (설정 같은 창 전체의 명령).
+    //
+    // **끌기와 갈린다.** 창 버튼이 아닌 caption의 빈 자리는 창을 끄는 자리인데, 이 단추의 자리는
+    // 비클라이언트 판정이 client로 답해 평소의 단추처럼 눌린다 (caption-button-design.md).
+    //  - 판정은 게시된 tree의 이 단추를 본다. 그래서 단추를 더하거나 빼거나 비활성으로 두는 것이
+    //    다음 frame부터 그대로 판정에 든다 — 창을 만들 때의 설정에 묶이지 않는다.
+    //  - 창 버튼과 달리 Tab의 자리다. 창 버튼은 Alt+Space의 시스템 메뉴가 키보드의 길이지만 이 단추에는
+    //    다른 길이 없다.
+    struct caption_app_button
+    {
+        // 같은 caption 안에서 단추를 가르는 앱 정의 키다 (`ui_element_id::owner`).
+        std::u8string key {};
+        // codicon 코드포인트다.
+        char32_t glyph { 0 };
+        // tooltip이자 **보조 기술이 읽는 이름**이다. 글리프뿐인 단추라 이름의 원천이 이것뿐이다.
+        std::u8string tooltip {};
+        // 누르면 낼 액션이다. 없으면 단추를 만들지 않는다 — 없는 것은 두지 않는다.
+        ui_action action {};
+        bool enabled { true };
+    };
+
+    // 앱이 정하는 caption의 겉모습이다.
+    // 아이콘 글리프는 codicon 코드포인트이고 0이면 아이콘 없이 제목이 왼쪽 여백에서 시작한다.
+    // 툴팁은 앱의 언어로 넣는다.
+    struct caption_config
+    {
+        std::u8string title {};
+        char32_t application_icon { 0 };
+        std::u8string minimize_tooltip {};
+        std::u8string maximize_tooltip {};
+        std::u8string close_tooltip {};
+        caption_ui_metrics metrics { default_caption_ui_metrics };
+        // 둘 창 버튼이다. 없는 버튼은 만들지 않고 자리도 차지하지 않으며,
+        // 그 창 스타일(`WS_MINIMIZEBOX`·`WS_MAXIMIZEBOX`)도 함께 빠진다.
+        caption_buttons buttons { default_caption_buttons };
+        // 창 버튼 바로 왼쪽에 서는 앱 단추다. 목록 차례대로 왼쪽에서 오른쪽으로 서고,
+        // 폭은 창 버튼과 같다 (`caption_ui_metrics::button_width`). 제목은 그 앞에서 잘린다.
+        std::vector<caption_app_button> app_buttons {};
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/caption_metrics.h:4-39" data-path="include/luil/ui/caption_metrics.h" data-start="4"><script type="text/plain">
+    // caption 그리기(caption_element)와 Win32 비클라이언트
+    // hit test(caption_layout)가 공유하는 논리 픽셀 치수다.
+    // 의존성이 없는 독립 헤더라 어느 계층에서도 포함할 수 있다.
+    struct caption_ui_metrics
+    {
+        int height { 36 };
+        int button_width { 42 };
+        int application_icon_slot_width { 40 };
+        int title_left_padding { 14 };
+        int title_icon_gap { 6 };
+        int title_font_size { 14 };
+        int application_icon_size { 16 };
+        int button_icon_size { 14 };
+    };
+
+    inline constexpr caption_ui_metrics default_caption_ui_metrics {};
+
+    // caption에 둘 창 버튼이다.
+    // 그리기(caption_element)·비클라이언트 hit test(caption_layout)·창 스타일이
+    // **같은 값**을 본다 — 셋이 어긋나면 "버튼은 없는데 그 자리가 최대화"이거나
+    // "버튼은 없는데 더블클릭으로 최대화되는" 창이 된다
+    // (caption-button-design.md).
+    //
+    // 존재를 키로 삼을 데이터가 없어(명령은 라이브러리가 고정하고 툴팁은 있어도
+    // 없어도 된다) 집합을 그대로 말한다. `tab_item::closable`과 같은 선례다.
+    // 기본은 셋 다 있음이라 값을 주지 않던 앱은 그대로다.
+    struct caption_buttons
+    {
+        bool minimize { true };
+        bool maximize { true };
+        bool close { true };
+
+        [[nodiscard]] bool operator==(const caption_buttons&) const = default;
+    };
+
+    inline constexpr caption_buttons default_caption_buttons {};
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>title</code></td><td>빈 글</td><td>제목이 없다. 보조 기술이 읽는 <code>title_bar</code>의 이름도 이것이다</td></tr>
+                  <tr><td><code>application_icon</code></td><td>0</td><td>아이콘 없이 제목이 왼쪽 여백(14)에서 시작한다. 시스템 메뉴 칸(40)은 아이콘과 상관없이 있다</td></tr>
+                  <tr><td><code>minimize_tooltip</code> · <code>maximize_tooltip</code> · <code>close_tooltip</code></td><td>빈 글</td><td><strong>그 창 버튼은 보조 기술에 이름도 역할도 없는 요소다</strong></td></tr>
+                  <tr><td><code>buttons</code></td><td>셋 다 참</td><td>빠진 버튼은 자리도 창 스타일도 없다. 남은 버튼이 오른쪽으로 당겨진다</td></tr>
+                  <tr><td><code>app_buttons</code></td><td>빈 목록</td><td>— 있으면 창 버튼 왼쪽에 목록 차례대로 선다</td></tr>
+                  <tr><td><code>caption_app_button::action</code></td><td>없음</td><td>그 단추를 만들지 않는다</td></tr>
+                  <tr><td><code>caption_ui_metrics</code></td><td>높이 36, 버튼 42</td><td>그리기와 판정이 같은 치수를 본다 (논리 픽셀)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="ui_window">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/app/app_host.h:169-248" data-path="include/luil/app/app_host.h" data-start="169"><script type="text/plain">
+    // 화면의 한 점에 창을 세우는 닻이다 (`ui_window::screen_anchor`).
+    // 새 창 client의 논리 점 (`client_x`, `client_y`)이 화면의 물리 점 `screen`에 오게 놓는다 — 끌어 낸 탭을 놓은
+    // 자리에 그 탭이 그대로 오는 새 창이 이것이다.
+    //  - 논리 점을 물리로 바꾸는 배율은 **그 화면 점이 있는 모니터의 것**이다. 앱은 모니터 배치도 배율도 모른 채
+    //    "탭이 이 점에 오게"만 말한다.
+    //  - 그 뒤 창을 그 모니터의 작업 영역 안으로 민다 (다른 초기 배치와 같은 규칙). 밀린 만큼 점은 어긋난다.
+    struct window_screen_anchor
+    {
+        screen_point screen {};
+        float client_x { 0.0f };
+        float client_y { 0.0f };
+
+        [[nodiscard]] bool operator==(const window_screen_anchor&) const noexcept = default;
+    };
+
+    // 주 창 곁의 보조 top-level 창 하나다. 기본은 주 창이 소유하는 도구·문서 창이고, `independent`면 주 창에 매이지
+    // 않는 창이다 (브라우저의 창 하나처럼).
+    // 열림·닫힘은 popup처럼 앱 상태다: frame에 실으면 창이 생기고 빼면 사라진다.
+    // 자기 캡션(custom caption)·테두리·DPI를 갖고 화면 어디로든 움직인다
+    // (multi-window-design.md).
+    // tree는 그 창 client의 (0,0)에서 시작하는 분리 tree이고,
+    // 주 창처럼 caption_element를 tree 맨 위에 앱이 담는다.
+    struct ui_window
+    {
+        // 표면 id다. popup id와 같은 이름 공간을 쓴다.
+        std::u8string id {};
+        // custom caption의 제목·아이콘·툴팁이다.
+        // 비클라이언트 hit test가 이 metrics를 쓴다.
+        caption_config caption {};
+        // 초기 배치다 (논리 픽셀). x·y는 주 창 client 기준이다.
+        // 창을 만들 때 한 번만 쓰고, 이후의 이동·크기 조절은 사용자의 것이다 (앱은 `placement`로 그 결과를 받는다).
+        //  - 화면 자리로 놓으려면 `screen_anchor`, 저장해 둔 배치로 되돌리려면 `initial_placement`다. 둘이 x·y보다 앞선다.
+        float x { 0.0f };
+        float y { 0.0f };
+        // client 크기다. 0 이하면 창을 만들지 않는다.
+        float width { 0.0f };
+        float height { 0.0f };
+        // 사용자가 이보다 작게 줄일 수 없는 client 크기다.
+        float minimum_width { 200.0f };
+        float minimum_height { 120.0f };
+        std::shared_ptr<const ui_tree> tree {};
+        // 크기·배율이 정해지거나 바뀔 때 게시할 메시지다 (생성 직후·크기 조절·DPI 변경).
+        // 앱은 이것으로 그 창의 tree를 다시 배치한다.
+        // 비어 있으면 알리지 않는다 (고정 배치 창).
+        std::function<app_message(float width, float height, float scale)> metrics {};
+        // 닫힘 요청(캡션 close, Alt+F4)에서 낼 메시지다.
+        // UI thread는 이 메시지만 내고, 창을 없애는 것은 앱이 목록에서 빼는 것이다.
+        // 비어 있으면 닫힘 요청을 무시한다 (앱이 다른 경로로만 닫는 창).
+        std::function<input_action()> close {};
+        // 화면 자리로 만든다 (끌어 낸 탭을 놓은 자리에 새 창을 세울 때 — `drag_release::screen`).
+        // 있으면 `x`·`y` 대신 쓴다. 만들 때 한 번만이다.
+        std::optional<window_screen_anchor> screen_anchor {};
+        // 주 창에 매이지 않는 최상위 창이다 — 작업 표시줄에 따로 서고, 따로 최소화되고, 주 창 위에 붙어 있지 않다.
+        // 거짓(기본)이면 지금처럼 주 창이 소유하는 창이다 (주 창 위에 뜨고 주 창과 함께 숨는다).
+        //  - 만들 때 정한다. 같은 id로 값을 바꿔 실어도 살아 있는 창은 그대로다 — 바꾸려면 id를 빼고 다시 싣는다.
+        //  - 여전히 앱 상태다. 목록에서 빼면 사라지고, 주 창과 같은 입력 pump·renderer 정책·popup 앵커를 쓴다.
+        //  - 주 창이 닫힐 때 이 창들을 어떻게 할지는 앱이 `ui_frame::close`로 정한다 (multi-window-design.md).
+        bool independent { false };
+        // 저장해 둔 배치로 만든다. 있으면 `x`·`y`·크기·`screen_anchor`보다 앞선다.
+        //  - 값의 규약은 주 창의 `window_config::initial_placement`와 같다 — `placement`로 받은 그대로다
+        //    (x·y는 작업 영역 좌표, 크기는 물리 픽셀). 잘못된 값·화면 밖 배치는 통째로 무시한다.
+        //  - `fullscreen`은 보지 않는다. 전체 화면은 주 창의 것이다.
+        std::optional<window_placement> initial_placement {};
+        // 처음 표시한 자리와 이동·크기·최대화 변경을 알린다. 끌기 안에서는 끝에 한 번 알린다.
+        //  - 앱은 받은 값을 저장했다가 다음 실행의 `initial_placement`로 되돌린다. 주 창의
+        //    `window_delegate::make_window_placement_message`와 같은 값이다 (`fullscreen`은 늘 거짓).
+        //  - 비어 있으면 알리지 않는다.
+        std::function<app_message(const window_placement&)> placement {};
+        // 이 창 뒤의 배경 효과다. 주 창(`ui_frame::backdrop`)과 같은 규칙으로 서고, 기본값이면 지금까지의 창이다.
+        //  - 효과가 선 창은 바탕과 캡션이 `backdrop_background`다. 비활성 창에서는 OS가 효과를 단색으로 깐다 (주 창과 같다).
+        //  - 상태는 주 창처럼 알린다 (`win32::backdrop_report::surface`가 이 창의 id다).
+        //  - 같은 id에서 이 값만 바뀌면 창을 다시 만들지 않고 효과만 다시 건다.
+        window_backdrop backdrop { window_backdrop::none };
+        // 이 창의 작업 표시줄 단추에 바라는 진행률과 오버레이다 (`independent`인 창만 읽는다).
+        //  - 소유된 창은 단추가 없어 읽지 않는다. 독립 창은 주 창(`ui_frame::taskbar`)과 따로 단추가 서므로 요청도 따로 건다.
+        //  - 창이 사라지면 그 창의 기록과 아이콘도 함께 사라진다. 상태는 주 창처럼 알린다
+        //    (`win32::taskbar_report::surface`가 이 창의 id다).
+        //  - 점프 목록(`taskbar_request::jump_list`)은 앱마다 하나라 이 창의 것은 읽지 않는다. 주 창의 것이 이 창 단추에도 보인다.
+        taskbar_request taskbar {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>id</code></td><td>빈 글</td><td>popup·도킹 표면과 같은 이름 공간. 주 창이 빈 id다</td></tr>
+                  <tr><td><code>width</code> · <code>height</code></td><td>0</td><td><strong>0 이하면 창을 만들지 않는다</strong></td></tr>
+                  <tr><td><code>x</code> · <code>y</code> · <code>screen_anchor</code> · <code>initial_placement</code></td><td>0 · 없음 · 없음</td><td>만들 때 한 번만 읽는다. 앞설수록 뒤의 것을 덮는다: <code>initial_placement</code> → <code>screen_anchor</code> → <code>x</code>·<code>y</code></td></tr>
+                  <tr><td><code>independent</code></td><td>거짓</td><td>주 창이 소유한다 (주 창 위에 뜨고 함께 숨는다). 만들 때 정한다</td></tr>
+                  <tr><td><code>close</code></td><td>없음</td><td><strong>닫기 단추와 Alt+F4가 아무 일도 하지 않는다</strong></td></tr>
+                  <tr><td><code>metrics</code> · <code>placement</code></td><td>없음</td><td>크기·배율 · 배치를 알리지 않는다</td></tr>
+                  <tr><td><code>taskbar</code></td><td><code>{}</code></td><td><code>independent</code>인 창만 읽는다. 점프 목록 칸은 읽지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="ui_frame">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/app/app_host.h:471-574" data-path="include/luil/app/app_host.h" data-start="471"><script type="text/plain">
+    struct ui_frame
+    {
+        std::shared_ptr<const ui_tree> tree {};
+        // 창 경계를 넘을 수 있는 popup들이다.
+        // 뒤에 있는 것이 위에 온다.
+        std::vector<ui_popup> popups {};
+        // 주 창 곁의 보조 top-level 창들이다.
+        std::vector<ui_window> windows {};
+        // 일반 창과 따로 화면에 붙는 도킹 표면들이다 (docked-surface-design.md).
+        std::vector<ui_docked_surface> docked_surfaces {};
+        // 모니터 목록을 알릴 메시지다. 처음 실린 frame에서 한 번, 그 뒤로는 모니터 연결·해상도·작업 영역·배율이 바뀔 때마다
+        // 새 목록으로 온다. 비어 있으면 알리지 않는다.
+        //  - 도킹 표면의 자리(`docked_edge_placement::monitor`)를 고르거나 물리 사각형을 계산할 때 쓴다.
+        //  - Android는 부르지 않는다.
+        std::function<app_message(const std::vector<display_info>& displays)> displays {};
+        // 표면들에 얹힌 웹뷰들이다.
+        // popup·보조 창처럼 실으면 서고 빼면 사라진다. **자리는 여기 없다** —
+        // tree의 자리표(`webview_element`)가 정한다 (webview.h에 이유가 있다).
+        std::vector<ui_webview> webviews {};
+        // 외양·글꼴의 유효 선호다.
+        // 실제 팔레트는 UI thread가 OS 상태(고대비·밝은 모드)와 함께 해석한다.
+        appearance_settings appearance {};
+        font_settings fonts {};
+        // 앱의 스타일이다 (두 테마의 중립 색·accent tone·치수).
+        // 비어 있으면 내장 스타일(assets/style.json)이다. 앱이 한 번 세워 두고 매 frame
+        // 같은 포인터를 실으면 되고, 바꾸면 다음 frame부터 새 값이다.
+        //  - 선호(`appearance`)가 아니라 여기 있는 이유: 사용자 설정이 아니라 **앱의
+        //    것**이라 계층이 다르다 (ui_style.h).
+        std::shared_ptr<const ui_style> style {};
+        // 주 창의 배경 효과다. 테마처럼 frame마다 실으며, 바뀐 frame에서 UI thread가 다시 건다.
+        // 보조 창과 popup은 각자 고른다 (`ui_window::backdrop`·`ui_popup::backdrop`).
+        window_backdrop backdrop { window_backdrop::none };
+        // 창 배치 적용 요청이다.
+        // revision이 바뀐 경우에만 UI thread가 적용한다.
+        std::uint64_t window_placement_revision { 0 };
+        std::optional<window_placement> window_placement_request {};
+        // 뒤로 가기(Android의 뒤로 가기 단추·몸짓)에서 낼 동작이다.
+        // 앱이 안쪽 화면(목록에서 들어간 페이지 등)에 있을 때 싣고, 맨 앞 화면이면 비운다.
+        //  - 비어 있으면 플랫폼의 기본 동작이다 (Android는 Activity를 끝낸다).
+        //  - popup이 떠 있으면 popup을 닫는 것이 먼저다. 그때는 이것을 부르지 않는다.
+        //  - 데스크톱 창(Win32)은 지금 이것을 부르지 않는다. 앱 바의 뒤로 단추가 같은 일을 한다.
+        std::function<input_action()> back {};
+        // 화면 방향·시스템 막대 등 기기에 바라는 것이다. 기본값이면 플랫폼에 맡긴다.
+        device_request device {};
+        std::optional<file_dialog_request> file_dialog {};
+        // 주 창의 닫힘 요청(캡션 close, Alt+F4, 작업 표시줄 닫기, `ui_command::window_close`)에서 낼 동작이다.
+        //  - 비어 있으면 지금처럼 앱을 끝낸다 (다른 창도 함께 사라진다).
+        //  - 있으면 이 동작만 내고 아무것도 닫지 않는다. 나머지 창을 어떻게 할지는 앱이 정한다: 독립 창
+        //    (`ui_window::independent`)을 남기려면 `main_hidden`으로 주 창을 숨기고, 끝내려면
+        //    `ui_command::application_exit`를 낸다.
+        //  - 보조 창의 `close`처럼 게시된 frame당 한 번만 낸다. 같은 frame에 거듭 와도 앱이 넘치지 않는다.
+        //  - 세션 종료(로그오프·재시작)는 이것을 거치지 않고 끝낸다 — 저장은 종료 메시지가 한다.
+        //  - logic이나 input thread가 멈췄으면(`app_host::faulted`) 이것을 부르지 않고 끝낸다. 낸 동작을 받을 logic이 없다.
+        //  - logic thread가 비동기 작업을 기다렸다가 끝낼 때는 `app_host::post_ui_command`로 `application_exit`(훅을 거치지
+        //    않는다)나 `window_close`(훅을 다시 거친다)를 낸다.
+        std::function<input_action()> close {};
+        // 주 창을 숨긴다 (작업 표시줄에서도 빠진다). 독립 창만 남기고 앱을 계속 돌리는 동안이다.
+        //  - 주 창이 소유한 보조 창과 주 창에 앵커한 popup은 함께 숨지 않는다 — 앱이 같은 frame에서 뺀다.
+        //  - 숨긴 동안에도 앱은 살아 있다. 마지막 창을 닫을 때 `ui_command::application_exit`를 내는 것은 앱의 몫이다.
+        bool main_hidden { false };
+        // 나중에 서는 초점·활성화 요청이다 (`focus_request`). 비어 있으면 요청이 없다.
+        std::optional<focus_request> focus {};
+        // 초점 요청의 결과를 알릴 메시지다. 비어 있으면 알리지 않는다.
+        std::function<app_message(std::uint64_t id, focus_request_outcome outcome)> focus_report {};
+        // 주 창의 작업 표시줄 단추에 바라는 진행률과 오버레이다 (taskbar-design.md). 기본값이면 셸을 만지지 않는다.
+        //  - 주 창이 숨은 동안(`main_hidden`)은 단추가 없어 요청을 쥐기만 한다. 보이면 단추가 새로 서고 그때 한 번에 낸다.
+        //  - 하지 못하는 플랫폼(Android)은 받고 무시한다. 독립 창은 `ui_window::taskbar`다.
+        //  - 점프 목록(`taskbar_request::jump_list`)은 이 칸의 것만 읽는다 (docs/jump-list-design.md).
+        taskbar_request taskbar {};
+        // 실행 중인 화면에 요소의 윤곽과 정보를 얹는 검사기다 (inspector-design.md). 기본값이면 아무것도 그리지 않는다.
+        //  - 앱은 상태 하나로 켠다 (`inspector.enabled = state_.inspecting;`). 켜는 단축키는 앱이 정한다.
+        //  - 그리기만 한다. 켠다고 다시 그릴 계기가 늘지 않고 접근성 tree, 입력, 초점에 닿지 않는다.
+        inspector_config inspector {};
+        // 알림 영역(트레이) 아이콘이다 (tray-icon-design.md). 비면 아이콘이 없다 (기본).
+        //  - 주 창이 숨은 동안(`main_hidden`)에도 선다. 주 창을 숨기고 트레이에서 되살리는 앱이 쓴다.
+        //  - 하지 못하는 플랫폼(Android)은 받고 무시한다 (`ui_platform::capabilities::tray`).
+        std::optional<tray_icon> tray {};
+        // 앱이 뒤에 있어도 받는 전역 단축키 목록이다 (global-hotkey-design.md). 비면 건 것이 없다 (기본).
+        //  - 주 창이 숨거나 최소화돼도 받는다. 눌림은 항목의 `pressed`로 온다.
+        //  - 건 결과는 Win32의 `hotkey_report`가 항목마다 알린다. 하지 못하는 플랫폼(Android)은 받고 무시한다
+        //    (`ui_platform::capabilities::global_hotkeys`).
+        std::vector<global_hotkey> hotkeys {};
+        // 시간에 따라 변하는 내용(경과 시간 표시 등)의 다시 그리기는 frame이 아니라
+        // 그 element가 `ui_element::next_update`로 예고한다.
+        // Windows Direct3D 주 창에서 대기 중인 옛 그림보다 새 그림을 우선한다.
+        // 연속 영상처럼 뒤 프레임이 앞 프레임을 대체할 수 있을 때만 켠다.
+        // 연속 프레임에서만 켠다. GPU나 표시 큐가 바쁘면 그 장을 건너뛸 수 있다. 마지막 정지 장에서는 끈다.
+        bool prefer_latest_presentation { false };
+        // 주 창에 바라는 전체 화면 상태다. 빈 값이면 명령과 배치 요청이 정한다.
+        // 보인 뒤 게시 wake에서 대조하며 같은 frame의 배치 요청보다 우선한다.
+        //  - **앱이 정한 값만 싣는다.** 배치 보고의 `fullscreen`을 여기에 되비추지 않는다. 대조는 게시마다 하고
+        //    전환마다 보고가 나가므로, 보고를 되비추면 늦게 도착한 보고와 새 frame이 서로를 뒤집어 전체 화면이
+        //    끝없이 들락거린다.
+        //  - 이 값을 싣는 앱은 `ui_command::window_toggle_fullscreen`을 쓰지 않고 자기 상태를 뒤집는다. 명령이 뒤집은
+        //    상태는 다음 게시 wake가 이 값으로 되돌린다.
+        //  - 최소화된 동안에는 전환을 미루고 창이 되살아난 뒤에 대조한다.
+        //  - 하지 못하는 플랫폼(Android)은 받고 무시한다.
+        std::optional<bool> fullscreen {};
+        // 주 창이 다른 앱의 창 위에 늘 뜨는가다 (Windows의 topmost). 빈 값이면 시작 설정을 그대로 둔다.
+        //  - 바뀐 frame에서 옮긴다. 앱 상태 하나로 싣는다 (`topmost = state_.pinned;`).
+        //  - macOS는 `NSFloatingWindowLevel`이다. 시작 값은 `macos::application_config::topmost`다.
+        //  - Win32·Android는 아직 읽지 않는다.
+        std::optional<bool> topmost {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>칸</th><th>기본값</th><th>뜻 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>windows</code> · <code>popups</code> · <code>docked_surfaces</code></td><td>빈 목록</td><td>실으면 서고 빼면 사라진다. popup은 뒤의 것이 위다</td></tr>
+                  <tr><td><code>close</code></td><td>없음</td><td>비면 주 창 닫기가 앱을 끝낸다. 있으면 그 동작만 내고 아무것도 닫지 않는다</td></tr>
+                  <tr><td><code>main_hidden</code></td><td>거짓</td><td>주 창을 숨긴다(작업 표시줄에서도). 소유된 창과 주 창에 붙은 popup은 함께 숨지 않는다</td></tr>
+                  <tr><td><code>window_placement_revision</code> · <code>window_placement_request</code></td><td>0 · 없음</td><td>번호가 바뀐 frame에서만 적용한다. 숨은 동안은 미룬다</td></tr>
+                  <tr><td><code>fullscreen</code></td><td>없음</td><td>명령과 배치 요청이 정한다. 앱이 정한 값만 싣는다 (보고를 되비추지 않는다)</td></tr>
+                  <tr><td><code>topmost</code></td><td>없음</td><td>macOS만 읽는다</td></tr>
+                  <tr><td><code>focus</code></td><td>없음</td><td>요청 없음. <code>focus_request::id</code>가 바뀔 때만 새 요청이다</td></tr>
+                  <tr><td><code>taskbar</code> · <code>tray</code> · <code>hotkeys</code></td><td><code>{}</code> · 없음 · 빈 목록</td><td>셸을 만지지 않는다 · 아이콘이 없다 · 건 단축키가 없다</td></tr>
+                  <tr><td><code>back</code></td><td>없음</td><td>플랫폼 기본 동작. Android만 부른다</td></tr>
+                  <tr><td><code>displays</code></td><td>없음</td><td>모니터 목록을 알리지 않는다. 있으면 처음 실린 frame에서 한 번, 모니터가 바뀔 때마다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="window_placement · focus_request">
+            <div class="code" data-lang="cpp" data-src="include/luil/app/app_host.h:31-62" data-path="include/luil/app/app_host.h" data-start="31"><script type="text/plain">
+    // 저장·복원되는 창 배치다.
+    struct window_placement
+    {
+        int x { 0 };
+        int y { 0 };
+        int width { 0 };
+        int height { 0 };
+        bool maximized { false };
+        // 창이 화면을 덮고 있는가다 (주 창 전용 — 전체 화면은 주 창의 것이라 보조 창의 배치에서는 늘 거짓이다).
+        //
+        // **참이면 나머지 값은 지금 창의 사각형이 아니라 "돌아갈 자리"다.**
+        // 전체 화면 창의 사각형은 모니터가 정하므로 적어 둘 것이 없고, 적어 둘
+        // 가치가 있는 것은 나올 때 되돌아갈 배치뿐이다. 그래서 이 값을 그대로
+        // 저장했다가 그대로 다시 넣으면 **전체 화면으로 열리면서 돌아갈 자리도 함께
+        // 산다** — 둘을 따로 저장하지 않아도 되는 이유다.
+        //  - `maximized`는 뜻이 그대로이고 이 값과 **겹쳐 쓴다.** 둘 다 참이면
+        //    "지금은 전체 화면, 나오면 최대화된 창"이다. 최대화 상태에서 전체
+        //    화면에 들어간 사용자가 나왔을 때 창이 복원 크기로 앉지 않는 길이
+        //    그것이다.
+        //  - 전체 화면은 테두리 없는 창이다 (독점 전체 화면은 합성 스왑체인에
+        //    설 수 없다 — docs/concepts/window.md).
+        //  - **꼬리에 둔다.** 이 집합체를 위치 초기화로 짓는 앱이 있어
+        //    (examples/demo_main.cpp) 가운데 끼우면 그 자리들의 뜻이 조용히 어긋난다.
+        bool fullscreen { false };
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return width > 0 && height > 0;
+        }
+
+        [[nodiscard]] bool operator==(const window_placement&) const noexcept = default;
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/app/app_host.h:438-469" data-path="include/luil/app/app_host.h" data-start="438"><script type="text/plain">
+    // 나중에 서는 초점·창 활성화 요청이다 (deferred-focus-design.md).
+    // "보조 창을 띄우고 그 안의 입력 칸에 초점", "목록을 그 행까지 흘린 뒤 그 행에 초점"처럼 요청하는 frame에
+    // 아직 없는 대상을 UI thread가 들고 있다가, 대상이 서는 순간 한 번 이행한다.
+    struct focus_request
+    {
+        // 요청 번호다. 0이면 요청이 없다.
+        //  - **번호가 바뀔 때만 새 요청이다** (`window_placement_revision`과 같은 규칙). 같은 요청을 frame마다
+        //    실어도 한 번만 이행한다.
+        std::uint64_t id { 0 };
+        // 표면 id다. 비어 있으면 주 창, 아니면 `ui_window::id`나 `ui_popup::id`다.
+        std::u8string surface {};
+        // 초점을 옮길 element다. 비어 있으면 초점은 그대로 두고 표면만 활성화한다.
+        ui_element_id target {};
+        // 그 표면의 창을 앞으로 세우고 활성화한다. 최소화돼 있으면 되살린다.
+        //  - popup은 활성화를 받지 않는 표면이라 무시한다.
+        //  - 앱이 앞 창이 아니면 OS가 막고 작업 표시줄 단추만 깜빡인다. 그래도 초점은 세운다.
+        //  - Android는 지원하지 않는다 (Activity를 앞으로 세우는 것은 앱의 Java 쪽 일이다).
+        bool activate { false };
+        // 대상이 이 시간 안에 서지 않으면 버린다.
+        std::chrono::milliseconds timeout { 2000 };
+    };
+
+    // 초점 요청 하나의 결과다. 요청마다 한 번 알린다.
+    enum class focus_request_outcome
+    {
+        // 대상이 서서 초점 요청(과 활성화)을 보냈다.
+        fulfilled,
+        // 기한 안에 대상이 서지 않아 버렸다.
+        expired,
+        // 이행 전에 새 번호의 요청이 와서 버렸다.
+        superseded,
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>뜻 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>window_placement::x</code> · <code>y</code></td><td>0</td><td>Windows는 <strong>작업 영역 좌표</strong>, macOS는 창 내용의 왼쪽 위 (주 화면 왼쪽 위 원점)</td></tr>
+                  <tr><td><code>window_placement::width</code> · <code>height</code></td><td>0</td><td>물리 픽셀. <code>valid()</code>는 둘이 양수인지만 본다</td></tr>
+                  <tr><td><code>window_placement::fullscreen</code></td><td>거짓</td><td>주 창 전용. 참이면 나머지는 돌아갈 자리다</td></tr>
+                  <tr><td><code>focus_request::id</code></td><td>0</td><td>0이면 요청이 없다. 바뀔 때만 새 요청</td></tr>
+                  <tr><td><code>focus_request::surface</code> · <code>target</code></td><td>빈 글 · 빈 id</td><td>주 창 · 활성화만 한다 (초점을 옮기지 않는다)</td></tr>
+                  <tr><td><code>focus_request::activate</code></td><td>거짓</td><td>앞으로 세우지 않는다. 참이면 세우고 최소화를 되살린다. 앱이 앞 창이 아니면 OS가 막을 수 있다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="taskbar_request">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/app/taskbar.h:10-86" data-path="include/luil/app/taskbar.h" data-start="10"><script type="text/plain">
+    // 작업 표시줄 단추의 진행 막대다 (docs/taskbar-design.md).
+    enum class taskbar_progress_state
+    {
+        // 막대 없음 (기본).
+        none,
+        // 값을 모르는 진행이다.
+        indeterminate,
+        // `taskbar_progress::value`가 뜻을 갖는다.
+        normal,
+        // 같은 값, 빨간 막대다.
+        error,
+        // 같은 값, 노란 막대다.
+        paused,
+    };
+
+    struct taskbar_progress
+    {
+        taskbar_progress_state state { taskbar_progress_state::none };
+        // 0..1이다. `normal`·`error`·`paused`에서만 읽는다. 범위 밖은 자르고 NaN은 0이다.
+        //  - 셸에는 1000단계로 내므로 그보다 작은 변화는 호출이 되지 않는다.
+        float value { 0.0f };
+    };
+
+    struct taskbar_overlay
+    {
+        // 단추 모서리에 얹는 작은 그림이다. 비면 오버레이가 없다.
+        //  - 같은 그림인지는 이미지의 몸통(`ui_image::backing`)으로 가른다. 앱은 같은 `ui_image` 복사본을 frame마다 실으면
+        //    되고, 새로 지으면 새 그림이다.
+        ui_image icon {};
+        // 보조 기술이 읽는 글이다. 앱이 준다. 그림이 비면 읽지 않는다.
+        std::u8string description {};
+    };
+
+    // 점프 목록의 작업 하나다 (docs/jump-list-design.md). 누르면 셸이 이 앱의 실행 파일을 `arguments`로 새로 띄운다.
+    //  - 앱이 떠 있으면 새 프로세스가 둘째다. 앱이 `single_instance::send_to_primary`로 첫째에 넘긴다. 꺼져 있으면 새
+    //    프로세스가 첫째라 명령 줄로 같은 인자를 읽는다. 라이브러리는 인자를 해석하지 않는다.
+    struct taskbar_jump_task
+    {
+        // 목록에 보이는 글이다. 비면 안 된다.
+        std::u8string title {};
+        // 실행 파일 뒤에 붙일 인자다. 따옴표는 라이브러리가 붙인다 (argv 경계가 그대로 산다). 작업 폴더는 정하지 않는다.
+        std::vector<std::u8string> arguments {};
+        // 마우스를 올리면 보이는 설명이다. 비면 없다.
+        std::u8string description {};
+        // 아이콘 파일(.ico·.exe·.dll)의 절대 경로와 그 안의 번호다. 경로가 비면 이 실행 파일의 `icon_index`번이다.
+        std::u8string icon_path {};
+        int icon_index { 0 };
+
+        [[nodiscard]] bool operator==(const taskbar_jump_task&) const = default;
+    };
+
+    // 작업 표시줄 단추의 점프 목록이다. 창이 아니라 앱 식별(AUMID)에 묶이고, 셸이 사용자 프로필에 적어 앱이 꺼진 뒤에도 남는다.
+    struct taskbar_jump_list
+    {
+        // 셸의 "작업" 범주에 위에서 아래로 선다. 비면 이 앱의 목록을 지운다.
+        std::vector<taskbar_jump_task> tasks {};
+
+        [[nodiscard]] bool operator==(const taskbar_jump_list&) const = default;
+    };
+
+    // 작업 표시줄 단추 하나의 바라는 상태다. 기본값이면 셸을 만지지 않는다.
+    //  - 앱 상태다. 매 frame 지금 바라는 값을 싣고, UI thread가 바뀐 것만 셸에 옮긴다. 마지막 frame의 값이 이긴다.
+    //    다른 thread가 바꾸려면 앱 메시지(`app_host::post_app_message`)로 상태를 바꾼다.
+    //  - 주 창은 `ui_frame::taskbar`, 독립 창(`ui_window::independent`)은 `ui_window::taskbar`다. 소유된 창은 단추가
+    //    없어 읽지 않는다.
+    //  - 하지 못하는 플랫폼은 받고 무시한다. 무엇을 하는지는 `ui_platform::capabilities::taskbar`가 말한다.
+    struct taskbar_request
+    {
+        taskbar_progress progress {};
+        taskbar_overlay overlay {};
+        // 점프 목록이다. 비어 있으면 셸의 목록을 만지지 않는다 (기본, 앞 실행이 지은 목록도 그대로다). 값이 있으면 마지막으로
+        // 낸 것과 다를 때만 그 목록으로 다시 짓고, 작업이 없으면 지운다.
+        //  - 주 창(`ui_frame::taskbar`)의 것만 읽는다. 목록은 앱마다 하나라 독립 창(`ui_window::taskbar`)의 것은 읽지 않는다.
+        //  - 단추와 무관하다. 주 창이 숨은 동안에도 내고, 단추가 다시 서도 다시 짓지 않는다. 앱이 끝나도 지우지 않는다.
+        //  - 결과는 Win32의 `jump_list_report`가 말한다. 진행률·오버레이의 `taskbar_report`에는 섞이지 않는다.
+        std::optional<taskbar_jump_list> jump_list {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>progress</code></td><td><code>none</code>, 0</td><td>진행 막대가 없다. 값은 <code>normal</code>·<code>error</code>·<code>paused</code>에서만 쓴다</td></tr>
+                  <tr><td><code>overlay.icon</code></td><td>빈 그림</td><td>오버레이가 없다. <code>description</code>도 읽지 않는다</td></tr>
+                  <tr><td><code>jump_list</code></td><td><code>std::nullopt</code></td><td>셸의 목록을 <strong>만지지 않는다</strong> (앞 실행의 목록이 남는다). 빈 목록은 지운다</td></tr>
+                  <tr><td><code>taskbar_jump_task::title</code></td><td>빈 글</td><td>안 된다 — 보고가 <code>failed</code>다</td></tr>
+                  <tr><td><code>taskbar_jump_task::icon_path</code></td><td>빈 글</td><td>이 실행 파일의 아이콘</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>보고 <code>taskbar_report::status</code>: <code>off</code>·<code>waiting</code>·<code>applied</code>·<code>unavailable</code>·<code>failed</code>. <code>jump_list_report::status</code>: <code>applied</code>·<code>removed</code>·<code>unavailable</code>·<code>failed</code>. 셸에는 읽는 길이 없어 <code>applied</code>는 호출이 오류 없이 끝났다는 뜻이다.</p></div>
+          </section>
+          <section data-tab="tray_icon">
+            <div class="code" data-lang="cpp" data-src="include/luil/app/tray_icon.h:12-59" data-path="include/luil/app/tray_icon.h" data-start="12"><script type="text/plain">
+    // 알림 영역(트레이) 아이콘이 앱에 돌려주는 사건이다 (docs/tray-icon-design.md).
+    enum class tray_icon_action
+    {
+        // 왼쪽 클릭, 키보드로 고름(Enter·Space)이다.
+        select,
+        // 왼쪽 두 번 클릭이다. 앞에 `select`가 하나 먼저 온다고 알려져 있다 (실측 전).
+        double_click,
+        // 오른쪽 클릭·Shift+F10·메뉴 키다. `tray_icon::menu`가 있으면 오지 않는다 (라이브러리가 메뉴를 띄운다).
+        context,
+    };
+
+    struct tray_icon_event
+    {
+        tray_icon_action action { tray_icon_action::select };
+        // 키보드로 냈다.
+        bool keyboard { false };
+        // 셸이 준 화면 물리 좌표다 (아이콘 자리나 커서).
+        screen_point point {};
+
+        [[nodiscard]] bool operator==(const tray_icon_event&) const noexcept = default;
+    };
+
+    // 알림 영역의 아이콘 하나다. `ui_frame::tray`에 실으면 서고 빼면 사라진다.
+    //  - 앱 상태다. 매 frame 지금 바라는 값을 싣고, UI thread가 바뀐 것만 셸에 옮긴다 (`taskbar_request`와 같다).
+    //  - 그림은 몸통(`ui_image::backing`)으로, 툴팁은 값으로 견준다. 같은 `ui_image` 복사본을 frame마다 실으면 되고,
+    //    새로 지으면 새 그림이다. 메뉴와 `activate`는 견주지 않는다. 사건이 올 때 그 순간의 frame에서 읽는다.
+    //  - 하지 못하는 플랫폼(Android)은 받고 무시한다. 무엇을 하는지는 `ui_platform::capabilities::tray`가 말한다.
+    //  - 셸에 닿았는지는 Win32의 `tray_report`가 말한다.
+    struct tray_icon
+    {
+        // 그림이다. 비면 창 아이콘(`window_config::icon_resource`, 없으면 시스템 기본)이다.
+        ui_image icon {};
+        // 밝은 작업 표시줄에서 쓸 그림이다. 비면 `icon`이다.
+        //  - 알림 영역은 앱 모드가 아니라 작업 표시줄의 테마를 따른다. 앱이 밝아도 작업 표시줄은 어두울 수 있다.
+        ui_image light_icon {};
+        // 고대비에서 쓸 그림이다. 비면 위 규칙을 따른다.
+        ui_image high_contrast_icon {};
+        // 툴팁이자 보조 기술이 읽는 이름이다. 비면 창 제목이다. 127 UTF-16 코드 단위에서 자른다.
+        std::u8string tooltip {};
+        // 오른쪽 클릭 메뉴다. 있으면 라이브러리가 시스템 메뉴로 띄우고 고른 키를 `menu->select`로 낸다. 비면 `context`
+        // 사건이 온다.
+        //  - 라이브러리가 읽는 칸은 `items`(글·흐림·구분선·체크·라디오·하위 메뉴·단축키 글)와 `select`다. 항목 아이콘
+        //    글리프와 열림 상태 칸은 쓰지 않는다. 메뉴는 OS가 그려 앱 테마를 따르지 않는다.
+        std::optional<menu_config> menu {};
+        // 사건이다. UI thread에서 그 순간의 frame 것을 부른다. 비면 사건을 버린다.
+        //  - 라이브러리는 사건에서 창을 앞으로 세우지 않는다. 앱이 `main_hidden`을 끄고 `focus_request::activate`를 싣는다.
+        std::function<input_action(const tray_icon_event&)> activate {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>icon</code></td><td>빈 그림</td><td>창 아이콘 (<code>icon_resource</code>, 없으면 시스템 기본)</td></tr>
+                  <tr><td><code>tooltip</code></td><td>빈 글</td><td>창 제목, 그것도 비면 <code>luil</code>. 127 UTF-16 코드 단위에서 자른다</td></tr>
+                  <tr><td><code>menu</code></td><td>없음</td><td>오른쪽 클릭이 <code>context</code> 사건으로 <code>activate</code>에 온다</td></tr>
+                  <tr><td><code>activate</code></td><td>없음</td><td>사건을 버린다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>보고 <code>tray_report::status</code>: <code>off</code>(요청 없음)·<code>waiting</code>(탐색기가 아직 없다)·<code>shown</code>·<code>failed</code>. Windows 11은 <code>shown</code>인 아이콘을 넘침 칸에 둘 수 있고 앱이 꺼낼 길이 없다.</p></div>
+          </section>
+          <section data-tab="global_hotkey">
+            <div class="code" data-lang="cpp" data-src="include/luil/app/global_hotkey.h:10-31" data-path="include/luil/app/global_hotkey.h" data-start="10"><script type="text/plain">
+    // 전역 단축키 하나다 (docs/global-hotkey-design.md). 앱이 뒤에 있거나 창이 최소화·숨김이어도 OS에서 받는 키 조합이다.
+    // `ui_frame::hotkeys`에 실으면 걸리고 빼면 풀린다.
+    //  - 앱 상태다. 매 frame 지금 바라는 목록을 싣고, UI thread가 바뀐 것만 OS에 옮긴다 (`taskbar_request`·`tray_icon`과 같다).
+    //    견주는 값은 `id`와 `chord`이고 `pressed`는 견주지 않는다. 눌림이 올 때 그 순간의 frame에서 읽는다.
+    //  - 못 거는 것이 정상 경로다. 다른 프로그램이 쓰는 조합은 걸리지 않는다. 걸렸는지는 Win32의 `hotkey_report`가 항목마다 말한다.
+    //  - 하지 못하는 플랫폼(Android)은 받고 무시한다. 무엇을 하는지는 `ui_platform::capabilities::global_hotkeys`가 말한다.
+    //  - 라이브러리는 거는 키가 시스템 전체 입력을 해치지 않게 거른다. 수정자 없는 글자·이동·편집 키와 OS가 예약한 조합은
+    //    OS를 부르지 않고 `hotkey_status::needs_modifier`·`reserved`로 알린다. 키를 시스템 전체에서 가져가는 기능이라
+    //    앱은 사용자가 켜는 설정 뒤에 두기를 권한다.
+    struct global_hotkey
+    {
+        // 앱이 정한 키다. 목록 안에서 겹치지 않는다. 비었거나 앞 항목과 같으면 걸지 않는다 (`invalid_id`).
+        std::u8string id {};
+        // 조합이다. Ctrl·Shift·Alt와 키 하나다. Windows 키 조합은 못 건다 (결정 1). 앱 안 단축키(`app_command::shortcut`)와
+        // 같은 값을 쓰므로 `parse_shortcut`·`shortcut_label`·키 잡기 칸이 그대로 통한다.
+        key_chord chord {};
+        // 눌렀을 때 UI thread에서 부른다. 눌린 순간의 frame에 실린 같은 id의 것이다. 비면 눌림을 버린다.
+        //  - 한 번 눌러 한 번 온다. 누르고 있어도 반복하지 않고 뗌 사건은 없다.
+        //  - 라이브러리는 눌림에서 창을 앞으로 세우지 않는다. 앱이 `main_hidden`을 끄고 `focus_request::activate`를 싣는다.
+        //  - 앱이 앞에 있어도 같은 길이다. 걸린 조합은 OS가 키 입력 단계에서 가져가 앱 안 키 이벤트로 오지 않는다.
+        std::function<input_action()> pressed {};
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/win32/win32_window.h:234-265" data-path="include/luil/win32/win32_window.h" data-start="234"><script type="text/plain">
+    // 전역 단축키(`ui_frame::hotkeys`) 하나를 걸어 본 결과다 (docs/global-hotkey-design.md).
+    enum class hotkey_status
+    {
+        // 걸렸다. 같은 요청이 이어지는 동안 눌림이 `global_hotkey::pressed`로 온다.
+        registered,
+        // 다른 프로그램이나 같은 목록의 앞 항목이 이미 쓰는 조합이다 (`ERROR_HOTKEY_ALREADY_REGISTERED`).
+        conflict,
+        // OS가 예약한 조합이다 (`system_reserved_chord`와 F12). OS를 부르지 않고 걸렀다.
+        reserved,
+        // 글자·이동·편집 키는 Ctrl이나 Alt와 함께여야 한다. 수정자 없이 걸면 그 키가 시스템 전체에서 앱으로만 간다.
+        needs_modifier,
+        // 키가 없거나 Win32 가상 키로 옮길 수 없다 (`key_code::none`, 수정자 키, 휴대폰 키).
+        invalid_key,
+        // id가 비었거나 앞 항목과 겹친다.
+        invalid_id,
+        // 그 밖의 OS 실패다. `error`에 까닭이 있다.
+        failed,
+    };
+
+    // 전역 단축키 하나의 시도 결과다. 항목마다 결과가 바뀔 때 한 번 알린다.
+    //  - 처음 건 시도, 조합을 바꾼 시도, 다시 걸어 결과가 달라진 때다. 목록에서 뺀 항목은 알리지 않는다.
+    //  - `conflict`와 `failed`는 요청이 같으면 frame마다 다시 걸지 않는다. 주 창이 활성화될 때 한 번 다시 건다.
+    struct hotkey_report
+    {
+        // 결과가 가리키는 `global_hotkey::id`다. `invalid_id`가 빈 id를 알릴 때는 비었다.
+        std::u8string id {};
+        hotkey_status status { hotkey_status::registered };
+        // `failed`일 때의 영문 진단이다. 그 밖에는 비었다.
+        std::u8string error {};
+
+        [[nodiscard]] bool operator==(const hotkey_report&) const = default;
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>상태</th><th>뜻</th><th>OS를 불렀나</th></tr></thead>
+                <tbody>
+                  <tr><td><code>registered</code></td><td>걸렸다</td><td>예</td></tr>
+                  <tr><td><code>conflict</code></td><td>다른 프로그램이 쥐었거나, 같은 목록의 앞 항목과 같은 조합이다</td><td>앞 항목과 같으면 아니오</td></tr>
+                  <tr><td><code>reserved</code></td><td>OS 예약 조합(Alt+F4·Alt+Tab 등)이나 F12</td><td>아니오</td></tr>
+                  <tr><td><code>needs_modifier</code></td><td>Ctrl·Alt 없는 글자·이동·편집 키</td><td>아니오</td></tr>
+                  <tr><td><code>invalid_key</code> · <code>invalid_id</code></td><td>옮길 수 없는 키 · 빈 id나 앞 항목과 같은 id</td><td>아니오</td></tr>
+                  <tr><td><code>failed</code></td><td>그 밖의 실패</td><td>예</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="app_bar_config">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/app_bar_element.h:10-48" data-path="include/luil/ui/app_bar_element.h" data-start="10"><script type="text/plain">
+    // 앱 바의 치수다 (논리 픽셀, 모바일에서는 1이 1dp다).
+    // 기본값은 Material의 작은 상단 앱 바를 따른다.
+    struct app_bar_metrics
+    {
+        int height { 64 };
+        // 아이콘 버튼 하나의 터치 영역이다. 손가락이 닿는 최소 크기라 아이콘보다 넓다.
+        int button_size { 48 };
+        int icon_size { 24 };
+        // 바 양 끝에서 첫 버튼까지다.
+        int edge_padding { 4 };
+        // 선행 버튼이 없을 때 제목이 시작하는 자리다.
+        int title_left_padding { 16 };
+        // 선행 버튼과 제목, 제목과 동작 버튼 사이다.
+        int title_gap { 4 };
+        int title_font_size { 22 };
+    };
+
+    inline constexpr app_bar_metrics default_app_bar_metrics {};
+
+    // 앱 바의 아이콘 버튼 하나다.
+    struct app_bar_button
+    {
+        // codicon 코드포인트다.
+        char32_t glyph { 0 };
+        // 보조 기술이 읽는 이름이자 tooltip이다. 아이콘만으로는 뜻이 말해지지 않는다.
+        std::u8string label {};
+        ui_action action {};
+    };
+
+    // 앱이 정하는 앱 바의 내용이다.
+    struct app_bar_config
+    {
+        std::u8string title {};
+        // 제목 왼쪽의 버튼이다 (뒤로 가기, 메뉴 열기). 없으면 제목이 왼쪽 여백에서 시작한다.
+        std::optional<app_bar_button> navigation {};
+        // 오른쪽 끝부터 쌓이는 동작 버튼이다. 앞의 것이 왼쪽에 온다.
+        std::vector<app_bar_button> actions {};
+        app_bar_metrics metrics { default_app_bar_metrics };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면</th></tr></thead>
+                <tbody>
+                  <tr><td><code>navigation</code></td><td>없음</td><td>제목이 왼쪽 여백(16)에서 시작한다</td></tr>
+                  <tr><td><code>actions</code></td><td>빈 목록</td><td>— 있으면 오른쪽 끝부터 쌓고, 앞의 것이 왼쪽이다</td></tr>
+                  <tr><td><code>app_bar_button::label</code></td><td>빈 글</td><td>접근 이름도 tooltip도 없다</td></tr>
+                  <tr><td><code>app_bar_button::action</code></td><td>없음</td><td>누를 수 없다</td></tr>
+                  <tr><td><code>metrics</code></td><td>높이 64, 단추 48</td><td>— 모바일 1 = 1dp</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">창과 셸의 사건은 거의 다 UI thread에서 앱 메시지가 된다. 예외는 caption의 앱 단추처럼 tree의 element가 내는 것 — 그것은 input thread다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>무엇이 나오나</th><th>thread</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>주 창 크기·배율이 바뀜</td><td><code>make_window_metrics_message(width, height, scale)</code></td><td>UI</td><td>새 크기로 tree를 다시 배치한다</td></tr>
+              <tr><td>보조 창 크기·배율이 바뀜</td><td><code>ui_window::metrics(width, height, scale)</code></td><td>UI</td><td>그 창의 tree를 다시 배치한다</td></tr>
+              <tr><td>주 창 이동·크기·최대화·전체 화면 전환·종료 직전</td><td><code>make_window_placement_message(placement)</code></td><td>UI</td><td>적어 두었다가 종료 때 저장한다</td></tr>
+              <tr><td>보조 창 이동·크기·최대화</td><td><code>ui_window::placement(placement)</code></td><td>UI</td><td>창마다 적어 둔다</td></tr>
+              <tr><td>주 창 닫힘 요청 (caption 닫기·Alt+F4·작업 표시줄)</td><td><code>ui_frame::close()</code>가 있으면 그 동작, 없으면 종료 신호 <code>make_close_message()</code></td><td>UI</td><td>숨길지 끝낼지 정한다 / 종료 저장을 제출한다</td></tr>
+              <tr><td>보조 창 닫힘 요청</td><td><code>ui_window::close()</code>의 동작 (frame당 한 번)</td><td>UI</td><td>다음 frame에서 목록에서 뺀다</td></tr>
+              <tr><td>caption 창 버튼 클릭</td><td>창 명령 (<code>window_minimize</code>·<code>window_toggle_maximize</code>·<code>window_close</code>)</td><td>UI</td><td>없다 (라이브러리가 실행한다). 닫기는 위의 닫힘 요청이 된다</td></tr>
+              <tr><td>caption 앱 단추 클릭</td><td>단추 <code>action</code>의 <code>input_action</code></td><td>input</td><td>메시지를 처리한다</td></tr>
+              <tr><td>트레이 왼쪽 클릭 · Enter · Space</td><td><code>tray_icon::activate({ select, keyboard })</code></td><td>UI</td><td>창 되살리기 따위 (앞으로 세우기는 앱이 청한다)</td></tr>
+              <tr><td>트레이 두 번 클릭</td><td><code>activate({ double_click })</code></td><td>UI</td><td>헤더는 앞에 <code>select</code> 하나가 먼저 온다고 적는다 (실행해 확인하지 않았다)</td></tr>
+              <tr><td>트레이 오른쪽 클릭 · Shift+F10 · 메뉴 키</td><td>메뉴가 있으면 시스템 메뉴 → 그 메뉴의 <code>select(key)</code>, 없으면 <code>activate({ context })</code></td><td>UI</td><td>고른 항목을 처리한다. 메뉴가 없으면 앱이 메뉴를 연다</td></tr>
+              <tr><td>트레이 상태가 바뀜</td><td><code>make_tray_message(tray_report)</code></td><td>UI</td><td><code>shown</code>일 때만 숨기기를 허락한다</td></tr>
+              <tr><td>전역 단축키 눌림</td><td><code>global_hotkey::pressed()</code></td><td>UI</td><td>필요하면 숨김을 풀고 활성화를 청한다</td></tr>
+              <tr><td>단축키 걸기 결과</td><td><code>make_hotkey_message(hotkey_report)</code>, 항목마다</td><td>UI</td><td>설정 화면에 상태를 보인다</td></tr>
+              <tr><td>작업 표시줄 단추 상태 · 점프 목록 반영</td><td><code>make_taskbar_message</code> · <code>make_jump_list_message</code></td><td>UI</td><td>상태를 보인다</td></tr>
+              <tr><td>점프 목록의 작업 누름</td><td>셸이 새 프로세스를 띄운다 → 앱이 떠 있으면 그 둘째가 <code>send_to_primary</code></td><td>—</td><td>인자를 해석한다 (아래 줄)</td></tr>
+              <tr><td>둘째 인스턴스의 인자</td><td><code>on_instance_arguments(host, arguments)</code></td><td>UI (주 창 프로시저)</td><td>표 붙은 게시 후 곧 돌아온다</td></tr>
+              <tr><td>파일 드롭 (받는 element 있음)</td><td><code>drop_target::on_drop(payload, context)</code></td><td>UI</td><td>원시 객체는 그 안에서만 꺼낸다</td></tr>
+              <tr><td>파일 드롭 (받는 element 없음)</td><td><code>on_file_dropped(host, path)</code>, 경로마다</td><td>UI</td><td>직접 게시한다. <code>true</code>면 멈춘다</td></tr>
+              <tr><td>모니터 배치가 바뀜</td><td><code>ui_frame::displays(list)</code></td><td>UI</td><td>도킹 자리 따위를 다시 고른다</td></tr>
+              <tr><td>클립보드 바뀜</td><td><code>make_clipboard_changed_message(clipboard_change)</code></td><td>UI</td><td>잘라 둔 표시를 정리한다</td></tr>
+              <tr><td>앱이 앞뒤로 감</td><td><code>make_lifecycle_message(foreground · background)</code></td><td>UI</td><td>뒤로 갈 때 저장한다</td></tr>
+              <tr><td>초점 요청의 결과</td><td><code>ui_frame::focus_report(id, outcome)</code></td><td>UI</td><td><code>expired</code>면 다시 청하거나 포기한다</td></tr>
+              <tr><td>뒤로 가기 (Android)</td><td><code>ui_frame::back()</code></td><td>UI</td><td>안쪽 화면을 닫는다</td></tr>
+              <tr><td>caption 끌기 걸음 (macOS borderless)</td><td><code>on_window_moving(host, bounds)</code></td><td>UI</td><td>자리를 고친다 (게시하지 않는다)</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>훅이 돌려준 빈 메시지는 게시하지 않는다. 훅이 던진 예외는 삼키고 디버그 출력에 적는다(<code>on_instance_arguments</code>는 <code>false</code>로 본다). frame의 함수들(<code>activate</code>·<code>pressed</code>·<code>select</code>·<code>close</code>)은 사건이 온 순간 게시된 frame에서 읽으므로, 값으로 캡처한 람다여야 한다. 앱 상태를 참조로 잡지 않는다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">창 버튼은 Tab의 자리가 아니다 — 시스템 창처럼 키보드의 길은 Alt+Space의 시스템 메뉴다. 앱 단추는 Tab의 자리이고 이름은 tooltip이다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="키">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키 · 몸짓</th><th>결과 (Windows)</th></tr></thead>
+                <tbody>
+                  <tr><td>Alt+Space</td><td>시스템 메뉴를 <strong>caption 띠의 왼쪽 아래</strong>에서 연다. 띠가 창 아래면 OS가 메뉴를 위로 뒤집는다. 보조 창도 같다</td></tr>
+                  <tr><td>띠·시스템 메뉴 칸에서 오른쪽 클릭 (뗌)</td><td>커서 자리에 시스템 메뉴</td></tr>
+                  <tr><td>Tab</td><td>창 버튼은 건너뛴다. 앱 단추는 선다 — 앱 단추가 창 버튼보다 먼저 담겨 Tab 차례가 화면 차례다</td></tr>
+                  <tr><td>Alt+F4</td><td>주 창: 닫힘 요청 (<code>ui_frame::close</code>가 있으면 그 동작). 보조 창: <code>ui_window::close</code></td></tr>
+                  <tr><td>창 버튼 누름</td><td>누른 단추 위에서 뗐을 때만 실행한다. 다른 곳에서 눌러 닫기 위에서 떼면 닫지 않는다. 전체 화면 중에는 실행하지 않는다</td></tr>
+                  <tr><td>caption 더블클릭 · Win+↑ · 시스템 메뉴의 최대화</td><td>최대화 단추를 빼면 그 창 스타일도 빠져 셋 다 멎는다</td></tr>
+                  <tr><td>전체 화면 중</td><td>크기 조절·최대화 스타일을 빼 Alt+Space의 "크기 조정"·Win+↑을 막는다. Alt+Tab·Alt+F4는 산다</td></tr>
+                  <tr><td>Win+← / → · 끌어 붙이기</td><td>OS의 것이다. luil은 끌기 밖의 이동을 모아 마지막 배치를 한 번 알린다</td></tr>
+                  <tr><td>트레이 아이콘에서 Enter · Space</td><td><code>activate({ select, keyboard = true })</code>. 겹쳐 오는 두 번째는 두 번 누름 시간 안이면 버린다</td></tr>
+                  <tr><td>트레이 메뉴</td><td>OS 메뉴라 키보드·배율·고대비·보조 기술이 OS의 것이다. 다크 모드를 따르지 않는다. 항목의 접근 키는 라벨에 <code>&amp;</code>로 들어간다</td></tr>
+                  <tr><td>전역 단축키로 건 Alt+글자</td><td>그동안 메뉴 막대의 같은 접근 키가 열리지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>Windows 11의 최대화 단추 위 스냅 레이아웃 창은 저장소에 언급이 없다. 그 자리에서 판정이 <code>HTMAXBUTTON</code>을 답하지만, 그 창이 서는지는 코드로 알 수 없다. 이 표의 동작은 코드를 읽어 정리한 것이고 실제 창에서 눌러 보지 않았다.</p></div>
+          </section>
+          <section data-tab="접근성">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>대상</th><th>역할</th><th>이름</th></tr></thead>
+                <tbody>
+                  <tr><td><code>caption_element</code> · <code>app_bar_element</code></td><td><code>title_bar</code> (UIA TitleBar, macOS AXGroup)</td><td>제목</td></tr>
+                  <tr><td>창 버튼 · 앱 단추 · 앱 바 단추</td><td><code>button</code> — <strong>이름이 있을 때만</strong></td><td>tooltip (앱 바는 <code>label</code>)</td></tr>
+                  <tr><td>창 caption이 없는 플랫폼의 caption</td><td>숨는다 — 보이는 경로에서 빠진다</td><td>—</td></tr>
+                  <tr><td>작업 표시줄 오버레이</td><td>셸의 것</td><td><code>taskbar_overlay::description</code></td></tr>
+                  <tr><td>트레이 아이콘</td><td>셸의 것 (luil의 UIA는 닿지 않는다)</td><td><code>tray_icon::tooltip</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li>창 버튼과 앱 단추는 <code>button_element</code>이고 접근 정보를 넓히지 않아 기본 규칙을 쓴다. 누를 액션이 있고 이름(접근 이름, 없으면 검색 라벨, 없으면 tooltip)이 있을 때만 <code>button</code> 역할이다. tooltip을 비운 단추는 역할 없이 읽힌다.</li>
+                <li>진행 막대에는 셸이 읽는 글이 없다. 같은 정보를 창 안에도 둔다.</li>
+                <li>역할이 플랫폼 낱말이 되는 자리는 <a class="xref" href="platforms.html#s7">플랫폼과 host</a>에 있다.</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">같은 frame을 네 플랫폼에 실어도 된다. 아래는 기능마다 다른 점이다. host가 어떻게 서는지와 기능 전체의 매트릭스는 <a class="xref" href="platforms.html">플랫폼과 host</a>에 있다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>기능</th><th>Windows</th><th>macOS</th></tr></thead>
+            <tbody>
+              <tr><td>caption</td><td>주 창은 만들자마자 시스템 caption을 떼고 비클라이언트를 0으로 만든다. 판정은 OS의 물음(<code>WM_NCHITTEST</code>)에 host가 직접 답한다</td><td>기본은 시스템 제목 막대이고 <code>caption_element</code>는 자리를 차지하지 않는다. 앱 단추는 제목 막대 끝 부속 view로 선다. <code>borderless</code>면 앱이 그리고 같은 계산으로 판정하되, 버튼 집합은 tree의 설정을 읽고 시스템 메뉴 칸·가장자리 판정이 없다. 두 번 누르기는 시스템 설정을 따른다</td></tr>
+              <tr><td>보조 창</td><td>소유된 창은 주 창이 owner인 창, 독립 창은 owner 없이 작업 표시줄에 서는 창이다. 도킹 표면은 owner가 없어 주 창이 파괴될 때 따로 거둔다</td><td>소유된 창은 주 창 위의 패널(앱이 뒤로 가면 함께 숨는다), 독립 창은 보통 창이다. <code>main_hidden</code>은 주 창과 소유된 창을 숨긴다</td></tr>
+              <tr><td>배치</td><td>보고의 x·y는 작업 영역 좌표, 크기는 물리 픽셀</td><td>화면 좌표는 주 화면 왼쪽 위가 원점이고 아래로 는다(점 × 주 화면 배율). 보고의 x·y는 창 <strong>내용</strong>의 왼쪽 위, 크기는 내용 픽셀이다</td></tr>
+              <tr><td>전체 화면 · 늘 위</td><td>전체 화면은 테두리 없는 창으로 모니터를 덮는다(합성 swap chain이라 독점 전체 화면은 없다). <code>topmost</code>는 읽지 않는다</td><td>전체 화면은 시스템 전체 화면 전환이다. <code>topmost</code>는 떠 있는 창 층이고 실행 중에는 <code>ui_frame::topmost</code>로 바꾼다</td></tr>
+              <tr><td>작업 표시줄</td><td>주 창과 독립 창의 단추마다. 탐색기가 단추를 만들어야 선다(<code>waiting</code>)</td><td>Dock 타일 하나, 주 창 것만. 막대는 강조색·빨강·노랑·빗금, 오버레이는 오른쪽 아래. <code>waiting</code>이 없다</td></tr>
+              <tr><td>점프 목록</td><td>셸 링크 작업. 사용자 프로필에 남아 앱이 끝나도 남는다</td><td>Dock 메뉴. 앱이 떠 있는 동안만 있다. 아이콘 칸은 읽지 않고, 고르면 실행 파일을 그 인자로 새로 띄운다</td></tr>
+              <tr><td>트레이</td><td>알림 영역 아이콘. Windows 11은 넘침 칸에 둘 수 있고 앱이 꺼낼 길이 없다</td><td>메뉴 막대의 상태 항목, 18점 그림. 보고는 <code>off</code>·<code>shown</code>·<code>failed</code>(<code>waiting</code> 없음). Control+왼쪽 클릭이 <code>context</code>다. 템플릿 그림이 아니다</td></tr>
+              <tr><td>전역 단축키</td><td>OS 단축키 등록에 반복 없음 표시를 붙여 건다</td><td>Carbon 단축키라 손쉬운 사용 권한이 필요 없다. Ctrl→Command, Alt→Option으로 옮긴다. 같은 거르기에 Carbon 키가 없는 키는 <code>invalid_key</code>가 더해진다</td></tr>
+              <tr><td>둘째 인스턴스</td><td>세션 단위 뮤텍스 + 창 메시지</td><td>잠금 파일 + Unix 소켓 (<code>application_environment::instance</code>)</td></tr>
+              <tr><td>OS 끌어 놓기</td><td>복사만 답한다(이동·링크는 아니다). 경로 1,024개·형식 256개 상한. 원시 객체는 <code>IDataObject*</code></td><td>파일 URL·주소·글·PNG·TIFF를 받고 효과는 늘 복사. 원시 객체는 <code>NSPasteboard*</code></td></tr>
+              <tr><td>수명 주기</td><td>부르지 않는다</td><td>앱 활성 전환마다</td></tr>
+              <tr><td>클립보드 바뀜</td><td>OS 알림으로 안다</td><td>알림이 없어 번호를 견준다 — 앱이 넣은 뒤, 앞으로 올 때, 앞에 있는 동안 반 초마다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><strong>Android·iOS</strong>는 창 caption이 없어 caption이 숨고 맨 위가 앱 바의 자리다. <code>ui_frame::windows</code>·<code>docked_surfaces</code>는 받고 한 번 경고하며, popup은 주 표면 위 overlay다. 트레이·단축키·작업 표시줄·점프 목록은 받고 무시한다. 안전 영역(<code>window_metrics::outside</code>)은 둘만 채운다. 뒤로 가기는 Android만 부른다. iOS는 클립보드 바뀜에서 <code>has_files</code>를 늘 거짓으로 싣는다.</li>
+            <li><strong>헤더·설계 문서와 다른 점 (코드가 정본).</strong> 트레이·전역 단축키·작업 표시줄·점프 목록의 설계 문서와 <code>ui_platform_capabilities</code> 주석은 "Win32 전용"·"Win32에서 주 창이 섰으면 참"이라 적지만, macOS host는 <code>taskbar</code>·<code>tray</code>·<code>global_hotkeys</code>를 모두 참으로 적고 위 표처럼 구현한다. 작업 표시줄·점프 목록 문서가 "macOS host가 아직 잇지 않았다"고 한 Dock 연결도 코드는 잇는다. <code>make_clipboard_changed_message</code>의 "지금은 Win32만 알린다"와 달리 macOS·iOS도 부른다.</li>
+            <li>Windows의 능력 플래그는 주 창이 서면 <code>tray</code>·<code>global_hotkeys</code>를 참으로, <code>taskbar</code>는 셸의 작업 표시줄 객체를 만들었을 때 참으로 적는다.</li>
+          </ul>
+          <p>이 절은 코드를 읽어 모은 것이다. 네 플랫폼 어느 것에서도 이 문서를 쓰며 실행해 보지 않았다. 설계 문서가 "실측"이라 적은 macOS 동작(Command+Tab·Command+Space가 <code>conflict</code>)도 옮겨 적기만 했다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>Windows 주 창의 caption 설정은 창을 만들 때 한 번 읽는다.</strong> 판정이 쓰는 버튼 집합·치수와 OS 제목(작업 표시줄·Alt+Tab)은 <code>window_config::caption</code>에서 한 번 실리고 끝이다. 실행 중에 tree의 <code>caption_element</code>에서 <code>buttons</code>·<code>metrics</code>·<code>title</code>을 바꾸면 그림만 바뀌고 판정·창 스타일·OS 제목은 옛 값이다. 따라오는 것은 띠의 자리와 앱 단추·client 칸뿐이다. 보조 창은 frame마다 <code>ui_window::caption</code>을 다시 실어 이 문제가 없다.</li>
+          <li><strong>tooltip을 비운 창 버튼은 보조 기술에 이름도 역할도 없다.</strong> 창 버튼의 접근 이름은 <code>minimize_tooltip</code>·<code>maximize_tooltip</code>·<code>close_tooltip</code>뿐이고 기본은 빈 글이다. 단추의 기본 접근 규칙은 이름이 없으면 <code>button</code> 역할을 주지 않는다. 데모의 독립 창 caption도 닫기 tooltip만 준다. 앱 단추도 <code>tooltip</code>이 유일한 이름이다.</li>
+          <li><strong><code>initial_position</code>은 화면 좌표이고, 배치의 x·y는 작업 영역 좌표다.</strong> 저장한 배치의 x·y를 <code>initial_position</code>에 넣으면 작업 표시줄이 위나 왼쪽에 있는 모니터에서 그 두께만큼 어긋난다. 저장 배치는 <code>initial_placement</code>에 그대로 넣는다 — 라이브러리가 작업 영역 오프셋을 더해 화면 사각형을 짓고, <code>initial_position</code>·초기 크기보다 앞선다. 데모는 아직 앞의 길을 쓴다.</li>
+          <li><strong>저장 배치는 통째로 버려질 수 있다.</strong> 크기가 양수가 아니거나, 어느 모니터에도 걸치지 않거나, 그 모니터에서 잰 최소 크기보다 작으면 <code>initial_placement</code> 전체를 무시한다. 실행 중의 배치 요청은 달라서 화면 밖이면 크기만 적용하고, 주 창이 숨었거나 아직 보이지 않으면 미룬다. 번호(<code>window_placement_revision</code>)를 올리지 않으면 다시 적용하지 않는다.</li>
+          <li><strong>맞춰 붙인 창의 배치 보고는 붙이기 전 자리일 수 있다.</strong> 보고는 OS의 복원 사각형이라, 화면 가장자리에 붙인 채 끝낸 창은 다음 실행에서 붙이기 전 자리로 열릴 수 있다.</li>
+          <li><strong><code>ui_frame::fullscreen</code>에 배치 보고를 되비추지 않는다.</strong> 대조는 게시마다 하고 전환마다 보고가 나가므로, 되비추면 전체 화면이 들락거린다. 이 값을 싣는 앱은 <code>window_toggle_fullscreen</code> 명령 대신 자기 상태를 뒤집는다.</li>
+          <li><strong><code>ui_frame::close</code>를 달면 닫기가 앱을 끝내지 않는다.</strong> 그 동작만 내고 아무것도 닫지 않는다. 끝내는 길은 <code>ui_command::application_exit</code>다. 주 창을 숨긴 채 마지막 창을 닫을 때 그것을 내지 않으면 보이는 창 없이 프로세스가 남는다. 트레이 아이콘 없이 숨은 주 창은 되살릴 길이 없다.</li>
+          <li><strong><code>ui_window::close</code>를 비우면 닫기 단추와 Alt+F4가 아무 일도 하지 않는다.</strong> 동작은 게시된 frame당 한 번만 나간다. 창을 없애는 것은 앱이 다음 frame에서 목록에서 빼는 것이다.</li>
+          <li><strong><code>main_hidden</code>은 소유된 보조 창과 주 창에 붙은 popup을 숨기지 않는다.</strong> 같은 frame에서 앱이 뺀다. 숨은 동안 주 창의 작업 표시줄 요청은 쥐기만 한다. 트레이와 전역 단축키는 그대로 선다.</li>
+          <li><strong>트레이·단축키 사건은 창을 앞으로 세우지 않는다.</strong> 앱이 <code>main_hidden</code>을 끄고 새 번호의 <code>focus_request</code>(<code>activate = true</code>)를 싣는다. 앱이 앞 창이 아니면 OS가 활성화를 막고 단추만 깜빡일 수 있다. 둘째 인스턴스의 <code>activate</code>만은 라이브러리가 보이는 주 창을 세운다.</li>
+          <li><strong>그림은 몸통 포인터로 견준다.</strong> 오버레이·트레이 그림을 frame마다 새로 지으면 매번 새 그림으로 읽혀 셸을 다시 부른다. 처음 한 번 지은 <code>ui_image</code>를 계속 싣는다.</li>
+          <li><strong>전역 단축키는 못 거는 것이 정상 경로다.</strong> 보고를 보지 않으면 걸렸는지 모른다. <code>conflict</code>·<code>failed</code>는 frame마다 다시 걸지 않고 주 창이 활성화될 때 한 번 다시 건다. 걸린 조합은 앱이 앞에 있어도 앱 안 키 이벤트로 오지 않아, 같은 조합의 앱 안 단축키가 그동안 죽는다.</li>
+          <li><strong>점프 목록은 프로세스 밖에 남는다.</strong> <code>jump_list</code>가 비어 있으면(<code>std::nullopt</code>) 셸을 만지지 않으므로 앞 실행의 목록이 그대로다. 지우려면 빈 목록을 싣는다. 독립 창의 점프 목록 칸은 읽지 않는다.</li>
+          <li><strong><code>on_instance_arguments</code>는 막으면 안 된다.</strong> 보낸 프로세스가 답을 기다린다. 게시하고 표가 0이 아닌지만 답한다. 시한이 지난 보내기도 나중에 닿을 수 있어 같은 인자가 두 번 올 수 있다.</li>
+          <li><strong><code>single_instance</code>는 창보다 오래 살아야 한다.</strong> 둘째 객체는 첫째가 끝나도 둘째로 남는다 — 다시 겨루려면 놓고 새로 만든다.</li>
+          <li><strong>끌어 놓기의 원시 객체는 <code>on_drop</code> 안에서만 유효하다.</strong> 꺼낸 값을 메시지에 담는다. <code>accepts</code>는 두 thread에서 불리므로 가볍게. "밖에서 온 끌기"는 <code>external()</code>로 가린다. 형식만 실린 끌기와 불투명 표면이 가린 자리는 <code>on_file_dropped</code>로 물러서지 않고, 그 훅이 던진 예외는 진단 없이 삼킨다.</li>
+          <li><strong>COM STA가 없으면 셸 기능이 조용히 빠진다.</strong> 작업 표시줄과 점프 목록은 <code>unavailable</code>, 파일 끌기는 꺼진다. 진입점에서 <code>com_sta_scope</code>를 쥔다.</li>
+          <li><strong>Windows는 <code>ui_frame::topmost</code>를 읽지 않고 <code>on_window_moving</code>을 부르지 않는다.</strong> 늘 위의 작은 판이 필요하면 도킹 표면이 그 자리다.</li>
+          <li><strong>tree에 caption이 없으면 Windows는 맨 위 띠를 기본으로 판정한다.</strong> 그리지 않은 자리가 끌리고 보이지 않는 창 버튼이 선다(tree가 서기 전 첫 frame과 같은 답이다). caption을 그리지 않는 화면은 caption을 담고 숨겨 띠를 없앤다. macOS borderless는 반대로 caption이 없으면 끌 자리가 없다.</li>
+          <li><strong>시스템 메뉴 칸은 아이콘과 상관없이 늘 있다.</strong> 띠 왼쪽 40 논리 픽셀은 아이콘이 없어도 시스템 메뉴 자리이고, 창 버튼보다 먼저 판정한다. 거기에 client 칸을 겹쳐도 client로 뒤집히지 않는다 — 뒤집기는 끌기 자리에서만 일어난다.</li>
+          <li><strong>분수 배율에서 판정과 그림이 반 픽셀 어긋날 수 있다.</strong> 판정은 버튼 폭을 정수 식 (값 × DPI + 48) / 96으로 재고, 그리기는 실수 (값 × 배율)로 놓는다. 125%에서 버튼 폭이 판정 53px, 그림 52.5px이다. 일치를 못 박는 시험은 100%·150%만 본다. 화면에서 실제로 보이는지는 확인하지 못했다.</li>
+          <li><strong>탭을 떼어 세울 때 잡은 지점을 출발 창 배율로 나눈다.</strong> <code>grab_offset_x</code>·<code>grab_offset_y</code>는 출발 창의 물리 픽셀이고, <code>window_screen_anchor</code>의 <code>client_x</code>·<code>client_y</code>는 새 창의 논리 점이다. 데모는 나누지 않아 100%에서만 잡은 자리가 맞는다.</li>
+          <li><strong>보조 창의 <code>width</code>·<code>height</code>가 0 이하면 창이 없다.</strong> 오류도 없다. 만들기에 실패한 id는 계속 실리는 동안 다시 시도하지 않는다 — 빼고 다시 싣는다.</li>
+          <li><strong>모바일에서 caption을 넣어도 보이지 않는다.</strong> 창 caption이 없는 플랫폼에서 caption은 숨고 높이 0이다. 맨 위에는 앱이 앱 바를 놓는다.</li>
+          <li><strong>"Win32 전용"이라는 문서를 믿고 플랫폼으로 가르지 않는다.</strong> macOS host는 트레이(메뉴 막대 상태 항목)·전역 단축키·Dock의 진행률과 메뉴를 구현하고 능력 플래그도 참으로 적는다. 클립보드 바뀜도 macOS·iOS에서 온다. 기능을 둘지는 <code>ui_platform_capabilities</code>로 고른다.</li>
+          <li><strong>macOS의 <code>background</code>는 앱을 바꿀 때마다 온다.</strong> 같은 <code>make_lifecycle_message</code>가 Android에서는 Activity가 사라질 때, macOS에서는 다른 앱을 잠깐 누를 때도 불린다. 무거운 정리를 걸면 macOS에서만 잦게 돈다. Windows는 부르지 않는다.</li>
+          <li><strong>레이어드 표시(<code>window_presentation::layered</code>)는 조건이 많다.</strong> CPU 렌더러만(<code>direct3d</code>·<code>gpu</code>와 함께면 시작 실패), 주 창만, 웹뷰 자리 없음, 배경 효과는 acrylic만이고, 크기 변경이 한두 frame 늦게 따라온다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>주 창은 어떻게 띄우나?</summary><div class="faq-a"><p class="faq-short">진입점에서 DPI 인지를 켜고 <code>com_sta_scope</code>를 쥔 뒤 <code>window_config</code>와 <code>window_environment</code>(driver·delegate)로 <code>run_application_window</code>를 부른다.</p><p>반환값이 프로세스 종료 코드다. macOS는 <code>macos::run_application</code>, 모바일은 각 host의 진입점이다 (<a class="xref" href="#build-windows">주 창 띄우기</a>, <a class="xref" href="platforms.html#s4">같은 hello, 네 진입점</a>).</p></div></details>
+          <details class="faq"><summary>창을 하나 더 열려면?</summary><div class="faq-a"><p class="faq-short"><code>ui_frame::windows</code>에 <code>ui_window</code>를 싣는다. 빼면 사라진다.</p><p>tree 맨 위에 <code>caption_element</code>를 앱이 담는다. 작업 표시줄에 따로 서는 창이면 <code>independent = true</code>다 — 만들 때 정하므로 바꾸려면 id를 빼고 다시 싣는다 (<a class="xref" href="#build-windows">보조 창</a>).</p></div></details>
+          <details class="faq"><summary>보조 창의 닫기 단추를 누르면 누가 닫나?</summary><div class="faq-a"><p class="faq-short">앱이다. <code>close</code>의 동작이 메시지를 내고, 앱이 다음 frame에서 그 창을 목록에서 뺀다.</p><p><code>close</code>가 비어 있으면 닫기 단추와 Alt+F4가 아무 일도 하지 않는다. 동작은 게시된 frame당 한 번 나간다.</p></div></details>
+          <details class="faq"><summary>창 크기·위치를 다음 실행에 되돌리려면?</summary><div class="faq-a"><p class="faq-short">주 창은 <code>make_window_placement_message</code>, 보조 창은 <code>ui_window::placement</code>로 받은 값을 저장했다가 <code>initial_placement</code>에 그대로 넣는다.</p><p>저장 배치의 x·y를 <code>initial_position</code>에 넣지 않는다 — 단위가 다르다 (<a class="xref" href="#build-windows">배치 저장과 복원</a>의 예제).</p></div></details>
+          <details class="faq"><summary>저장한 배치가 화면 밖이면?</summary><div class="faq-a"><p class="faq-short"><code>initial_placement</code>는 통째로 무시되고 기본 배치로 열린다.</p><p>모니터를 뺐거나 해상도가 바뀐 경우다. 실행 중의 배치 요청은 달라서 화면 밖이면 크기만 적용한다.</p></div></details>
+          <details class="faq"><summary>caption에 설정 단추를 넣으려면?</summary><div class="faq-a"><p class="faq-short"><code>caption_config::app_buttons</code>에 <code>caption_app_button</code>{<code>key</code>, <code>glyph</code>, <code>tooltip</code>, <code>action</code>}을 넣는다.</p><p>창 버튼 바로 왼쪽에 서고, 끌기가 아니라 client로 판정되며, Tab의 자리다. 주 창이면 같은 설정을 <code>window_config::caption</code>에도 준다.</p></div></details>
+          <details class="faq"><summary>제목 표시줄 가운데에 검색 칸을 두고 싶다.</summary><div class="faq-a"><p class="faq-short">caption 다음에 담아 위에 겹치고 그 element에 <code>set_caption_client(true)</code>를 단다.</p><p>명령 팔레트 입구(<code>make_command_palette_entry</code>)는 스스로 단다. 데모가 그렇게 caption 가운데에 둔다 (<a class="xref" href="#build-caption">caption 위에 겹치기</a>).</p></div></details>
+          <details class="faq"><summary>최대화 단추를 없애면 더블클릭 최대화도 막히나?</summary><div class="faq-a"><p class="faq-short">막힌다. 빠진 버튼은 그 창 스타일도 빠져 caption 더블클릭·Win+↑·시스템 메뉴의 최대화가 함께 멎는다.</p><p>크기 조절 테두리와 시스템 메뉴는 버튼 집합과 상관없이 남는다. 주 창이면 이 집합도 창을 만들 때 한 번 읽는다.</p></div></details>
+          <details class="faq"><summary>caption을 창 아래에 둘 수 있나?</summary><div class="faq-a"><p class="faq-short">있다. 놓은 자리가 곧 끌기 띠다.</p><p>창 버튼과 시스템 메뉴 칸도 그리로 간다. 아래 가장자리 몇 픽셀은 여전히 크기 조절이다. Alt+Space의 메뉴는 띠의 왼쪽 아래에서 열리고 OS가 위로 뒤집는다.</p></div></details>
+          <details class="faq"><summary>caption을 그리지 않는 화면인데 창 위쪽을 누르면 창이 끌린다.</summary><div class="faq-a"><p class="faq-short">tree에 caption이 없으면 Windows는 맨 위 36 논리 픽셀을 끌기 띠로 판정한다.</p><p>caption을 담고 <code>set_visible(false)</code>로 숨기면 띠가 없다. 아래 <a class="xref" href="#lab">판정 지도</a>에서 "없음"과 "숨김"을 견주어 볼 수 있다.</p></div></details>
+          <details class="faq"><summary>창을 닫으면 트레이로 숨기려면?</summary><div class="faq-a"><p class="faq-short"><code>ui_frame::close</code>에서 숨김 메시지를 내고 <code>main_hidden</code>을 싣는다. 정말 끝내는 길은 <code>ui_command::application_exit</code>다.</p><p>라이브러리에 이 정책은 없다. 아이콘이 선 동안만(보고가 <code>shown</code>) 숨긴다 (<a class="xref" href="#build-shell">닫으면 트레이로 숨기기</a>의 예제).</p></div></details>
+          <details class="faq"><summary>트레이 아이콘을 눌렀는데 창이 앞으로 안 온다.</summary><div class="faq-a"><p class="faq-short">라이브러리는 트레이 사건에서 창을 세우지 않는다. 앱이 <code>main_hidden</code>을 끄고 새 번호의 <code>focus_request</code>(<code>activate = true</code>)를 싣는다.</p><p>번호가 그대로면 새 요청이 아니다. 앱이 앞 창이 아니면 OS가 막고 작업 표시줄 단추만 깜빡일 수 있다.</p></div></details>
+          <details class="faq"><summary>트레이 오른쪽 클릭이 <code>context</code> 사건으로 오지 않는다.</summary><div class="faq-a"><p class="faq-short"><code>menu</code>가 있으면 라이브러리가 메뉴를 띄우고 <code>context</code>를 내지 않는다.</p><p>메뉴 없이 오른쪽 클릭을 받으려면 <code>menu</code>를 비운다. 그러면 <code>context</code> 사건이 셸이 준 화면 물리 좌표(<code>point</code>)와 함께 <code>activate</code>로 온다.</p></div></details>
+          <details class="faq"><summary>전역 단축키가 안 걸린다.</summary><div class="faq-a"><p class="faq-short"><code>make_hotkey_message</code>로 오는 <code>hotkey_report::status</code>를 본다.</p><p>다른 프로그램이 쥐었으면 <code>conflict</code>, 수정자 없는 글자 키는 <code>needs_modifier</code>, Alt+F4·F12 같은 조합은 <code>reserved</code>다. 뒤의 둘은 라이브러리가 OS를 부르지 않고 거른 것이다.</p></div></details>
+          <details class="faq"><summary>Win 키 조합을 전역 단축키로 걸 수 있나?</summary><div class="faq-a"><p class="faq-short">없다. <code>key_chord</code>에 그 수정자 칸이 없다.</p><p>누르고 있어도 반복하지 않고 뗌도 오지 않는다. 한 번 눌러 한 번이다.</p></div></details>
+          <details class="faq"><summary>점프 목록의 작업을 누르면 떠 있는 앱에 어떻게 닿나?</summary><div class="faq-a"><p class="faq-short">셸이 새 프로세스를 띄운다. 그 프로세스가 <code>single_instance</code>의 둘째라 <code>send_to_primary</code>로 인자를 넘기고 끝나며, 첫째는 <code>on_instance_arguments</code>로 받는다.</p><p>앱을 지워도 점프 목록은 사용자 프로필에 남는다. 빈 목록을 실어야 지운다.</p></div></details>
+          <details class="faq"><summary>둘째 실행을 막고 첫째에 파일 경로를 넘기려면?</summary><div class="faq-a"><p class="faq-short"><code>single_instance</code>를 만들고 <code>primary()</code>가 거짓이면 <code>send_to_primary</code>로 인자를 보낸 뒤 끝낸다. 첫째는 <code>environment.instance</code>와 <code>on_instance_arguments</code>를 단다.</p><p>관리자 권한 첫째가 탐색기에서 연 파일을 받으려면 <code>instance_from_lower_integrity</code>를 켠다 (<a class="xref" href="#build-instance">둘째 인스턴스</a>).</p></div></details>
+          <details class="faq"><summary>파일을 창 아무 데나 떨어뜨려도 받으려면?</summary><div class="faq-a"><p class="faq-short"><code>accept_file_drop = true</code>와 <code>window_delegate::on_file_dropped</code>다. 자리가 뜻을 가지면 element의 <code>drop_target</code>이다.</p><p>브라우저가 끄는 그림처럼 경로가 없는 끌기는 <code>on_drop</code> 안에서 <code>drop_virtual_files</code>·<code>drop_data_bytes</code>로 꺼낸다 (<a class="xref" href="#build-drop">파일 끌어 놓기</a>).</p></div></details>
+          <details class="faq"><summary>늘 위에 뜨는 창은?</summary><div class="faq-a"><p class="faq-short">macOS는 <code>ui_frame::topmost</code>(시작은 <code>application_config::topmost</code>)다. Windows는 이 칸을 읽지 않는다.</p><p>Windows에서 늘 위의 작은 판이 필요하면 <code>ui_frame::docked_surfaces</code>의 도킹 표면을 쓴다. 눌러도 활성화되지 않는 판이다.</p></div></details>
+          <details class="faq"><summary>macOS에서도 트레이·전역 단축키·작업 표시줄이 되나?</summary><div class="faq-a"><p class="faq-short">된다. 메뉴 막대 상태 항목, Carbon 단축키, Dock 타일과 Dock 메뉴로 선다.</p><p>설계 문서 몇은 "Win32 전용"이라 적지만 코드가 정본이다. 같은 frame을 그대로 싣고, 보이는 차이(<code>waiting</code> 없음, Dock은 주 창 것만)는 <a class="xref" href="#platforms">플랫폼 차이</a>에 있다.</p></div></details>
+          <details class="faq"><summary>모바일에서 caption 대신 무엇을 쓰나?</summary><div class="faq-a"><p class="faq-short"><code>current_ui_platform().window_caption</code>이 거짓이면 <code>app_bar_element</code>를 맨 위에 둔다.</p><p>데스크톱 tree를 그대로 써도 caption은 높이 0으로 숨는다. 안전 영역 밖까지 칠할 것은 <code>window_surface(metrics)</code>를 배치 문맥에 넘긴다.</p></div></details>
         </div>
       </section>
 

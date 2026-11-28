@@ -1,14 +1,17 @@
 /* luil 설명서 — 명령표·단축키·명령 팔레트 규칙을 JS로 옮긴 것
  *
- * src/ui/commands.cpp 전부(effective_shortcuts, match_command, shortcut_label, parse_shortcut, label_with_shortcut,
- * command_tooltip, system_reserved_chord, chord_of, menu_item_from, find_conflicts)와
- * src/ui/command_palette.cpp의 거르기(filter_commands, command_palette_items, 기본 항목 고르기),
- * src/ui/ui_interaction.cpp의 search_query와 열린 메뉴의 ↑/↓·Enter·Esc 판정(process_menu_key)을 함수 단위로 옮겼다.
- * 이름 옆 주석은 C++ 원본의 이름이다. commands.cpp·command_palette.cpp·case_fold.cpp를 컴파일한 대조기로
- * 무작위 입력을 견주어 맞췄다 (메뉴 키 판정은 원본 controller를 혼자 링크할 수 없어 tests/command_palette_tests.cpp의
- * 장면을 되풀이해 맞췄다).
- *
- *   key        luil::key_code 열거자 이름 ("key_s", "enter", "f4", "numpad_add" …). 없음은 "none"
+ * 옮긴 것 (이름 옆 주석이 C++ 원본이다):
+ *   - src/ui/commands.cpp 전부: effective_shortcuts, match_command, shortcut_label, parse_shortcut, label_with_shortcut,
+ *     command_tooltip, system_reserved_chord, chord_of, menu_item_from, find_conflicts
+ *   - src/ui/command_palette.cpp: filter_commands, command_palette_items, 기본 항목(palette_menu의 default_key)
+ *   - src/ui/ui_interaction.cpp: search_query, 열린 메뉴의 ↑/↓·Enter·Esc 판정(process_menu_key의 팔레트에 닿는 갈래)
+ *   - src/ui/menu_element.cpp: 강조가 없을 때 기본 항목을 강조처럼 그리는 판정(shown_as_default)
+ * 맞춘 방법:
+ *   - commands.cpp·command_palette.cpp·case_fold.cpp를 컴파일해 링크한 대조기에 무작위 입력 약 4만 줄(단축키 글 두 플랫폼,
+ *     해석, 맞추기, 겹침, 팔레트 거르기·줄)을 넣어 이 파일의 답과 한 줄씩 견줬다. search_query는 ui_interaction.cpp를
+ *     통째로 링크할 수 없어 그 함수 본문(1270-1281행)을 그대로 옮겨 붙여 대조했다.
+ *   - 메뉴 키 판정은 controller를 혼자 링크할 수 없어 tests/command_palette_tests.cpp(170-210행)의 장면을 node에서 되풀이했다.
+ * 키 이름은 luil::key_code 열거자 이름("key_s", "enter", "f4", "numpad_add" …)이다. 이름 없는 플랫폼 대역 키는 다루지 않는다.
  *   key_chord  { key, control, shift, alt }            — control은 주 단축키 수정자다 (macOS는 Command)
  *   key_pressed_event(일부) { key, control, shift, alt, meta, primary_shortcut: true|false|null, repeat }
  *   app_command { id, label, shortcut, scope: "window"|"focused"|"modal", enabled, checked, checkable,
@@ -17,7 +20,9 @@
 (function (root) {
   "use strict";
 
-  const fold = (s) => (root.LuilText && root.LuilText.foldString ? root.LuilText.foldString(s) : s.toLowerCase()); // text::fold_case
+  // text::fold_case — textlab.js가 옮긴 표를 쓴다. 없으면 거르기가 원본과 달라지므로 조용히 물러서지 않는다
+  if (!root.LuilText || !root.LuilText.foldString) throw new Error("commandmodel.js: textlab.js(LuilText)를 먼저 불러야 한다");
+  const fold = root.LuilText.foldString;
 
   // key_names (commands.cpp 38-92): 영문자·숫자 밖의 이름 키의 글이다
   const KEY_NAMES = [

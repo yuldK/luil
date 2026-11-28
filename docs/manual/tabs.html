@@ -36,6 +36,44 @@
   .anat-tab.cut { width: 70px; opacity: 0.75; }
   .anat-keys { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: var(--fs-xs); color: var(--fg-3); }
   .anat-keys code { font-size: 11px; }
+  /* 실습: 탭 막대 재현 — 치수는 막대 배치를 옮긴 함수가 정한다 (배율 1: 논리 픽셀 = CSS 픽셀) */
+  .tb-grid { display: grid; gap: 14px; }
+  @media (min-width: 1180px) { .tb-grid { grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr); align-items: start; } }
+  .tb-side, .tb-panel { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .tb-stage { position: relative; min-height: 168px; padding-top: 2px; }
+  .tb-bar { position: relative; background: var(--sunk); outline: 1px solid var(--line-2); border-radius: 3px; user-select: none; -webkit-user-select: none; touch-action: none; font-size: 12.5px; }
+  .tb-strip { position: absolute; top: 0; bottom: 0; overflow: hidden; }
+  .tb-tab { position: absolute; top: 0; bottom: 0; box-sizing: border-box; display: flex; align-items: center; gap: 4px; padding: 0 4px 0 10px; border-right: 1px solid var(--line); color: var(--fg-2); white-space: nowrap; cursor: default; }
+  .tb-tab.sel { background: var(--panel); color: var(--fg); box-shadow: inset 0 -2px 0 var(--accent); }
+  .tb-tab.target { background: var(--accent-wash); }
+  .tb-tab.dragging .tb-name { color: var(--fg-3); }
+  .tb-name { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .tb-x { flex: none; width: 18px; height: 18px; display: grid; place-items: center; border-radius: 3px; color: var(--fg-3); cursor: pointer; }
+  .tb-x:hover { background: var(--line); color: var(--fg); }
+  .tb-x .ci { font-size: 12px; }
+  .tb-gap { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--accent); pointer-events: none; }
+  .tb-btn { position: absolute; top: 0; bottom: 0; display: grid; place-items: center; padding: 0; border: 0; background: var(--sunk); color: var(--fg-2); font: inherit; cursor: pointer; }
+  .tb-btn:hover:not(:disabled) { background: var(--line); color: var(--fg); }
+  .tb-btn:disabled { color: var(--fg-3); cursor: default; }
+  .tb-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .tb-btn .ci { font-size: 14px; }
+  .tb-menu { position: absolute; z-index: 2; display: grid; min-width: 150px; max-height: 200px; overflow: auto; padding: 4px; background: var(--panel); border: 1px solid var(--line-2); border-radius: var(--r-row); }
+  .tb-menu button { appearance: none; border: 0; background: transparent; color: var(--fg); font: inherit; font-size: var(--fs-xs); text-align: left; padding: 5px 10px; border-radius: var(--r-control); cursor: pointer; }
+  .tb-menu button:hover:not(:disabled), .tb-menu button:focus-visible { background: var(--accent-wash); outline: none; }
+  .tb-menu button:disabled { color: var(--fg-3); cursor: default; }
+  .tb-status { min-height: 1.4em; font-size: var(--fs-xs); color: var(--fg-2); }
+  .tb-order { overflow-wrap: anywhere; }
+  .tb-readout { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 0; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); font-size: 12px; }
+  .tb-readout > div { display: contents; }
+  .tb-readout .k { font-family: var(--font-code); font-size: 11px; color: var(--fg-3); }
+  .tb-readout .v { font-family: var(--font-code); font-size: 11.5px; color: var(--fg); }
+  .tb-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 300px; overflow: auto; padding: 4px 0; font-size: 12px; }
+  .tb-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .tb-entry:first-child { background: var(--accent-wash); }
+  .tb-entry .in { font-weight: 600; color: var(--fg); }
+  .tb-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .tb-entry .msg::before { content: "\2192  "; color: var(--fg-3); }
+  .tb-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
 </style>
 </head>
 <body data-page="tabs">
@@ -51,7 +89,7 @@
       <div class="head-cols">
         <dl class="meta">
           <div><dt>관련 소스</dt><dd><code>tab_bar_element.h</code>·<code>tab_bar_element.cpp</code>·<code>ui_style.h</code>·<code>strip_element.h</code>·<code>page_transition_element.h</code>·<code>examples/demo/tabs_page.cpp</code></dd></div>
-          <div><dt>실습</dt><dd>없음</dd></div>
+          <div><dt>실습</dt><dd>탭 막대 — 줄이기·넘침·한 탭씩, 놓는 자리와 메시지, 앱 명령</dd></div>
           <div><dt>먼저 읽기</dt><dd><a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="input.html#s7">입력과 초점 — 묶음</a> · <a class="xref" href="lists.html">목록과 트리 뷰</a></dd></div>
         </dl>
         <div class="goals">
@@ -176,6 +214,55 @@
           <div role="listitem"><span class="who">UI thread</span><span>새 tree를 그리고, 발행본 대조가 새로 골라진 탭을 보조 기술에 알린다.</span></div>
         </div>
         <div class="callout key"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">factory는 메시지만 만든다</span>탭의 액션은 상태를 바꾸지 않고 메시지를 돌려준다. 보조 기술의 고르기는 UI thread에서 <strong>계획</strong>으로 factory를 부르고 그 결과를 버리기도 한다. factory 안에서 앱 상태를 바꾸지 않는다 (<a class="xref" href="accessibility.html#build-actions">접근성 — 명령 받기</a>).</div></div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 탭 막대">
+        <header class="sec-head">
+          <h2>실습: 탭 막대</h2>
+          <p class="lede">탭 수와 폭을 바꿔 줄이기와 넘침을 보고, 탭을 끌어 놓는 자리와 나가는 메시지를 본다. 누를 때마다 막대가 낼 메시지와 앱이 바꾼 상태가 기록에 쌓인다.</p>
+        </header>
+        <div class="lw" data-title="탭 막대" data-surface="tab_bar_element · fitted_tab_width · tab_step_offset" data-reset id="tb-lab">
+          <div class="lw-body tb-grid">
+            <div class="tb-side">
+              <div class="controls">
+                <label class="field" for="tb-count">탭 수</label><input type="range" id="tb-count" data-tb="count" min="1" max="12" value="6"><output data-tb="count-out" for="tb-count">6</output>
+                <label class="field" for="tb-bw">막대 폭</label><input type="range" id="tb-bw" data-tb="bw" min="160" max="720" step="4" value="520"><output data-tb="bw-out" for="tb-bw">520</output>
+              </div>
+              <div class="controls">
+                <label class="field" for="tb-tw">tab_width</label><input type="range" id="tb-tw" data-tb="tw" min="60" max="200" step="10" value="140"><output data-tb="tw-out" for="tb-tw">140</output>
+                <label class="field" for="tb-mtw">min_tab_width</label><input type="range" id="tb-mtw" data-tb="mtw" min="0" max="160" step="8" value="0"><output data-tb="mtw-out" for="tb-mtw">0</output>
+              </div>
+              <div class="controls">
+                <span class="field">overflow_mode</span>
+                <div class="seg" role="group" aria-label="overflow_mode" data-seg="mode"><button type="button" data-v="scroll" aria-pressed="true">scroll</button><button type="button" data-v="step" aria-pressed="false">step</button></div>
+                <label class="field"><input type="checkbox" data-tb="chk-overflow" checked> 넘침 메뉴</label>
+                <label class="field"><input type="checkbox" data-tb="chk-trailing" checked> 꼬리</label>
+              </div>
+              <div class="controls">
+                <span class="field">끌어 놓기</span>
+                <div class="seg" role="group" aria-label="끌어 놓기 factory" data-seg="drop"><button type="button" data-v="move" aria-pressed="true">move · 데스크톱 데모</button><button type="button" data-v="reorder" aria-pressed="false">reorder · 모바일 데모</button></div>
+              </div>
+              <div class="tb-stage" data-tb="stage"></div>
+              <div class="tb-status" data-tb="status" aria-live="polite"></div>
+              <div class="controls">
+                <label class="field" for="tb-off">scroll_offset (앱 상태)</label><input type="range" id="tb-off" data-tb="off" min="0" max="0" value="0"><output data-tb="off-out" for="tb-off">0</output>
+              </div>
+              <div class="controls">
+                <span class="field">앱 명령</span>
+                <button class="btn sm" type="button" data-tb="cmd-close">현재 탭 닫기 (Ctrl+W)</button>
+                <button class="btn sm" type="button" data-tb="cmd-next">다음 탭 (Ctrl+Tab)</button>
+                <button class="btn sm" type="button" data-tb="cmd-left">왼쪽으로 이동</button>
+                <button class="btn sm" type="button" data-tb="cmd-right">오른쪽으로 이동</button>
+              </div>
+              <div class="tb-order small muted" data-tb="order" aria-live="polite"></div>
+            </div>
+            <div class="tb-panel">
+              <div class="tb-readout" data-tb="readout" aria-label="배치가 정한 값"></div>
+              <div class="tb-log" data-tb="log" aria-live="polite" aria-label="메시지 기록"></div>
+            </div>
+          </div>
+          <div class="lw-foot">막대의 배치는 원본을 옮긴 함수다 — <code>fitted_tab_width</code>·<code>tab_step_offset</code>·<code>step_delta</code>와 <code>tab_bar_element::arrange</code>(띠·레인의 배치와 <code>clamp_scroll</code> 포함), 놓는 자리의 <code>side_at</code>·<code>changes_order</code>, 앱 쪽은 데스크톱 데모의 이동·닫기·드러내기와 모바일 데모의 순서 바꾸기다. 원본 줄을 그대로 오려 컴파일한 대조기로 무작위 입력 25만여 건(배치·놓는 자리·앱 처리)을 견주어 같음을 확인했다. 놓는 자리의 조합(탭이 먼저, 거절되면 마지막 탭 뒤의 틈)과 메뉴 명령, 끌기 문턱 6, Esc 취소, 가운데 버튼 닫기는 원본을 읽고 옮겼다. 키보드 묶음(←/→)·글자 탐색·휠·끄는 탭의 흐림·실제 글꼴과 말줄임은 옮기지 않았다. × 는 luil처럼 포인터로만 누른다 — 키보드로는 위의 앱 명령을 쓴다. 그림은 배율 1의 재현이지 luil의 실제 렌더링이 아니다.</div>
+        </div>
       </section>
 
       <section class="sec" id="build-basic">
@@ -2180,5 +2267,9 @@ TEST_CASE("A tab bar is one tab stop and its close buttons are not stops", "[ui]
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
 <script src="assets/manual.js"></script>
+<script src="assets/tabs-lab.js"></script>
+<script>
+  LuilTabsLab.setup(document.getElementById("tb-lab"));
+</script>
 </body>
 </html>

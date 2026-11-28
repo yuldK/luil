@@ -458,7 +458,8 @@
 
     function drawBar(at) {
       const svg = window.LU.svg;
-      const W = 600;
+      // 막대는 상자의 실제 폭으로 그린다 — 좁은 화면에서 눈금 글이 줄어들지 않게 한다.
+      const W = Math.max(240, Math.round(bar.getBoundingClientRect().width) || 600);
       const lanes = [];
       const placed = parsed.cues.map((c) => {
         let lane = lanes.findIndex((end) => end <= c.start_ms);
@@ -472,7 +473,11 @@
       const H = 20 + Math.max(1, lanes.length) * 16;
       const x = (ms) => 4 + (ms / span) * (W - 8);
       const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, width: "100%", height: H, role: "img", "aria-label": `cue ${parsed.cues.length}개의 시간 막대, 지금 ${at} ms` });
-      for (let s = 0; s <= span; s += 1000) g.append(svg("line", { x1: x(s), x2: x(s), y1: 0, y2: H - 12, class: "srt-grid" }), svg("text", { x: x(s) + 2, y: H - 2, class: "srt-tick", text: `${s / 1000}s` }));
+      const labelEvery = Math.max(1, Math.ceil(30 / ((W - 8) / (span / 1000))));
+      for (let s = 0; s <= span; s += 1000) {
+        g.append(svg("line", { x1: x(s), x2: x(s), y1: 0, y2: H - 12, class: "srt-grid" }));
+        if ((s / 1000) % labelEvery === 0 && x(s) + 22 <= W) g.append(svg("text", { x: x(s) + 2, y: H - 2, class: "srt-tick", text: `${s / 1000}s` }));
+      }
       for (const { c, lane } of placed) {
         const active = at >= c.start_ms && at < c.end_ms;
         g.append(svg("rect", { x: x(c.start_ms), y: 4 + lane * 16, width: Math.max(1, x(c.end_ms) - x(c.start_ms)), height: 12, rx: 2, class: "srt-cue" + (active ? " on" : "") }));
@@ -499,6 +504,7 @@
       parse();
     });
     onTheme(() => update());
+    window.addEventListener("resize", () => update());
     text.value = SAMPLE_SRT;
     slider.value = "3700";
     parse();

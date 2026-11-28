@@ -141,7 +141,7 @@
   const FIELD_H = 28; // dropdown_height
   const SIDE_NAMES = { below: "아래", above: "위", left: "왼쪽", right: "오른쪽" };
   const fmt = (v) => {
-    if (Number.isNaN(v)) return "NaN";
+    if (Number.isNaN(v)) return "nan";
     const r = Math.round(v * 100) / 100;
     return (Object.is(r, -0) ? 0 : r).toString();
   };

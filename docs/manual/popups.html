@@ -1,0 +1,2231 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>드롭다운·콤보·팝업 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — dropdown_element·combo_box_element·field_popup.h·teaching_tip_element와 tooltip으로 드롭다운, 비동기 후보 콤보, 필드 아래 popup, 안내 풍선, hover 설명을 만드는 법.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+  /* 필드 popup 자리 실습 — 값은 luil의 논리 픽셀, 그림은 재현이다 */
+  .fp-grid { display: grid; gap: 14px; }
+  @media (min-width: 1180px) { .fp-grid { grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); align-items: start; } }
+  .fp-side, .fp-panel { display: grid; gap: 10px; min-width: 0; align-content: start; }
+  .fp-tools { display: grid; gap: 8px 14px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); font-size: var(--fs-xs); color: var(--fg-2); }
+  .fp-tools label { display: grid; gap: 3px; min-width: 0; }
+  .fp-tools label.inline { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+  .fp-tools select, .fp-tools input[type="range"] { width: 100%; min-width: 0; }
+  .fp-tools select { font-size: var(--fs-xs); min-height: 26px; }
+  .fp-tools output { font-family: var(--font-code); color: var(--fg); }
+  .fp-stage { position: relative; line-height: 0; border: 1px solid var(--line-2); border-radius: var(--r-row); background: var(--sunk); overflow: hidden; user-select: none; -webkit-user-select: none; touch-action: none; }
+  .fp-svg { display: block; width: 100%; height: auto; }
+  .fp-limit { fill: var(--panel); stroke: var(--line-3); stroke-width: 1; stroke-dasharray: 5 4; }
+  .fp-cap { font-family: var(--font-code); font-size: 11px; fill: var(--fg-3); }
+  .fp-field { fill: var(--bg); stroke: var(--line-3); stroke-width: 1; }
+  .fp-field.open { stroke: var(--accent); stroke-width: 1.5; }
+  .fp-field-text { font-size: 12px; fill: var(--fg); }
+  .fp-chev { fill: none; stroke: var(--fg-2); stroke-width: 1.4; }
+  .fp-pop { fill: var(--panel-2); stroke: var(--line-3); stroke-width: 1; }
+  .fp-pop.outside { stroke: var(--warn); stroke-dasharray: 4 3; }
+  .fp-pop-text { font-size: 11px; fill: var(--fg-2); font-family: var(--font-code); }
+  .fp-gap { stroke: var(--accent); stroke-width: 1.5; }
+  .fp-field-hit { position: absolute; cursor: grab; border-radius: 3px; outline: none; }
+  .fp-field-hit:active { cursor: grabbing; }
+  .fp-field-hit:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+  .fp-keys { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11.5px; color: var(--fg-3); }
+  .fp-keys kbd { font-family: var(--font-code); font-size: 10.5px; border: 1px solid var(--line-2); border-radius: 3px; padding: 0 4px; color: var(--fg-2); background: var(--panel); }
+  .fp-state { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 10px; margin: 0; font-size: 12px; border: 1px solid var(--line); border-radius: var(--r-row); padding: 10px 12px; background: var(--bg); }
+  .fp-state dt { color: var(--fg-3); font-family: var(--font-code); font-size: 11px; padding-top: 2px; }
+  .fp-state dd { margin: 0; overflow-wrap: anywhere; }
+  .fp-state code { font-size: 11.5px; background: none; padding: 0; }
+  @media (max-width: 560px) { .fp-state { grid-template-columns: minmax(0, 1fr); } .fp-state dd { margin-bottom: 4px; } }
+  .fp-log { border: 1px solid var(--line); border-radius: var(--r-row); background: var(--bg); height: 260px; overflow: auto; padding: 4px 0; font-size: 12px; }
+  .fp-entry { padding: 6px 12px; border-bottom: 1px solid var(--line); display: grid; gap: 2px; }
+  .fp-entry:first-child { background: var(--accent-wash); }
+  .fp-entry .in { font-weight: 600; color: var(--fg); }
+  .fp-entry .msg { font-family: var(--font-code); font-size: 11.5px; color: var(--accent-ink); overflow-wrap: anywhere; }
+  .fp-entry .msg::before { content: "→ "; color: var(--fg-3); }
+  .fp-entry .eff { color: var(--fg-2); overflow-wrap: anywhere; }
+</style>
+</head>
+<body data-page="popups">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>드롭다운·콤보·팝업</h1>
+      <p class="summary">이 문서의 판은 모두 열림을 앱이 쥔다. 드롭다운은 닫힌 칸이고 목록은 앱이 popup에 실은 메뉴다. 콤보는 글 칸과 후보 popup을 함께 조립하고, 후보는 앱이 token으로 늦게 받아 넣는다. 안내 풍선은 popup이 아니라 주 tree 안에 겹쳐 그리고, tooltip은 표면이 hover로만 세운다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>dropdown_element.h</code>·<code>combo_box_element.h</code>·<code>field_popup.h</code>·<code>teaching_tip_element.h</code>·<code>ui_element.h</code>(tooltip)</dd></div>
+          <div><dt>실습</dt><dd>필드 popup 자리 — 아래 기본, 위로 뒤집기, 네 방향, 여는 키</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="menus.html">메뉴와 메뉴 막대</a>(popup 표면) · <a class="xref" href="input.html">입력과 초점</a> · <a class="xref" href="text-input.html">텍스트 입력과 서식 글</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>드롭다운·콤보·안내 풍선·tooltip 가운데 무엇을 쓸지 고른다.</li>
+            <li>필드 아래 popup을 열고 닫는 규약(절대 메시지, 자리, 여는 키)을 앱에 단다.</li>
+            <li>콤보의 후보를 비동기로 받고, 늦게 온 답을 token으로 버린다.</li>
+            <li>안내 풍선의 덮개·비modal과 tooltip의 수명이 어떻게 다른지 안다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 것을 쓰나</h2>
+          <p class="lede">고르는 기준은 셋이다. 사용자가 무엇을 하는가(고르기·치기·읽기), 판이 언제까지 남는가, 터치에서도 서야 하는가.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB17;</i><code>dropdown_element</code></h4>
+            <ul>
+              <li>정해진 값 몇 개에서 하나를 고른다 (select).</li>
+              <li>요소는 고른 라벨을 보이는 닫힌 칸뿐이다. 목록은 앱이 popup에 실은 <code>menu_element</code>다.</li>
+              <li>값이 많으면 popup 안에 검색 칸을 둔다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA6D;</i><code>combo_box_element</code></h4>
+            <ul>
+              <li>글을 치되 후보를 고를 수도 있다. 후보는 서버에서 늦게 와도 된다.</li>
+              <li>글 칸과 후보 popup(가상 목록)을 함께 조립한다. 초점은 글 칸에 남는다.</li>
+              <li><code>allow_custom = false</code>면 목록에 있는 값만 받는다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB94;</i><code>field_popup.h</code></h4>
+            <ul>
+              <li>닫힌 필드 아래(모자라면 위)에 popup을 놓는 순수 함수 <code>place_field_popup</code>.</li>
+              <li>네 방향 판 <code>place_field_popup_at_side</code>, 여는 키 처리기 <code>field_popup_key_handler</code>.</li>
+              <li>분할 버튼·날짜 칸·색 칸·메뉴 막대가 같은 규약을 쓴다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB21;</i><code>teaching_tip_element</code></h4>
+            <ul>
+              <li>처음 쓰는 기능을 꼬리로 짚는 안내다. 단추가 있고 닫을 때까지 남는다.</li>
+              <li>popup이 아니다. 주 tree root 끝에 창 전체 자리로 담는다.</li>
+              <li>덮개(modal: 초점 가둠·덮개 누름·Esc)와 비modal 둘 중 하나다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA74;</i><code>set_tooltip</code> · <code>set_tooltip_content</code></h4>
+            <ul>
+              <li>포인터를 올리면 잠깐 뜨는 설명이다. 문자열, 마크다운, 임의의 tree.</li>
+              <li>표면 tree가 직접 그린다. 앱은 열림도 시계도 들지 않는다.</li>
+              <li>마우스·펜의 hover로만 선다. 터치에는 없다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB2C;</i><code>set_hover_dwell</code></h4>
+            <ul>
+              <li>포인터가 머무르면 미리보기를 연다. 떠나거나 누르면 닫는다.</li>
+              <li>시계는 controller가 들고, 찬 것·끝난 것만 앱 메시지로 온다.</li>
+              <li>판 자체는 앱이 짓는다 (tree 또는 popup).</li>
+            </ul>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>판</th><th>여는 손</th><th>닫는 손</th><th>키보드</th><th>터치</th></tr></thead>
+            <tbody>
+              <tr><td>드롭다운 목록</td><td>칸 클릭 · Space · Enter (앱이 달면 Alt+↓ · F4 · ↓)</td><td>고름 · 칸 다시 누름 · popup의 닫힘 계기</td><td>목록은 메뉴의 키 (↑/↓/Enter). 초점은 칸에 남는다</td><td>탭으로 연다</td></tr>
+              <tr><td>콤보 후보</td><td>글 입력 · 닫힌 칸의 ↑↓·Page · ▾ 단추</td><td>고름 · 확정 · Esc · 초점 떠남 · <strong>모든</strong> 닫힘 계기</td><td>글 칸이 쓰지 않은 ↑↓·Page·Enter·Esc가 콤보로 온다</td><td>같다</td></tr>
+              <tr><td>안내 풍선 (덮개)</td><td>앱이 연다</td><td>닫기 단추 · 덮개 누름 · Esc · 뒤로 가기</td><td>초점을 풍선 안에 가둔다</td><td>같다. 단추를 터치 크기로 키운다</td></tr>
+              <tr><td>안내 풍선 (비modal)</td><td>앱이 연다</td><td>닫기 단추만</td><td>초점을 옮기지 않는다</td><td>같다</td></tr>
+              <tr><td>tooltip</td><td>hover 500ms (또는 <code>tooltip_config::delay</code>)</td><td>포인터가 떠남 (커스텀 내용은 누름·키도)</td><td>키보드 초점으로는 서지 않는다</td><td>서지 않는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>정렬 기준 같은 값 몇 개 고르기</td><td><code>dropdown_element</code> + 목록 popup</td><td><a class="xref" href="#build-dropdown">가장 작은 드롭다운</a></td></tr>
+              <tr><td>값이 많아 글로 좁히는 목록</td><td>popup 안의 검색 칸 + <code>search_query</code></td><td><a class="xref" href="#build-search">검색 칸이 있는 목록</a></td></tr>
+              <tr><td>Alt+↓·F4로 열기, 초점이 떠나면 닫기</td><td><code>field_popup_key_handler</code> · <code>set_focus_leave_action</code></td><td><a class="xref" href="#build-keys">여는 키</a></td></tr>
+              <tr><td>아래가 모자라면 위로 뒤집기</td><td><code>place_field_popup</code> · <code>menu_popup_config::below</code></td><td><a class="xref" href="#build-place">자리 규칙</a> · <a class="xref" href="#lab">실습</a></td></tr>
+              <tr><td>치면서 서버 후보 받기</td><td><code>combo_box_element</code> + <code>begin_combo_query</code></td><td><a class="xref" href="#build-combo">편집형 콤보</a></td></tr>
+              <tr><td>목록에 있는 값만 받기</td><td><code>allow_custom = false</code> · <code>invalid</code></td><td><a class="xref" href="#build-strict">엄격한 콤보</a></td></tr>
+              <tr><td>새 기능을 짚는 안내</td><td><code>teaching_tip_element</code></td><td><a class="xref" href="#build-tip">안내 풍선</a></td></tr>
+              <tr><td>단추 설명, 링크가 있는 도움말</td><td><code>set_tooltip</code> · <code>make_markdown_tooltip</code></td><td><a class="xref" href="#build-tooltip">tooltip</a></td></tr>
+              <tr><td>머무르면 여는 미리보기, 숨은 도구 막대</td><td><code>hover_dwell_target</code> · <code>hover_region_target</code></td><td><a class="xref" href="#build-dwell">머무름</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>우클릭 메뉴·메뉴 막대·하위 메뉴는 <a class="xref" href="menus.html">메뉴와 메뉴 막대</a>에서 다룬다. popup 표면의 규칙(앵커, 닫힘 계기, Esc의 차례)도 그 문서의 <a class="xref" href="menus.html#concepts">개념</a>이 정본이고, 여기서는 필요한 만큼만 다시 적는다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 열림은 앱이, 자리와 수명은 규약이</h2>
+          <p class="lede">드롭다운과 콤보는 앱이 frame마다 싣는 popup이고, 안내 풍선은 앱이 tree에 담는 요소다. tooltip만 앱 상태 없이 controller와 표면이 혼자 다룬다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>임자</th><th>싣는 자리</th></tr></thead>
+            <tbody>
+              <tr><td>드롭다운 목록이 떠 있는가, 고른 라벨</td><td>앱</td><td><code>dropdown_config::open</code> · <code>text</code></td></tr>
+              <tr><td>드롭다운 목록 안의 키보드 강조</td><td>controller</td><td>— (목록이 <code>menu_element</code>라서 <code>menu_highlight</code>)</td></tr>
+              <tr><td>콤보의 글·조합, 후보 상태(token·질의·항목·받는 중), 강조 키, 열림, 스크롤, 검증 글</td><td>앱</td><td><code>combo_box_config</code>의 칸들</td></tr>
+              <tr><td>콤보가 보이는 후보 (거른 목록)</td><td>요소가 build마다 새로 계산한다</td><td>—</td></tr>
+              <tr><td>안내 풍선이 열렸는가, 가리킬 사각형, 연 시각</td><td>앱</td><td><code>teaching_tip_config</code></td></tr>
+              <tr><td>안내 풍선의 자리(풍선·꼬리)</td><td>요소가 배치 때마다 계산한다</td><td>—</td></tr>
+              <tr><td>tooltip이 떠 있는가, 지연 시계, 포인터 자리, 커스텀 내용 안의 hover·눌림·스크롤</td><td>controller — 앱은 들지 않는다</td><td>— (<code>interaction_snapshot::hover_started_at</code>·<code>hover_point</code>·<code>tooltip</code>)</td></tr>
+              <tr><td>머무름 시계</td><td>controller. 찬 것·끝난 것만 앱 메시지로 온다</td><td><code>set_hover_dwell</code></td></tr>
+              <tr><td>popup 창의 화면 자리</td><td>UI thread(host)</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>popup 규칙 요약</h3>
+        <div class="prose">
+          <ul>
+            <li>popup은 frame의 선언이다. 열린 동안 <code>ui_frame::popups</code>에 싣고 닫히면 뺀다. 자기 (0,0)에서 시작하는 분리 tree를 가진다.</li>
+            <li>자리 <code>x</code>·<code>y</code>·<code>width</code>·<code>height</code>는 앵커 표면 client의 논리 픽셀이다. 필드의 <code>bounds()</code>는 물리 픽셀이니 배율로 나눈다.</li>
+            <li>닫힘은 UI thread가 계기(<code>popup_dismiss_reason</code>)를 감지해 <code>dismiss(reason)</code>의 메시지만 내는 것이다. 빼는 것은 앱이다. <strong>빈 액션 <code>luil::input_action {}</code>이 "이 계기에는 닫지 않는다"이다.</strong></li>
+            <li>Esc는 플랫폼이 controller보다 먼저 popup에 묻는다. 메시지가 나면 키가 삼켜진다. 자세한 차례는 <a class="xref" href="menus.html#concepts">메뉴 문서의 개념</a>에 있다.</li>
+            <li>popup은 활성화되지 않는다. 물리 키보드 초점은 앵커 창에 남고, popup 안의 글 칸을 누르면 <strong>논리 초점</strong>만 그 popup으로 간다. IME는 앵커 창의 session이 대신 맡는다.</li>
+          </ul>
+        </div>
+
+        <h3>필드 popup 열림 규약</h3>
+        <div class="prose">
+          <p>닫힌 필드(분할 버튼·드롭다운·날짜 칸·색 칸·메뉴 막대)가 popup 하나를 여닫는 규약이다. 공통 부분이 <code>field_popup.h</code>에 있다.</p>
+        </div>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">열림</span><span>열림은 앱 상태다. 필드는 <code>open</code>을 받아 그리고, 보조 기술에 펼침(<code>expanded</code>)으로 알린다.</span></div>
+          <div role="listitem"><span class="who">메시지</span><span>여닫는 메시지는 <strong>절대 상태 하나</strong>(<code>set_open(bool)</code>)다. 클릭은 build 때의 <code>open</code> 반대를 담아 부르고, 보조 기술의 펼치기·접기는 목표를 담아 부른다. 같은 명령이 거듭 와도 결과가 같다.</span></div>
+          <div role="listitem"><span class="who">닫힘</span><span>닫는 계기는 모두 <code>set_open(false)</code>다: popup의 닫힘 계기, 항목 고름(<code>after_select</code>), 필드 다시 누름, 보조 기술 접기, 초점이 필드를 떠남.</span></div>
+          <div role="listitem"><span class="who">하나만</span><span>라이브러리는 "한 번에 하나"를 강제하지 못한다. 앱이 열린 필드의 owner 하나를 든다.</span></div>
+          <div role="listitem"><span class="who">자리</span><span>앱은 build 때 필드 포인터를 남기고, frame을 다 지은 뒤 <code>bounds()</code>를 읽어 <code>place_field_popup</code>에 넣는다. 그 포인터는 그 frame이 게시되기 전까지만 유효하다.</span></div>
+          <div role="listitem"><span class="who">다시 누름</span><span>열린 필드를 다시 누르면 바깥 누름 닫힘과 클릭이 함께 온다. controller는 누를 때 펼쳐 있던 요소의 클릭을 누를 때의 tree에서 꺼내므로, 다시 열리지 않고 <code>set_open(false)</code>가 나간다.</span></div>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">드롭다운은 규약의 일부만 갖는다</span><code>dropdown_element</code>는 여는 키 처리기(<code>field_popup_key_handler</code>)도, 초점 떠남 닫기(<code>set_focus_leave_action</code>)도 달지 않는다. 그래서 라이브러리 드롭다운은 Alt+↓·F4로 열리지 않고, Tab으로 떠나도 목록이 닫히지 않는다. 설계 문서도 이것을 범위 밖에 둔다. 앱이 달 수 있다 — <a class="xref" href="#build-keys">여는 키</a>.</div></div>
+
+        <h3>열린 popup과 키</h3>
+        <div class="prose">
+          <ul>
+            <li><strong>드롭다운 목록 (메뉴).</strong> 정책의 <code>menu()</code>가 메뉴 kind 짝을 돌려주면, 메뉴가 서 있는 동안 ↑/↓/Enter가 메뉴의 것이고 나머지 키는 삼켜진다(Tab 포함). 예외는 그 popup 안에서 초점을 가진 글 칸(검색 칸)이 쓰는 편집 키다. 초점은 닫힌 칸에 그대로 있다.</li>
+            <li><strong>콤보 후보 (메뉴가 아니다).</strong> 키보드 초점은 콤보의 글 칸에 있다. 글 칸이 쓰지 않은 ↑↓·Page·Enter·Esc가 조상 전파로 콤보의 키 처리기에 온다. popup의 부품은 모두 누름에 초점을 지키므로, 후보를 눌러도 글 칸의 초점이 남는다.</li>
+            <li><strong>안내 풍선.</strong> popup이 아니다. 덮개면 초점 가둠이라 Tab이 풍선 안을 돌고, Esc가 가둠의 닫기로 간다.</li>
+            <li><strong>tooltip.</strong> 키를 받지 않는다. 커스텀 내용 tooltip이 떠 있는 동안의 키는 그것을 거두고, 그 키가 Esc면 삼킨다.</li>
+          </ul>
+        </div>
+
+        <h3>modal과 비modal</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>판</th><th>modal?</th><th>뒤 화면</th></tr></thead>
+            <tbody>
+              <tr><td>드롭다운 목록, 콤보 후보 (popup)</td><td>아니다</td><td>그대로 눌린다. 누르면 popup에 <code>pointer_press_outside</code>가 간다</td></tr>
+              <tr><td>덮개 안내 풍선 (<code>modal = true</code>, 기본)</td><td>그렇다. 투명 덮개가 누름·휠을 흡수하고 초점을 가둔다</td><td>눌리지 않는다. 덮개 누름은 <code>dismiss(outside)</code></td></tr>
+              <tr><td>비modal 안내 풍선 (<code>modal = false</code>)</td><td>아니다. 덮개·가둠이 없고 초점을 옮기지 않는다</td><td>그대로 눌린다. 닫기 단추로만 닫힌다</td></tr>
+              <tr><td>tooltip</td><td>아니다. 커스텀 내용은 클릭·커서·세로 휠만 받는다</td><td>상자 자리의 입력은 뒤로 새지 않는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>tooltip의 수명</h3>
+        <div class="prose">
+          <ul>
+            <li><strong>hover로만 선다.</strong> 마우스·펜이 요소 위로 <em>움직여 들어오면</em> 시계가 서고, <code>tooltip_delay</code>(500ms) 또는 <code>tooltip_config::delay</code>가 지나면 표면 tree가 그린다. 포인터가 머문 채 화면이 다시 지어져 밑의 요소가 바뀐 것은 시계를 세우지 않는다. 터치에는 hover가 없어 서지 않는다.</li>
+            <li><strong>키보드 초점으로는 서지 않는다</strong> (코드에서 확인한 동작). tooltip의 대상은 hover 요소뿐이고, controller는 포인터 이동에서만 hover를 세운다. 설계 문서는 "키보드 초점·보조 기술·터치"의 자리 규칙을 적지만, 그 계기로 tooltip이 서는 경로는 코드에 없다.</li>
+            <li><strong>자리.</strong> 포인터가 있던 자리 아래(포인터 y + 20 논리 픽셀)에 놓고, 아래로 넘치면 포인터 위로 뒤집고, 표면 root 안으로 민다. 지연이 끝난 뒤에는 포인터를 따라가지 않는다. 표면 밖으로는 나가지 않는다 — popup이 아니기 때문이다.</li>
+            <li><strong>문자열 tooltip</strong>은 작은 글자, 높이 22, 안쪽 5, 간격 3 논리 픽셀로 그린다. 지연은 500ms 고정이다.</li>
+            <li><strong>커스텀 내용</strong>은 떠 있는 동안 요소·상자·사이 간격을 건너도 열린 채 남는다. 상자 안의 클릭·휠은 내용 tree의 액션·스크롤이다. 영역을 벗어나거나, 표면을 떠나거나, 초점을 잃거나, 상자 밖을 누르거나, <strong>키가 오면</strong> 거둔다. 문자열 tooltip에는 키로 거두는 경로가 없다.</li>
+            <li><strong>보조 기술.</strong> tooltip 글은 요소의 도움말(UIA HelpText)이 된다. 커스텀 내용은 접근 tree에 들지 않는다.</li>
+          </ul>
+        </div>
+        <div class="prose small"><p>factory를 부르는 thread는 메뉴와 같다. 드롭다운 클릭, 콤보의 키 처리기, 안내 풍선 단추, tooltip 링크의 <code>activate_link</code>는 input thread가, popup <code>dismiss</code>와 보조 기술의 펼치기·접기는 UI thread가 부른다. 후보를 받는 작업과 상태 변경(<code>begin_combo_query</code>·<code>accept_combo_suggestions</code>)은 logic thread의 <code>handle</code>·<code>tick</code>에서 한다.</p></div>
+      </section>
+
+      <section class="sec" id="lab" data-toc="실습: 필드 popup 자리">
+        <header class="sec-head">
+          <h2>실습: 필드 popup 자리</h2>
+          <p class="lede">필드를 끌어 옮기고 popup 크기·간격·맞춤·배율을 바꿔 본다. 자리는 <code>place_field_popup</code>과 <code>place_field_popup_at_side</code>를 옮긴 함수가 계산하고, 필드의 키는 <code>field_popup_key_handler</code>를 옮긴 함수가 판정한다.</p>
+        </header>
+        <div class="lw" data-title="필드 popup 자리" data-surface="place_field_popup · place_field_popup_at_side · field_popup_key_handler" data-reset id="fp-lab">
+          <div class="lw-body fp-grid">
+            <div class="fp-side">
+              <div class="fp-tools">
+                <label>함수
+                  <select data-fp="mode" aria-label="함수">
+                    <option value="below">place_field_popup (아래·위)</option>
+                    <option value="side">place_field_popup_at_side (네 방향)</option>
+                  </select>
+                </label>
+                <label>바라는 방향 (preferred)
+                  <select data-fp="side" aria-label="바라는 방향">
+                    <option value="below">below</option>
+                    <option value="above">above</option>
+                    <option value="left">left</option>
+                    <option value="right">right</option>
+                  </select>
+                </label>
+                <label>맞춤 (alignment)
+                  <select data-fp="align" aria-label="맞춤">
+                    <option value="start">start — 왼쪽끼리</option>
+                    <option value="end">end — 오른쪽끼리</option>
+                  </select>
+                </label>
+                <label>배율 (scale)
+                  <select data-fp="scale" aria-label="배율">
+                    <option value="1">1</option>
+                    <option value="1.25">1.25</option>
+                    <option value="1.5">1.5</option>
+                    <option value="2">2</option>
+                  </select>
+                </label>
+                <label>popup 폭 <output data-fp="width-out"></output>
+                  <input type="range" data-fp="width" min="40" max="560" step="1" aria-label="popup 폭">
+                </label>
+                <label>popup 높이 <output data-fp="height-out"></output>
+                  <input type="range" data-fp="height" min="20" max="320" step="1" aria-label="popup 높이">
+                </label>
+                <label>간격 (gap) <output data-fp="gap-out"></output>
+                  <input type="range" data-fp="gap" min="-4" max="16" step="1" aria-label="간격">
+                </label>
+                <label class="inline"><input type="checkbox" data-fp="down"> ↓도 연다 (<code>down_opens</code>)</label>
+                <label>필드 x <output data-fp="fx-out"></output>
+                  <input type="range" data-fp="fx" step="1" aria-label="필드 x">
+                </label>
+                <label>필드 y <output data-fp="fy-out"></output>
+                  <input type="range" data-fp="fy" step="1" aria-label="필드 y">
+                </label>
+              </div>
+              <div class="fp-stage" data-fp="stage"></div>
+              <div class="fp-keys"><span>필드 끌기 · 누르기</span><span><kbd>Alt</kbd>+<kbd>↓</kbd> · <kbd>F4</kbd> · <kbd>↓</kbd> 열기</span><span><kbd>Space</kbd> · <kbd>Enter</kbd> 여닫기</span><span><kbd>Esc</kbd> · 바깥 누름 닫기</span></div>
+            </div>
+            <div class="fp-panel">
+              <dl class="fp-state" data-fp="state" aria-label="계산의 입력과 결과"></dl>
+              <div class="fp-log" data-fp="log" aria-live="polite" aria-label="호출 기록"></div>
+            </div>
+          </div>
+          <div class="lw-foot">자리와 키 판정은 원본을 옮긴 함수다 — <code>place_field_popup</code>·<code>place_field_popup_at_side</code>·<code>field_popup_key_handler</code>(<code>src/ui/field_popup.cpp</code>). float 연산을 단계마다 32비트로 반올림해 옮겼고, 원본 C++을 컴파일·링크한 대조기의 무작위·경계 입력 6만 건(숫자가 아닌 값·무한·0·음수의 배율과 간격, 아래에 딱 맞는 높이 포함)과 키 조합 768가지에서 결과가 비트 단위로 같음을 확인했다. 필드와 limit은 물리 픽셀(논리 × 배율)로 넘기고, 답은 <code>ui_popup::x</code>·<code>y</code>에 넣는 논리 픽셀이다. 여닫기(클릭·Space·Enter = <code>set_open(!open)</code>)와 바깥 누름·Esc에 닫는 것은 이 실습의 앱이 정한 정책이다. limit 크기(480×300)는 실습이 정한 값이고, host가 작업 영역 안으로 미는 일과 실제 그림은 옮기지 않았다.</div>
+        </div>
+      </section>
+
+      <section class="sec" id="build-dropdown">
+        <header class="sec-head">
+          <h2>만들기: 가장 작은 드롭다운</h2>
+          <p class="lede"><code>examples/widgets</code>의 "정렬" 칸이다. 닫힌 칸과 목록 popup을 따로 짓는다. 칸은 <code>set_open</code> 하나만 받는다.</p>
+        </header>
+        <h3>메시지와 상태</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:121-131" data-path="examples/widgets/app.h" data-start="121"><script type="text/plain">
+    // popups: 정렬 드롭다운을 여닫는다 (이 상태로 하라는 절대 메시지).
+    struct sort_open_intent
+    {
+        bool open { false };
+    };
+
+    // popups: 정렬 값을 고른다. 고르면 목록도 닫는다.
+    struct sort_select_intent
+    {
+        std::u8string value {};
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.h:198-200" data-path="examples/widgets/app.h" data-start="198"><script type="text/plain">
+        // popup은 앱 상태다: 열려 있으면 frame에 싣고, 닫으면 뺀다.
+        std::u8string sort { u8"이름순" };
+        bool sort_open { false };
+</script></div>
+        <h3>닫힌 칸</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/popups_section.cpp:41-48" data-path="examples/widgets/popups_section.cpp" data-start="41"><script type="text/plain">
+        luil::dropdown_config sort {};
+        sort.owner = u8"sort";
+        sort.text = state.sort;
+        sort.open = state.sort_open;
+        sort.set_open = [](const bool open) { return luil::make_app_action(sort_open_intent { open }); };
+        auto field { std::make_unique<luil::dropdown_element>(std::move(sort)) };
+        *dropdown = field.get();
+        column->add(std::move(field), { .length = luil::dropdown_height, .cross_length = dropdown_width });
+</script></div>
+        <div class="prose">
+          <p><code>set_open</code>만 주면 클릭이 <code>set_open(!open)</code>이고, 보조 기술의 펼치기·접기도 같은 factory를 목표 값으로 탄다. 칸의 포인터(<code>*dropdown</code>)는 같은 frame에서 목록 자리를 재는 데만 쓴다.</p>
+        </div>
+        <h3>열린 동안 목록 popup</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/popups_section.cpp:72-105" data-path="examples/widgets/popups_section.cpp" data-start="72"><script type="text/plain">
+    std::vector<luil::ui_popup> build_popups(const app_state& state, const luil::ui_element* const dropdown, const float scale)
+    {
+        std::vector<luil::ui_popup> popups {};
+        // 어느 계기에서든 닫는다. 남기고 싶은 계기는 빈 액션을 돌려주면 된다.
+        const auto close_on_any = [](luil::popup_dismiss_reason) { return luil::make_app_action(popup_close_intent {}); };
+
+        if (state.sort_open && dropdown != nullptr)
+        {
+            luil::menu_config menu {};
+            menu.owner = u8"sort";
+            for (const std::u8string_view value : sort_values)
+            {
+                luil::menu_item_config item {};
+                item.key = std::u8string { value };
+                item.label = std::u8string { value };
+                if (item.key == state.sort)
+                    item.icon = luil::codicons::icon_check;
+                menu.items.push_back(std::move(item));
+            }
+            menu.select = [](const std::u8string& value) { return luil::make_app_action(sort_select_intent { value }); };
+
+            // 칸 바로 아래에 붙인다.
+            const luil::rect_f field { dropdown->bounds() };
+            luil::ui_popup popup {};
+            popup.id = u8"sort-menu";
+            popup.x = field.x / scale;
+            popup.y = (field.y + field.height) / scale + 2.0f;
+            popup.width = dropdown_width;
+            popup.height = luil::menu_element::height_for(menu);
+            auto root { std::make_unique<luil::menu_element>(std::move(menu)) };
+            popup.tree = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(root), { 0.0f, 0.0f, popup.width * scale, popup.height * scale }, scale));
+            popup.dismiss = close_on_any;
+            popups.push_back(std::move(popup));
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>목록은 메뉴다. 고른 값에는 체크 아이콘을 단다 (<code>kind</code>가 <code>action</code>이라 아이콘이 그려진다).</li>
+            <li><code>dropdown-&gt;bounds()</code>는 그 frame에 배치가 끝난 칸의 물리 픽셀이다. 그래서 <code>/ scale</code>로 논리 픽셀을 만든다.</li>
+            <li>이 예는 위로 뒤집지 않는다. 창 아래쪽에서 열면 host가 작업 영역 안으로 밀 뿐이다. 뒤집으려면 <code>menu_popup_config::below</code>를 쓴다 (<a class="xref" href="#build-place">자리 규칙</a>).</li>
+          </ul>
+        </div>
+        <h3><code>handle</code>의 갈래</h3>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:119-130" data-path="examples/widgets/app.cpp" data-start="119"><script type="text/plain">
+        if (const auto* const open { message.get<sort_open_intent>() }; open != nullptr)
+        {
+            state_.sort_open = open->open;
+            state_.card_menu_open = false;
+            return;
+        }
+        if (const auto* const select { message.get<sort_select_intent>() }; select != nullptr)
+        {
+            state_.sort = select->value;
+            state_.sort_open = false;
+            return;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/app.cpp:146-151" data-path="examples/widgets/app.cpp" data-start="146"><script type="text/plain">
+        if (message.get<popup_close_intent>() != nullptr)
+        {
+            state_.sort_open = false;
+            state_.card_menu_open = false;
+            return;
+        }
+</script></div>
+        <div class="prose">
+          <p>고르면 닫는 것도 앱이다. "모두 닫기" 메시지는 popup의 <code>dismiss</code>와, Esc가 controller까지 왔을 때의 정책 <code>close_menu()</code>가 함께 쓴다. 다른 popup이 열리면 이 목록을 닫는 것으로 "한 번에 하나"를 지킨다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-search">
+        <header class="sec-head">
+          <h2>만들기: 검색 칸이 있는 목록 (popup 안의 글 입력)</h2>
+          <p class="lede">데모의 "문서 표시 방식" 칸이다. popup은 키보드 초점을 받지 못하지만, 앵커 창의 IME session이 popup 안의 글 칸을 대신 봐서 한글 조합까지 된다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:475-484" data-path="examples/demo/popups_page.cpp" data-start="475"><script type="text/plain">
+        luil::dropdown_config dropdown {};
+        dropdown.owner = u8"presentation";
+        dropdown.text = presentation_;
+        dropdown.open = open_popup_ == u8"presentation";
+        dropdown.set_open = [](const bool open) { return luil::make_app_action(dropdown_toggle_intent { open }); };
+        auto field { std::make_unique<luil::dropdown_element>(std::move(dropdown)) };
+        field->set_access_name(u8"문서 표시 방식");
+        dropdown_ = field.get();
+        page.add(make_label({ kind_text, u8"presentation-label" }, u8"문서 표시 방식 (검색 가능)", 15.0f, luil::label_color_role::primary), 28.0f);
+        page.add(std::move(field), luil::dropdown_height);
+</script></div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl"><code>set_access_name</code>은 드롭다운의 이름이 되지 않는다</span>코드에서 확인한 동작이다. 드롭다운의 접근 정보는 이름에 <code>placeholder</code>만 쓰고, 요소에 건 접근 이름을 덧입히지 않는다. 이 데모는 <code>placeholder</code>가 비어 있어 이름 없는 콤보 상자로 읽힌다. 보조 기술이 읽을 이름은 <code>placeholder</code>에 둔다.</div></div>
+        <h3>열기·고르기와 검색 칸의 편집</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:253-267" data-path="examples/demo/popups_page.cpp" data-start="253"><script type="text/plain">
+        if (const auto* const toggle { message.get<dropdown_toggle_intent>() }; toggle != nullptr)
+        {
+            // 한 번에 하나만 띄운다. 다른 popup이 떠 있으면 이 열기가 그것을 대신한다.
+            if (toggle->open)
+                show_popup(u8"presentation");
+            else
+                close_popup(u8"presentation");
+            return true;
+        }
+        if (const auto* const select { message.get<dropdown_select_intent>() }; select != nullptr)
+        {
+            presentation_ = select->value;
+            close_popup(u8"presentation");
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:416-417,424-430,437-446" data-path="examples/demo/popups_page.cpp" data-start="416"><script type="text/plain">
+        if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
+        {
+⋯@424
+            if (edit->request.target != target_dropdown_search)
+                return false;
+            luil::apply_text_edit(search_, edit->request);
+            return true;
+        }
+        if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
+        {
+⋯@437
+                return true;
+            }
+            if (composition->event.target != target_dropdown_search)
+                return false;
+            if (composition->event.composing)
+                composition_ = composition->event;
+            else
+                composition_.reset();
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>popup 안의 칸이라고 다른 경로가 아니다. 정책의 <code>text_target_of</code>에 검색 칸의 kind를 등록하면, 편집·조합 메시지가 여느 글 칸처럼 그 대상을 달고 온다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/text_targets.h:38-41" data-path="examples/demo/text_targets.h" data-start="38"><script type="text/plain">
+        // popup 안의 검색 칸도 여느 텍스트 칸과 같이 등록한다.
+        // popup이라고 다른 경로가 아니다 (popup-ime-design.md).
+        if (kind == kind_dropdown_search_input)
+            return target_dropdown_search;
+</script></div>
+        <h3>popup: 검색어로 좁힌 메뉴</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:674-714" data-path="examples/demo/popups_page.cpp" data-start="674"><script type="text/plain">
+        if (open_popup_ == u8"presentation" && dropdown_ != nullptr)
+        {
+            const luil::text_input_view search { luil::make_text_input_view(search_, composition_, target_dropdown_search) };
+
+            std::vector<luil::menu_item_config> values {};
+            for (const std::u8string_view value : presentation_values)
+            {
+                luil::menu_item_config item {};
+                item.key = std::u8string { value };
+                item.label = std::u8string { value };
+                if (item.key == presentation_)
+                    item.icon = luil::codicons::icon_check;
+                values.push_back(std::move(item));
+            }
+
+            luil::menu_config menu {};
+            menu.owner = u8"presentation";
+            menu.items = narrow_menu_items(std::move(values), search);
+            menu.select = [](const std::u8string& value) { return luil::make_app_action(dropdown_select_intent { value }); };
+            // 둥근 창에서는 메뉴의 사각 선이 모서리에서 튀어나온다. 경계는 OS 테두리가 긋는다.
+            menu.border = popup_border_ && luil::popup_corner_radius(corner_) <= 0.0f;
+
+            // 칸 바로 아래에 붙인다.
+            const luil::rect_f field { dropdown_->bounds() };
+            luil::win32::ui_popup popup {};
+            popup.id = u8"dropdown";
+            popup.width = dropdown_width;
+            popup.height = search_menu_height(menu);
+            popup.x = field.x / scale;
+            popup.y = (field.y + field.height) / scale + 2.0f;
+            popup.tree = make_search_menu_tree(std::move(menu), kind_dropdown_search_input, search, u8"검색", popup.width, scale);
+            popup.corner = corner_;
+            popup.border = popup_border_;
+            popup.dismiss = [](const luil::win32::popup_dismiss_reason reason) {
+                // 검색 중이던 목록이다 — 계기를 가려서 남는다.
+                if (search_popup_stays(reason))
+                    return luil::input_action {};
+                return luil::make_app_action(dropdown_toggle_intent { false });
+            };
+            popups.push_back(std::move(popup));
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="676" data-title="검색 칸의 보기">앱이 든 글과 조합 상태로 <code>text_input_view</code>를 만든다. 조합 중인 글자도 보이는 그대로 들어 있다.</li>
+            <li data-lines="678-692" data-title="좁힌 메뉴">값마다 항목을 짓고 고른 값에 체크를 단다. <code>narrow_menu_items</code>가 검색어로 좁힌다.</li>
+            <li data-lines="693-694" data-title="선">둥근 창에서는 메뉴의 사각 선을 끈다. 경계는 OS 테두리가 긋는다.</li>
+            <li data-lines="696-704" data-title="자리와 tree">칸 바로 아래 2 논리 픽셀에 붙인다. tree는 검색 칸 + 메뉴를 쌓은 판이다 (<code>make_search_menu_tree</code>).</li>
+            <li data-lines="707-712" data-title="계기마다 가르기">창 이동과 활성 전환에는 빈 액션을 돌려 남는다. 다른 창을 잠깐 본 것으로 치던 검색이 사라지면 안 된다. 바깥 누름·Esc·휠에는 닫는다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/common.cpp:222-225" data-path="examples/demo/common.cpp" data-start="222"><script type="text/plain">
+    bool search_popup_stays(const luil::win32::popup_dismiss_reason reason) noexcept
+    {
+        return reason == luil::win32::popup_dismiss_reason::surface_moved || reason == luil::win32::popup_dismiss_reason::activation_changed;
+    }
+</script></div>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/common.cpp:236-296" data-path="examples/demo/common.cpp" data-start="236"><script type="text/plain">
+    float search_menu_height(const luil::menu_config& menu) noexcept
+    {
+        // 둘레 여백 두 번 + 검색 칸 + 칸과 메뉴 사이 한 번.
+        return 3.0f * search_menu_padding + search_menu_field_height + luil::menu_element::height_for(menu);
+    }
+
+    std::vector<luil::menu_item_config> narrow_menu_items(std::vector<luil::menu_item_config> items, const luil::text_input_view& search)
+    {
+        // 이 앱의 매칭 정책이다: 이름에 그 글이 들어 있으면 맞다.
+        // 빈 질의는 전부 통과시킨다.
+        const auto matches = [](const std::u8string_view label, const std::u8string_view query) { return query.empty() || label.find(query) != std::u8string_view::npos; };
+        // 그 질의로 맞는 것이 하나라도 있는지만 답한다.
+        // 조합 중인 글자를 어떻게 다룰지는 라이브러리가 이 답으로 정한다.
+        const auto any_match = [&items, &matches](const std::u8string_view candidate) {
+            for (const luil::menu_item_config& item : items)
+                if (matches(item.label, candidate))
+                    return true;
+            return false;
+        };
+        const std::u8string_view query { luil::search_query(search, any_match) };
+
+        std::vector<luil::menu_item_config> narrowed {};
+        for (luil::menu_item_config& item : items)
+            if (matches(item.label, query))
+                narrowed.push_back(std::move(item));
+        if (narrowed.empty())
+        {
+            luil::menu_item_config empty {};
+            empty.key = u8"none";
+            empty.label = u8"일치하는 항목 없음";
+            empty.enabled = false;
+            narrowed.push_back(std::move(empty));
+        }
+        return narrowed;
+    }
+
+    std::shared_ptr<const luil::ui_tree> make_search_menu_tree(
+        luil::menu_config menu, const luil::ui_element_kind search_kind, luil::text_input_view search, std::u8string placeholder, const float width, const float scale)
+    {
+        const float height { search_menu_height(menu) };
+        const float menu_height { luil::menu_element::height_for(menu) };
+        std::u8string owner { menu.owner };
+
+        luil::stack_config config {};
+        config.padding = luil::edge_insets::all(search_menu_padding);
+        config.spacing = search_menu_padding;
+        auto column { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"search-" + owner }, config) };
+        luil::text_input_config search_config {};
+        search_config.placeholder = std::move(placeholder);
+        column->add(std::make_unique<luil::text_input_element>(luil::ui_element_id { search_kind }, std::move(search), std::move(search_config)), search_menu_field_height);
+        column->add(std::make_unique<luil::menu_element>(std::move(menu)), menu_height);
+
+        // popup 창 전체를 칠한다. 메뉴는 자기 배경과 테두리를 그 위에 그린다.
+        luil::panel_config background {};
+        auto panel { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_page_panel, u8"search-" + std::move(owner) }, std::move(background)) };
+        // 여백을 눌러도 아래 element로 새지 않는다 (메뉴와 같은 규칙이다).
+        panel->set_hit_opaque(true);
+        panel->set_content(std::move(column));
+        // root가 자식까지 배치하는 tree라 표준 입구를 쓴다.
+        return std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(panel), { 0.0f, 0.0f, width * scale, height * scale }, scale));
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>search_query</code>는 조합 중인 글자를 어떻게 다룰지 정한다. 조합을 넣은 질의로 맞는 것이 없으면 확정 글로 물러선다. "토ㅅ"처럼 아직 어디에도 없는 중간 단계에서 목록이 사라졌다 나타나지 않는다.</li>
+            <li>남는 것이 없으면 눌리지 않는 한 줄로 "없다"를 말한다. 빈 상자를 두지 않는다.</li>
+            <li>배경 판은 hit를 흡수한다(<code>set_hit_opaque(true)</code>). popup 여백을 눌러도 아래로 새지 않는다.</li>
+            <li>메뉴가 열린 동안 ↑/↓/Enter는 메뉴가, ←/→·Ctrl+A 같은 편집 키는 검색 칸이 받는다.</li>
+            <li>검색 칸을 누르면 논리 초점이 popup으로 간다. popup이 사라지면 그 초점은 거둬지고 칸으로 돌아오지 않는다 — 코드에서 확인한 동작이다. 되돌리려면 앱이 <code>ui_frame::focus</code>로 요청한다. 같은 데모의 색 칸·날짜 칸이 Esc 닫힘에서 그렇게 한다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-keys">
+        <header class="sec-head">
+          <h2>만들기: 드롭다운에 여는 키와 초점 떠남 닫기를 단다</h2>
+          <p class="lede">저장소의 드롭다운 예는 여는 키를 달지 않는다. 분할 버튼·날짜 칸·색 칸이 쓰는 처리기를 앱이 같은 방식으로 단다. 목록은 <code>menu_popup_config::below</code>로 칸 아래에 붙인다.</p>
+        </header>
+        <div class="code tall" data-lang="cpp" data-label="여는 키·초점 떠남·뒤집는 목록 (직접 작성)" data-compile="pre-keys"><script type="text/plain">
+// 목록을 이 상태로 하라는 절대 메시지다. 누름·Alt+↓·F4·↓·보조 기술·바깥 누름·초점 떠남이 모두 이것을 낸다.
+struct font_open_intent
+{
+    bool open { false };
+};
+
+struct font_pick_intent
+{
+    std::u8string value {};
+};
+
+struct font_state
+{
+    std::u8string font { u8"Noto Sans" };
+    bool open { false };
+};
+
+constexpr std::u8string_view fonts[] { u8"Noto Sans", u8"Noto Serif", u8"D2Coding" };
+
+void handle(font_state& state, const luil::app_message& message)
+{
+    if (const auto* const open { message.get<font_open_intent>() }; open != nullptr)
+        state.open = open->open;
+    else if (const auto* const pick { message.get<font_pick_intent>() }; pick != nullptr)
+        state.font = pick->value; // 닫기는 `after_select`가 따로 보낸다.
+}
+
+// 닫힌 칸이다. `field`에 남긴 포인터는 이 frame이 게시되기 전까지만 popup 자리를 재는 데 쓴다.
+[[nodiscard]] std::unique_ptr<luil::dropdown_element> make_font_field(const font_state& state, const luil::dropdown_element** field)
+{
+    luil::dropdown_config config {};
+    config.owner = u8"font";
+    config.text = state.font;
+    // 접근 이름도 이 값이다 (`dropdown_element::accessibility`).
+    config.placeholder = u8"글꼴";
+    config.open = state.open;
+    config.set_open = [](const bool open) { return luil::make_app_action(font_open_intent { open }); };
+    auto element { std::make_unique<luil::dropdown_element>(config) };
+    // 라이브러리 드롭다운은 여는 키를 달지 않는다. 닫혀 있을 때 Alt+↓·F4·↓가 연다.
+    element->set_key_handler(luil::field_popup_key_handler(state.open, config.set_open, true));
+    // 열린 동안 Tab 등으로 초점이 칸을 떠나면 닫는다 (분할 버튼·콤보와 같은 규약).
+    if (state.open)
+        element->set_focus_leave_action([close = config.set_open](const luil::ui_action_context&) { return std::vector<luil::input_action> { close(false) }; });
+    *field = element.get();
+    return element;
+}
+
+// 열린 목록이다. 칸 아래에 두고, 아래가 모자라면 위로 뒤집는다 (`place_field_popup`).
+//  - `surface`는 앵커 표면(주 창)의 client 사각형이다 (물리 픽셀).
+[[nodiscard]] luil::ui_popup make_font_list(const font_state& state, const luil::ui_element& field, const luil::rect_f& surface, const float scale)
+{
+    luil::menu_config menu {};
+    menu.owner = u8"font";
+    for (const std::u8string_view value : fonts)
+        menu.items.push_back({ .key = std::u8string { value }, .label = std::u8string { value }, .kind = luil::menu_item_kind::radio, .checked = value == state.font });
+    menu.select = [](const std::u8string& value) { return luil::make_app_action(font_pick_intent { value }); };
+    menu.after_select = luil::make_message_action(font_open_intent { false });
+
+    luil::menu_popup_config popup {};
+    popup.id = u8"font-list";
+    popup.scale = scale;
+    popup.width = field.bounds().width / scale;
+    popup.below = luil::field_popup_anchor { .field = field.bounds(), .limit = surface };
+    popup.dismiss = [](const luil::popup_dismiss_reason) { return luil::make_app_action(font_open_intent { false }); };
+    return luil::make_menu_popup(std::move(menu), std::move(popup));
+}
+</script></div>
+        <script type="text/plain" id="pre-keys" data-prelude>
+#include "luil/app/menu_popup.h"
+#include "luil/ui/app_message.h"
+#include "luil/ui/dropdown_element.h"
+#include "luil/ui/field_popup.h"
+#include <memory>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li><code>field_popup_key_handler(open, set_open, down_opens)</code>: 닫혀 있으면 Alt만 눌린 ↓, 수식 키 없는 F4, (<code>down_opens</code>면) 수식 키 없는 ↓가 <code>set_open(true)</code>다. 열려 있으면 그 키들을 빈 목록으로 삼킨다. 그 밖의 키는 <code>std::nullopt</code>로 흘려보낸다. <a class="xref" href="#lab">실습</a>의 필드가 이 판정을 그대로 쓴다.</li>
+            <li>처리기는 초점 요소에서 root 쪽으로 묻는 키 처리기 단계에서 돈다. 글 칸·값·묶음의 키 다음이다.</li>
+            <li>목록이 열려 메뉴가 서 있는 동안에는 메뉴 경로가 먼저 키를 가져가므로 처리기에 오지 않는다. "열려 있으면 삼킨다"는 메뉴가 아닌 popup을 위한 갈래다.</li>
+            <li>목록 폭은 칸 폭에 맞춘다(<code>bounds().width / scale</code>). 라디오 항목이라 고른 값에 점이 선다.</li>
+            <li>이 예는 컴파일만 확인했다 (<code>-fsyntax-only</code>). 앱의 <code>make_frame</code>은 칸을 배치한 뒤 같은 frame에서 <code class="free">make_font_list(state_, *field, client, scale)</code>를 <code>frame-&gt;popups</code>에 싣는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-place">
+        <header class="sec-head">
+          <h2>만들기: 필드 아래 자리를 정하는 규칙</h2>
+          <p class="lede"><code>make_menu_popup</code>은 <code>below</code>가 있으면 폭·높이를 잰 뒤 <code>place_field_popup</code>을 부른다. popup을 손으로 짓는 앱도 직접 부를 수 있다. 규칙은 test가 잠근다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="tests/field_popup_tests.cpp:56-85" data-path="tests/field_popup_tests.cpp" data-start="56"><script type="text/plain">
+TEST_CASE("A field popup sits under the field by the gap and aligns to its left edge", "[ui][field-popup]")
+{
+    const luil::field_popup_position position { luil::place_field_popup(anchor_in_window(), { 120.0f, 100.0f }, 1.0f) };
+    REQUIRE(position.x == 100.0f);
+    // 필드 아래(50 + 30)에서 기본 간격 2다.
+    REQUIRE(position.y == 82.0f);
+    REQUIRE(position.above == false);
+}
+
+TEST_CASE("A field popup flips above only when below overflows and above fits", "[ui][field-popup]")
+{
+    luil::field_popup_anchor anchor { anchor_in_window() };
+    anchor.field = { 100.0f, 550.0f, 80.0f, 30.0f };
+
+    // 아래(582 + 100)가 창 아래(600)를 넘고 위(548 - 100)는 들어간다.
+    const luil::field_popup_position flipped { luil::place_field_popup(anchor, { 120.0f, 100.0f }, 1.0f) };
+    REQUIRE(flipped.above);
+    REQUIRE(flipped.y == 448.0f);
+
+    // 아래에 딱 들어가면 뒤집지 않는다. 경계는 포함이다.
+    const luil::field_popup_position fits { luil::place_field_popup(anchor, { 120.0f, 18.0f }, 1.0f) };
+    REQUIRE(fits.above == false);
+    REQUIRE(fits.y == 582.0f);
+
+    // 위도 안 들어가면 아래에 둔다. 나머지는 host가 민다.
+    anchor.field = { 100.0f, 300.0f, 80.0f, 30.0f };
+    const luil::field_popup_position neither { luil::place_field_popup(anchor, { 120.0f, 700.0f }, 1.0f) };
+    REQUIRE(neither.above == false);
+    REQUIRE(neither.y == 332.0f);
+}
+</script></div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>축</th><th><code>place_field_popup</code></th><th><code>place_field_popup_at_side</code></th></tr></thead>
+            <tbody>
+              <tr><td>주 축</td><td>아래가 기본이다. 아래가 <code>limit</code>을 넘고 위가 들어갈 때만 위로 뒤집는다. 둘 다 안 되면 아래에 두고 host가 민다. 경계는 포함이다 (딱 맞으면 뒤집지 않는다)</td><td>바라는 방향 → 반대 → 남은 둘(아래·위면 오른쪽·왼쪽, 옆이면 아래·위) 순으로 주 축이 들어가는 첫 방향. 하나도 없으면 바라는 방향에 두고 주 축도 밀며 <code>fits = false</code></td></tr>
+              <tr><td>다른 축</td><td><code>alignment</code>로 맞춘 뒤(start: 왼쪽끼리, end: 오른쪽끼리) <code>limit</code> 안으로 민다. <code>limit</code>보다 넓으면 왼쪽 가장자리에 붙는다</td><td>필드 가운데에 맞춘 뒤 민다. <code>alignment</code>는 보지 않는다</td></tr>
+              <tr><td>단위</td><td colspan="2">필드·<code>limit</code>은 물리 픽셀(<code>bounds()</code>와 같은 좌표), <code>size</code>와 <code>gap</code>(기본 2)은 논리 픽셀, 답은 <code>ui_popup::x</code>·<code>y</code>에 넣을 논리 픽셀이다. 배율이 0 이하이거나 유한하지 않으면 1, 간격이 음수면 0, 유한하지 않으면 0이다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li><code>limit</code>은 앱이 준다. 보통 앵커 표면의 client 사각형이다. 작업 영역은 host만 알아서, 이 함수는 창 밖으로 걸치는 자리를 고르지 않는다.</li>
+            <li>네 방향 판은 안내 풍선이 쓴다. 풍선은 tree 안에 겹쳐 그리므로 자기 자리에서 둘레 여백(<code>teaching_tip_screen_margin</code>, 8)을 뺀 사각형을 <code>limit</code>으로, 꼬리 길이에 2를 더한 값을 간격으로 넘긴다. <code>fits</code>가 거짓이면 꼬리를 그리지 않는다.</li>
+            <li>뒤집혔는지(<code>above</code>)는 꼬리가 있는 popup처럼 방향을 알아야 하는 앱이 읽는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-combo">
+        <header class="sec-head">
+          <h2>만들기: 편집형 콤보와 늦게 오는 후보</h2>
+          <p class="lede">데모 작업대의 "작성자" 칸이다. 치면 흉내 낸 서버에 후보를 묻고, 답(250ms 뒤)이 오기 전에는 popup에 스피너가 돈다. 후보·열림·강조·스크롤·검증 글이 모두 앱 상태다.</p>
+        </header>
+        <h3>메시지와 앱 상태</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.h:215-250" data-path="examples/demo/workbench_page.h" data-start="215"><script type="text/plain">
+    // 작성자 콤보의 메시지다. 후보·열림·강조·스크롤은 전부 앱 상태다 (combo-box-design.md).
+    struct workbench_author_open_intent
+    {
+        bool open { false };
+    };
+
+    struct workbench_author_move_intent
+    {
+        std::u8string key {};
+    };
+
+    struct workbench_author_select_intent
+    {
+        std::u8string key {};
+    };
+
+    // 후보 밖의 글을 Enter로 확정했다.
+    struct workbench_author_commit_intent
+    {
+        std::u8string text {};
+    };
+
+    // 닫힌 콤보의 Esc다. 마지막으로 확정한 작성자로 되돌린다.
+    struct workbench_author_restore_intent
+    {
+    };
+
+    struct workbench_author_scroll_intent
+    {
+        float delta { 0.0f };
+    };
+
+    struct workbench_author_scroll_to_intent
+    {
+        float offset { 0.0f };
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.h:435-452" data-path="examples/demo/workbench_page.h" data-start="435"><script type="text/plain">
+        // 작성자 콤보의 앱 상태다. 후보는 흉내 낸 서버가 늦게 답한다.
+        struct pending_authors
+        {
+            std::uint64_t token { 0 };
+            std::u8string query {};
+            std::chrono::steady_clock::time_point due {};
+        };
+        luil::text::text_edit_state author_ {};
+        std::optional<luil::text_composition_event> author_composition_ {};
+        std::u8string author_committed_ {};
+        luil::combo_suggestion_state author_suggestions_ {};
+        std::optional<pending_authors> author_pending_ {};
+        std::u8string author_highlight_ {};
+        std::u8string author_error_ {};
+        float author_scroll_ { 0.0f };
+        bool author_open_ { false };
+        // 이번 frame에 배치한 콤보다. 후보 popup은 그 자리를 따라 선다.
+        const luil::combo_box_element* author_combo_ { nullptr };
+</script></div>
+        <h3>콤보를 짓는다</h3>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1376-1399" data-path="examples/demo/workbench_page.cpp" data-start="1376"><script type="text/plain">
+        // 작성자 칸은 편집형 콤보다. 치면 흉내 낸 서버에 후보를 묻고, 답이 오기 전에는 popup에 스피너가 돈다.
+        //  - 후보 밖의 글도 확정할 수 있다. 형식이 틀리면 앱이 검증 글을 칸 아래에 둔다.
+        //  - 닫힌 칸의 Esc는 마지막으로 확정한 작성자로 되돌린다.
+        form->add(caption(u8"author-label", u8"작성자"), { .row = 1, .column = 0, .vertical = author_error_.empty() ? luil::layout_alignment::center : luil::layout_alignment::start });
+        luil::combo_box_config combo {};
+        combo.input.placeholder = u8"이름 <메일>";
+        combo.suggestions = author_suggestions_;
+        combo.highlighted = author_highlight_;
+        combo.validation_message = author_error_;
+        combo.open = author_open_;
+        combo.popup_height = author_popup_height;
+        combo.set_open = [](const bool open) { return luil::make_app_action(workbench_author_open_intent { open }); };
+        combo.move = [](const std::u8string& key) { return luil::make_app_action(workbench_author_move_intent { key }); };
+        combo.select = [](const std::u8string& key) { return luil::make_app_action(workbench_author_select_intent { key }); };
+        combo.commit = [](const std::u8string& text) { return luil::make_app_action(workbench_author_commit_intent { text }); };
+        combo.restore = luil::make_message_action(workbench_author_restore_intent {});
+        combo.scroll_offset = author_scroll_;
+        combo.scroll = [](const float delta) { return luil::make_app_action(workbench_author_scroll_intent { delta }); };
+        combo.scroll_to = [](const float offset) { return luil::make_app_action(workbench_author_scroll_to_intent { offset }); };
+        const luil::text_input_view author_view { luil::make_text_input_view(author_, author_composition_, target_workbench_author) };
+        auto author { std::make_unique<luil::combo_box_element>(luil::ui_element_id { kind_workbench_author_input, u8"workbench-author" }, author_view, std::move(combo)) };
+        author->set_access_name(u8"작성자");
+        author_combo_ = author.get();
+        form->add(std::move(author), { .row = 1, .column = 1 });
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="1380-1386" data-title="값">안쪽 글 칸 설정(<code>input.placeholder</code>), 후보 상태, 강조 키, 검증 글, 열림, popup 높이를 싣는다. 보이는 후보는 요소가 build마다 이 값으로 다시 거른다.</li>
+            <li data-lines="1387-1394" data-title="메시지">여닫기, 강조 옮기기, 후보 고르기, 후보 밖 글의 확정, 닫힌 칸의 Esc(되돌리기), 스크롤 둘. 모두 앱 메시지다.</li>
+            <li data-lines="1395-1396" data-title="글과 id">글 칸의 보기는 여느 글 칸과 같다. root id의 owner에 <code>:input</code>을 붙인 것이 안쪽 글 칸의 id다 — kind는 같다.</li>
+            <li data-lines="1397-1399" data-title="이름과 포인터"><code>set_access_name</code>은 콤보의 접근 이름이 되지 않는다(코드에서 확인한 동작). 콤보는 안쪽 글 칸의 이름을 쓰는데, 그 칸에는 앱이 이름을 달 수 없어 <code>placeholder</code>("이름 &lt;메일&gt;")가 읽힌다. 포인터는 같은 frame의 popup 자리에만 쓴다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/text_targets.h:48-50" data-path="examples/demo/text_targets.h" data-start="48"><script type="text/plain">
+        // 콤보는 root와 안쪽 입력 칸이 같은 kind다. 둘 다 같은 편집 대상이다 (combo-box-design.md).
+        if (kind == kind_workbench_author_input)
+            return target_workbench_author;
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:1407-1412" data-path="examples/demo/workbench_page.cpp" data-start="1407"><script type="text/plain">
+    std::vector<luil::win32::ui_popup> workbench_page::make_popups(const float scale) const
+    {
+        std::vector<luil::win32::ui_popup> popups {};
+        // 작성자 후보 popup은 이번 frame에 배치한 콤보의 자리를 따라 선다.
+        if (author_open_ && author_combo_ != nullptr)
+            popups.push_back(author_combo_->suggestion_popup());
+</script></div>
+        <div class="prose">
+          <p>정책의 <code>text_target_of</code>는 root와 글 칸 둘 다를 같은 편집 대상으로 돌려준다. 후보 popup은 <code>suggestion_popup()</code>이 짓는다 — id는 owner + <code>:suggestions</code>, 자리는 콤보 왼쪽과 글 칸 아래, 폭은 콤보 폭, 높이는 <code>popup_height</code>다. 닫혀 있으면 높이 0인 popup을 돌려주므로 싣지 않는 편이 낫다.</p>
+        </div>
+        <h3>질의를 시작하고, 답을 받는다</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:437-453" data-path="examples/demo/workbench_page.cpp" data-start="437"><script type="text/plain">
+    void workbench_page::apply_author_edit(const luil::text_edit_request& request)
+    {
+        const std::u8string before { author_.text };
+        luil::apply_text_edit(author_, request);
+        if (author_.text == before)
+            return;
+        author_error_.clear();
+        author_open_ = true;
+        query_authors(std::chrono::steady_clock::now());
+    }
+
+    void workbench_page::query_authors(const std::chrono::steady_clock::time_point now)
+    {
+        std::u8string query { luil::make_text_input_view(author_, author_composition_, target_workbench_author).displayed_text() };
+        const std::uint64_t token { luil::begin_combo_query(author_suggestions_, query) };
+        author_pending_ = pending_authors { token, std::move(query), now + author_delay };
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:342-359" data-path="examples/demo/workbench_page.cpp" data-start="342"><script type="text/plain">
+        if (author_pending_.has_value() && author_pending_->due <= now)
+        {
+            // 서버는 부분 일치로 거른다. 받는 동안 콤보가 앞 후보를 보이는 글로 거르므로 둘이 같은 규칙이어야 한다 (combo-box-design.md).
+            //  - 칸의 글이 확정한 작성자 그대로면 펼치기다. 그 하나만 돌려주면 고를 것이 없으므로 전부를 돌려준다.
+            const bool browse { author_pending_->query == author_committed_ };
+            auto items { std::make_shared<std::vector<luil::combo_suggestion>>() };
+            for (const std::u8string_view author : author_catalog)
+                if (browse || author.find(author_pending_->query) != std::u8string_view::npos)
+                    items->push_back({ std::u8string { author }, std::u8string { author } });
+            // 더 새 물음이 이미 나갔으면 이 답은 버려진다 (token이 다르다).
+            if (luil::accept_combo_suggestions(author_suggestions_, author_pending_->token, std::move(items))
+                && std::none_of(author_suggestions_.items->begin(), author_suggestions_.items->end(), [this](const luil::combo_suggestion& item) { return item.key == author_highlight_; }))
+            {
+                author_highlight_.clear();
+                author_scroll_ = 0.0f;
+            }
+            author_pending_.reset();
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>begin_combo_query(state, query)</code>는 token을 1 올리고(0은 건너뛴다), 질의를 적고, <code>loading</code>을 세운다. <strong>앞 후보는 남긴다</strong> — 받는 동안 목록이 비어 깜빡이지 않는다.</li>
+            <li><code>accept_combo_suggestions(state, token, items)</code>는 token이 지금 것이고 받는 중일 때만 넣고 참을 돌려준다. 더 새 질의가 이미 나갔으면 옛 답은 버려진다(거짓).</li>
+            <li>받는 동안 콤보는 앞 후보를 <strong>칸의 글로 다시 거른다</strong> (라벨에 글이 든 것, 대소문자 구분). 원천의 일치 규칙과 이 기본 거르기가 같아야 답이 올 때 목록이 덜컥 바뀌지 않는다. 다 받았고 칸의 글이 그 질의와 같으면 원천의 답을 그대로 보인다. <code>matches</code>를 주면 언제나 그것으로 거른다.</li>
+            <li>답에 강조 키가 없으면 앱이 지운다 (데모처럼). <code>suggestion_request(token)</code>은 앱이 따로 요청 메시지를 만들 때 쓰는 도우미다. 이 데모는 logic thread에서 원천을 직접 부른다.</li>
+          </ul>
+        </div>
+        <h3><code>handle</code>의 갈래</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:900-943" data-path="examples/demo/workbench_page.cpp" data-start="900"><script type="text/plain">
+        if (const auto* const open { message.get<workbench_author_open_intent>() }; open != nullptr)
+        {
+            author_open_ = open->open;
+            if (author_open_)
+                query_authors(now);
+            return true;
+        }
+        if (const auto* const move { message.get<workbench_author_move_intent>() }; move != nullptr)
+        {
+            author_highlight_ = move->key;
+            return true;
+        }
+        if (const auto* const select { message.get<workbench_author_select_intent>() }; select != nullptr)
+        {
+            set_author(select->key);
+            return true;
+        }
+        if (const auto* const commit { message.get<workbench_author_commit_intent>() }; commit != nullptr)
+        {
+            // 후보 밖의 글도 받는다. 형식만 앱이 본다 — 틀리면 칸 아래에 이유를 적고 칸을 그대로 둔다.
+            if (commit->text.find(u8'<') == std::u8string::npos || commit->text.find(u8'@') == std::u8string::npos || commit->text.ends_with(u8'>') == false)
+            {
+                author_error_ = u8"\"이름 <메일>\" 꼴로 적는다";
+                author_open_ = false;
+                return true;
+            }
+            set_author(commit->text);
+            return true;
+        }
+        if (message.get<workbench_author_restore_intent>() != nullptr)
+        {
+            set_author(author_committed_);
+            return true;
+        }
+        if (const auto* const scroll { message.get<workbench_author_scroll_intent>() }; scroll != nullptr)
+        {
+            author_scroll_ = std::max(0.0f, author_scroll_ + scroll->delta);
+            return true;
+        }
+        if (const auto* const scroll { message.get<workbench_author_scroll_to_intent>() }; scroll != nullptr)
+        {
+            author_scroll_ = std::max(0.0f, scroll->offset);
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/workbench_page.cpp:945-951,975-1000" data-path="examples/demo/workbench_page.cpp" data-start="945"><script type="text/plain">
+        if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
+        {
+            const luil::text_input_target target { edit->request.target };
+            if (target == target_workbench_summary)
+                luil::apply_text_edit(summary_, edit->request);
+            else if (target == target_workbench_author)
+                apply_author_edit(edit->request);
+⋯@975
+        if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
+        {
+            const luil::text_input_target target { composition->event.target };
+            std::optional<luil::text_composition_event>* slot { nullptr };
+            if (target == target_workbench_summary)
+                slot = &composition_;
+            else if (target == target_workbench_author)
+                slot = &author_composition_;
+            else if (target == target_workbench_find)
+                slot = &find_composition_;
+            if (slot == nullptr)
+                return false;
+            if (composition->event.composing)
+                *slot = composition->event;
+            else
+                slot->reset();
+            // 조합 중인 글자도 보이는 대로 다시 묻고 다시 찾는다.
+            if (target == target_workbench_author)
+            {
+                author_open_ = true;
+                query_authors(now);
+            }
+            if (target == target_workbench_find && refresh_matches())
+                reveal_match();
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <p>확정한 앱은 열림도 닫는다 (<code>set_author</code>). 조합 중인 글자도 보이는 대로 다시 묻는다. 칸 아래의 검증 글(<code>validation_message</code>)은 20 논리 픽셀 줄을 더 차지하므로 콤보에 그만큼 자리를 준다.</p>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">후보 popup은 Alt+Tab에도 닫힌다</span><code>suggestion_popup()</code>의 <code>dismiss</code>는 계기를 가리지 않고 <code>set_open(false)</code>를 낸다. 그래서 다른 창을 잠깐 보는 것(<code>activation_changed</code>)이나 창 이동에도 후보가 닫힌다 — 코드에서 확인한 동작이다. 설계 문서는 "창 비활성은 떠남이 아니라 popup이 남는다"고 적지만, 그것은 초점 떠남 훅의 이야기다. 남기려면 돌려받은 <code>ui_popup</code>의 <code>dismiss</code>를 앱이 바꿔 싣는다 (직접 돌려 보지는 않았다). 후보 popup은 위로 뒤집지도 않는다.</div></div>
+      </section>
+
+      <section class="sec" id="build-strict">
+        <header class="sec-head">
+          <h2>만들기: 목록에 있는 값만 받는 콤보</h2>
+          <p class="lede"><code>allow_custom = false</code>면 Enter가 후보 밖 글을 <code>invalid</code>로 보낸다. 라벨이 칸의 글과 정확히 같은 활성 후보는 그대로 고른다.</p>
+        </header>
+        <div class="code tall" data-lang="cpp" data-label="엄격한 콤보 하나 (직접 작성)" data-compile="pre-strict"><script type="text/plain">
+constexpr luil::ui_element_kind kind_country_input { luil::application_element_kind(7) };
+constexpr luil::text_input_target target_country { static_cast<luil::text_input_target>(7) };
+
+struct country_open_intent
+{
+    bool open { false };
+};
+struct country_move_intent
+{
+    std::u8string key {};
+};
+struct country_select_intent
+{
+    std::u8string key {};
+};
+struct country_invalid_intent
+{
+    std::u8string text {};
+};
+struct country_edit_intent
+{
+    luil::text_edit_request request {};
+};
+
+struct country_state
+{
+    luil::text::text_edit_state text {};
+    std::optional<luil::text_composition_event> composition {};
+    luil::combo_suggestion_state suggestions {};
+    std::u8string highlighted {};
+    std::u8string error {};
+    bool open { false };
+};
+
+// 이 앱의 원천은 고정 목록이다. 비동기 원천이라도 상태 다루기는 같다 (begin → accept).
+[[nodiscard]] std::shared_ptr<const std::vector<luil::combo_suggestion>> all_countries()
+{
+    return std::make_shared<const std::vector<luil::combo_suggestion>>(std::vector<luil::combo_suggestion> {
+        { u8"kr", u8"Korea" }, { u8"jp", u8"Japan" }, { u8"de", u8"Germany" }, { u8"fr", u8"France", false } });
+}
+
+// ASCII 대소문자를 가리지 않는 접두어 일치다. 주면 받는 중이든 아니든 언제나 이것으로 거른다.
+[[nodiscard]] bool starts_with_folded(const luil::combo_suggestion& item, const std::u8string_view query)
+{
+    if (query.size() > item.label.size())
+        return false;
+    for (std::size_t index = 0; index < query.size(); ++index)
+    {
+        const auto fold = [](const char8_t c) { return c >= u8'A' && c <= u8'Z' ? static_cast<char8_t>(c - u8'A' + u8'a') : c; };
+        if (fold(item.label[index]) != fold(query[index]))
+            return false;
+    }
+    return true;
+}
+
+void handle(country_state& state, const luil::app_message& message)
+{
+    if (const auto* const open { message.get<country_open_intent>() }; open != nullptr)
+    {
+        state.open = open->open;
+        if (state.open && state.suggestions.items == nullptr)
+        {
+            const std::uint64_t token { luil::begin_combo_query(state.suggestions, state.text.text) };
+            static_cast<void>(luil::accept_combo_suggestions(state.suggestions, token, all_countries()));
+        }
+    }
+    else if (const auto* const move { message.get<country_move_intent>() }; move != nullptr)
+        state.highlighted = move->key;
+    else if (const auto* const select { message.get<country_select_intent>() }; select != nullptr)
+    {
+        for (const luil::combo_suggestion& item : *all_countries())
+            if (item.key == select->key)
+                state.text = { .text = item.label, .caret = item.label.size(), .anchor = item.label.size() };
+        state.error.clear();
+        state.open = false;
+    }
+    else if (const auto* const invalid { message.get<country_invalid_intent>() }; invalid != nullptr)
+        state.error = u8"목록에 있는 나라를 고른다";
+    else if (const auto* const edit { message.get<country_edit_intent>() }; edit != nullptr && edit->request.target == target_country)
+    {
+        luil::apply_text_edit(state.text, edit->request);
+        state.error.clear();
+        state.open = true;
+    }
+}
+
+[[nodiscard]] std::unique_ptr<luil::combo_box_element> make_country_combo(const country_state& state)
+{
+    luil::combo_box_config combo {};
+    combo.input.placeholder = u8"나라";
+    combo.suggestions = state.suggestions;
+    combo.highlighted = state.highlighted;
+    combo.validation_message = state.error;
+    combo.open = state.open;
+    combo.allow_custom = false;
+    combo.matches = starts_with_folded;
+    combo.set_open = [](const bool open) { return luil::make_app_action(country_open_intent { open }); };
+    combo.move = [](const std::u8string& key) { return luil::make_app_action(country_move_intent { key }); };
+    combo.select = [](const std::u8string& key) { return luil::make_app_action(country_select_intent { key }); };
+    combo.invalid = [](const std::u8string& text) { return luil::make_app_action(country_invalid_intent { text }); };
+    const luil::text_input_view view { luil::make_text_input_view(state.text, state.composition, target_country) };
+    return std::make_unique<luil::combo_box_element>(luil::ui_element_id { kind_country_input, u8"country" }, view, std::move(combo));
+}
+
+// 정책은 콤보 root와 입력 칸(같은 kind, owner만 다르다)을 같은 편집 대상으로 등록한다.
+class country_policy final : public luil::interaction_policy
+{
+public:
+    [[nodiscard]] std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+    {
+        return kind == kind_country_input ? std::optional<luil::text_input_target> { target_country } : std::nullopt;
+    }
+
+    [[nodiscard]] luil::input_action make_text_edit_action(const luil::text_edit_request& request) const override
+    {
+        return luil::make_app_action(country_edit_intent { request });
+    }
+};
+</script></div>
+        <script type="text/plain" id="pre-strict" data-prelude>
+#include "luil/ui/app_message.h"
+#include "luil/ui/combo_box_element.h"
+#include "luil/ui/ui_interaction.h"
+#include <memory>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li>Enter의 차례: 열려 있고 강조가 활성 후보면 <code>select(강조)</code>. 아니면 라벨이 칸의 글과 정확히 같은 활성 후보의 <code>select</code>. 그것도 없을 때 받는 중이면 Enter를 삼키고, 다 받았으면 <code>invalid(칸의 글)</code>다.</li>
+            <li><code>matches</code>는 주면 받는 중이든 아니든 언제나 그것으로 거른다. 대소문자 무시·초성 검색 같은 앱의 규칙을 여기에 둔다.</li>
+            <li>비활성 후보(<code>enabled = false</code>, 위의 France)는 ↑↓가 건너뛰고 Enter가 고르지 않는다.</li>
+            <li>검증 글은 앱이 <code>validation_message</code>로 싣는다. 콤보는 그 글을 칸 아래에 오류색으로 그릴 뿐이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-tip">
+        <header class="sec-head">
+          <h2>만들기: 안내 풍선 (덮개·비modal)</h2>
+          <p class="lede">데모의 알림 페이지가 "새 기능" 단추를 가리키는 풍선을 두 방식으로 연다. 풍선은 popup이 아니라 주 tree root 끝에 창 전체 자리로 담는 요소다.</p>
+        </header>
+        <h3>메시지와 대상</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.h:99-127" data-path="examples/demo/toasts_page.h" data-start="99"><script type="text/plain">
+    struct tip_open_intent
+    {
+        bool modal { true };
+        luil::ui_element_id opener {};
+    };
+
+    // 안내 풍선이 닫자고 했다 (닫기 단추·덮개·Esc·뒤로 가기).
+    struct tip_dismiss_intent
+    {
+        luil::teaching_tip_dismiss_reason reason { luil::teaching_tip_dismiss_reason::close_button };
+    };
+
+    // 안내 풍선의 행동 단추를 눌렀다. 이 데모는 어느 쪽이든 풍선을 닫는다.
+    struct tip_action_intent
+    {
+        bool primary { true };
+    };
+
+    // 풍선이 가리키는 "새 기능" 단추를 눌렀다.
+    struct tip_target_intent
+    {
+    };
+
+    // 안내 풍선의 owner와 대상 단추다.
+    inline constexpr std::u8string_view tip_owner { u8"toasts/tip" };
+    [[nodiscard]] inline luil::ui_element_id tip_target_id()
+    {
+        return { kind_toast_trigger, u8"toasts/tip-target" };
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:405-421" data-path="examples/demo/toasts_page.cpp" data-start="405"><script type="text/plain">
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id { kind_layout, u8"tip-buttons" }, row_config) };
+        auto target { std::make_unique<luil::text_button_element>(tip_target_id(), luil::text_button_config { .text = u8"새 기능" }) };
+        target->set_cursor(luil::ui_cursor::hand);
+        target->set_action(luil::ui_trigger::left_click, luil::make_message_action(tip_target_intent {}));
+        row->add_fit(std::move(target));
+        const auto add_opener = [&row](std::u8string owner, std::u8string label, const bool modal) {
+            auto button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_toast_trigger, std::move(owner) }, luil::text_button_config { .text = std::move(label) }) };
+            button->set_cursor(luil::ui_cursor::hand);
+            // 연 단추가 돌아갈 자리다. 액션이 자기 id를 받는다.
+            button->set_action(luil::ui_trigger::left_click, [modal](const luil::ui_action_context& context) -> std::vector<luil::input_action> {
+                return { luil::make_app_action(tip_open_intent { modal, context.element }) };
+            });
+            row->add_fit(std::move(button));
+        };
+        add_opener(u8"toasts/tip-open-modal", u8"덮개로 열기", true);
+        add_opener(u8"toasts/tip-open-modeless", u8"비modal로 열기", false);
+        page.add(std::move(row), luil::text_button_height);
+</script></div>
+        <div class="prose">
+          <p>여는 단추의 액션이 자기 id(<code>context.element</code>)를 실어 보낸다. 닫힌 뒤 초점이 돌아갈 자리다.</p>
+        </div>
+        <h3>여닫기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:210-231" data-path="examples/demo/toasts_page.cpp" data-start="210"><script type="text/plain">
+        if (const auto* const open { message.get<tip_open_intent>() }; open != nullptr)
+        {
+            tip_open_ = true;
+            tip_modal_ = open->modal;
+            tip_opener_ = open->opener;
+            tip_opened_at_ = std::chrono::steady_clock::now();
+            // 명령으로 연 비modal 풍선은 초점을 primary로 옮긴다. 덮개는 가둠의 진입이 옮긴다.
+            if (tip_modal_ == false)
+                request_focus(luil::teaching_tip_element::primary_id(tip_owner));
+            return true;
+        }
+        if (const auto* const dismiss { message.get<tip_dismiss_intent>() }; dismiss != nullptr)
+        {
+            finish_tip(std::u8string { dismiss_word(dismiss->reason) });
+            return true;
+        }
+        if (const auto* const action { message.get<tip_action_intent>() }; action != nullptr)
+        {
+            // 행동 단추는 풍선을 닫지 않는다. 닫는 것은 이 앱의 선택이다.
+            finish_tip(action->primary ? u8"써 보기" : u8"나중에");
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:442-452" data-path="examples/demo/toasts_page.cpp" data-start="442"><script type="text/plain">
+    void toasts_page::finish_tip(std::u8string reason)
+    {
+        // 늦게 온 닫기 메시지가 다시 연 풍선의 기록을 덮지 않는다.
+        if (tip_open_ == false)
+            return;
+        tip_open_ = false;
+        tip_last_close_ = std::move(reason);
+        // 비modal은 가둠이 없어 되돌리기가 없다. 연 단추로 초점 요청을 싣는다.
+        if (tip_modal_ == false && tip_opener_ != luil::ui_element_id {})
+            request_focus(tip_opener_);
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>덮개 풍선은 초점 가둠이다. 열리면 초점이 primary, 없으면 secondary, 없으면 닫기 단추로 들어가고, 닫히면 <code>focus_return</code>으로 돌아간다.</li>
+            <li>비modal 풍선은 가둠이 없어 초점을 옮기지 않는다. 명령으로 열었다면 앱이 <code>ui_frame::focus</code> 요청으로 primary에 옮기고, 닫을 때 연 자리로 되돌린다 (<code class="free">request_focus</code>는 그 요청을 싣는 데모의 도우미다).</li>
+            <li><strong>행동 단추는 풍선을 닫지 않는다.</strong> 이 데모는 닫기로 정했다. 늦게 온 닫기 메시지가 다시 연 풍선을 덮지 않게 <code>tip_open_</code>부터 본다.</li>
+          </ul>
+        </div>
+        <h3>풍선을 짓고 겹으로 담는다</h3>
+        <div class="code tall" data-lang="cpp" data-src="examples/demo/toasts_page.cpp:511-553" data-path="examples/demo/toasts_page.cpp" data-start="511"><script type="text/plain">
+    std::unique_ptr<luil::ui_element> toasts_page::make_overlay()
+    {
+        prune();
+        std::unique_ptr<luil::ui_element> tip { make_tip() };
+        std::unique_ptr<luil::ui_element> stack { make_toast_stack() };
+        if (tip == nullptr)
+            return stack;
+        if (stack == nullptr)
+            return tip;
+        // 둘 다 창 전체를 받는다. 풍선이 뒤라 위에 그려지고 Tab 순서의 끝이다.
+        auto layer { std::make_unique<luil::layer_element>(luil::ui_element_id { kind_layout, u8"toasts/overlay" }) };
+        layer->add(std::move(stack));
+        layer->add(std::move(tip));
+        return layer;
+    }
+
+    std::unique_ptr<luil::ui_element> toasts_page::make_tip()
+    {
+        // 이번 build의 가지가 있을 때만 대상을 찾는다. 쓴 뒤 잊어 다음 frame에 낡은 가지를 읽지 않는다.
+        const luil::ui_element* const branch { page_root_ };
+        page_root_ = nullptr;
+        if (tip_open_ == false)
+        {
+            tip_relabel_ = false;
+            return nullptr;
+        }
+        luil::teaching_tip_config config {};
+        config.owner = std::u8string { tip_owner };
+        if (branch != nullptr)
+            config.target = luil::teaching_tip_target(*branch, tip_target_id());
+        tip_target_found_ = config.target.has_value();
+        tip_relabel_ = branch != nullptr && tip_target_found_ != tip_label_found_;
+        config.side = luil::field_popup_side::below;
+        config.modal = tip_modal_;
+        config.title = u8"새 기능";
+        config.body = u8"새 기능 단추로 바로 시작할 수 있습니다. 덮개 풍선은 바깥을 누르거나 Esc를 치면 닫힙니다.";
+        config.primary = luil::teaching_tip_button { u8"써 보기", luil::make_message_action(tip_action_intent { true }) };
+        config.secondary = luil::teaching_tip_button { u8"나중에", luil::make_message_action(tip_action_intent { false }) };
+        config.dismiss = [](const luil::teaching_tip_dismiss_reason reason) { return luil::make_app_action(tip_dismiss_intent { reason }); };
+        config.focus_return = tip_opener_;
+        config.opened_at = tip_opened_at_;
+        return std::make_unique<luil::teaching_tip_element>(std::move(config));
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:916-923" data-path="examples/demo_main.cpp" data-start="916"><script type="text/plain">
+                // 오버레이들: dialog는 화면을 덮고 토스트는 오른쪽 아래에 쌓인다.
+                basics_.add_overlay(*root, width, height, scale);
+                if (auto toasts { toasts_.make_overlay() }; toasts != nullptr)
+                {
+                    // 풍선은 배치 때 글을 잰다. frame에 싣는 스타일과 같은 포인터라야 테마 페이지의 글자 크기에서 잰 줄과 그린 글이 맞는다.
+                    toasts->arrange({ .slot = { 0.0f, 0.0f, width, height }, .scale = scale, .style = style });
+                    root->add(std::move(toasts));
+                }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>가리킬 자리는 <code>teaching_tip_target(가지, 대상 id)</code>로 찾는다. 이번 build에서 먼저 배치한 가지의 보이는 자리다. 숨은 가지는 건너뛰고, 자르는 조상과 겹친 부분만 본다. 없거나 다 잘렸으면 <code>std::nullopt</code>이고, 그러면 풍선은 자리 가운데에 꼬리 없이 선다. 닫을지는 앱이 정한다.</li>
+            <li>한 번에 배치하는 앱(<code>make_arranged_tree</code>)은 게시된 tree에서 앞 frame의 자리를 주므로 한 frame 늦다.</li>
+            <li>셸은 겹을 창 전체 자리로 배치해 root 끝에 담는다. frame에 싣는 스타일과 같은 포인터를 넘겨야 잰 줄과 그린 글이 맞는다.</li>
+            <li><code>opened_at</code>을 주면 나타나는 동안 투명도와 4px 다가옴이 움직인다. 움직임 줄이기 설정이면 움직이지 않는다.</li>
+          </ul>
+        </div>
+        <h3>모바일: 뒤로 가기와 터치 크기</h3>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/toasts_page.cpp:351-359" data-path="examples/mobile_demo/toasts_page.cpp" data-start="351"><script type="text/plain">
+    bool toasts_page::back_closes_tip() const noexcept
+    {
+        return tip_open_ && tip_modal_;
+    }
+
+    luil::input_action toasts_page::back_action() const
+    {
+        return luil::make_app_action(tip_dismiss_intent { luil::teaching_tip_dismiss_reason::back });
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/app.cpp:301-311" data-path="examples/mobile_demo/app.cpp" data-start="301"><script type="text/plain">
+        // 뒤로 가기는 열린 dialog·시트·덮개 안내 풍선을 먼저 닫고, 그다음 좁은 화면의 페이지를 닫는다. 맨 앞 화면이면 비워
+        // 두어 플랫폼의 기본 동작(앱을 떠나기)을 받는다. popup은 host가 그보다 먼저 닫는다.
+        //  - 비modal 풍선은 닫기 단추로만 닫아 뒤로 가기를 받지 않는다. 페이지를 떠나면 셸이 닫는다.
+        if (shown == page_basics && basics_.dialog_open())
+            frame->back = [action = basics_.back_action()] { return action; };
+        else if (shown == page_sheets && sheets_.sheet_open())
+            frame->back = [action = sheets_.back_action()] { return action; };
+        else if (shown == page_toasts && toasts_.back_closes_tip())
+            frame->back = [action = toasts_.back_action()] { return action; };
+        else if (nested)
+            frame->back = [] { return luil::make_app_action(back_intent {}); };
+</script></div>
+        <div class="prose">
+          <p><code>teaching_tip_dismiss_reason::back</code>은 요소가 내지 않는다. 앱이 덮개 풍선이 열린 동안 <code>ui_frame::back</code>에 그 메시지를 싣는다. 비modal 풍선은 뒤로 가기를 받지 않는다. 모바일 풍선은 <code>control_size</code>를 터치 높이로 올려 단추와 닫기를 키운다.</p>
+        </div>
+        <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">비modal 풍선의 Esc</span>비modal 풍선은 Esc를 받지 않는다. 풍선 안이든 밖이든 Esc는 앱 정책의 <code>on_key</code>로 흐른다. Esc로도 닫으려면 앱이 거기서 열림을 보고 닫는다. 덮개 풍선은 <code>dismiss</code>가 비어 있으면 닫기 단추가 없고, 덮개는 누름만 흡수하며, Esc는 앱으로 흐른다.</div></div>
+      </section>
+
+      <section class="sec" id="build-tooltip">
+        <header class="sec-head">
+          <h2>만들기: tooltip — 문자열, 마크다운, 임의의 내용</h2>
+          <p class="lede">요소에 <code>set_tooltip</code>으로 글을, <code>set_tooltip_content</code>로 tree를 단다. 둘을 함께 주면 내용이 그려지고 문자열은 보조 기술의 도움말로 남는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/controls_section.cpp:23-34" data-path="examples/widgets/controls_section.cpp" data-start="23"><script type="text/plain">
+        [[nodiscard]] luil::tooltip_config make_counter_tooltip()
+        {
+            return luil::make_markdown_tooltip({
+                .text = u8"### 카운터를 하나 더합니다\n\n**마크다운**과 *강조*, `인라인 코드`를 표시합니다. "
+                        u8"툴팁 위로 이동해도 열린 채로 유지됩니다.\n\n"
+                        u8"- 여러 줄 설명과 목록\n- 클릭할 수 있는 링크\n\n"
+                        u8"```cpp\nbutton->set_tooltip_content(\n    make_markdown_tooltip(help));\n```\n\n"
+                        u8"[여기를 눌러 카운터 더하기](app:increment)",
+                .activate_link
+                = [](const std::u8string_view destination) -> luil::input_action { return destination == u8"app:increment" ? luil::make_app_action(increment_intent {}) : luil::input_action {}; },
+            });
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/widgets/controls_section.cpp:69-73" data-path="examples/widgets/controls_section.cpp" data-start="69"><script type="text/plain">
+        auto text_button { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_counter_button }, luil::text_button_config { .text = u8"하나 더" }) };
+        text_button->set_cursor(luil::ui_cursor::hand);
+        text_button->set_tooltip(u8"카운터를 하나 더합니다. 제목·설명·코드가 있는 커스텀 툴팁입니다.");
+        text_button->set_tooltip_content(make_counter_tooltip());
+        text_button->set_action(luil::ui_trigger::left_click, luil::make_message_action(increment_intent {}));
+</script></div>
+        <div class="prose">
+          <p><code>make_markdown_tooltip(config, width, appearance)</code>는 마크다운을 그 폭에서 재서 배율 1로 배치한 tree를 <code>tooltip_config::content</code>에 넣어 돌려준다. 링크는 <code>activate_link</code>가 앱 액션을 만든다. 링크가 아니면 빈 액션을 돌려준다.</p>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:654-660" data-path="examples/demo/gallery_page.cpp" data-start="654"><script type="text/plain">
+        auto hover { button(u8"gallery/hover", u8"여기에 마우스를 올려 보세요", luil::text_button_visual::normal, std::move(hover_action)) };
+        hover->set_tooltip(u8"마크다운 도움말: 팝업 안으로 마우스를 옮겨 링크를 누를 수 있습니다.");
+        luil::markdown_config markdown {};
+        markdown.text = u8"### 마크다운 hover\n**굵게**, *기울임*, 인라인 코드와 링크를 지원합니다.\n\n- 팝업 위에서도 열린 상태 유지\n- 긴 내용은 휠로 스크롤\n\n[테마 설정](app:theme) · [탭 "
+                        u8"예제](app:tabs) · [링크 실행](app:sample)";
+        markdown.activate_link = follow_link;
+        hover->set_tooltip_content(luil::make_markdown_tooltip(std::move(markdown), 340.0f));
+</script></div>
+        <h3>마크다운이 아닌 내용</h3>
+        <div class="code" data-lang="cpp" data-label="두 줄짜리 커스텀 tooltip (직접 작성)" data-compile="pre-tooltip"><script type="text/plain">
+// 두 줄짜리 설명이다. 내용 tree는 배율 1의 논리 좌표로 배치한다 (`tooltip_config`의 규약).
+[[nodiscard]] luil::tooltip_config make_save_tooltip()
+{
+    constexpr float width { 260.0f };
+    luil::label_config title { .text = u8"저장", .font_size = 13.0f, .weight = luil::font_weight::semibold, .color = luil::label_color_role::primary };
+    luil::label_config hint { .text = u8"바꾼 내용을 파일에 씁니다.", .color = luil::label_color_role::dim };
+    const float title_height { luil::label_element::height_for(title) };
+    const float hint_height { luil::label_element::height_for(hint) };
+
+    luil::stack_config column {};
+    column.spacing = 4.0f;
+    auto content { std::make_unique<luil::stack_element>(luil::ui_element_id { luil::ui_element_kind::root, u8"save-tooltip" }, column) };
+    content->add(std::make_unique<luil::label_element>(luil::ui_element_id { luil::ui_element_kind::none, u8"save-tooltip-title" }, title), title_height);
+    content->add(std::make_unique<luil::label_element>(luil::ui_element_id { luil::ui_element_kind::none, u8"save-tooltip-hint" }, hint), hint_height);
+
+    luil::tooltip_config config {};
+    // root의 bounds가 내용 크기다. 배치하지 않았거나 크기가 0이면 없는 내용이 되어 문자열 tooltip으로 돌아간다.
+    config.content = std::make_shared<const luil::ui_tree>(luil::make_arranged_tree(std::move(content), { 0.0f, 0.0f, width, title_height + column.spacing + hint_height }, 1.0f));
+    config.delay = std::chrono::milliseconds { 700 };
+    return config;
+}
+
+void decorate(luil::ui_element& save_button)
+{
+    // 문자열은 보조 기술의 도움말(UIA HelpText)과 내용이 없을 때의 표시다. 그대로 둔다.
+    save_button.set_tooltip(u8"저장 (Ctrl+S)");
+    save_button.set_tooltip_content(make_save_tooltip());
+}
+</script></div>
+        <script type="text/plain" id="pre-tooltip" data-prelude>
+#include "luil/ui/label_element.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/ui_element.h"
+#include "luil/ui/ui_tree.h"
+#include <chrono>
+#include <memory>
+#include <string>
+#include <utility>
+namespace sample {
+/*SAMPLE*/
+}
+</script>
+        <div class="prose">
+          <ul>
+            <li>내용 tree는 배율 1의 논리 좌표로 배치한다. root의 bounds가 내용 크기다. 빈 tree, 배치하지 않은 root, 숨은 root, 크기 없는 root는 없는 내용으로 보고 문자열 표시로 돌아간다.</li>
+            <li><code>set_tooltip_content</code>는 음수·비정상 치수를 0으로, 음수 지연을 0으로, 그림자를 0~1로 다듬는다. <code>content</code>가 비면 지운다.</li>
+            <li>문자열 tooltip의 지연은 <code>tooltip_delay</code>(500ms) 고정이다. 지연을 바꾸려면 커스텀 내용의 <code>tooltip_config::delay</code>를 쓴다 (위 예는 700ms).</li>
+            <li>tooltip을 달면 요소가 hit 대상이 된다. 비활성 요소도 tooltip 표시를 위해 hit는 된다.</li>
+            <li>tooltip은 표면 밖으로 나가지 않는다. 좁은 창이나 popup 끝에서는 안쪽으로 밀리고, 큰 내용은 잘려 휠로 읽는다. 창 밖에 떠야 하는 카드는 popup으로 짓는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-dwell">
+        <header class="sec-head">
+          <h2>만들기: 머무름 카드와 hit를 받지 않는 hover 영역</h2>
+          <p class="lede">포인터가 0.35초 머무르면 미리보기를 열고 떠나거나 누르면 닫는 카드, 그리고 숨은 도구 막대를 드러내는 띠다. 시계와 들고 남은 controller가, 판은 앱이 맡는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:616-630" data-path="examples/demo/gallery_page.cpp" data-start="616"><script type="text/plain">
+        // 머무름: 카드 위에 0.35초 머무르면 미리보기가 열리고, 떠나거나 누르면 닫힌다.
+        luil::panel_config card_config {};
+        card_config.corner_radius = 6.0f;
+        card_config.border = [](const luil::ui_color_palette& palette) { return palette.control_border; };
+        auto dwell_card { std::make_unique<luil::panel_element>(luil::ui_element_id { kind_layout, u8"gallery/dwell-card" }, std::move(card_config)) };
+        dwell_card->set_content(make_label({ kind_text, u8"gallery/dwell-card-text" }, u8"여기에 포인터를 잠시 머무르세요", 12.0f, luil::label_color_role::primary));
+        dwell_card->set_hover_dwell(luil::hover_dwell_target {
+            .delay = std::chrono::milliseconds { 350 },
+            .on_dwell = luil::make_message_action(gallery_preview_intent { true }),
+            .on_end = luil::make_message_action(gallery_preview_intent { false }),
+        });
+        page.add(std::move(dwell_card), 36.0f);
+        page.add(make_label({ kind_text, u8"gallery/dwell-preview" }, preview_open_ ? u8"미리보기가 열렸습니다 — 떠나거나 누르면 닫힙니다." : u8"(미리보기 닫힘)", 12.0f,
+                     preview_open_ ? luil::label_color_role::primary : luil::label_color_role::dim),
+            24.0f);
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:645-649" data-path="examples/demo/gallery_page.cpp" data-start="645"><script type="text/plain">
+        reveal_region->set_hover_region(luil::hover_region_target {
+            .on_enter = [] { return luil::make_app_action(gallery_toolbar_intent { true }); },
+            .on_leave = [] { return luil::make_app_action(gallery_toolbar_intent { false }); },
+        });
+        reveal_layer->add(std::move(reveal_region));
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:256-265" data-path="examples/demo/gallery_page.cpp" data-start="256"><script type="text/plain">
+        if (const auto* const preview { message.get<gallery_preview_intent>() }; preview != nullptr)
+        {
+            preview_open_ = preview->open;
+            return true;
+        }
+        if (const auto* const toolbar { message.get<gallery_toolbar_intent>() }; toolbar != nullptr)
+        {
+            toolbar_shown_ = toolbar->shown;
+            return true;
+        }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>hover_dwell_target</code>는 머무르면 <code>on_dwell</code>을 한 번, 찬 뒤 떠남·누름·끌기에 <code>on_end</code>를 한 번 낸다. 머무름의 임자는 포인터 아래 요소에서 root 쪽으로 처음 만나는 머무름 역할이고, 비활성 요소는 임자가 아니다. 누름·끌기는 끝이자 취소이고, 떠났다 돌아올 때까지 다시 재지 않는다.</li>
+            <li><code>hover_region_target</code>은 hit 없이 보이는 자리로 들어옴·나감을 알린다. 누른 채 끄는 동안은 나감을 미룬다(<code>hold_while_captured</code>).</li>
+            <li>둘 다 마우스·펜만이다. 터치에는 없다. 머무름만 단 판도 hit 대상이어야 hover가 서서 시계가 찬다.</li>
+            <li>미리보기 판을 popup으로 띄우는 예는 <code>examples/tool_window/main.cpp</code>다. 그 popup의 <code>dismiss</code>는 "남기기"에 <code>luil::app_message {}</code>를 돌려준다 — 빈 액션이 아니다 (<a class="xref" href="#pitfalls">함정</a>).</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 필드는 <a class="xref" href="api.html#combo-box-config">API 찾아보기</a>에 있다. popup 쪽 형식(<code>ui_popup</code>·<code>menu_popup_config</code>)은 <a class="xref" href="menus.html#config">메뉴 문서의 레퍼런스</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="dropdown_element">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/dropdown_element.h:11-32" data-path="include/luil/ui/dropdown_element.h" data-start="11"><script type="text/plain">
+    struct dropdown_config
+    {
+        // 같은 화면에 드롭다운이 여럿일 때 구분하는 키다.
+        std::u8string owner {};
+        // 선택된 값의 라벨이다. 비어 있으면 placeholder를 흐리게 그린다.
+        std::u8string text {};
+        std::u8string placeholder {};
+        // 목록이 떠 있는지는 앱 상태다 (popup이 frame에 실려 있는지와 같이 간다).
+        // 참이면 테두리를 강조하고 화살표를 뒤집는다.
+        bool open { false };
+        // 누르면 낼 액션이다 (통상 목록 popup을 여닫자는 메시지).
+        // 없으면 `set_open`이 대신 눌리고, 둘 다 없으면 눌리지 않는다.
+        ui_action toggle {};
+        // 목록을 **이 상태로** 하라는 절대 메시지다. 없으면 보조 기술이 열고
+        // 닫을 수 없다 (UIA Expand·Collapse가 거절된다).
+        //  - 토글로 흘리면 오래된 발행본을 본 같은 명령 둘이 열었다 도로 닫는다 —
+        //    그룹의 `set_collapsed`와 같은 갈래다.
+        std::function<input_action(bool open)> set_open {};
+    };
+
+    // 닫힌 칸의 높이다 (논리 픽셀).
+    inline constexpr float dropdown_height { 28.0f };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>칸 id <code>{ dropdown, owner }</code>의 owner</td></tr>
+                  <tr><td><code>text</code></td><td>빈 글</td><td>고른 값의 라벨이자 접근 값. 비면 <code>placeholder</code>를 흐리게 그린다</td></tr>
+                  <tr><td><code>placeholder</code></td><td>빈 글</td><td>빈 칸의 안내 글이자 <strong>접근 이름</strong>. <code>set_access_name</code>은 쓰이지 않는다</td></tr>
+                  <tr><td><code>open</code></td><td>거짓</td><td>앱 상태. 참이면 테두리를 강조하고 화살표를 뒤집으며, 펼침으로 알린다</td></tr>
+                  <tr><td><code>toggle</code></td><td>없음</td><td>있으면 클릭이 이것이다(<code>set_open</code>보다 먼저). 보조 기술의 펼치기·접기에는 쓰지 않는다</td></tr>
+                  <tr><td><code>set_open</code></td><td>없음</td><td><code>toggle</code>이 없으면 클릭이 <code>set_open(!open)</code>. 없으면 보조 기술이 열고 닫을 수 없다. 둘 다 없으면 눌리지 않는다</td></tr>
+                  <tr><td><code>dropdown_height</code></td><td>28</td><td>닫힌 칸의 높이 (논리 픽셀)</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="field_popup.h">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/field_popup.h:14-84" data-path="include/luil/ui/field_popup.h" data-start="14"><script type="text/plain">
+    // popup을 필드의 어느 가장자리에 맞추는가.
+    enum class field_popup_alignment
+    {
+        // popup의 왼쪽을 필드의 왼쪽에 맞춘다.
+        start,
+        // popup의 오른쪽을 필드의 오른쪽에 맞춘다.
+        end,
+    };
+
+    struct field_popup_anchor
+    {
+        // 필드의 자리다. `ui_element::bounds()`와 같은 좌표(물리 픽셀)다.
+        rect_f field {};
+        // popup이 들어갈 영역이다. 보통 앵커 표면의 client 사각형(물리 픽셀)이다.
+        //  - 작업 영역은 host만 안다. 그래서 이 영역 안에서만 놓고, 그 밖으로 걸치는 일은 없다.
+        rect_f limit {};
+        // 필드와 popup 사이의 간격이다 (논리 픽셀).
+        float gap { 2.0f };
+        field_popup_alignment alignment { field_popup_alignment::start };
+    };
+
+    struct field_popup_position
+    {
+        // `ui_popup::x`·`y`에 그대로 넣는 논리 픽셀이다.
+        float x { 0.0f };
+        float y { 0.0f };
+        // 아래가 모자라 필드 위에 놓았는가. 앱이 뒤집혔는지 알아야 하는 쪽(꼬리가 있는 popup)이 읽는다.
+        bool above { false };
+    };
+
+    // 필드 아래에 popup을 놓을 자리를 정한다. `size`는 popup의 논리 크기(`make_menu_popup`이 잰 폭·높이)다.
+    //  - 기본은 필드 아래다. 아래가 `limit`을 넘고 위가 들어가면 위로 뒤집는다. 둘 다 들어가지 않으면 아래에 두고
+    //    나머지는 host가 민다.
+    //  - 가로는 `alignment`로 맞춘 뒤 `limit` 안으로 민다. popup이 `limit`보다 넓으면 왼쪽 가장자리에 맞춘다.
+    //  - 배율이 유효하지 않으면(0 이하, 유한하지 않음) 1로 본다.
+    [[nodiscard]] field_popup_position place_field_popup(const field_popup_anchor& anchor, size_f size, float scale) noexcept;
+
+    // 필드를 여는 키 처리기다 (`ui_element::set_key_handler`). 필드의 처리기는 닫혀 있을 때만 일한다.
+    //  - Alt+↓는 Alt만 눌렸을 때, F4는 수식 키 없이 `set_open(true)`를 낸다. `down_opens`가 참이면 수식 키 없는 ↓도
+    //    연다. 화살표 단추처럼 ↓가 달리 쓰이지 않는 자리에 준다.
+    //  - 이미 열려 있으면 그 키들을 빈 목록으로 삼켜 앱 단축키로 새지 않게 한다. 그 밖의 키는 `std::nullopt`다.
+    //  - `set_open`이 비어 있으면 처리기도 비어 있다.
+    [[nodiscard]] key_handler field_popup_key_handler(bool open, std::function<input_action(bool open)> set_open, bool down_opens);
+
+    // 필드의 어느 변 바깥에 놓는가다. 왼쪽·오른쪽은 화면의 방향이고 읽는 방향과 무관하다.
+    enum class field_popup_side
+    {
+        below,
+        above,
+        left,
+        right,
+    };
+
+    struct field_popup_side_position
+    {
+        // `place_field_popup`과 같은 논리 픽셀이다.
+        float x { 0.0f };
+        float y { 0.0f };
+        // 실제로 놓은 방향이다.
+        field_popup_side side { field_popup_side::below };
+        // 네 방향 모두 모자라 바라는 방향에 두고 `limit` 안으로 밀었으면 거짓이다. 그때는 필드를 덮을 수 있다.
+        bool fits { true };
+    };
+
+    // 필드의 네 변 가운데 한 곳 바깥에 놓을 자리를 정한다. `size`는 논리 크기다 (docs/teaching-tip-design.md 결정 3).
+    //  - 바라는 방향, 반대 방향, 남은 두 방향(아래·위면 오른쪽·왼쪽, 오른쪽·왼쪽이면 아래·위) 순으로 주 축이 `limit`에
+    //    들어가는 첫 방향에 놓는다. 주 축은 아래·위면 세로, 왼쪽·오른쪽이면 가로다.
+    //  - 다른 축은 필드 가운데에 맞춘 뒤 `limit` 안으로 민다. `limit`보다 크면 처음 가장자리(왼쪽·위)에 붙는다.
+    //  - 어느 방향도 들어가지 않으면 바라는 방향에 두고 주 축도 `limit` 안으로 밀며 `fits`가 거짓이다.
+    //  - `anchor.alignment`는 보지 않는다. 배율이 유효하지 않으면 1로 본다 (`place_field_popup`과 같다).
+    [[nodiscard]] field_popup_side_position place_field_popup_at_side(const field_popup_anchor& anchor, size_f size, float scale, field_popup_side preferred) noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>이름</th><th>기본값</th><th>뜻 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>field_popup_anchor::field</code></td><td>—</td><td>필드 자리. <code>bounds()</code>와 같은 물리 픽셀</td></tr>
+                  <tr><td><code>field_popup_anchor::limit</code></td><td>—</td><td>popup이 들어갈 영역. 보통 앵커 표면 client (물리 픽셀). 이 안에서만 놓는다</td></tr>
+                  <tr><td><code>field_popup_anchor::gap</code></td><td>2</td><td>필드와 popup 사이 (논리 픽셀). 음수·비정상이면 0</td></tr>
+                  <tr><td><code>field_popup_anchor::alignment</code></td><td><code>start</code></td><td><code>start</code>는 왼쪽끼리, <code>end</code>는 오른쪽끼리. 네 방향 판은 보지 않는다</td></tr>
+                  <tr><td><code>field_popup_position::above</code></td><td>—</td><td>아래가 모자라 위로 뒤집었는가</td></tr>
+                  <tr><td><code>field_popup_side_position::fits</code></td><td>—</td><td>거짓이면 네 방향 다 모자라 밀었다. 필드를 덮을 수 있다</td></tr>
+                  <tr><td><code>field_popup_key_handler</code></td><td>—</td><td><code>set_open</code>이 비면 처리기도 비어 있다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="combo_box_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/combo_box_element.h:12-78" data-path="include/luil/ui/combo_box_element.h" data-start="12"><script type="text/plain">
+    struct combo_suggestion
+    {
+        std::u8string key {};
+        std::u8string label {};
+        bool enabled { true };
+    };
+
+    struct combo_suggestion_state
+    {
+        std::uint64_t token { 0 };
+        std::u8string query {};
+        std::shared_ptr<const std::vector<combo_suggestion>> items {};
+        bool loading { false };
+    };
+
+    [[nodiscard]] std::uint64_t begin_combo_query(combo_suggestion_state& state, std::u8string query);
+    [[nodiscard]] bool accept_combo_suggestions(combo_suggestion_state& state, std::uint64_t token, std::shared_ptr<const std::vector<combo_suggestion>> items);
+
+    struct combo_box_config
+    {
+        text_input_config input {};
+        combo_suggestion_state suggestions {};
+        std::u8string highlighted {};
+        std::u8string validation_message {};
+        bool open { false };
+        bool allow_custom { true };
+        float popup_height { 240.0f };
+        std::function<input_action(bool)> set_open {};
+        std::function<input_action(const std::u8string&)> move {};
+        std::function<input_action(const std::u8string&)> select {};
+        std::function<input_action(const std::u8string&)> commit {};
+        std::function<input_action(const std::u8string&)> invalid {};
+        std::function<input_action(std::uint64_t, const std::u8string&)> request_suggestions {};
+        ui_action restore {};
+        float scroll_offset { 0.0f };
+        std::function<input_action(float delta)> scroll {};
+        std::function<input_action(float offset)> scroll_to {};
+        std::function<bool(const combo_suggestion&, std::u8string_view)> matches {};
+        // 후보를 받는 동안 popup에 서는 진행 표시의 접근 이름이다. 화면에는 그리지 않는다. 비면 기본 문구("추천 항목을 불러오는 중")다.
+        std::u8string loading_name {};
+    };
+
+    class combo_box_element final : public ui_element
+    {
+    public:
+        // 입력 칸은 같은 kind와 다른 owner다. 기존 text_target_of를 그대로 쓴다.
+        combo_box_element(ui_element_id id, text_input_view value, combo_box_config config);
+        [[nodiscard]] bool ancestor_keys_connected() const noexcept;
+        [[nodiscard]] std::optional<std::vector<input_action>> on_key(const key_pressed_event& event) const;
+        // 앱이 편집·IME 표시를 반영한 뒤 그 token의 후보 요청을 만든다.
+        [[nodiscard]] std::optional<input_action> suggestion_request(std::uint64_t token) const;
+        [[nodiscard]] ui_popup suggestion_popup(std::u8string anchor = {}) const;
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] access_info accessibility() const override;
+        [[nodiscard]] std::optional<text_input_snapshot> text_input() const override;
+        [[nodiscard]] std::optional<std::vector<input_action>> access_actions(const access_request& request) const override;
+
+    private:
+        text_input_view value_ {};
+        combo_box_config config_ {};
+        text_input_element* input_ { nullptr };
+        ui_element* validation_ { nullptr };
+        float scale_ { 1.0f };
+        bool keys_connected_ { false };
+        std::vector<combo_suggestion> visible_items_ {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>input</code></td><td><code>{}</code></td><td>안쪽 글 칸 설정. <code>placeholder</code>가 콤보의 접근 이름이 된다. <code>clear</code>가 비고 <code>set_open</code>이 있으면 지우기 자리에 ▾ 펼침 단추가 선다</td></tr>
+                  <tr><td><code>suggestions</code></td><td><code>{}</code></td><td>앱의 후보 상태(token·질의·항목·받는 중)를 그대로 싣는다</td></tr>
+                  <tr><td><code>highlighted</code></td><td>빈 글</td><td>강조 후보 키. 목록의 고른 행으로 그린다</td></tr>
+                  <tr><td><code>validation_message</code></td><td>빈 글</td><td>비지 않으면 칸 아래에 오류색 글 줄(20 논리 픽셀)</td></tr>
+                  <tr><td><code>open</code></td><td>거짓</td><td>후보 popup이 떠 있는가 (앱 상태)</td></tr>
+                  <tr><td><code>allow_custom</code></td><td>참</td><td>거짓이면 후보 밖 글의 Enter가 <code>invalid</code></td></tr>
+                  <tr><td><code>popup_height</code></td><td>240</td><td>popup 높이. PageUp·Down 한 쪽은 <code>popup_height / 24</code> 줄</td></tr>
+                  <tr><td><code>set_open</code></td><td>없음</td><td>닫힌 콤보의 ↑↓·Page가 열지 못하고, ▾ 단추·Esc·닫힘 계기·초점 떠남·보조 기술도 쓰지 못한다</td></tr>
+                  <tr><td><code>move</code></td><td>없음</td><td>열린 콤보의 ↑↓가 아무것도 내지 않는다 (삼킨다)</td></tr>
+                  <tr><td><code>select</code></td><td>없음</td><td>후보를 고를 수 없다 (Enter·행 클릭)</td></tr>
+                  <tr><td><code>commit</code></td><td>없음</td><td><code>allow_custom</code>일 때 강조 없는 Enter가 콤보 밖으로 흐른다</td></tr>
+                  <tr><td><code>invalid</code></td><td>없음</td><td><code>allow_custom = false</code>에서 후보 밖 Enter를 삼키기만 한다</td></tr>
+                  <tr><td><code>restore</code></td><td>없음</td><td>닫힌 콤보의 Esc가 콤보 밖으로 흐른다</td></tr>
+                  <tr><td><code>matches</code></td><td>없음</td><td>기본 거르기(라벨에 글이 든 것, 대소문자 구분)를 쓴다. 주면 언제나 이것이다</td></tr>
+                  <tr><td><code>loading_name</code></td><td>빈 글</td><td>받는 중 스피너의 접근 이름. 기본 문구 "추천 항목을 불러오는 중"</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="teaching_tip_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/teaching_tip_element.h:14-78,125-130" data-path="include/luil/ui/teaching_tip_element.h" data-start="14"><script type="text/plain">
+    // 안내 풍선의 치수다 (논리 픽셀).
+    inline constexpr float teaching_tip_default_width { 320.0f };
+    // 꼬리의 밑변과 길이다. 꼬리 끝과 대상 사이는 2를 더 띄운다.
+    inline constexpr float teaching_tip_tail_width { 16.0f };
+    inline constexpr float teaching_tip_tail_length { 8.0f };
+    // 풍선이 root 자리 가장자리에서 띄우는 여백이다.
+    inline constexpr float teaching_tip_screen_margin { 8.0f };
+
+    // 풍선을 닫자는 계기다. 무엇을 닫을지는 앱이 정한다.
+    enum class teaching_tip_dismiss_reason
+    {
+        // 닫기 단추를 눌렀다.
+        close_button,
+        // modal일 때 덮개를 눌렀다.
+        outside,
+        // modal일 때 Esc를 눌렀다.
+        escape,
+        // 요소가 아니라 앱이 `ui_frame::back`에서 이 값으로 부른다 (`sheet_dismiss_reason::back`과 같다).
+        back,
+    };
+
+    // 행동 단추 하나다. 정보 막대의 `action_label`·`action` 쌍과 같은 규칙으로 둘 다 있어야 단추가 선다.
+    struct teaching_tip_button
+    {
+        std::u8string text {};
+        ui_action action {};
+    };
+
+    struct teaching_tip_config
+    {
+        // root·덮개·몸·그림의 owner다. 단추의 owner는 이 값, 단위 구분자(U+001F), `close`·`primary`·`secondary`다.
+        std::u8string owner {};
+        // 가리킬 자리다. 물리 픽셀, tree 좌표(`ui_element::bounds()`와 같다)다.
+        //  - 비거나 root 자리와 겹치지 않으면 대상이 없다. 풍선은 자리 가운데에 꼬리 없이 선다 (설계 문서 결정 2).
+        //  - 같은 frame에 먼저 배치한 가지에서 `teaching_tip_target`으로 보이는 자리를 얻어 넣는다 (결정 1).
+        std::optional<rect_f> target {};
+        // 바라는 방향이다. 모자라면 반대, 남은 두 방향 순으로 뒤집는다 (`place_field_popup_at_side`).
+        field_popup_side side { field_popup_side::below };
+        // 참이면 덮개다. 투명한 덮개가 뒤를 막고 초점을 가두며 덮개 누름·Esc가 `dismiss`를 부른다.
+        // 거짓이면 비modal이다. 뒤 화면을 그대로 쓰고 초점을 옮기지 않으며 Esc를 받지 않는다 (결정 4). 닫기 단추로만 닫힌다.
+        bool modal { true };
+        // 제목과 본문이다. 둘 다 풍선 폭에서 줄을 바꾼다. 자리가 모자라면 본문의 줄 수를 줄이고 마지막 줄을 줄인다.
+        std::u8string title {};
+        std::u8string body {};
+        // 풍선 위쪽의 그림이다. 폭은 안쪽 폭이고 높이는 그림 비율이다 (최대 160). 설명이 있을 때만 읽힌다.
+        std::optional<image_config> image {};
+        // 행동 단추 둘이다 (결정 7). primary는 accent, secondary는 normal이다. 누름은 앱 액션이고 풍선을 닫지 않는다.
+        std::optional<teaching_tip_button> primary {};
+        std::optional<teaching_tip_button> secondary {};
+        // 닫자는 메시지다. 비면 닫기 단추가 없다. 덮개는 누름만 흡수하고 Esc는 앱으로 흐른다
+        // (가둠에 dismiss 액션이 없을 때의 controller 규칙이다).
+        std::function<input_action(teaching_tip_dismiss_reason)> dismiss {};
+        // 접근 이름이다. 비면 `title`, 둘 다 비면 기본 문구(안내)다.
+        std::u8string name {};
+        // 닫기 단추의 툴팁이자 이름이다. 비면 기본 문구(닫기)다.
+        std::u8string close_tooltip {};
+        // modal이 닫힌 뒤 초점이 돌아갈 바깥 자리다 (`modal_host_config::focus_return`과 같다). 비modal에서는 쓰이지 않는다.
+        ui_element_id focus_return {};
+        // 연 시각이다. 비면(시계의 처음) 나타남 움직임이 없다 (결정 5).
+        std::chrono::steady_clock::time_point opened_at {};
+        // 풍선의 폭이다. 자리 폭에서 여백 둘을 뺀 값보다 넓으면 그 값으로 줄인다.
+        float width { teaching_tip_default_width };
+        // 행동 단추의 높이와 닫기 단추의 한 변이다. 0이면 `text_button_height`와 24다. 터치 앱이 올린다.
+        float control_size { 0.0f };
+    };
+⋯@125
+    // 배치가 끝난 가지 `root`에서 `id`의 보이는 자리를 찾는다 (물리 픽셀, tree 좌표). 같은 frame에 대상을 먼저 배치한 앱이
+    // `teaching_tip_config::target`에 넣는다 (결정 1).
+    //  - 숨은 가지(`visible()`이 거짓)는 건너뛴다. `ui_tree::visible_bounds`는 숨김을 보지 않으므로 여기서만 nullopt다.
+    //  - 지나온 자르는 조상(`clip_children`)과 겹친 자리만 남긴다. 규칙은 `ui_tree::visible_bounds`와 같다.
+    //  - 없거나 다 잘렸으면 nullopt다. 앱은 그것을 보고 풍선을 닫을지 정한다.
+    [[nodiscard]] std::optional<rect_f> teaching_tip_target(const ui_element& root, const ui_element_id& id);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>target</code></td><td>비어 있음</td><td>가리킬 자리 (물리 픽셀, tree 좌표). 비거나 root 자리와 겹치지 않으면 가운데에 꼬리 없이</td></tr>
+                  <tr><td><code>side</code></td><td><code>below</code></td><td>바라는 방향. 모자라면 반대, 남은 둘 순</td></tr>
+                  <tr><td><code>modal</code></td><td>참</td><td>참: 덮개·가둠·덮개 누름·Esc. 거짓: 뒤 화면 그대로, 초점 안 옮김, Esc 안 받음, 닫기 단추로만</td></tr>
+                  <tr><td><code>primary</code> · <code>secondary</code></td><td>비어 있음</td><td><code>text</code>와 <code>action</code>이 둘 다 있어야 단추가 선다. 누름은 앱 액션이고 풍선을 닫지 않는다</td></tr>
+                  <tr><td><code>dismiss</code></td><td>없음</td><td>닫기 단추가 없다. 덮개는 누름만 흡수하고 Esc는 앱으로 흐른다</td></tr>
+                  <tr><td><code>name</code></td><td>빈 글</td><td><code>title</code>, 둘 다 비면 "안내"</td></tr>
+                  <tr><td><code>close_tooltip</code></td><td>빈 글</td><td>닫기 단추의 tooltip이자 이름. 기본 "닫기"</td></tr>
+                  <tr><td><code>focus_return</code></td><td>빈 id</td><td>덮개가 닫힌 뒤 초점이 돌아갈 자리. 비modal에서는 쓰이지 않는다</td></tr>
+                  <tr><td><code>opened_at</code></td><td>시계의 처음</td><td>나타남 움직임이 없다</td></tr>
+                  <tr><td><code>width</code></td><td>320</td><td>자리 폭에서 여백 둘을 뺀 값보다 넓으면 줄인다</td></tr>
+                  <tr><td><code>control_size</code></td><td>0</td><td>행동 단추 높이와 닫기 한 변이 기본값(<code>text_button_height</code>·24). 터치 앱이 올린다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="tooltip · 머무름">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element.h:1060-1077,1265-1268" data-path="include/luil/ui/ui_element.h" data-start="1060"><script type="text/plain">
+    inline constexpr std::chrono::milliseconds tooltip_delay { 500 };
+    class ui_tree;
+
+    // 정보 표시용 hover 콘텐츠다. 내용은 배율 1의 논리 좌표로 배치한 독립 tree이고,
+    // root의 bounds가 내용 크기다. 그릴 때 소유 표면의 DPI를 적용하므로 여러 배율에서 공유할 수 있다.
+    // 포인터는 내용에 먼저 전달한다. 키보드 초점·접근 tree는 분리하며 읽을 요약은 소유 요소의 set_tooltip에 둔다.
+    struct tooltip_config
+    {
+        std::shared_ptr<const ui_tree> content {};
+        std::chrono::milliseconds delay { tooltip_delay };
+        float padding { 8.0f };
+        float gap { 3.0f };
+        float corner_radius { 4.0f };
+        float shadow { 0.16f };
+        // 비어 있으면 각각 tooltip_background·tooltip_border다.
+        std::function<ui_color(const ui_color_palette&)> background {};
+        std::function<ui_color(const ui_color_palette&)> border {};
+    };
+⋯@1265
+        void set_tooltip(std::u8string text);
+        // 커스텀 내용이 문자열 대신 표시된다. 빈 content로 지우면 문자열 표시로 돌아간다.
+        // 게시 후에는 내용 tree도 불변이다. 화면 밖으로 넘치는 내용은 표면 안에서 잘린다.
+        void set_tooltip_content(tooltip_config config);
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/ui_element.h:715-742" data-path="include/luil/ui/ui_element.h" data-start="715"><script type="text/plain">
+    // 포인터가 이 element 위에 `delay` 동안 머무르면 낸다 (미리보기 카드 — hover-dwell-design.md).
+    //  - 머무름의 임자는 포인터 아래 element에서 root 쪽으로 처음 만나는 이 역할이다. 안쪽 자식 사이를 옮겨 다녀도
+    //    임자가 같으면 시계가 이어진다.
+    //  - 머무름이 찬 뒤 그 끝(`on_end`)이 한 번 온다: 임자를 떠남, 아무 버튼이나 누름, 끌기 시작. 가둠·popup이
+    //    덮어 hover가 그쪽으로 옮겨도 떠남이다.
+    //  - 차기 전에 떠나거나 누르면 아무것도 내지 않는다. 누른 뒤에는 임자를 떠났다 돌아올 때까지 다시 재지 않는다.
+    //  - 마우스·펜의 hover만 잰다. 터치에는 머무름이 없다.
+    struct hover_dwell_target
+    {
+        std::chrono::milliseconds delay { 350 };
+        ui_action on_dwell {};
+        ui_action on_end {};
+    };
+
+    // hit를 받지 않고 자리만으로 포인터의 들어옴·나감을 알리는 역할이다 (자동으로 숨는 도구 막대 — hover-dwell-design.md).
+    //  - 판정은 hit test가 아니라 보이는 자리(`ui_tree::visible_bounds`)다. 그 자리의 누름·hover는 아래 element가
+    //    그대로 받는다. 비활성이어도 알린다.
+    //  - `hold_while_captured`면 누른 채 끄는 동안(포인터를 잡은 동안)은 자리를 벗어나도 나감을 뗄 때까지 미룬다 —
+    //    드러난 도구 막대를 끄는 도중에 숨기지 않는다.
+    //  - 마우스·펜만이다. 터치에는 hover가 없다.
+    struct hover_region_target
+    {
+        std::function<input_action()> on_enter {};
+        std::function<input_action()> on_leave {};
+        bool hold_while_captured { true };
+        ui_action on_move {};
+        std::chrono::milliseconds move_interval { 16 };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>이름</th><th>기본값</th><th>뜻 · 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>tooltip_delay</code></td><td>500ms</td><td>문자열 tooltip의 지연. 바꿀 수 없다</td></tr>
+                  <tr><td><code>tooltip_config::content</code></td><td>없음</td><td>배율 1의 논리 좌표로 배치한 독립 tree. root bounds가 내용 크기</td></tr>
+                  <tr><td><code>tooltip_config::delay</code></td><td><code>tooltip_delay</code></td><td>포인터가 들어온 뒤 표시까지</td></tr>
+                  <tr><td><code>padding</code> · <code>gap</code> · <code>corner_radius</code> · <code>shadow</code></td><td>8 · 3 · 4 · 0.16</td><td>내용 둘레, 대상과 상자 사이, 모서리, 그림자 진하기(0~1)</td></tr>
+                  <tr><td><code>background</code> · <code>border</code></td><td>없음</td><td>팔레트의 <code>tooltip_background</code>·<code>tooltip_border</code></td></tr>
+                  <tr><td><code>hover_dwell_target::delay</code></td><td>350ms</td><td>머무른 뒤 <code>on_dwell</code>까지</td></tr>
+                  <tr><td><code>hover_region_target::hold_while_captured</code></td><td>참</td><td>누른 채 끄는 동안 나감을 미룬다</td></tr>
+                  <tr><td><code>hover_region_target::move_interval</code></td><td>16ms</td><td><code>on_move</code>를 내는 가장 짧은 간격</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">요소는 앱 상태를 바꾸지 않는다. 앱이 준 factory가 메시지를 만들고, 메시지는 logic thread의 <code>handle</code>로 간다. tooltip만 앱 메시지 없이 controller와 표면 안에서 끝난다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사용자가 한 일</th><th>나는 것</th><th>만드는 thread</th></tr></thead>
+            <tbody>
+              <tr><td>닫힌 드롭다운 클릭 · 초점의 Space·Enter</td><td><code>toggle</code>, 없으면 <code>set_open(!open)</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>열린 드롭다운을 다시 누름</td><td>누를 때의 tree의 액션 = <code>set_open(false)</code>. 바깥 누름 닫힘과 함께 와도 같다</td><td><span class="thread-chip in">input</span> <span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>보조 기술 펼치기·접기 (드롭다운·콤보)</td><td><code>set_open(true)</code> · <code>set_open(false)</code></td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>목록에서 고름 (클릭·Enter)</td><td>메뉴의 <code>select(key)</code>, 이어서 <code>after_select</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>목록 popup 밖 누름 · 휠 · Esc · 창 이동·크기 · 활성 전환</td><td>목록 popup의 <code>dismiss(reason)</code></td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>앱이 단 처리기: 닫힌 칸의 Alt+↓ · F4 · ↓</td><td><code>set_open(true)</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>콤보에 글 입력 · IME 조합</td><td>정책의 <code>make_text_edit_action</code>·<code>make_text_composition_action</code>이 만든 앱 메시지</td><td><span class="thread-chip in">input</span> (조합은 <span class="thread-chip ui">UI</span>도)</td></tr>
+              <tr><td>(앱의 비동기 작업이 끝남)</td><td>앱의 메시지 또는 <code>tick</code></td><td><span class="thread-chip lg">logic</span></td></tr>
+              <tr><td>열린 콤보의 ↑↓ · PageUp·Down</td><td><code>move(key)</code>, 강조가 창 밖이면 <code>scroll(delta)</code>도</td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>닫힌 콤보의 ↑↓ · Page · ▾ 단추</td><td><code>set_open(true)</code> · ▾는 <code>set_open(!open)</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>콤보 Enter</td><td>강조가 있으면 <code>select</code>. 아니면 <code>commit(글)</code>(허용) · <code>select</code>(라벨이 같음) · 삼킴(받는 중) · <code>invalid(글)</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>콤보 Esc</td><td>열림: <code>set_open(false)</code> (대개 popup의 dismiss가 먼저) · 닫힘: <code>restore</code></td><td><span class="thread-chip in">input</span> · <span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>콤보에서 초점이 떠남 (Tab · 보조 기술 초점)</td><td>열려 있을 때만 <code>set_open(false)</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>후보 popup의 모든 닫힘 계기</td><td><code>set_open(false)</code> (<code>suggestion_popup()</code>이 단 것)</td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>후보 행 클릭</td><td>목록의 <code>select(key)</code> = 콤보의 <code>select</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>안내 풍선 닫기 단추 · 덮개 누름 · 덮개 풍선의 Esc</td><td><code>dismiss(close_button)</code> · <code>dismiss(outside)</code> · <code>dismiss(escape)</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>안내 풍선 행동 단추</td><td>그 단추의 <code>action</code> (풍선을 닫지 않는다)</td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>Android 뒤로 가기 (덮개 풍선이 열림)</td><td>앱이 <code>ui_frame::back</code>에 둔 <code>dismiss(back)</code></td><td><span class="thread-chip ui">UI</span></td></tr>
+              <tr><td>tooltip 마크다운 링크 클릭</td><td><code>activate_link(destination)</code>의 액션</td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>포인터 머무름 · 떠남·누름</td><td><code>on_dwell</code> · <code>on_end</code></td><td><span class="thread-chip in">input</span></td></tr>
+              <tr><td>hover 영역 들어옴 · 나감</td><td><code>on_enter</code> · <code>on_leave</code></td><td><span class="thread-chip in">input</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>받은 메시지</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td><code>set_open(open)</code></td><td>그 값을 열림으로 둔다. 다른 popup을 닫을지 정한다. 콤보면 열 때 질의를 시작한다</td></tr>
+              <tr><td>목록의 <code>select</code> · <code>after_select</code></td><td>값을 바꾸고 닫는다. 닫기를 절대 상태로 받으면 두 번 와도 같다</td></tr>
+              <tr><td>popup <code>dismiss</code>의 메시지</td><td>닫는다. 남길 계기는 factory가 빈 액션을 돌려줘야 한다 — 받은 뒤 무시하는 것과 다르다</td></tr>
+              <tr><td>콤보 글 편집</td><td>글을 고치고, 바뀌었으면 검증 글을 지우고 열고 <code>begin_combo_query</code></td></tr>
+              <tr><td>비동기 답</td><td><code>accept_combo_suggestions(state, token, items)</code>. 거짓이면 늦게 온 옛 답이다. 강조 키가 새 후보에 없으면 지운다</td></tr>
+              <tr><td>콤보 <code>move</code> · <code>scroll</code> · <code>scroll_to</code></td><td>강조 키와 스크롤 값을 바꾼다</td></tr>
+              <tr><td>콤보 <code>select</code> · <code>commit</code> · <code>invalid</code> · <code>restore</code></td><td>값을 확정하고 닫는다 / 형식을 보고 확정하거나 검증 글을 단다 / 검증 글을 단다 / 마지막 확정 값으로 되돌린다</td></tr>
+              <tr><td>풍선 <code>dismiss(reason)</code> · 행동 단추</td><td>열림을 지운다. 비modal이면 초점을 연 자리로 요청한다. 행동 단추 뒤 닫을지는 앱이 정한다</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">드롭다운 목록의 키는 메뉴 경로가, 콤보의 키는 콤보 자신의 키 처리기가, 덮개 풍선의 키는 초점 가둠이 받는다. tooltip은 키를 받지 않는다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="드롭다운 · 여는 키">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>상태</th><th>키</th><th>동작</th></tr></thead>
+                <tbody>
+                  <tr><td>닫힘, 초점</td><td>Space · Enter</td><td>클릭과 같다 (<code>toggle</code> 또는 <code>set_open(true)</code>)</td></tr>
+                  <tr><td>닫힘, 초점</td><td>Alt+↓ · F4 · ↓</td><td>라이브러리는 받지 않는다. 앱이 <code>field_popup_key_handler</code>를 달면 연다</td></tr>
+                  <tr><td>닫힘</td><td>Tab</td><td>칸은 Tab 자리다 (누를 수 있으면 자리)</td></tr>
+                  <tr><td>열림</td><td>↑ · ↓ · Enter · 그 밖</td><td>목록 메뉴의 키 (<a class="xref" href="menus.html#keyboard">메뉴 문서의 키 표</a>). 초점은 칸에 남는다. 메뉴가 쓰지 않은 키는 삼킨다 — Tab도</td></tr>
+                  <tr><td>열림</td><td>Esc</td><td>플랫폼이 목록 popup의 <code>dismiss(escape_key)</code>에 먼저 묻는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th><code>field_popup_key_handler</code></th><th>닫힘</th><th>열림</th></tr></thead>
+                <tbody>
+                  <tr><td>Alt만 + ↓</td><td><code>set_open(true)</code></td><td>삼킨다 (빈 목록)</td></tr>
+                  <tr><td>F4 (수식 키 없음)</td><td><code>set_open(true)</code></td><td>삼킨다</td></tr>
+                  <tr><td>↓ (수식 키 없음, <code>down_opens</code>일 때)</td><td><code>set_open(true)</code></td><td>삼킨다</td></tr>
+                  <tr><td>Ctrl·Shift·Meta·주 단축키가 함께 · Alt+F4</td><td>받지 않는다 (<code>std::nullopt</code>)</td><td>받지 않는다</td></tr>
+                  <tr><td>그 밖</td><td><code>std::nullopt</code></td><td><code>std::nullopt</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="콤보">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>동작</th></tr></thead>
+                <tbody>
+                  <tr><td>IME 조합 중의 모든 키 · Ctrl·Alt·Meta가 든 키</td><td>콤보가 받지 않는다 (입력기·앱 단축키로)</td></tr>
+                  <tr><td>↓ · ↑ · PageDown · PageUp (닫힘)</td><td><code>set_open(true)</code></td></tr>
+                  <tr><td>↓ · ↑ (열림)</td><td>다음·앞 <strong>활성</strong> 후보로 <code>move</code>. 강조가 없으면 ↓는 첫, ↑는 끝. 끝에서 멈춘다 (돌지 않는다)</td></tr>
+                  <tr><td>PageDown · PageUp (열림)</td><td><code>popup_height / 24</code>개(최소 1) 활성 후보만큼. 끝에서 멈춘다</td></tr>
+                  <tr><td>강조가 창 밖으로 나가면</td><td><code>scroll(delta)</code>도 낸다. 줄 24 논리 픽셀, 받는 중이면 스피너 줄 24만큼 뺀 높이로 잰다</td></tr>
+                  <tr><td>Home · End (Shift 포함)</td><td>글 칸의 caret이다. 열려 있어도 그렇다. 목록의 처음·끝은 PageUp·PageDown으로 간다</td></tr>
+                  <tr><td>Enter</td><td>열려 있고 강조가 활성 후보면 <code>select(강조)</code>. 아니면 <code>allow_custom</code>이면 <code>commit(글)</code>(없으면 콤보 밖으로 흐른다). 아니면 라벨이 같은 활성 후보의 <code>select</code> → 받는 중이면 삼킴 → <code>invalid(글)</code></td></tr>
+                  <tr><td>Esc</td><td>열림: <code>set_open(false)</code>. 닫힘: <code>restore</code></td></tr>
+                  <tr><td>Tab</td><td>다음 자리로 간다. 떠나면 열린 후보를 닫는다</td></tr>
+                  <tr><td>Alt+↓ · F4</td><td>콤보는 받지 않는다 (수식 키를 거르고 F4 갈래가 없다)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>글자와 편집 키는 글 칸이 먼저 받는다. 칸이 쓰지 않은 ↑↓·Page·Enter·Esc만 조상 전파로 콤보에 온다. 열린 동안 글 칸은 세로 이동 키를 부모로 넘긴다. 글자 찾기(typeahead)는 없다 — 후보를 좁히는 것은 칸의 글과 앱의 질의다.</p></div>
+          </section>
+          <section data-tab="안내 풍선">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>형태</th><th>키·때</th><th>동작</th></tr></thead>
+                <tbody>
+                  <tr><td>덮개</td><td>열림</td><td>초점이 primary, 없으면 secondary, 없으면 닫기로 들어간다. 단추가 하나도 없으면 자동 초점이 없다</td></tr>
+                  <tr><td>덮개</td><td>Tab · Shift+Tab</td><td>풍선 안을 돈다. 순서는 닫기, primary, secondary</td></tr>
+                  <tr><td>덮개</td><td>Esc</td><td><code>dismiss(escape)</code>. 앱으로 흐르지 않는다. <code>dismiss</code>가 비면 앱으로 흐른다</td></tr>
+                  <tr><td>덮개</td><td>Enter · Space</td><td>초점의 단추. 기본 단추는 세우지 않는다</td></tr>
+                  <tr><td>덮개</td><td>닫힘</td><td>가둠이 사라지면 <code>focus_return</code>으로 초점이 돌아간다</td></tr>
+                  <tr><td>비modal</td><td>열림</td><td>초점을 옮기지 않는다. 단추는 Tab 순서의 끝이다 (root 끝에 담겨서)</td></tr>
+                  <tr><td>비modal</td><td>Esc</td><td>풍선 안이든 밖이든 앱 정책의 <code>on_key</code>로 흐른다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="tooltip">
+            <div class="prose">
+              <ul>
+                <li>커스텀 내용 tooltip이 떠 있으면(또는 그 요소 위에서 hover가 시작됐으면) 아무 키나 그것을 거둔다. 그 키가 Esc면 다른 데로 가지 않는다.</li>
+                <li>문자열 tooltip을 키로 거두는 경로는 코드에 없다. 거두는 계기는 hover가 끝나는 것(떠남·다른 요소)이다.</li>
+                <li>키보드 초점으로 tooltip을 세우는 경로도 controller에 없다 (코드에서 확인한 동작). 키보드 사용자에게 필요한 설명은 tooltip에만 두지 않는다 — 접근 이름이나 화면의 글로도 둔다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="초점">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>판</th><th>열린 동안 키보드 초점</th><th>닫힌 뒤</th></tr></thead>
+                <tbody>
+                  <tr><td>드롭다운 목록</td><td>칸에 남는다</td><td>키보드로 고르면 칸 그대로. 목록 항목을 <strong>마우스로</strong> 누르면 초점이 지워진다 (코드에서 확인한 동작)</td></tr>
+                  <tr><td>검색 칸이 있는 목록</td><td>검색 칸을 누르면 그 popup의 칸으로 간다</td><td>popup이 사라지면 초점이 거둬진다. 돌려놓기는 앱의 <code>ui_frame::focus</code></td></tr>
+                  <tr><td>콤보 후보</td><td>글 칸에 남는다 (후보를 눌러도)</td><td>글 칸</td></tr>
+                  <tr><td>덮개 안내 풍선</td><td>풍선 안 (가둠)</td><td><code>focus_return</code></td></tr>
+                  <tr><td>비modal 안내 풍선</td><td>그대로 (옮기지 않는다)</td><td>그대로. 명령으로 열었으면 앱이 요청한다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>요소</th><th>역할 (Windows UIA)</th><th>이름 · 값 · 상태</th></tr></thead>
+                <tbody>
+                  <tr><td><code>dropdown_element</code></td><td><code>combo_box</code> (ComboBox)</td><td>이름 = <code>placeholder</code>, 값 = <code>text</code>, 펼침 = <code>open</code>. 펼치기·접기는 <code>set_open</code>. <strong><code>set_access_name</code>은 쓰이지 않는다</strong></td></tr>
+                  <tr><td>드롭다운 목록</td><td><code>menu</code> · <code>menu_item</code></td><td><a class="xref" href="menus.html#keyboard">메뉴 문서</a>와 같다</td></tr>
+                  <tr><td><code>combo_box_element</code></td><td><code>combo_box</code></td><td>안쪽 글 칸의 이름(<code>placeholder</code>)과 값, 펼침 = <code>open</code>. root의 <code>set_access_name</code>은 쓰이지 않는다</td></tr>
+                  <tr><td>콤보 받는 중 표시</td><td><code>progress</code></td><td>이름 = <code>loading_name</code> 또는 기본 문구</td></tr>
+                  <tr><td>콤보 후보 목록</td><td>가상 목록</td><td>고른 행 = <code>highlighted</code></td></tr>
+                  <tr><td><code>teaching_tip_element</code></td><td>덮개: <code>dialog</code> (Window), 비modal: <code>pane</code></td><td>이름 = <code>name</code> → <code>title</code> → "안내"</td></tr>
+                  <tr><td>풍선 단추</td><td><code>button</code> (Invoke)</td><td>닫기 이름 = <code>close_tooltip</code> 또는 "닫기"</td></tr>
+                  <tr><td>tooltip</td><td>요소의 도움말</td><td>UIA HelpText. 커스텀 내용은 접근 tree에 들지 않는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>나타남 알림은 없다. 스스로 뜬 비modal 풍선은 읽히지 않는다 (설계 결정). 이름 규칙은 요소의 접근 정보 코드에서 확인했고, 실제 스크린 리더로 들어 보지는 않았다. 보조 기술 전반은 <a class="xref" href="accessibility.html">접근성</a>에 있다.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">드롭다운·콤보·안내 풍선·tooltip의 코드에는 플랫폼 분기가 없다. 차이는 popup 표면을 세우는 host, hover가 있는 입력 장치, IME에서 난다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th></th><th>Windows</th><th>macOS</th><th>Android · iOS</th></tr></thead>
+            <tbody>
+              <tr><td>드롭다운 목록 · 콤보 후보 (popup)</td><td>활성화되지 않는 popup 창. 창 밖으로 나갈 수 있다</td><td>비활성화 판(<code>NSPanel</code>), 앵커 창의 자식</td><td>주 표면 위 layer. 내용 영역 안으로 들인다</td></tr>
+              <tr><td>popup 안 글 칸의 IME</td><td>앵커 창의 TSF session이 대신 본다. 후보 창은 popup 창 좌표다</td><td>후보 창은 판의 view 좌표다</td><td>popup 안 칸에 초점이 서면 IME가 그 칸에 붙고 글자 자리를 popup 원점으로 옮긴다</td></tr>
+              <tr><td>Esc · 뒤로 가기</td><td>Esc가 popup의 닫힘 계기다</td><td>조합 중이 아닐 때 Esc</td><td>Esc와 뒤로 가기가 <code>escape_key</code>다. 닫을 popup이 없으면 앱의 <code>ui_frame::back</code></td></tr>
+              <tr><td>활성 전환 (<code>activation_changed</code>)</td><td>창이 비활성화됨</td><td>키 창을 잃음</td><td>창이 초점을 잃음</td></tr>
+              <tr><td>안내 풍선</td><td colspan="2">tree 안의 요소라 플랫폼 코드가 없다. 창 client 안에만 그린다</td><td>같다. 덮개 풍선의 뒤로 가기는 앱이 <code>ui_frame::back</code>에 싣는다. 터치 앱은 <code>control_size</code>를 올린다</td></tr>
+              <tr><td>tooltip</td><td>hover로 선다</td><td>앱이 뒤에 있어도 보이는 창이면 hover가 온다</td><td>터치에는 hover가 없어 서지 않는다. 마우스·펜이면 선다</td></tr>
+              <tr><td>머무름 · hover 영역</td><td>마우스·펜</td><td>같다</td><td>터치에는 없다</td></tr>
+              <tr><td>Alt+↓ · F4 (앱이 단 여는 키)</td><td>시스템 키 메시지로도 온다. Alt+F4는 창 닫기라 처리기도 받지 않는다</td><td>확인하지 않았다</td><td>외장 키보드의 Alt·F4는 같은 키 이벤트다. 소프트 키보드에는 Alt가 없다</td></tr>
+              <tr><td>접근성</td><td>UIA (<a class="xref" href="#keyboard">보조 기술</a> 탭)</td><td>판마다 VoiceOver 다리</td><td>Android에는 luil 접근성 계층이 없다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>모바일 데모의 popups 페이지도 같은 드롭다운·필드 메뉴 코드를 쓴다. 앱 코드가 플랫폼마다 다르지 않다.</li>
+            <li>tooltip이 터치에서 서지 않으니, 터치 앱에서 꼭 필요한 설명은 화면의 글이나 안내 풍선으로 둔다. 길게 누르기는 tooltip이 아니라 우클릭이다.</li>
+            <li>macOS의 여는 키 동작은 코드로도 실기기로도 확인하지 않았다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다. "코드에서 확인한 동작"은 test가 잠그지 않은 것을 소스로 따라간 결론이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>드롭다운의 접근 이름은 <code>placeholder</code>다.</strong> <code>set_access_name</code>을 불러도 드롭다운의 접근 정보에 들지 않는다 (코드에서 확인한 동작). 데모도 <code>set_access_name</code>만 불러 이름 없는 콤보 상자가 된다. 콤보도 root의 <code>set_access_name</code>이 아니라 안쪽 글 칸의 <code>placeholder</code>가 이름이다.</li>
+          <li><strong>드롭다운은 Alt+↓·F4로 열리지 않고, Tab으로 떠나도 닫히지 않는다.</strong> 라이브러리 드롭다운은 여는 키 처리기와 초점 떠남 액션을 달지 않는다. 앱이 단다 (<a class="xref" href="#build-keys">여는 키</a>).</li>
+          <li><strong>콤보 후보 popup은 모든 닫힘 계기에 닫힌다</strong> — Alt+Tab(<code>activation_changed</code>)·창 이동 포함 (코드에서 확인한 동작). <code>suggestion_popup()</code>의 <code>dismiss</code>가 계기를 가리지 않는다. 설계 문서의 "창 비활성에는 남는다"는 초점 떠남 훅만의 이야기다. 남기려면 돌려받은 popup의 <code>dismiss</code>를 앱이 바꿔 싣는다.</li>
+          <li><strong>콤보 후보 popup은 위로 뒤집지 않는다.</strong> 자리는 언제나 글 칸 아래다. 창 아래쪽 콤보는 host가 작업 영역 안으로 밀어 칸을 덮을 수 있다 (코드에서 확인한 동작).</li>
+          <li><strong>받는 중에도 앞 후보가 남고, 콤보는 그것을 칸의 글로 다시 거른다.</strong> 원천의 일치 규칙과 기본 거르기(대소문자 구분 부분 일치)가 다르면 답이 올 때 목록이 바뀐다. 규칙을 맞추거나 <code>matches</code>를 준다.</li>
+          <li><strong>옛 token의 답은 <code>accept_combo_suggestions</code>가 버린다.</strong> 버렸는지는 반환값(거짓)으로 안다. 강조 키가 새 후보에 없으면 앱이 지운다.</li>
+          <li><strong>popup을 남기는 빈 액션은 <code>luil::input_action {}</code>이다.</strong> <code>luil::app_message {}</code>는 메시지 하나로 나가 그 popup을 그 frame에 "닫자고 했다"로 표시하고, Esc라면 키를 삼킨다. <code>examples/tool_window/main.cpp</code>의 미리보기 카드가 "남기기"에 <code>luil::app_message {}</code>를 돌려준다.</li>
+          <li><strong>검색 칸이 있는 popup은 닫히면 초점이 사라진다.</strong> 초점이 popup 안의 칸에 있었기 때문이다. 앱이 돌려놓지 않으면 다음 Tab이 처음부터다.</li>
+          <li><strong>목록 항목을 마우스로 고르면 칸의 초점도 지워진다</strong> (코드에서 확인한 동작). 메뉴 항목이 누름에 초점을 지키지 않기 때문이다. 콤보 후보는 이 문제가 없다.</li>
+          <li><strong>필드 포인터를 frame 밖으로 들고 다니지 않는다.</strong> build가 남긴 <code>const ui_element*</code>는 그 frame이 게시되기 전까지만 자리 재기에 쓴다. 데모는 다음 build 시작에서 지운다.</li>
+          <li><strong>"한 번에 하나만"은 앱이 지킨다.</strong> 드롭다운 둘이 동시에 열려도 라이브러리는 막지 않는다.</li>
+          <li><strong>안내 풍선은 popup이 아니다.</strong> <code>ui_frame::popups</code>에 싣지 않고 root 끝에 창 전체 자리로 담는다. 창 밖으로 걸치지 않고 popup 배경 효과도 없다.</li>
+          <li><strong>덮개 풍선은 대화 상자처럼 가둔다.</strong> 다른 modal과 겹치지 않게, 한 번에 하나만 띄우는 것은 앱 몫이다. 가둠은 pre-order로 마지막에 보이는 것이 이긴다.</li>
+          <li><strong>안내 풍선의 대상은 앱이 준다.</strong> 같은 frame에 먼저 배치한 가지에서 <code>teaching_tip_target</code>으로 찾는다. 한 번에 배치하는 앱은 한 frame 늦은 자리를 준다.</li>
+          <li><strong>행동 단추는 풍선을 닫지 않는다.</strong> 앱이 닫는다. 비modal 풍선의 Esc는 요소가 받지 않으니, 닫으려면 정책의 <code>on_key</code>에서 닫는다.</li>
+          <li><strong>tooltip은 hover로만 선다.</strong> 키보드 초점과 터치로는 서지 않는다 (코드에서 확인한 동작). 설명이 꼭 필요하면 tooltip에만 두지 않는다.</li>
+          <li><strong>키로 거둬지는 것은 커스텀 내용 tooltip뿐이다.</strong> 문자열 tooltip은 키를 눌러도 떠 있다. 설계 문서의 "다른 키 입력이 오면 닫는다"는 커스텀 내용의 규칙이다.</li>
+          <li><strong>tooltip은 표면 밖으로 나가지 않는다.</strong> 좁은 창·popup 끝에서는 안쪽으로 밀리고 큰 내용은 잘려 휠로 읽는다. 창 밖 카드는 popup으로 짓는다.</li>
+          <li><strong>문자열 tooltip의 지연은 바꿀 수 없다 (500ms).</strong> 지연을 바꾸려면 커스텀 내용의 <code>tooltip_config::delay</code>다.</li>
+          <li><strong>tooltip이나 머무름을 달면 요소가 hit 대상이 된다.</strong> 비활성 요소도 tooltip 표시를 위해 hit는 된다. 머무름만 단 판도 hit 대상이어야 시계가 찬다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>드롭다운 목록은 어떤 요소로 짓나?</summary><div class="faq-a"><p class="faq-short"><code>menu_element</code>를 popup에 싣는다. 드롭다운 요소는 닫힌 칸뿐이다.</p><p>목록의 키보드는 메뉴의 키다. 정책의 <code>menu()</code>가 메뉴 kind 짝을 돌려줘야 ↑/↓/Enter가 먹는다 (<a class="xref" href="#build-dropdown">가장 작은 드롭다운</a>).</p></div></details>
+          <details class="faq"><summary><code>toggle</code>과 <code>set_open</code> 중 무엇을 주나?</summary><div class="faq-a"><p class="faq-short"><code>set_open</code>이다.</p><p>클릭과 보조 기술이 한 factory를 쓰고, 같은 명령이 겹쳐 와도 결과가 같다. <code>toggle</code>만 주면 보조 기술의 펼치기·접기가 거절된다.</p></div></details>
+          <details class="faq"><summary>목록을 칸 바로 아래에, 아래가 모자라면 위에 띄우려면?</summary><div class="faq-a"><p class="faq-short"><code>menu_popup_config::below = { .field = 칸 bounds, .limit = 창 client }</code>.</p><p><code>make_menu_popup</code>이 크기를 잰 뒤 <code>place_field_popup</code>으로 놓는다. 손으로 지은 popup이면 그 함수를 직접 부른다 (<a class="xref" href="#build-place">자리 규칙</a>, <a class="xref" href="#lab">실습</a>).</p></div></details>
+          <details class="faq"><summary>Alt+↓·F4로 드롭다운을 열려면?</summary><div class="faq-a"><p class="faq-short"><code>set_key_handler(field_popup_key_handler(open, set_open, true))</code>를 단다.</p><p>라이브러리 드롭다운은 여는 키를 달지 않는다. 같은 김에 <code>set_focus_leave_action</code>으로 초점이 떠날 때 닫는다 (<a class="xref" href="#build-keys">여는 키</a>).</p></div></details>
+          <details class="faq"><summary>스크린 리더가 드롭다운 이름을 읽지 않는다.</summary><div class="faq-a"><p class="faq-short">이름은 <code>placeholder</code>에 둔다. <code>set_access_name</code>은 드롭다운에 쓰이지 않는다.</p><p>코드에서 확인한 동작이다. 드롭다운의 접근 정보는 <code>placeholder</code>를 이름, <code>text</code>를 값으로 쓴다. 콤보도 안쪽 글 칸의 <code>placeholder</code>가 이름이다.</p></div></details>
+          <details class="faq"><summary>검색하다 다른 창을 보면 목록이 닫힌다.</summary><div class="faq-a"><p class="faq-short">popup의 <code>dismiss</code>가 <code>surface_moved</code>·<code>activation_changed</code>에 빈 액션을 돌려주게 한다.</p><p>데모의 <code>search_popup_stays</code>가 그 판정이다. 빈 액션은 <code>luil::input_action {}</code>이다 — <code>luil::app_message {}</code>가 아니다 (<a class="xref" href="#build-search">검색 칸</a>).</p></div></details>
+          <details class="faq"><summary>콤보 후보는 어떻게 비동기로 넣나?</summary><div class="faq-a"><p class="faq-short">글이 바뀌면 <code>begin_combo_query</code>로 token을 받고 작업을 시작한다. 답이 오면 <code>accept_combo_suggestions(state, token, items)</code>.</p><p>옛 token의 답은 거짓으로 버려진다. 받는 동안 <code>loading</code>이 서서 popup 위에 스피너 줄이 선다 (<a class="xref" href="#build-combo">편집형 콤보</a>).</p></div></details>
+          <details class="faq"><summary>받는 동안 후보가 비어 깜빡인다.</summary><div class="faq-a"><p class="faq-short"><code>begin_combo_query</code>는 앞 후보를 남긴다. 앱이 <code>items</code>를 지우지 않는 한 비지 않는다.</p><p>받는 동안 콤보는 앞 후보를 칸의 글로 다시 거른다. 원천의 일치 규칙과 맞춰야 답이 올 때 덜컥 바뀌지 않는다.</p></div></details>
+          <details class="faq"><summary>Alt+Tab만 해도 콤보 후보가 닫힌다.</summary><div class="faq-a"><p class="faq-short"><code>suggestion_popup()</code>의 <code>dismiss</code>가 모든 계기에 <code>set_open(false)</code>를 내기 때문이다.</p><p>코드에서 확인한 동작이다. 남기려면 돌려받은 <code>ui_popup</code>의 <code>dismiss</code>를 앱이 계기마다 가르는 것으로 바꿔 싣는다 (직접 돌려 보지는 않았다).</p></div></details>
+          <details class="faq"><summary>콤보에서 Home·End가 목록 처음·끝으로 가지 않는다.</summary><div class="faq-a"><p class="faq-short">글 칸 caret의 몫이다. 목록의 처음·끝은 PageUp·PageDown이다.</p><p>PageUp·Down 한 번은 <code>popup_height / 24</code>개의 활성 후보다. 끝에서 멈춘다.</p></div></details>
+          <details class="faq"><summary>후보에 없는 값을 막으려면?</summary><div class="faq-a"><p class="faq-short"><code>allow_custom = false</code>와 <code>invalid</code>를 준다. 검증 글은 <code>validation_message</code>로 싣는다.</p><p>라벨이 칸의 글과 정확히 같은 활성 후보는 그대로 고른다. 받는 중이면 틀렸다고 단정하지 않고 Enter만 삼킨다 (<a class="xref" href="#build-strict">엄격한 콤보</a>).</p></div></details>
+          <details class="faq"><summary>대소문자 무시·초성 검색으로 거르고 싶다.</summary><div class="faq-a"><p class="faq-short"><code>combo_box_config::matches</code>를 준다.</p><p>주면 받는 중이든 아니든 언제나 그것으로 거른다. 원천(서버)에도 같은 규칙을 쓴다.</p></div></details>
+          <details class="faq"><summary>안내 풍선을 <code>ui_frame::popups</code>에 넣어야 하나?</summary><div class="faq-a"><p class="faq-short">아니다. 주 tree root 끝에 창 전체 자리로 배치해 담는다.</p><p>그래서 창 밖으로 나가지 않고 popup의 배경 효과도 없다. 데모는 토스트 더미와 함께 겹(<code>layer_element</code>)으로 담는다 (<a class="xref" href="#build-tip">안내 풍선</a>).</p></div></details>
+          <details class="faq"><summary>풍선이 가리킬 자리는 어떻게 구하나?</summary><div class="faq-a"><p class="faq-short"><code>teaching_tip_target(가지, 대상 id)</code>.</p><p>이번 build에서 먼저 배치한 가지에서 찾는다. 다 잘렸으면 <code>std::nullopt</code>이고, 풍선은 가운데에 꼬리 없이 선다. 닫을지는 앱이 정한다.</p></div></details>
+          <details class="faq"><summary>비modal 풍선을 Esc로 닫고 싶다.</summary><div class="faq-a"><p class="faq-short">앱 정책의 <code>on_key</code>에서 열림을 보고 닫는다.</p><p>비modal 풍선은 Esc를 받지 않는다. 덮개 풍선만 Esc를 <code>dismiss(escape)</code>로 받는다.</p></div></details>
+          <details class="faq"><summary>안드로이드 뒤로 가기로 풍선을 닫으려면?</summary><div class="faq-a"><p class="faq-short">덮개 풍선이 열린 동안 <code>frame-&gt;back</code>에 <code>dismiss(back)</code> 메시지를 싣는다.</p><p><code>teaching_tip_dismiss_reason::back</code>은 요소가 내지 않는다. 앱이 <code>ui_frame::back</code>으로 잇는다.</p></div></details>
+          <details class="faq"><summary>tooltip 지연을 바꾸려면?</summary><div class="faq-a"><p class="faq-short">커스텀 내용의 <code>tooltip_config::delay</code>다. 문자열 tooltip은 500ms 고정이다.</p><p>글 한 줄이면 <code>tooltip_config</code>에 그 글을 담은 작은 tree를 지어 넣는다 (<a class="xref" href="#build-tooltip">tooltip</a>).</p></div></details>
+          <details class="faq"><summary>tooltip 안의 링크를 누를 수 있나?</summary><div class="faq-a"><p class="faq-short">커스텀 내용이면 된다.</p><p>요소·상자·사이 간격을 건너도 열린 채 남는다. 링크는 <code>markdown_config::activate_link</code>가 앱 액션을 만든다.</p></div></details>
+          <details class="faq"><summary>tooltip이 터치나 키보드 초점에서 안 뜬다.</summary><div class="faq-a"><p class="faq-short">hover로만 선다. 터치에는 hover가 없고, 키보드 초점으로 세우는 경로는 코드에 없다.</p><p>코드에서 확인한 동작이다. 터치의 길게 누르기는 우클릭이다. 꼭 필요한 설명은 화면의 글이나 접근 이름으로도 둔다.</p></div></details>
+          <details class="faq"><summary>보조 기술은 tooltip을 읽나?</summary><div class="faq-a"><p class="faq-short">문자열이 도움말(HelpText)로 읽힌다. 커스텀 내용은 읽히지 않는다.</p><p>그래서 커스텀 내용을 줄 때도 요약을 <code>set_tooltip</code>에 둔다.</p></div></details>
+          <details class="faq"><summary>포인터가 머무를 때 미리보기를 띄우려면?</summary><div class="faq-a"><p class="faq-short"><code>set_hover_dwell</code>의 <code>on_dwell</code>·<code>on_end</code>로 앱 상태를 바꾸고 판을 짓는다.</p><p>판은 tree에 담아도, popup으로 띄워도 된다. popup이면 남길 계기에 빈 액션을 돌려준다 (<a class="xref" href="#build-dwell">머무름</a>).</p></div></details>
+          <details class="faq"><summary>드롭다운 둘이 동시에 열린다.</summary><div class="faq-a"><p class="faq-short">라이브러리가 막지 않는다. 열린 필드 owner 하나를 앱 상태로 든다.</p><p>데모의 <code>open_popup_</code>가 그렇다. 새 필드를 열면 그 값을 갈아 끼워 앞의 popup이 다음 frame에 빠진다.</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/combo_box_element.h" target="_blank" rel="noopener">include/luil/ui/combo_box_element.h</a><span class="n">최상위 기호 6</span></div>
+            <div class="hdr-syms"><a href="api.html#combo-suggestion" title="구조체"><span class="kb t">S</span>combo_suggestion</a><a href="api.html#combo-suggestion-state" title="구조체"><span class="kb t">S</span>combo_suggestion_state</a><a href="api.html#begin-combo-query" title="함수"><span class="kb f">f</span>begin_combo_query</a><a href="api.html#accept-combo-suggestions" title="함수"><span class="kb f">f</span>accept_combo_suggestions</a><a href="api.html#combo-box-config" title="구조체"><span class="kb t">S</span>combo_box_config</a><a href="api.html#combo-box-element" title="클래스"><span class="kb t">C</span>combo_box_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/dropdown_element.h" target="_blank" rel="noopener">include/luil/ui/dropdown_element.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#dropdown-config" title="구조체"><span class="kb t">S</span>dropdown_config</a><a href="api.html#dropdown-height" title="상수"><span class="kb ">k</span>dropdown_height</a><a href="api.html#dropdown-element" title="클래스"><span class="kb t">C</span>dropdown_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/field_popup.h" target="_blank" rel="noopener">include/luil/ui/field_popup.h</a><span class="n">최상위 기호 8</span></div>
+            <div class="hdr-syms"><a href="api.html#field-popup-alignment" title="열거형"><span class="kb e">E</span>field_popup_alignment</a><a href="api.html#field-popup-anchor" title="구조체"><span class="kb t">S</span>field_popup_anchor</a><a href="api.html#field-popup-position" title="구조체"><span class="kb t">S</span>field_popup_position</a><a href="api.html#place-field-popup" title="함수"><span class="kb f">f</span>place_field_popup</a><a href="api.html#field-popup-key-handler" title="함수"><span class="kb f">f</span>field_popup_key_handler</a><a href="api.html#field-popup-side" title="열거형"><span class="kb e">E</span>field_popup_side</a><a href="api.html#field-popup-side-position" title="구조체"><span class="kb t">S</span>field_popup_side_position</a><a href="api.html#place-field-popup-at-side" title="함수"><span class="kb f">f</span>place_field_popup_at_side</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/teaching_tip_element.h" target="_blank" rel="noopener">include/luil/ui/teaching_tip_element.h</a><span class="n">최상위 기호 10</span></div>
+            <div class="hdr-syms"><a href="api.html#teaching-tip-default-width" title="상수"><span class="kb ">k</span>teaching_tip_default_width</a><a href="api.html#teaching-tip-tail-width" title="상수"><span class="kb ">k</span>teaching_tip_tail_width</a><a href="api.html#teaching-tip-tail-length" title="상수"><span class="kb ">k</span>teaching_tip_tail_length</a><a href="api.html#teaching-tip-screen-margin" title="상수"><span class="kb ">k</span>teaching_tip_screen_margin</a><a href="api.html#teaching-tip-dismiss-reason" title="열거형"><span class="kb e">E</span>teaching_tip_dismiss_reason</a><a href="api.html#teaching-tip-button" title="구조체"><span class="kb t">S</span>teaching_tip_button</a><a href="api.html#teaching-tip-config" title="구조체"><span class="kb t">S</span>teaching_tip_config</a><a href="api.html#teaching-tip-placement" title="구조체"><span class="kb t">S</span>teaching_tip_placement</a><a href="api.html#teaching-tip-element" title="클래스"><span class="kb t">C</span>teaching_tip_element</a><a href="api.html#teaching-tip-target" title="함수"><span class="kb f">f</span>teaching_tip_target</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<script src="assets/popups-lab.js"></script>
+<script>
+  LuilPopupsLab.setup(document.getElementById("fp-lab"));
+</script>
+</body>
+</html>

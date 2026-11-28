@@ -182,8 +182,7 @@
           </ul>
         </div>
         <h3>부품과 자리표</h3>
-        <div class="tbl-tree" role="img" aria-label="표 부품의 tree 모양">
-<b>table</b>                          <i>접근 tree에서 접힌다</i>
+        <div class="tbl-tree" role="img" aria-label="표 부품의 tree 모양"><b>table</b>                          <i>접근 tree에서 접힌다</i>
 ├─ <b>table_header</b>                <i>Header: 머리글 칸(HeaderItem)과 경계 손잡이(Handle)</i>
 │   └─ 고정 열이 있으면: 고정 칸 · <b>table_header_lane</b>(흐르는 칸·손잡이) · 고정 손잡이
 ├─ <b>virtual_list</b>                <i>DataGrid: 표 전체의 Tab 자리 하나</i>
@@ -1879,25 +1878,25 @@ TEST_CASE("An editor takes focus, commits on Enter, cancels on Escape and hands 
         <div class="prose small"><p>스레드 칸은 factory가 불리는 자리다. <span class="thread-chip in">input</span>은 controller가 포인터·키·휠·터치를 처리할 때, <span class="thread-chip ui">UI</span>는 보조 기술의 명령을 계획할 때(Win32에서는 창 thread의 UIA provider)다. 누름류 명령(Invoke·Toggle)의 결과는 input thread로 넘어가 정책의 <code>on_click</code> 뒤에 나간다.</p></div>
         <div class="table-wrap">
           <table class="t">
-            <thead><tr><th>사건</th><th>메시지</th><th>스레드</th><th>앱이 할 일</th></tr></thead>
+            <thead><tr><th>사건</th><th>메시지</th><th>앱이 할 일</th></tr></thead>
             <tbody>
-              <tr><td>머리글 칸 누름 (클릭·탭)</td><td><code>sort_request(열 키)</code> — <code>sortable</code>인 열만</td><td><span class="thread-chip in">input</span></td><td>정렬 열·방향과 행 순서를 바꾸고, 다음 frame에 그 열의 <code>sort</code>를 칠한다</td></tr>
-              <tr><td>보조 기술: 머리글 칸 Invoke</td><td><code>sort_request(열 키)</code> (기본 실행이 왼쪽 누름이다)</td><td><span class="thread-chip ui">UI</span></td><td>위와 같다</td></tr>
-              <tr><td>경계 손잡이 끌기</td><td><code>resize_column(열 키, Δ)</code>가 이어서</td><td><span class="thread-chip in">input</span></td><td>폭에 Δ를 더한다. 자기 지금 폭으로 <code>table_resize_delta</code>를 한 번 더 부른다</td></tr>
-              <tr><td>경계 손잡이 놓기</td><td><code>resize_column_end(열 키)</code> 한 번</td><td><span class="thread-chip in">input</span></td><td>실행 취소 합치기를 끊는다 (<code>break_merge()</code>)</td></tr>
-              <tr><td>머리글 칸을 다른 머리글 칸에 놓기</td><td><code>reorder_column(옮긴 열, 대상 열)</code> — 같은 표·같은 고정 구역만</td><td><span class="thread-chip in">input</span></td><td>열 목록의 순서를 바꾼다. 앞 열이 바뀌면 <code>frozen_columns</code>도 맞춘다</td></tr>
-              <tr><td>머리글 우클릭 · 길게 누르기 · 펜 배럴</td><td><code>column_menu(열 키, 문맥)</code></td><td><span class="thread-chip in">input</span></td><td>문맥의 <code>x</code>·<code>y</code>(물리 픽셀)에 메뉴를 연다</td></tr>
-              <tr><td>체크박스 누름 · Space (<code>rows.activate</code>가 없을 때)</td><td><code>toggle_check(행 키)</code> — 활성 행만</td><td><span class="thread-chip in">input</span></td><td>다음 상태를 정한다</td></tr>
-              <tr><td>트리 열 삼각형 누름</td><td><code>rows.set_expanded(행 키, !지금)</code></td><td><span class="thread-chip in">input</span></td><td>펼친 집합을 고치고 다시 평탄화한다</td></tr>
-              <tr><td>가로 휠 · 터치 가로 쓸기(놓으면 관성)</td><td><code>scroll_horizontal(Δ)</code> — 범위 안으로 깎음, 끝이면 0</td><td><span class="thread-chip in">input</span></td><td><code>scroll_x += Δ</code></td></tr>
-              <tr><td>← · → (셀 탐색 없음)</td><td><code>scroll_horizontal(±48을 깎은 값)</code>. 끝이면 메시지 없이 삼킨다</td><td><span class="thread-chip in">input</span></td><td><code>scroll_x += Δ</code></td></tr>
-              <tr><td>가로 막대 끌기 · 트랙 누름 · 막대 키</td><td><code>scroll_horizontal(Δ)</code> — <strong>깎지 않는다</strong></td><td><span class="thread-chip in">input</span></td><td>더하고 범위로 다듬는다 (<a class="xref" href="#build-hscroll">가로 스크롤</a>)</td></tr>
-              <tr><td>보조 기술: 가로 막대 값 정하기 (UIA <code>SetValue</code>)</td><td><code>scroll_horizontal_to(offset)</code> — 막대가 범위로 다듬고, 같은 값이면 내지 않는다</td><td><span class="thread-chip ui">UI</span></td><td><code>scroll_x = offset</code></td></tr>
-              <tr><td>← · → (셀 탐색)</td><td><code>move_column(옆 열 키)</code>, 창 밖이면 <code>scroll_horizontal(들이기 Δ)</code>를 함께</td><td><span class="thread-chip in">input</span></td><td><code>cell_column</code>을 바꾼다</td></tr>
-              <tr><td>F2</td><td><code>begin_edit({ 커서 행, 열 })</code>, 창 밖이면 들이기 Δ를 함께</td><td><span class="thread-chip in">input</span></td><td><code>editing</code>을 세우고 편집기 초안을 채운다</td></tr>
-              <tr><td>편집기 안의 Enter · Esc</td><td><code>commit_edit(칸)</code> · <code>cancel_edit(칸)</code> — 한 번씩</td><td><span class="thread-chip in">input</span></td><td>값을 반영하고 <code>editing</code>을 비운다 · 그냥 비운다</td></tr>
-              <tr><td>칸 안 컨트롤로 간 키보드 초점</td><td><code>scroll_horizontal(Δ)</code> — 정책의 <code>on_focus_moved</code>가 <code>route_reveal</code>을 돌려줄 때만</td><td><span class="thread-chip in">input</span></td><td><code>scroll_x += Δ</code></td></tr>
-              <tr><td>끌기 중 가장자리 띠 (머리글 칸 끌기·행 끌어 놓기)</td><td><code>scroll_horizontal(Δ)</code>가 시간마다</td><td><span class="thread-chip in">input</span></td><td><code>scroll_x += Δ</code></td></tr>
+              <tr><td>머리글 칸 누름 (클릭·탭)<br><span class="thread-chip in">input</span></td><td><code>sort_request(열 키)</code> — <code>sortable</code>인 열만</td><td>정렬 열·방향과 행 순서를 바꾸고, 다음 frame에 그 열의 <code>sort</code>를 칠한다</td></tr>
+              <tr><td>보조 기술: 머리글 칸 Invoke<br><span class="thread-chip ui">UI</span></td><td><code>sort_request(열 키)</code> (기본 실행이 왼쪽 누름이다)</td><td>위와 같다</td></tr>
+              <tr><td>경계 손잡이 끌기<br><span class="thread-chip in">input</span></td><td><code>resize_column(열 키, Δ)</code>가 이어서</td><td>폭에 Δ를 더한다. 자기 지금 폭으로 <code>table_resize_delta</code>를 한 번 더 부른다</td></tr>
+              <tr><td>경계 손잡이 놓기<br><span class="thread-chip in">input</span></td><td><code>resize_column_end(열 키)</code> 한 번</td><td>실행 취소 합치기를 끊는다 (<code>break_merge()</code>)</td></tr>
+              <tr><td>머리글 칸을 다른 머리글 칸에 놓기<br><span class="thread-chip in">input</span></td><td><code>reorder_column(옮긴 열, 대상 열)</code> — 같은 표·같은 고정 구역만</td><td>열 목록의 순서를 바꾼다. 앞 열이 바뀌면 <code>frozen_columns</code>도 맞춘다</td></tr>
+              <tr><td>머리글 우클릭 · 길게 누르기 · 펜 배럴<br><span class="thread-chip in">input</span></td><td><code>column_menu(열 키, 문맥)</code></td><td>문맥의 <code>x</code>·<code>y</code>(물리 픽셀)에 메뉴를 연다</td></tr>
+              <tr><td>체크박스 누름 · Space (<code>rows.activate</code>가 없을 때)<br><span class="thread-chip in">input</span></td><td><code>toggle_check(행 키)</code> — 활성 행만</td><td>다음 상태를 정한다</td></tr>
+              <tr><td>트리 열 삼각형 누름<br><span class="thread-chip in">input</span></td><td><code>rows.set_expanded(행 키, !지금)</code></td><td>펼친 집합을 고치고 다시 평탄화한다</td></tr>
+              <tr><td>가로 휠 · 터치 가로 쓸기(놓으면 관성)<br><span class="thread-chip in">input</span></td><td><code>scroll_horizontal(Δ)</code> — 범위 안으로 깎음, 끝이면 0</td><td><code>scroll_x += Δ</code></td></tr>
+              <tr><td>← · → (셀 탐색 없음)<br><span class="thread-chip in">input</span></td><td><code>scroll_horizontal(±48을 깎은 값)</code>. 끝이면 메시지 없이 삼킨다</td><td><code>scroll_x += Δ</code></td></tr>
+              <tr><td>가로 막대 끌기 · 트랙 누름 · 막대 키<br><span class="thread-chip in">input</span></td><td><code>scroll_horizontal(Δ)</code> — <strong>깎지 않는다</strong></td><td>더하고 범위로 다듬는다 (<a class="xref" href="#build-hscroll">가로 스크롤</a>)</td></tr>
+              <tr><td>보조 기술: 가로 막대 값 정하기 (UIA <code>SetValue</code>)<br><span class="thread-chip ui">UI</span></td><td><code>scroll_horizontal_to(offset)</code> — 막대가 범위로 다듬고, 같은 값이면 내지 않는다</td><td><code>scroll_x = offset</code></td></tr>
+              <tr><td>← · → (셀 탐색)<br><span class="thread-chip in">input</span></td><td><code>move_column(옆 열 키)</code>, 창 밖이면 <code>scroll_horizontal(들이기 Δ)</code>를 함께</td><td><code>cell_column</code>을 바꾼다</td></tr>
+              <tr><td>F2<br><span class="thread-chip in">input</span></td><td><code>begin_edit({ 커서 행, 열 })</code>, 창 밖이면 들이기 Δ를 함께</td><td><code>editing</code>을 세우고 편집기 초안을 채운다</td></tr>
+              <tr><td>편집기 안의 Enter · Esc<br><span class="thread-chip in">input</span></td><td><code>commit_edit(칸)</code> · <code>cancel_edit(칸)</code> — 한 번씩</td><td>값을 반영하고 <code>editing</code>을 비운다 · 그냥 비운다</td></tr>
+              <tr><td>칸 안 컨트롤로 간 키보드 초점<br><span class="thread-chip in">input</span></td><td><code>scroll_horizontal(Δ)</code> — 정책의 <code>on_focus_moved</code>가 <code>route_reveal</code>을 돌려줄 때만</td><td><code>scroll_x += Δ</code></td></tr>
+              <tr><td>끌기 중 가장자리 띠 (머리글 칸 끌기·행 끌어 놓기)<br><span class="thread-chip in">input</span></td><td><code>scroll_horizontal(Δ)</code>가 시간마다</td><td><code>scroll_x += Δ</code></td></tr>
             </tbody>
           </table>
         </div>

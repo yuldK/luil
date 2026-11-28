@@ -62,7 +62,8 @@
   .tl-chip { padding: 4px 10px; border-radius: 3px; font-size: 12px; }
   .tl-link { text-decoration: underline; font-size: 12px; }
   .tl-rowsel { padding: 4px 8px; border-left: 3px solid; border-radius: 0 4px 4px 0; font-size: 12px; }
-  .tl-table-h { margin: 20px 0 8px; font-size: var(--fs-sm); color: var(--fg); overflow-wrap: anywhere; }
+  .tl-table-h { margin: 20px 0 8px; font-size: var(--fs-sm); color: var(--fg); }
+  .tl-table-h code { font-size: 11.5px; font-weight: 400; word-break: normal; overflow-wrap: normal; }
   table.tl-roles td code { font-size: 11.5px; }
   /* 실습이 짓는 식별자는 '_'·'.'·'(' 뒤에 줄 바꿀 자리(wbr)를 둔다 — 낱자 단위로 끊지 않는다. */
   .tl-call code, table.tl-roles td code { word-break: normal; overflow-wrap: normal; }
@@ -128,7 +129,7 @@
             </ul>
           </div>
           <div class="panel">
-            <h4><i class="ci" aria-hidden="true">&#xEA7A;</i><code>system_appearance</code></h4>
+            <h4><i class="ci" aria-hidden="true">&#xEAC6;</i><code>system_appearance</code></h4>
             <ul>
               <li>OS 상태: 밝은 모드, 고대비와 그 시스템 색, OS 키 컬러, 움직임 줄이기, 투명 효과.</li>
               <li>host가 읽는다. 앱은 <code>current_system_appearance()</code>로 묻거나 메시지로 받는다.</li>
@@ -520,7 +521,7 @@ namespace sample {
         <div class="prose">
           <ul>
             <li>고르는 id는 카탈로그의 id(<code>blue</code>, <code>mint</code>…)이거나 예약 id <code>system</code>(<code>system_accent_id</code>)이다.</li>
-            <li>목록에 없는 id는 그리기에서 기본 id로 물러서고, 저장된 값은 그대로 둔다. 다른 PC로 옮겼다 돌아와도 값이 산다.</li>
+            <li>목록에 없는 id는 그리기에서 기본 id로 물러서고, 저장된 값은 그대로 둔다.</li>
             <li><code>system</code>은 OS가 키 컬러를 알려 준 동안만 선다. 서지 않으면 기본색이다. 플랫폼마다 서는지가 다르다 (<a class="xref" href="#platforms">플랫폼 차이</a>).</li>
           </ul>
         </div>
@@ -1182,7 +1183,7 @@ namespace sample {
             </div>
             <div class="prose"><p><code>appearance_overrides</code>·<code>font_overrides</code>·<code>apply_overrides</code>는 저장소의 라이브러리·예제·test 어디에서도 쓰지 않는다. <code>ui_frame</code>에도 보조 창 <code>ui_window</code>에도 덮어쓰기 칸이 없다 — 앱이 합친 결과를 <code>ui_frame::appearance</code>에 싣는 데 쓴다.</p></div>
           </section>
-          <section data-tab="색 형식·함수">
+          <section data-tab="ui_theme.h">
             <div class="code" data-lang="cpp" data-src="include/luil/theme/ui_theme.h:11-42" data-path="include/luil/theme/ui_theme.h" data-start="11"><script type="text/plain">
     using ui_color = std::uint32_t;
 
@@ -1481,7 +1482,7 @@ namespace sample {
 <tr><td><code>close_button_hover_foreground</code></td><td><code>closeButtonHoverForeground</code></td><td><code>#ffffff</code></td><td><code>#ffffff</code></td><td><code>colors.highlight_foreground</code></td></tr>
 </tbody></table></div>
           </section>
-          <section data-tab="중립 색·style.json">
+          <section data-tab="중립 색">
             <div class="prose"><p><code>neutral_color_palette</code>는 키 컬러와 무관한 한 테마의 중립 색이다. <code>ui_color_palette</code>의 같은 이름 칸으로 그대로 옮겨진다. JSON 키는 camelCase이고 필드 차례가 곧 생성물의 지정 초기화 차례다. 값은 내장 <code>assets/style.json</code>이다.</p></div>
 <div class="table-wrap"><table class="t">
 <thead><tr><th>JSON 키</th><th>필드</th><th>빠지면</th><th>dark</th><th>light</th></tr></thead>
@@ -1791,7 +1792,7 @@ namespace sample {
               </table>
             </div>
           </section>
-          <section data-tab="palette_scope_element.h">
+          <section data-tab="가지 팔레트">
             <div class="code" data-lang="cpp" data-src="include/luil/ui/palette_scope_element.h:9-40" data-path="include/luil/ui/palette_scope_element.h" data-start="9"><script type="text/plain">
     // 감싼 가지가 그릴 팔레트다 (palette-scope-design.md).
     struct palette_scope_config
@@ -1948,7 +1949,7 @@ namespace sample {
 <tr><td>25</td><td><code>skyblue</code></td><td>스카이블루 / Sky blue</td><td><span class="sw" style="background:#8ed6f6"></span> <code>#8ed6f6</code></td><td><code>#0086af</code> · <code>#289bc4</code> · <code>#8ed6f6</code> · <code>#b5e7fe</code></td><td>0.2015 → 검정</td><td><code>#006a8b</code> · <code>#005a76</code> · <code>#004e67</code> · <code>#004e67</code></td><td>0.1217 → 흰색</td></tr>
 </tbody></table></div>
           </section>
-          <section data-tab="frame·문맥·CMake">
+          <section data-tab="frame·CMake">
             <div class="code" data-lang="cpp" data-src="include/luil/app/app_host.h:490-499" data-path="include/luil/app/app_host.h" data-start="490"><script type="text/plain">
         // 외양·글꼴의 유효 선호다.
         // 실제 팔레트는 UI thread가 OS 상태(고대비·밝은 모드)와 함께 해석한다.

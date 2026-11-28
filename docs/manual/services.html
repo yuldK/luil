@@ -25,6 +25,8 @@
   @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
   /* 표의 "있다/없다" 칸 */
   .t td.no { color: var(--fg-3); }
+  /* 칸이 넷 이상인 표는 좁은 화면에서 줄이지 않고 표 상자 안에서 옆으로 흘린다 */
+  .t.matrix { min-width: 720px; }
   /* 실습: 응답 몸의 갈래 (assets/services-lab.js) */
   .bk-grid { display: grid; gap: 14px; }
   @media (min-width: 1180px) { .bk-grid { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; } }
@@ -151,7 +153,7 @@
           <p>luil이 세우는 플랫폼은 Windows·Android·macOS·iOS 넷이다. iOS는 대부분 macOS 파일을 분기 없이 함께 쓴다. 헤더 주석에는 "Windows·Android"나 "Android 전용"만 적힌 자리가 있지만, 아래 표는 빌드 규칙(<code>src/CMakeLists.txt</code>)과 소스를 따른 것이다.</p>
         </div>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t matrix">
             <thead><tr><th>부품</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
             <tbody>
               <tr><td><code>http_client</code></td><td>WinHTTP 비동기 세션</td><td>JNI <code>HttpURLConnection</code></td><td><code>NSURLSession</code></td><td><code>NSURLSession</code> (macOS 파일)</td></tr>
@@ -194,7 +196,7 @@
           <p>배출구가 하나뿐인 것은 판단이다. 요청마다 callback을 받으면 앱 상태를 남의 thread에서 만지는 코드가 생긴다. <code>http_response</code>·<code>http_body</code>의 무거운 슬롯은 참조 공유이고 <code>app_message</code>도 공유 소유의 불변 상자라, 큰 몸도 thread를 건너는 값 복사가 싸다.</p>
         </div>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t matrix">
             <thead><tr><th>부품</th><th>일하는 thread</th><th><code>deliver</code>가 불리는 thread</th><th>앱이 메서드를 부르는 곳</th></tr></thead>
             <tbody>
               <tr><td><code>http_client</code></td><td>Windows: OS thread pool의 callback이 전이만 하고 client의 pump thread가 몸을 푼다. Android: 요청마다 떼어 낸 worker + pump. macOS·iOS: 동시 1의 delegate 큐 + pump</td><td>pump thread (client가 하나 소유)</td><td>어느 thread든. <code>stop</code>만 막힌다</td></tr>
@@ -221,7 +223,7 @@
           <p>요청을 받아들였다는 표시는 0이 아닌 표다. 받아들인 요청의 답은 <strong>정확히 하나</strong> 온다. 0이면 손잡이가 서기 전의 거절이라 <code>error</code>에 이유가 있고 답은 오지 않는다. 가르는 선은 "손잡이가 섰는가" 하나다. 그래서 앱의 상태 기계는 "표를 받았으면 답을 기다린다" 한 줄이면 된다.</p>
         </div>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t matrix">
             <thead><tr><th>부품</th><th>받아들임</th><th>답의 수</th><th>취소하면</th><th><code>stop()</code>이 먼저 오면</th></tr></thead>
             <tbody>
               <tr><td><code>http_client</code></td><td><code>http_ticket</code> ≠ 0</td><td>하나. 되풀이는 회차마다 하나 — 표는 그대로이고 <code>sequence</code>가 1부터 늘며 마지막만 <code>last</code>다</td><td><code>cancelled</code>를 실은 답이 그래도 온다</td><td>답이 앱에 닿지 않는다고 본다</td></tr>
@@ -1579,7 +1581,7 @@ namespace sample {
         </div>
         <h3>어디에 어떤 이름으로 놓이나</h3>
         <div class="table-wrap">
-          <table class="t">
+          <table class="t matrix">
             <thead><tr><th></th><th>저장소</th><th>OS 쪽 이름</th><th>이름 규칙</th></tr></thead>
             <tbody>
               <tr><td>Windows</td><td>자격 증명 관리자의 일반 자격 증명, 이 기기에 둔다</td><td><code>luil-v2:&lt;hex(service)&gt;-&lt;hex(name)&gt;</code> — 소문자 16진이라 OS가 대소문자를 무시해도 바이트 구분이 남는다</td><td>둘 다 비지 않은 올바른 UTF-8, 인코딩한 이름이 OS 상한 안</td></tr>
@@ -2776,6 +2778,297 @@ namespace luil {
               <p>주석은 Windows·Android·macOS만 들지만 iOS도 macOS 구현을 쓴다. 이름 규칙과 OS 쪽 이름은 <a class="xref" href="#build-secret">비밀 저장소 조각</a>의 표에 있다.</p>
             </div>
           </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">부품은 앱 상태를 모른다. 결과를 값으로 내놓을 뿐이고, 그 값을 앱 메시지로 싸서 logic thread에 넣는 것은 앱이 준 <code>deliver</code>나 delegate 훅이다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t matrix">
+            <thead><tr><th>값</th><th>언제</th><th>도착하는 thread</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td><code>http_response</code></td><td>받은 요청마다 하나, 되풀이는 회차마다 하나</td><td>client의 pump thread (<code>deliver</code>)</td><td>그 자리에서 <code>post_app_message</code>로 옮긴다. <code>handle</code>에서 표로 흐름을 가르고, <code>last</code>면 표를 잊는다</td></tr>
+              <tr><td><code>websocket_event</code> · <code>opened</code></td><td>upgrade가 끝난 직후 한 번</td><td>reader thread</td><td>이 뒤로 <code>send_text</code>·<code>send_binary</code>가 받아들여진다</td></tr>
+              <tr><td><code>text</code> · <code>binary</code></td><td>완성된 메시지마다. 조각은 이어 붙이고 빈 메시지도 온다</td><td>reader thread</td><td><code>data</code>(공유 불변 바이트)를 읽는다. text는 UTF-8이 검사된 바이트다</td></tr>
+              <tr><td><code>closed</code></td><td>client마다 정확히 한 번. 연결 실패와 upgrade 거절도 이것이다</td><td>reader thread. <code>stop()</code> 안에서일 수 있다</td><td><code>close_code</code>·<code>close_reason</code>·<code>error</code>를 보고 다시 붙을지 정한다</td></tr>
+              <tr><td><code>smb_response</code></td><td>받은 요청마다 하나 (<code>stop</code> 뒤는 제외)</td><td>배달 thread</td><td><code>operation</code>으로 갈라 <code>entries</code>·<code>entry</code>·<code>data</code>·<code>shares</code>·<code>servers</code>를 읽는다. <code>connection</code>은 진단이다</td></tr>
+              <tr><td><code>file_change_batch</code></td><td><code>settle</code>·<code>max_delay</code>가 차면, 또는 감시가 끝날 때</td><td>감시 thread</td><td><code>post_app_message_ticketed</code>로 옮기고 0이 아닌지를 답한다. 끝 묶음이면 표를 잊고, <code>rescan</code>이면 그 범위를 다시 훑는다</td></tr>
+              <tr><td><code>instance_arguments</code> (<code>on_instance_arguments</code>)</td><td>같은 이름의 둘째가 보냈을 때</td><td>Windows: UI thread의 창 프로시저 안. macOS: 메인 thread</td><td>게시만 하고 표가 0이 아닌지를 답한다. 대화 상자·막는 호출은 하지 않는다. 인자는 믿을 수 없는 입력이다</td></tr>
+              <tr><td><code>file_clipboard_content</code> (<code>make_file_clipboard_message</code>)</td><td><code>clipboard_files_paste_request</code>의 답. 파일이 없어도, 지원하지 않아도 온다</td><td>UI thread가 지어 app inbox로</td><td><code>supported</code>·<code>paths</code>·<code>intent</code>·<code>tag</code>·<code>sequence</code>를 본다</td></tr>
+              <tr><td><code>clipboard_change</code> (<code>make_clipboard_changed_message</code>)</td><td>클립보드가 바뀔 때. 이 앱이 넣은 것도 온다</td><td>UI thread가 지어 app inbox로</td><td>잘라 둔 표시는 <code>owned</code>·<code>has_files</code>와 번호로 정한다</td></tr>
+              <tr><td>권한 답 (<code>make_permission_message</code>)</td><td><code>request_permission</code>이 참을 돌려주고 사용자가 답했을 때</td><td>UI thread가 지어 app inbox로</td><td>SMB나 같은 망의 HTTP 전에 <code>local_network</code>를 받는다. 거절도 답이다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>결과 값의 칸</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>칸</th></tr></thead>
+            <tbody>
+              <tr><td><code>http_response</code></td><td><code>ticket</code> · <code>sequence</code>(한 번짜리 0, 되풀이 1부터) · <code>last</code> · <code>status_code</code>(0이면 상태 줄 없음) · <code>reason</code>(Apple은 늘 빈 글) · <code>final_url</code> · <code>headers</code> · <code>content_type</code>(<code>assume_kind</code>와 무관하게 서버가 말한 그대로) · <code>body</code> · <code>error</code> · <code>elapsed</code>(몸 푸는 시간 제외) · <code>ok()</code> · <code>header(name)</code></td></tr>
+              <tr><td><code>http_body</code></td><td><code>kind</code> · <code>kind_source</code> · <code>bytes</code>(언제나 있다, 읽는 것은 <code>data()</code>) · <code>json</code> · <code>image</code> · <code>text</code>(언제나 올바른 UTF-8, 읽는 것은 <code>as_text()</code>) · <code>parse_error</code> · <code>parsed()</code> · <code>still_image()</code></td></tr>
+              <tr><td><code>websocket_event</code></td><td><code>kind</code> · <code>sequence</code> · <code>data</code>(<code>opened</code>·<code>closed</code>는 비어 있다) · <code>close_code</code>(기본 1006) · <code>close_reason</code> · <code>error</code></td></tr>
+              <tr><td><code>smb_response</code></td><td><code>ticket</code> · <code>operation</code> · <code>error</code> · <code>entries</code>(<code>list</code>, 서버가 준 차례) · <code>entry</code>(<code>stat</code>) · <code>data</code>(<code>read</code>, 파일 끝이면 짧다) · <code>elapsed</code> · <code>connection</code>(<code>opened</code>·<code>reused</code>·<code>reopened</code>) · <code>shares</code> · <code>servers</code>(이름 차례) · <code>ok()</code></td></tr>
+              <tr><td><code>smb_share</code> · <code>smb_server_found</code></td><td><code>name</code> · <code>kind</code>(<code>disk</code>·<code>printer</code>·<code>device</code>·<code>ipc</code>) · <code>special</code> · <code>temporary</code> · <code>comment</code> / <code>name</code> · <code>host</code> · <code>addresses</code>(IPv4 먼저) · <code>port</code> · <code>server()</code></td></tr>
+              <tr><td><code>file_change_batch</code></td><td><code>ticket</code> · <code>changes</code> · <code>rescan</code> · <code>end</code>(<code>none</code>·<code>removed</code>·<code>lost</code>) · <code>error</code> · <code>retried</code></td></tr>
+              <tr><td><code>instance_arguments</code></td><td><code>arguments</code>(argv[0] 없음) · <code>working_directory</code>(보내는 쪽이 늘 채운다)</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="security">
+        <header class="sec-head">
+          <h2>보안과 한계</h2>
+          <p class="lede">라이브러리가 막아 주는 것과 앱에 남는 것이다. 인증서 검증을 끄는 손잡이는 어디에도 없다. 밖에서 오는 값에는 모두 상한이 있다.</p>
+        </header>
+        <h3>TLS와 평문</h3>
+        <div class="prose">
+          <ul>
+            <li>Windows HTTP는 TLS 1.2·1.3만 켠다 (1.3을 걸 수 없는 OS면 1.2만). Android HTTP는 플랫폼 기본값과 인증서 검증을 그대로 쓴다 — 버전을 묶지 않아 Android 9 이하는 1.0·1.1도 받을 수 있다. Apple HTTP는 ephemeral 세션이고 ATS가 평문을 막으면 <code>secure_failure</code>다.</li>
+            <li>Windows WebSocket 세션은 TLS 버전 옵션을 따로 걸지 않는다. Android WebSocket은 기본 SSL 소켓에 호스트 이름 검사를 켠다.</li>
+            <li>TLS가 서지 않은 이유(인증서 만료·이름 불일치·믿지 못할 CA…)는 <code>secure_failure</code>의 <code>message</code>에 붙는다.</li>
+            <li>Android의 network security config가 그 host로 평문을 막으면 HTTP는 선을 건드리기 전에 <code>secure_failure</code>로 답한다. WebSocket도 같은 정책을 본다.</li>
+          </ul>
+        </div>
+        <h3>재지정</h3>
+        <div class="prose">
+          <ul>
+            <li>기본은 따라가기(<code>follow</code>), 최대 10회다.</li>
+            <li><strong>https→http는 따라가지 않는다.</strong> Android·Apple 코드는 그 3xx를 답으로 돌려준다. Windows는 WinHTTP의 정책 플래그(<code>WINHTTP_OPTION_REDIRECT_POLICY_DISALLOW_HTTPS_TO_HTTP</code>)에 맡긴다. 그때 Windows가 3xx를 답으로 주는지 오류로 주는지는 확인하지 못했다 — 저장소의 test는 되돌이 http만 쓴다. 헤더의 <code>secure_failure</code> 주석은 이 걸음을 그 갈래에 넣지만, 같은 헤더의 재지정 주석과 Android·Apple 코드는 3xx를 답으로 준다.</li>
+            <li><strong>다른 출처로 옮길 때 앱이 붙인 헤더를 지운다.</strong> 남는 것은 <code>Accept</code>·<code>Accept-Language</code>·<code>Cache-Control</code>·<code>Range</code>·<code>If-Range</code>·<code>If-None-Match</code>·<code>If-Modified-Since</code>·<code>Depth</code>뿐이다. 지울 이름이 아니라 남길 이름을 정해서, 인증 헤더가 다른 도메인으로 새지 않는다.</li>
+            <li>몸이 있는 요청은 따라가지 않는다. 따라간 303은 GET(HEAD는 그대로)이 되고, 301·302의 POST도 GET이 된다. 확장 메서드는 동사를 바꾸지 않으며 303을 따라가지 않는다.</li>
+          </ul>
+        </div>
+        <h3>주입과 크기</h3>
+        <div class="prose">
+          <p>헤더 이름은 token이어야 하고, 이름·값에 CR·LF·NUL이 있으면 요청 전체가 <code>invalid_header</code>다. Windows는 헤더 글이 올바른 UTF-8이 아니어도 거절한다. URL에 CR·LF·NUL이 있으면 <code>invalid_url</code>이다.</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>자리</th><th>상한</th></tr></thead>
+            <tbody>
+              <tr><td>HTTP 몸</td><td>기본 64 MiB, 요청마다 <code>max_body_bytes</code>. 미리 잡는 메모리는 1 MiB까지라 <code>Content-Length: 4 GB</code>가 메모리를 예약하게 두지 않는다. 읽지 못한 <code>Content-Length</code>는 가장 큰 값으로 보아 상한에 걸린다</td></tr>
+              <tr><td>HTTP 헤더 글</td><td>1 MiB (WinHTTP 백엔드)</td></tr>
+              <tr><td>JSON 풀기</td><td>16 MiB, 깊이 256</td></tr>
+              <tr><td>그림 풀기</td><td>파일에서 읽을 때와 같은 디코더 상한, 그리고 요청의 <code>parse.image.decode</code></td></tr>
+              <tr><td>WebSocket</td><td>메시지 8 MiB(설정 최대 64 MiB), 보낼 큐 64개·8 MiB, Close 이유 123바이트</td></tr>
+              <tr><td>SMB 읽기 하나</td><td>16 MiB</td></tr>
+              <tr><td>비밀 값 하나</td><td>2560바이트</td></tr>
+              <tr><td>둘째 인스턴스의 인자</td><td>4096개·256 KiB, 이름은 UTF-16 241 코드 단위</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <p>전송이 실패하면 반쪽 몸은 넘기지 않는다. 몸을 풀지도 않아 <code>body</code>는 빈 값이다.</p>
+        </div>
+        <h3>charset과 냄새 맡기</h3>
+        <div class="prose">
+          <ul>
+            <li>charset이 없거나 <code>utf-8</code>·<code>utf8</code>·<code>us-ascii</code>·<code>ascii</code>면 UTF-8로 읽는다. <strong>옛 HTTP의 latin-1 기본값을 따르지 않는다.</strong> 깨진 바이트는 U+FFFD로 바꿔 담고 <code>parse_error</code>에 적는다.</li>
+            <li>그 밖의 charset은 <code>transcode</code> 갈고리가 옮긴다. 갈고리가 모르는 이름이면 바이트를 그대로 두고 이유만 적는다. 갈고리가 돌려준 글도 다시 UTF-8 검사를 한다.</li>
+            <li><code>iso-8859-1</code>·<code>latin1</code>은 세 백엔드 모두 windows-1252로 읽는다. 변환이 실패할 때의 결과는 플랫폼마다 다르다 (<a class="xref" href="#platforms">플랫폼 차이</a>).</li>
+            <li>바이트로 갈래를 짐작하는 것은 Content-Type이 없거나 읽을 수 없거나 <code>application/octet-stream</code>일 때뿐이고, 그때도 그림 서명 다섯만 본다. json·text·ico는 맡지 않는다. 서버가 구체적인 형식을 말했으면 뒤집지 않는다 — png 바이트에 <code>text/plain</code>이면 글이다.</li>
+          </ul>
+        </div>
+        <h3>proxy</h3>
+        <div class="prose">
+          <ul>
+            <li><code>use_system_proxy</code>가 참이면 시스템 설정을 따른다. 거짓이면 Windows는 세션을 proxy 없이 열고 요청 손잡이마다 직접 연결을 다시 못박는다. 세션만 그렇게 열면 요청마다 proxy 해석이 뜨고, 그것이 묶이는 중에 손잡이를 닫으면 프로세스가 죽을 수 있다는 것이 설계 문서의 기록이다 (PAC·WPAD 환경은 확인하지 않았다고 적혀 있다).</li>
+            <li>Android는 거짓일 때 proxy 없이, Apple은 빈 proxy 사전으로 나간다.</li>
+            <li><strong>WebSocket에는 proxy 손잡이가 없다.</strong> Windows는 늘 시스템 proxy를 타고, Android는 proxy 없이 직접 소켓을 연다.</li>
+            <li>WebSocket은 URL 자격 증명·재지정·사용자 지정 헤더·서브프로토콜·압축 확장을 하지 않는다.</li>
+          </ul>
+        </div>
+        <h3>SMB · 비밀 저장소 · 주소 · 둘째 인스턴스</h3>
+        <div class="prose">
+          <ul>
+            <li>SMB는 NTLM만이고 SMB 2.02–3.1.1을 협상한다. Kerberos·SMB1은 없다. 서명은 서버가 요구할 때 따른다. 암호는 오류 글·logcat에 남기지 않고 넘긴 사본과 연결 장부의 열쇠를 지우지만, 모든 사본을 지운다고 보장하지는 않는다.</li>
+            <li>비밀 값은 이 기기·이 사용자에게만 열린다. Windows는 같은 사용자의 다른 프로세스가 읽을 수 있다. Android 키는 Keystore 밖으로 나오지 않는다. Apple은 기본 접근 목록이라, 다시 서명한 실행 파일은 OS가 허락을 묻는다.</li>
+            <li><code>open_url</code>은 허용 목록 밖을 열지 않는다. scheme을 RFC 3986대로 읽고, 공백으로 시작·끝나거나 C0·DEL·C1 제어 문자가 섞이면 거짓이다. 도메인은 보지 않는다 — 표시 글과 실제 주소를 함께 보이는 것은 앱의 일이다.</li>
+            <li>둘째 인스턴스의 인자는 같은 데스크톱의 어느 프로세스든 보낼 수 있다. 라이브러리는 모양만 검사한다. macOS는 소켓을 사용자 전용 임시 폴더에 두고 보낸 사용자를 다시 확인한다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">공개 API는 넷이 같다. 다른 것은 백엔드가 OS에 기대는 자리다. 같은 것도 같다고 적는다. 이 문서는 어느 플랫폼에서도 앱을 돌려 보지 않고 소스와 test의 기대값으로 썼다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="HTTP">
+            <div class="table-wrap">
+              <table class="t matrix">
+                <thead><tr><th>항목</th><th>Windows (WinHTTP)</th><th>Android (HttpURLConnection)</th><th>macOS · iOS (NSURLSession)</th></tr></thead>
+                <tbody>
+                  <tr><td>일하는 thread</td><td>OS thread pool callback → pump</td><td>요청마다 worker → pump</td><td>동시 1의 delegate 큐 → pump</td></tr>
+                  <tr><td>재지정</td><td>WinHTTP가 따라가고 luil의 계수기가 먼저 센다</td><td>플랫폼의 자동 재지정을 끄고 luil이 직접</td><td>delegate에서 luil이 직접</td></tr>
+                  <tr><td>https→http 재지정</td><td>WinHTTP 정책 플래그에 맡긴다 — 결과는 확인하지 못했다</td><td>3xx를 답으로</td><td>3xx를 답으로</td></tr>
+                  <tr><td>압축</td><td>WinHTTP가 gzip·deflate를 푼다. 푼 답의 헤더를 지우는 코드는 없다</td><td><code>Accept-Encoding: gzip, deflate</code>(거짓이면 <code>identity</code>)를 직접 적어 플랫폼의 몰래 풀기를 끄고 <strong>luil이 gzip·deflate를 푼다</strong>. 푼 답에서 <code>Content-Encoding</code>·<code>Content-Length</code>를 지운다</td><td>시스템이 늘 푼다(끌 수 없음). 거짓이면 <code>identity</code>를 청한다. 푼 답의 두 헤더를 지운다</td></tr>
+                  <tr><td><code>reason</code></td><td>상태 줄의 글</td><td>플랫폼이 준 상태 글</td><td>늘 빈 글</td></tr>
+                  <tr><td>헤더</td><td>온 차례, 이름 대소문자 그대로</td><td><code>X-Android-*</code>를 뺀다</td><td>사전이라 차례가 없고, 같은 이름은 쉼표로 이은 한 줄이다</td></tr>
+                  <tr><td>구간 시한</td><td>이름 풀기·연결·보내기·받기 (이름 풀기는 <code>connect_timeout</code>)</td><td>연결·읽기만. 보내기는 <code>total_timeout</code>만 막는다</td><td>셋 가운데 가장 긴 값 하나</td></tr>
+                  <tr><td>몸 있는 GET·HEAD</td><td>그대로 보낸다</td><td><code>send</code>가 거절 (<code>system_error</code>)</td><td><code>send</code>가 거절 (<code>system_error</code>)</td></tr>
+                  <tr><td>확장 메서드</td><td>그대로</td><td>https에서는 거절 (<code>system_error</code>)</td><td>그대로</td></tr>
+                  <tr><td>TLS</td><td>1.2·1.3만</td><td>플랫폼 기본</td><td>시스템 기본과 ATS</td></tr>
+                  <tr><td>cache · cookie</td><td>끄는 옵션을 거는 코드가 없다. WinHTTP가 그때 쿠키를 어떻게 다루는지는 이 저장소로 확인할 수 없다</td><td>cache 끔</td><td>ephemeral — cache·cookie·자격 증명 저장소를 모두 끈다</td></tr>
+                  <tr><td>기본 charset 변환</td><td>코드 페이지 표. 옮기지 못한 바이트는 <strong>바꿔 넣고 적는다</strong></td><td>utf-16은 손 변환, 나머지는 JVM <code>CharsetDecoder</code>. <strong>엄격해서 실패면 빈 글</strong>과 이유</td><td>utf-16은 손 변환, 나머지는 CoreFoundation 표. <strong>엄격</strong></td></tr>
+                  <tr><td><code>native_error</code></td><td>WinHTTP 코드</td><td>0 (글에 Java 예외)</td><td><code>NSError</code> 코드</td></tr>
+                  <tr><td>필요한 것</td><td>—</td><td><code>INTERNET</code> 권한, 평문이면 network security config. host가 JavaVM을 적은 뒤 <code>create</code></td><td>ATS 설정</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">주석이 코드보다 좁게 적힌 자리</span>헤더 주석(<code>http_client_config::transcode</code>)과 빌드 규칙의 주석은 "Android 기본 변환은 utf-16만 옮긴다"고 적는다. 코드는 그 밖의 이름도 JVM <code>CharsetDecoder</code>로 옮긴다 — euc-kr은 <code>windows-949</code>로 읽힌다. HTTP 설계 문서는 "Android는 플랫폼이 gzip을 청해 몰래 풀고 deflate는 풀지 않는다"고 적지만, 코드는 <code>Accept-Encoding</code>을 직접 적어 gzip·deflate를 모두 luil이 푼다. 몸 있는 GET을 Android 플랫폼이 POST로 바꾼다는 설계 문서의 말도, luil이 그 전에 <code>send</code>에서 거절하므로 앱이 겪을 일이 아니다. HTTP 설계 문서에는 NSURLSession 백엔드 절이 없다.</div></div>
+          </section>
+          <section data-tab="WebSocket">
+            <div class="table-wrap">
+              <table class="t matrix">
+                <thead><tr><th>항목</th><th>Windows</th><th>Android</th><th>macOS · iOS</th></tr></thead>
+                <tbody>
+                  <tr><td>전송</td><td>WinHTTP의 동기 WebSocket API. framing·ping/pong은 WinHTTP</td><td>APK에 든 Java <code>WebSocketTransport</code>를 앱 class loader로 찾는다. 없으면 모든 조작이 "Include the luil Java transport in the APK."</td><td><code>NSURLSessionWebSocketTask</code>. 조각·ping/pong·Close 응답은 시스템</td></tr>
+                  <tr><td>proxy · User-Agent</td><td>늘 시스템 proxy, UA <code>luil</code></td><td>proxy 없이 직접 소켓</td><td>ephemeral 세션, UA <code>luil</code></td></tr>
+                  <tr><td>로컬 Close</td><td>상대 답을 <code>close_timeout</code>까지 기다린다</td><td>같다 (공통 코드)</td><td><strong>기다리지 않는다</strong> — 보낸 코드와 빈 오류로 곧 끝난다</td></tr>
+                  <tr><td>상한을 넘는 메시지</td><td><code>body_too_large</code>로 끊는다. 상대에게 1009 Close를 보내지 않는다</td><td>Java 전송부가 예외로 끊고 C++ 쪽은 <code>system_error</code>로 옮긴다</td><td>시스템이 1009로 닫고 받기가 <code>body_too_large</code></td></tr>
+                  <tr><td>오류 갈래</td><td>upgrade 거절은 <code>cannot_connect</code>, 나머지는 <code>system_error</code>와 WinHTTP 코드</td><td>모두 <code>system_error</code></td><td>upgrade 거절은 <code>cannot_connect</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose">
+              <p>WebSocket 설계 문서(<code>docs/selected-nodes.md</code>)는 Windows와 Android만 들고 "<code>close</code>는 상대 응답을 기다린다"고 적는다. macOS·iOS 전송부가 있고 그쪽 로컬 Close는 기다리지 않는다.</p>
+            </div>
+          </section>
+          <section data-tab="비밀 저장소">
+            <div class="table-wrap">
+              <table class="t matrix">
+                <thead><tr><th>항목</th><th>Windows</th><th>Android</th><th>macOS · iOS</th></tr></thead>
+                <tbody>
+                  <tr><td>저장소</td><td>자격 증명 관리자 일반 자격 증명, 이 기기에 둔다</td><td>Keystore AES-256-GCM 키(<code>service</code>마다) + 앱 내부 파일</td><td>Keychain 일반 암호</td></tr>
+                  <tr><td>이름</td><td><code>luil-v2:&lt;hex(service)&gt;-&lt;hex(name)&gt;</code>, 올바른 UTF-8</td><td>별칭 <code>luil-secret:&lt;hex(service)&gt;</code>, 비지 않으면 된다</td><td>올바른 UTF-8, NUL 없음</td></tr>
+                  <tr><td>옛 항목 이전</td><td><code>migrate_legacy_win32_secret</code></td><td class="no"><code>unsupported</code></td><td class="no"><code>unsupported</code></td></tr>
+                  <tr><td>키가 사라진 값</td><td>—</td><td>파일을 지우고 <code>not_found</code></td><td>—</td></tr>
+                  <tr><td>쓸 수 없는 상태</td><td>—</td><td>JavaVM·files 폴더가 없으면 <code>unsupported</code></td><td>iOS 기기에서의 동작은 코드로 확인할 수 없다</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+          <section data-tab="파일 감시">
+            <div class="table-wrap">
+              <table class="t matrix">
+                <thead><tr><th>항목</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+                <tbody>
+                  <tr><td>OS 호출</td><td>감시마다 폴더 핸들 + 겹친 <code>ReadDirectoryChangesW</code>, 완료 포트 하나, 버퍼 64 KB</td><td>inotify + eventfd를 poll로</td><td>감시마다 FSEvents stream, 지연 10 ms</td><td>kqueue. 폴더마다 이름→inode 표, 연 파일 수 상한을 넘으면 500 ms 폴링</td></tr>
+                  <tr><td><code>subtree</code></td><td>OS가 한다</td><td>폴더마다 watch. 시스템 상한을 넘으면 <code>add</code> 오류나 <code>lost</code></td><td>FSEvents는 늘 그 아래 전부를 본다</td><td>폴더를 모두 연다</td></tr>
+                  <tr><td>넘침 → <code>rescan</code></td><td>빈 결과·열거 넘침</td><td>inotify 큐 넘침 → 그 감시자의 모든 감시</td><td>FSEvents의 다시 훑으라는 표지</td><td>OS 큐 넘침을 받는 자리가 없다. UTF-8로 옮길 수 없는 이름만 <code>rescan</code>으로 돌린다. 뿌리가 지워지거나 옮겨지면 <code>lost</code></td></tr>
+                  <tr><td>한계</td><td>SMB 공유는 알림이 오지 않을 수 있다. 핸들 때문에 이동식 드라이브 "안전하게 제거"가 막힐 수 있다</td><td>앱 전용 저장소만 보장한다. 공유 저장소(FUSE)는 실기기 확인 전</td><td>이벤트가 수백 ms 늦을 수 있다. 같은 경로의 표지가 쌓인다</td><td>폴더 알림은 "안의 이름이 바뀌었다"뿐이라 표를 다시 읽어 견준다. 폴링 파일은 500 ms 늦다. 설계 문서에 iOS 절이 없다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose">
+              <p>헤더 주석(<code>file_watcher.h</code>)은 Windows·Android·macOS 백엔드만 든다. iOS는 kqueue 구현(<code>src/ios/file_watcher_ios.cpp</code>)으로 선다.</p>
+            </div>
+          </section>
+          <section data-tab="플랫폼 도구">
+            <div class="table-wrap">
+              <table class="t matrix">
+                <thead><tr><th>도구</th><th>Windows</th><th>Android</th><th>macOS</th><th>iOS</th></tr></thead>
+                <tbody>
+                  <tr><td><code>replace_file_atomically</code></td><td>write-through로 쓰고 flush 뒤 <code>MoveFileExW</code>(바꾸기·write-through)</td><td><code>fsync</code> → <code>rename</code> → 폴더 <code>fsync</code></td><td><code>F_FULLFSYNC</code>(안 되면 <code>fsync</code>) → <code>rename</code>. 폴더 <code>fsync</code>는 없다</td><td>macOS와 같다</td></tr>
+                  <tr><td><code>single_instance</code></td><td><code>Local\luil-instance:&lt;이름&gt;</code> 뮤텍스 (같은 사용자 세션)</td><td class="no">늘 첫째, <code>unsupported</code></td><td>사용자 임시 폴더의 잠금 파일에 <code>flock</code>, 인자는 옆의 Unix 소켓</td><td class="no">늘 첫째, <code>unsupported</code></td></tr>
+                  <tr><td>받는 쪽 훅</td><td>UI thread 창 프로시저 안</td><td class="no">—</td><td>메인 thread (delegate가 <code>win32::window_delegate</code>를 구현했을 때)</td><td class="no">—</td></tr>
+                  <tr><td><code>open_url</code></td><td>처리기가 없으면 <code>not_found</code></td><td><code>ActivityNotFoundException</code>이면 <code>not_found</code>. 10+는 뒤에 있는 앱의 띄우기를 조용히 막아도 <code>ok</code></td><td>열지 못하면 <code>not_found</code></td><td>비동기로 넘기고 <strong>늘 <code>ok</code></strong></td></tr>
+                  <tr><td><code>reveal_in_file_manager</code></td><td>없는 경로는 <code>not_found</code>, 부른 thread에서 COM</td><td class="no"><code>unsupported</code></td><td>없는 경로는 <code>not_found</code></td><td class="no"><code>unsupported</code></td></tr>
+                  <tr><td><code>launch_program</code></td><td>Windows 명령 줄 규칙으로 따옴표 처리, PATH에서 찾는다</td><td class="no"><code>unsupported</code></td><td><code>posix_spawnp</code>, <code>show_window</code>는 쓰지 않는다</td><td class="no"><code>unsupported</code></td></tr>
+                  <tr><td><code>file_lock</code></td><td colspan="4">넷 다 기다리지 않는 배타 잠금이고, 같은 프로세스의 두 객체도 서로 막는다</td></tr>
+                  <tr><td><code>set_background_priority</code></td><td>배경 모드 (이미 그 모드면 성공)</td><td>nice 10 / 0</td><td>QoS utility / default</td><td>macOS와 같다</td></tr>
+                  <tr><td><code>blocking_io_canceller</code></td><td><code>CancelSynchronousIo</code></td><td class="no"><code>unsupported</code></td><td class="no"><code>unsupported</code></td><td class="no"><code>unsupported</code></td></tr>
+                  <tr><td><code>user_first_weekday</code> · <code>user_ui_languages</code></td><td>지역 설정 · 사용자가 고른 UI 언어 목록</td><td>Calendar · 호스트가 읽어 둔 태그 하나</td><td>NSCalendar · 선호 언어</td><td>macOS와 같다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose">
+              <p>헤더 주석은 <code>reveal_in_file_manager</code>·<code>blocking_io_canceller</code>에 "Android는 <code>unsupported</code>"만 적고, <code>open_url</code>에 "열 앱이 없으면 <code>not_found</code>"라 적는다. 위 표가 코드다. Windows의 인스턴스 이름은 대소문자를 가리지 않는 원자를 거치므로 대소문자만 다른 두 이름이 겹칠 수 있다는 것이 설계 문서의 기록이다(실측 전). macOS는 이름의 바이트로 해시해 다르다.</p>
+            </div>
+          </section>
+          <section data-tab="SMB">
+            <div class="prose">
+              <ul>
+                <li>Android·iOS에서 <code>LUIL_ENABLE_SMB=ON</code>(기본 OFF)일 때만 libsmb2로 선다. Windows·macOS와 끈 구성은 <code>create</code>가 nullptr, <code>supported()</code>가 거짓이다. "지원 안 함" 오류 글은 "SMB is built only on Android with LUIL_ENABLE_SMB=ON."이라 iOS를 빠뜨린다.</li>
+                <li>서버 찾기와 <code>.local</code> 풀기: Android는 직접 mDNS 질의를 한 번 한다(멀티캐스트 잠금·권한 불필요, <code>.local</code>은 1.5 s까지). iOS는 시스템 DNS-SD를 쓴다(<code>.local</code>은 5 s까지).</li>
+                <li>iOS의 로컬 네트워크 권한은 묻는 API가 없어 상태가 늘 <code>not_required</code>이고, 첫 접속 때 시스템이 묻는다. 거절하면 찾기·<code>.local</code>·연결이 모두 <code>cannot_connect</code>다. 권한 창이 떠 있는 동안 시작한 찾기는 빈 목록(성공)으로 끝날 수 있다.</li>
+                <li>iOS는 끊긴 소켓에 쓸 때의 SIGPIPE를 소켓 옵션으로 막는다.</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다. 주석·설계 문서와 코드가 다른 곳은 코드를 따랐다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>inbox가 차면 답이 조용히 사라진다.</strong> app inbox는 1024칸이고 넘치면 새 것을 버린다. <code>post_app_message</code>는 알리지 않는다. HTTP·SMB·WebSocket의 <code>deliver</code>는 <code>void</code>라 그 답은 다시 오지 않고, 표를 기다리던 화면이 영원히 "보내는 중"에 남는다. 파일 감시의 <code>bool</code> <code>deliver</code>만 거짓을 답하면 다시 낸다 — 그래서 감시에서는 <code>post_app_message_ticketed(...) != 0</code>을 그대로 답해야 하고, 참을 답하고 값을 잃으면 감시자는 모른다. HTTP의 대책은 <a class="xref" href="#build-http-drop">답을 잃지 않기</a>.</li>
+          <li><strong><code>stop()</code> 뒤에는 "표마다 답 하나"가 깨진다.</strong> HTTP 세 백엔드는 배달을 먼저 끄고 pump를 join한 뒤 남은 요청을 <code>stopped</code>로 접으므로, <code>stopped</code> 답이 화면을 정리해 줄 것이라 기대하지 않는다 (test도 "0개도 옳다"고 적는다). SMB와 감시도 내지 않은 답·묶음을 버린다. <strong>예외는 WebSocket이다</strong> — <code>stop()</code>이 돌아오기 전에 <code>closed</code>(오류 <code>stopped</code>, 코드 1006)가 올 수 있으니 <code>deliver</code>가 쥔 host가 <code>stop()</code>이 끝날 때까지 살아 있어야 한다.</li>
+          <li><strong><code>deliver</code> 안에서 <code>stop</code>을 부르지 않는다.</strong> 자기 thread를 join하게 된다. debug 빌드는 assert로 잡는다.</li>
+          <li><strong><code>deliver</code>가 잡은 것보다 먼저 멈춘다.</strong> 소멸자에 맡기지 말고 <code>stop_workers()</code>에서 <code>stop()</code>한다. 그 함수는 UI thread에서 불리므로 logic이 소유한 client는 원자적 손잡이로 본다.</li>
+          <li><strong>늦은 답은 표로 거르고, 답이 온 흐름은 표를 잊는다.</strong> 취소한 흐름·바뀐 화면의 답은 늦게 온다. 표를 잊지 않으면 취소 단추가 끝난 표를 겨누고 <code>cancel</code>은 아무 일도 하지 않는다.</li>
+          <li><strong>주석이 말하는 것보다 플랫폼이 많다.</strong> luil은 Windows·Android·macOS·iOS 넷을 세운다. 여러 헤더 주석이 Windows·Android(또는 Windows·Android·macOS)만 든다 — <code>file_watcher.h</code>(iOS kqueue 빠짐), <code>secret_store.h</code>(iOS는 macOS 구현), <code>smb_client.h</code>("Android 전용"이지만 iOS도 선다), <code>platform_services.h</code>의 <code>unsupported</code> 목록, 클립보드 바뀜 훅("Win32만 알린다"지만 macOS·iOS도 알린다). 플랫폼 분기는 <a class="xref" href="#platforms">플랫폼 차이</a>의 표를 따른다.</li>
+          <li><strong>되풀이 요청을 멈추는 영구 오류에 <code>invalid_method</code>도 든다.</strong> 헤더 주석은 <code>invalid_url</code>·<code>unsupported_scheme</code>·<code>invalid_header</code> 셋만 들지만 <code>failure_is_permanent</code>는 넷을 본다. 이름이 틀린 확장 메서드는 대개 <code>start_heartbeat</code>가 먼저 표 0으로 거절하고, 회차의 답으로 <code>invalid_method</code>가 오면 그 흐름은 그 답에서 <code>last</code>로 끝난다 — 다시 시도되지 않는다.</li>
+          <li><strong>몸 있는 GET·HEAD는 플랫폼마다 다르다.</strong> Windows는 그대로 보내고, Android·Apple은 <code>send</code>가 표 0으로 거절한다. 같은 코드가 한쪽에서만 답을 받는다.</li>
+          <li><strong>Android의 charset과 압축은 주석과 다르다.</strong> 기본 변환은 utf-16만이 아니라 JVM <code>CharsetDecoder</code>로 그 밖의 이름도 옮기고, 엄격해서 실패하면 빈 글과 이유가 온다(Windows는 바꿔 넣는다). 압축은 플랫폼이 몰래 푸는 것이 아니라 luil이 gzip·deflate를 모두 푼다. 같은 몸이 플랫폼마다 다른 글이 될 수 있다.</li>
+          <li><strong>https→http 재지정은 플랫폼마다 다른 답이 될 수 있다.</strong> Android·Apple은 3xx를 답으로 준다. Windows는 WinHTTP 정책 플래그에 맡겨, 그 답이 3xx인지 <code>secure_failure</code> 같은 오류인지 코드로 확인할 수 없다. 헤더의 <code>secure_failure</code> 주석은 이 걸음을 오류로 적는다. 앱은 둘 다 견딘다.</li>
+          <li><strong>iOS의 <code>open_url</code>은 늘 <code>ok</code>다.</strong> 메인 큐에 비동기로 넘기고 바로 답한다. 헤더 주석의 "열 앱이 없으면 <code>not_found</code>"는 오지 않는다. 다른 플랫폼의 <code>ok</code>도 "넘겼다"까지다.</li>
+          <li><strong>macOS도 둘째 실행의 인자를 받는다.</strong> 설계 문서 머리는 "Win32 전용"이라 적지만, <code>macos::application_environment::instance</code>를 달면 macOS host가 delegate의 <code>win32::window_delegate::on_instance_arguments</code>를 부른다. 데스크톱 둘이면 받는 코드도 둘에 맞춘다.</li>
+          <li><strong>SMB는 iOS에서도 선다.</strong> 헤더와 오류 글은 "Android 전용"이라 적지만 <code>LUIL_ENABLE_SMB=ON</code>이면 iOS도 libsmb2로 세운다. 권한과 찾기의 동작은 둘이 다르다 (iOS는 권한을 묻는 API가 없다).</li>
+          <li><strong>Android 비밀 키의 별칭은 <code>luil-secret:&lt;hex(service)&gt;</code>다.</strong> 설계 문서의 <code>luil-secret:&lt;service&gt;</code>가 아니다. Windows 자격 증명 이름도 <code>luil-v2:&lt;hex(service)&gt;-&lt;hex(name)&gt;</code>라 OS 도구로 찾을 때는 16진 이름을 찾는다.</li>
+          <li><strong>비밀 저장소의 이름 규칙이 플랫폼마다 다르다.</strong> NUL이 든 이름은 Windows가 받고 macOS가 거절한다. 그리고 모두 동기라 UI thread에서 부르지 않는다.</li>
+          <li><strong><code>receive_timeout</code>은 전체 시한이 아니다.</strong> 조각 사이의 상한이다. "얼마 안에 끝난다"는 <code>total_timeout</code>뿐이고 그것도 바닥이지 천장이 아니다.</li>
+          <li><strong>4xx·5xx는 오류가 아니다.</strong> <code>error.empty()</code>가 참이다. 성공은 <code>ok()</code>로 묻는다.</li>
+          <li><strong><code>parse_error</code>가 있어도 값이 있을 수 있고, 갈래는 낮아지지 않는다.</strong> 깨진 JSON도 <code>kind == json</code>이고 <code>json</code>이 비어 있다. 깨진 UTF-8 글은 U+FFFD가 든 채 <code>text</code>가 선다. 슬롯마다 따로 묻는다.</li>
+          <li><strong>서버가 말한 형식이 이긴다.</strong> png 바이트에 <code>text/plain</code>이면 글이다. 서버가 틀린 것을 알면 <code>parse.assume_kind</code>를 준다. html은 풀지 않고(<code>html_as_text</code>를 켜도 <code>parsed()</code>는 거짓), svg는 <code>bytes</code>다.</li>
+          <li><strong>쉬는 되풀이를 취소한 마지막 답은 앞 회차와 같은 <code>sequence</code>를 단다.</strong> 지어 낸 답의 <code>sequence</code>가 지금까지의 회차 수라서다. WinHTTP 백엔드 코드에서 읽은 것이고 Android·Apple의 같은 자리는 읽지 않았다. 회차가 있었던 뒤의 취소를 보는 test는 없다. 중복은 <code>sequence</code>가 아니라 <code>last</code>로 가른다.</li>
+          <li><strong><code>method_name</code>의 표준 동사 검사는 대소문자를 가린다.</strong> <code>u8"get"</code>은 거절되지 않고 확장 메서드로 받아 소문자 그대로 선에 실린다. test는 <code>propfind</code>가 그대로 실리는 것과 <code>GET</code>·<code>DELETE</code>·<code>CONNECT</code>의 거절만 보고, 소문자 <code>get</code>은 코드에서 읽은 것이다.</li>
+          <li><strong>Android에서 <code>create</code>를 너무 일찍 부르지 않는다.</strong> host가 JavaVM을 적기 전이면 실패한다.</li>
+          <li><strong>WebSocket URL은 소문자 scheme과 ASCII다.</strong> <code>WSS://</code>나 한글 경로는 <code>create</code>가 거절한다. 그리고 <code>opened</code> 전의 보내기는 거짓이다.</li>
+          <li><strong>WebSocket의 끝맺음이 플랫폼마다 다르다.</strong> macOS·iOS의 로컬 Close는 상대를 기다리지 않고 곧 끝난다. Windows는 상한을 넘는 메시지를 받으면 1009 Close를 보내지 않고 끊는다. Android는 Java 전송부를 APK에 싣지 않으면 모든 조작이 실패한다.</li>
+          <li><strong>감시는 처음 목록을 주지 않고, <code>modified</code>는 쓰기 완료가 아니다.</strong> <code>add</code> 먼저, 읽기는 그다음이다. 읽다 해석에 실패하면 이전 값을 지키고 다음 묶음을 기다린다. 폴더를 통째로 옮기면 그 아래 항목마다 알리지 않을 수 있다.</li>
+          <li><strong><code>replace_file_atomically</code>는 폴더를 만들지 않고, 같은 프로세스 안에서 같은 파일을 동시에 바꾸면 겹친다.</strong> 임시 이름이 <code>&lt;경로&gt;.&lt;pid&gt;.tmp</code>라서다. POSIX에서는 결과 파일의 권한이 <code>0600</code>이 된다. 뒤의 둘은 코드에서 읽은 것이고 test가 보지 않는다.</li>
+          <li><strong><code>on_instance_arguments</code>를 만들지 않으면 둘째는 늘 <code>failed</code>다.</strong> 기본 구현이 거짓을 답한다. <code>send_to_primary</code>는 부른 thread를 시한까지 막고, 시한이 지난 보내기도 나중에 닿을 수 있어 다시 보내면 중복이 생긴다.</li>
+          <li><strong>SMB의 <code>cancel</code>은 이미 끝난 요청에 닿지 않는다.</strong> 배달을 기다리던 답은 본래 결과로 온다. 그리고 <code>stop</code>의 "한 번만" 표지가 원자 값이 아니라 두 thread가 동시에 부르는 경우를 막지 않는다. 둘 다 코드에서 읽은 것이고 test가 없다.</li>
+          <li><strong>SMB 공유 목록을 거르는 것은 앱이다.</strong> <code>C$</code>·<code>ADMIN$</code>·<code>IPC$</code>와 프린터도 온다. iOS의 찾기가 빈 목록으로 끝나도 "서버 없음"이라 단정하지 않는다 — 권한 창이 떠 있는 동안 시작한 찾기는 빈 목록(성공)으로 끝난다.</li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>HTTP 답은 어느 thread로 오나? 요청마다 callback을 줄 수 있나?</summary><div class="faq-a"><p class="faq-short">client가 소유한 thread에서 <code>deliver</code>가 불린다. 요청마다 callback은 없다.</p><p>logic thread도 UI thread도 아니다. 그 자리에서 <code>post_app_message</code>로 logic thread에 옮기고, <code>handle</code>에서 <code>response.ticket</code>으로 어느 요청의 답인지 가른다 (<a class="xref" href="#concepts">개념</a>).</p></div></details>
+          <details class="faq"><summary><code>send</code>가 0을 돌려준다.</summary><div class="faq-a"><p class="faq-short">손잡이가 서기 전의 거절이다. 답은 오지 않고 <code>error</code>에 이유가 있다.</p><p>URL·scheme·헤더·메서드 규칙 위반, 동시 상한(<code>max_in_flight</code> 32)이나 배달 대기 상한(<code>max_pending_responses</code> 128) 초과, 멈춘 client다. <strong>몸을 실은 GET·HEAD</strong>도 Android·Apple에서는 여기서 거절된다 — Windows는 그대로 보내므로 한 플랫폼에서만 시험하면 놓친다.</p></div></details>
+          <details class="faq"><summary>취소하면 답이 안 오나?</summary><div class="faq-a"><p class="faq-short">온다. <code>cancelled</code>를 실은 답 하나다.</p><p>취소가 답을 지우면 "아직 오는 중"과 "접었다"를 앱이 따로 들어야 한다. 모르는 표·끝난 표의 <code>cancel</code>은 아무 일도 하지 않는다. test가 "정확히 한 번"을 잠근다 (<a class="xref" href="#build-http-cancel">취소</a>).</p></div></details>
+          <details class="faq"><summary><code>stop()</code>을 부르면 남은 요청에 <code>stopped</code> 답이 오나?</summary><div class="faq-a"><p class="faq-short">기대하지 않는다. WebSocket의 <code>closed</code>만 예외다.</p><p>HTTP 세 백엔드는 배달을 끄고 pump를 join한 <strong>뒤에</strong> 남은 요청을 <code>stopped</code>로 접으므로 그 답은 앱에 닿지 않는다. test도 "0개도 옳다"고 적는다. SMB와 파일 감시도 배달하지 않은 답·묶음을 버린다. WebSocket은 <code>stop()</code>이 돌아오기 전에 <code>closed</code>(오류 <code>stopped</code>, 코드 1006)를 낼 수 있다. 화면을 다시 쓰는 중에 client를 멈췄다면 앱이 표를 직접 잊는다.</p></div></details>
+          <details class="faq"><summary>답이 몰려 app inbox가 차면?</summary><div class="faq-a"><p class="faq-short">새 메시지가 조용히 버려진다. 파일 감시만 다시 낸다.</p><p>app inbox는 1024칸 <code>reject_newest</code>다. HTTP·SMB·WebSocket의 <code>deliver</code>는 <code>void</code>라 버려진 답은 다시 오지 않는다. 감시의 <code>deliver</code>는 <code>post_app_message_ticketed(...) != 0</code>을 답하면 거절된 묶음을 다음 변경과 합쳐 다시 낸다. HTTP는 같은 함수의 0을 보고 잃은 표를 적어 둔다 (<a class="xref" href="#build-http-drop">답을 잃지 않기</a>). 버려진 수는 <code>app_inbox_statistics()</code>가 센다.</p></div></details>
+          <details class="faq"><summary>404·500은 어떻게 오나?</summary><div class="faq-a"><p class="faq-short">오류가 아니라 답이다. <code>error.empty()</code>가 참이고 <code>ok()</code>가 거짓이다.</p><p>몸은 평소대로 풀린다. <code>application/problem+json</code> 오류 몸은 json으로 온다. 성공은 언제나 <code>ok()</code>로 묻는다.</p></div></details>
+          <details class="faq"><summary>JSON인데 <code>text/plain</code>으로 온다.</summary><div class="faq-a"><p class="faq-short">요청의 <code>parse.assume_kind = http_body_kind::json</code>을 준다.</p><p>라이브러리는 서버가 구체적인 형식을 말하면 바이트를 보고 뒤집지 않는다. 서버가 틀린 것을 아는 쪽은 앱이고, 그 문이 <code>assume_kind</code>다. 빈 몸은 그래도 <code>empty</code>다.</p></div></details>
+          <details class="faq"><summary>euc-kr이나 deflate로 압축된 응답이 플랫폼마다 같게 풀리나?</summary><div class="faq-a"><p class="faq-short">세 백엔드 모두 CP949 계열 표로 옮기지만, 옮기지 못할 때의 답이 다르다. Android는 주석과 달리 charset과 압축을 모두 직접 다룬다.</p><p>euc-kr은 Windows가 코드 페이지 949로, Android가 JVM <code>CharsetDecoder</code>(<code>windows-949</code>)로, Apple이 CoreFoundation 표로 옮긴다. 헤더 주석은 "Android 기본 변환은 utf-16만"이라 적지만 코드는 그렇다. 옮길 수 없는 바이트를 만나면 Windows는 바꿔 넣고 이유를 적고, Android·Apple은 엄격해서 빈 글과 이유를 준다. 압축은 Android에서도 luil이 gzip·deflate를 모두 푼다 (설계 문서의 "deflate는 풀지 않는다"는 코드와 다르다). 다른 규칙이 필요하면 <code>http_client_config::transcode</code>를 준다.</p></div></details>
+          <details class="faq"><summary>큰 그림이 메모리를 터뜨리지 않게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>parse.image.decode</code>에 상한을 준다. 섬네일이면 <code>parse.image.animated = false</code>.</p><p>4000×3000 사진 하나가 48 MB이고 움직이는 그림은 장 수가 곱해진다. 받는 몸 자체를 줄이려면 <code>max_body_bytes</code>를 낮춘다 (<a class="xref" href="#build-http-image">그림 받기</a>).</p></div></details>
+          <details class="faq"><summary>https에서 http로 재지정되면? POST가 307을 받으면?</summary><div class="faq-a"><p class="faq-short">둘 다 따라가지 않는다. 다만 https→http의 답 모양은 플랫폼마다 다를 수 있다.</p><p>Android·Apple은 그 3xx를 답으로 준다. Windows는 WinHTTP의 정책 플래그에 맡겨서, 3xx가 답으로 오는지 오류로 오는지 확인하지 못했다. 헤더의 <code>secure_failure</code> 주석은 이 걸음을 그 오류로 적는다. 몸이 있는 요청(POST·307)은 정책과 무관하게 따라가지 않고 3xx가 답으로 온다 — 앱이 <code>Location</code>을 보고 다시 보낸다.</p></div></details>
+          <details class="faq"><summary>인증 헤더가 다른 도메인으로 새지 않나? 인증서 검증을 끌 수 있나?</summary><div class="faq-a"><p class="faq-short">다른 출처로 재지정되면 여덟 이름 밖의 앱 헤더를 지운다. 검증을 끄는 손잡이는 없다.</p><p>남는 것은 <code>Accept</code>·<code>Accept-Language</code>·<code>Cache-Control</code>·<code>Range</code>·<code>If-Range</code>·<code>If-None-Match</code>·<code>If-Modified-Since</code>·<code>Depth</code>다. Windows HTTP는 TLS 1.2·1.3만 쓴다 (<a class="xref" href="#security">보안과 한계</a>).</p></div></details>
+          <details class="faq"><summary>주기적으로 상태를 물으려면? 오류가 나면 멈추나?</summary><div class="faq-a"><p class="faq-short"><code>start_heartbeat</code> 하나다. 전송 오류와 4xx·5xx로는 멈추지 않는다.</p><p>답을 받은 뒤 <code>interval</code>을 쉬므로 회차가 겹치지 않는다. 멈추는 것은 <code>cancel</code>·<code>max_rounds</code>·<code>stop</code>과 영원히 실패할 오류다 — 헤더 주석은 <code>invalid_url</code>·<code>unsupported_scheme</code>·<code>invalid_header</code>를 들지만 코드는 <code>invalid_method</code>도 영구 오류로 본다. "몇 번 틀리면 물러선다"는 앱이 센다 (<a class="xref" href="#build-http-cancel">되풀이 요청</a>).</p></div></details>
+          <details class="faq"><summary>WebSocket이 끊기면 저절로 다시 붙나? <code>send_text</code>가 거짓이다.</summary><div class="faq-a"><p class="faq-short">다시 붙지 않는다. 새 client를 세운다. 보내기가 거짓이면 넣지 못한 것이다.</p><p>아직 열리지 않았거나(<code>opened</code> 전), 닫는 중이거나, 큐(64개·8 MiB)가 찼거나, 메시지가 상한보다 크거나, 올바른 UTF-8이 아닐 때다. 숨은 무한 큐는 없다 (<a class="xref" href="#build-websocket">WebSocket</a>).</p></div></details>
+          <details class="faq"><summary>SMB는 어느 플랫폼에서 쓰나? Windows에서는?</summary><div class="faq-a"><p class="faq-short">Android와 iOS에서, <code>LUIL_ENABLE_SMB=ON</code>으로 빌드했을 때만 선다.</p><p>헤더 주석과 오류 글은 "Android 전용"이라 적지만 빌드 규칙은 iOS에서도 libsmb2로 세운다. Windows·macOS에서는 <code>create</code>가 nullptr이다. Windows는 운영체제의 SMB(UNC 경로)로 읽는다.</p></div></details>
+          <details class="faq"><summary>감시를 걸면 지금 있는 파일 목록도 오나? <code>rescan</code>이 참이면?</summary><div class="faq-a"><p class="faq-short">오지 않는다. <code>add</code> 뒤에 앱이 읽는다. <code>rescan</code>은 넘쳤다는 뜻이다.</p><p>거꾸로(읽고 나서 <code>add</code>) 하면 그 사이의 변경을 놓친다. <code>rescan</code>이 참이면 <code>changes</code>는 일부이거나 비었으니 그 범위를 다시 훑는다.</p></div></details>
+          <details class="faq"><summary>비밀은 어디에 어떤 이름으로 저장되나? 얼마나 크게?</summary><div class="faq-a"><p class="faq-short">값은 2560바이트까지다. OS 쪽 이름은 <code>service</code>·<code>name</code>의 16진이다.</p><p>Windows는 자격 증명 관리자의 <code>luil-v2:&lt;hex(service)&gt;-&lt;hex(name)&gt;</code>이다. Android는 Keystore 키 별칭 <code>luil-secret:&lt;hex(service)&gt;</code>와 앱 내부 파일 <code>luil-secrets/&lt;hex(service)&gt;-&lt;hex(name)&gt;</code>이다 — 설계 문서의 <code>luil-secret:&lt;service&gt;</code>가 아니다. macOS·iOS는 Keychain 일반 암호(서비스·계정)다. 앱을 지웠다 다시 깐 Android에서는 키가 없어 <code>not_found</code>가 온다.</p></div></details>
+          <details class="faq"><summary><code>open_url</code>이 <code>ok</code>인데 아무것도 열리지 않았다.</summary><div class="faq-a"><p class="faq-short"><code>ok</code>는 "넘겼다"까지다. iOS는 늘 <code>ok</code>다.</p><p>Windows는 브라우저가 실제로 열었는지 모른다. Android 10+는 앞에 보이지 않는 앱의 Activity를 OS가 조용히 막아도 <code>ok</code>다. iOS는 메인 큐에 비동기로 넘기고 곧 <code>ok</code>를 답하므로, 헤더 주석의 "열 앱이 없으면 <code>not_found</code>"를 iOS에서 기대하지 않는다. 사용자가 링크를 누른 그 순간에 부른다.</p></div></details>
+          <details class="faq"><summary>둘째 실행의 인자를 받으려면? macOS에서도 되나?</summary><div class="faq-a"><p class="faq-short">된다. Windows는 <code>window_environment::instance</code>, macOS는 <code>macos::application_environment::instance</code>를 달고 <code>on_instance_arguments</code>를 만든다.</p><p>macOS host는 delegate가 <code>win32::window_delegate</code>를 구현했으면 그 훅을 메인 thread에서 부른다. 설계 문서 머리는 "Win32 전용"이라 적지만 코드는 macOS도 받는다. 훅은 게시만 하고 <code>post_app_message_ticketed(...) != 0</code>을 답한다. Android·iOS는 둘째가 생기지 않는다 (<code>send_to_primary</code>는 <code>unsupported</code>).</p></div></details>
+          <details class="faq"><summary>헤더 주석에는 Windows·Android만 있는데 macOS·iOS에서는?</summary><div class="faq-a"><p class="faq-short">luil은 네 플랫폼을 세운다. 주석보다 <a class="xref" href="#overview">개요의 표</a>와 <a class="xref" href="#platforms">플랫폼 차이</a>를 따른다.</p><p>파일 감시(iOS는 kqueue), 비밀 저장소(iOS는 macOS 구현), SMB(iOS도 선다), 클립보드 바뀜 알림(macOS·iOS도 알린다), <code>unsupported</code> 목록(<code>blocking_io_canceller</code>는 Windows만 된다)이 주석보다 넓다. iOS 기기에서 돌려 본 결과는 이 문서에 없다.</p></div></details>
+          <details class="faq"><summary>앱을 닫을 때 무엇을 하나?</summary><div class="faq-a"><p class="faq-short"><code>logic_driver::cancel()</code>에서 <code>cancel_all()</code>, <code>stop_workers()</code>에서 모든 부품의 <code>stop()</code>.</p><p>둘 다 UI thread에서 불리므로 logic이 소유한 client는 원자적 손잡이로 본다. 종료 저장은 그 사이(종료 메시지를 처리하는 logic thread)에서 <code>replace_file_atomically</code>로 한다 (<a class="xref" href="#concepts">종료</a>).</p></div></details>
         </div>
       </section>
 

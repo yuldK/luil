@@ -1,0 +1,2260 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="claude:viewport-fit-sides" content="cover">
+<title>날짜·시간·색 고르기 · luil 설명서</title>
+<meta name="description" content="luil 설명서 — calendar_element·date_field_element·time_picker_element·color_picker_element·color_field_element로 날짜·시각·색 하나를 고르는 법: 값과 커서, popup 자리와 초점, 말일 접기, 시·분 칸, HSV와 16진 글.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Hahmlet:wght@500;700&family=IBM+Plex+Sans+KR:wght@400;500;600&family=JetBrains+Mono:wght@400;600&family=Nanum+Gothic+Coding:wght@400;700&display=swap">
+<link rel="stylesheet" href="assets/manual.css">
+<script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
+<style>
+  .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
+  .choose .panel h4 { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .choose .panel h4 code { font-size: 13px; }
+  .choose .panel ul { margin: 0; padding-left: 1.1em; font-size: var(--fs-sm); color: var(--fg-2); display: grid; gap: 3px; }
+  .loop { display: grid; gap: 0; counter-reset: loop; border: 1px solid var(--line); border-radius: var(--r-row); overflow: hidden; }
+  .loop > div { display: grid; grid-template-columns: 2.2em 8.4em minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 14px; border-top: 1px solid var(--line); font-size: var(--fs-sm); background: var(--panel); }
+  .loop > div:first-child { border-top: 0; }
+  .loop > div::before { counter-increment: loop; content: counter(loop, decimal-leading-zero); font-family: var(--font-code); font-size: var(--fs-xs); color: var(--accent-ink); }
+  .loop .who { font-size: var(--fs-xs); color: var(--fg-3); }
+  @media (max-width: 560px) { .loop > div { grid-template-columns: 2.2em minmax(0, 1fr); } .loop .who { grid-column: 2; } .loop > div > span:last-child { grid-column: 2; } }
+<!--LABCSS-->
+</style>
+</head>
+<body data-page="pickers">
+<header class="topbar"></header>
+
+<div class="doc-shell">
+  <nav class="sitenav" aria-label="설명서 목차"></nav>
+  <main class="doc-main">
+    <header class="doc-head">
+      <div class="crumbs" data-auto></div>
+      <h1>날짜·시간·색 고르기</h1>
+      <p class="summary">값 하나를 "고르는" 세 묶음이다. 날짜는 한 달을 6주×7일로 펴는 달력과 그것을 popup에 싣는 날짜 칸이다. 시각은 숫자 칸 둘과 오전·오후 단추, 색은 판·막대·견본·16진 칸을 한 본체에 담은 고르기다. 고른 값도, 달력의 커서도, popup이 떠 있는지도 모두 앱 상태다. 날짜와 색의 계산은 따로 순수 함수로 있다.</p>
+      <div class="head-cols">
+        <dl class="meta">
+          <div><dt>관련 소스</dt><dd><code>calendar_element.h</code>·<code>calendar_date.h</code>·<code>date_picker_popup.h</code>·<code>time_picker_element.h</code>·<code>color_picker_element.h</code>·<code>color_space.h</code>·<code>color_picker_popup.h</code>·<code>field_popup.h</code></dd></div>
+          <div><dt>실습</dt><dd>42칸 달력과 HSV·16진 변환 — luil의 규칙 그대로</dd></div>
+          <div><dt>먼저 읽기</dt><dd><a class="xref" href="popups.html">드롭다운·콤보·팝업</a> · <a class="xref" href="values.html">슬라이더·숫자·별점·진행</a> · <a class="xref" href="input.html">입력과 초점</a></dd></div>
+        </dl>
+        <div class="goals">
+          <h2><i class="ci" aria-hidden="true">&#xEB20;</i>이 문서를 읽으면</h2>
+          <ol>
+            <li>인라인 달력, 날짜 칸과 popup, 날짜 계산 함수 가운데 무엇을 쓸지 고른다.</li>
+            <li>고른 날·커서·초점 요청을 앱 상태로 다뤄 키와 단추가 맞게 움직이게 한다.</li>
+            <li>popup을 칸 아래에 붙이고, 열고 닫는 길과 초점 이동을 앱이 맡는다.</li>
+            <li>시·분 칸과 색 고르기의 메시지를 받아 저장할 값(24시간제 시각, <code>#RRGGBB</code>)으로 바꾼다.</li>
+          </ol>
+        </div>
+      </div>
+    </header>
+
+    <div class="doc-body">
+
+      <section class="sec" id="overview">
+        <header class="sec-head">
+          <h2>어느 것을 쓰나</h2>
+          <p class="lede">화면에 늘 보일 것인가, 좁은 칸을 눌러 popup으로 띄울 것인가. 그리고 계산만 필요한가. 날짜와 색은 세 층이 모두 있고, 시각은 칸 하나다.</p>
+        </header>
+        <div class="choose">
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEAB0;</i><code>calendar_element</code></h4>
+            <ul>
+              <li>한 달을 42칸(6주×7일)으로 펴서 날 하나를 고른다.</li>
+              <li>고른 날과 커서(보이는 달)는 앱 상태다.</li>
+              <li>범위, 고를 수 없는 날, 주 첫 요일, 오늘 표시.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEAB0;</i><code>date_field_element</code></h4>
+            <ul>
+              <li>고른 날을 보이는 닫힌 칸이다. 글을 받지 않는다.</li>
+              <li>누르면 <code>set_open</code>을 내고, 앱이 <code>make_date_picker_popup</code>으로 달력 popup을 싣는다.</li>
+              <li>popup 안에 시각 칸은 없다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEA82;</i><code>time_picker_element</code></h4>
+            <ul>
+              <li>시·분 숫자 칸 둘, 12시간제면 오전·오후 단추.</li>
+              <li>두 칸의 글은 앱의 편집 초안이다.</li>
+              <li>값은 앱이 <code>read_time_picker</code>로 읽는다.</li>
+            </ul>
+          </div>
+          <div class="panel">
+            <h4><i class="ci" aria-hidden="true">&#xEB5C;</i><code>color_picker_element</code></h4>
+            <ul>
+              <li>채도·명도 판, 색상·알파 막대, 견본, 16진 칸을 한 본체에 담는다.</li>
+              <li>값은 앱이 드는 HSV이고 모든 부분이 <code>change_to</code> 하나를 탄다.</li>
+              <li>닫힌 칸은 <code>color_field_element</code>, popup은 <code>make_color_picker_popup</code>이다.</li>
+            </ul>
+          </div>
+        </div>
+        <div class="prose">
+          <p>날짜를 글로 쳐 넣는 칸은 없다. 날짜 칸은 읽기 전용이다. 시스템의 날짜 대화 상자나 색 대화 상자도 부르지 않는다. 테마의 강조색을 고르는 것은 따로 있는 <code>accent_picker_element</code>다 (<a class="xref" href="theming.html">테마와 스타일</a>).</p>
+        </div>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>하고 싶은 것</th><th>쓰는 것</th><th>아래 조각</th></tr></thead>
+            <tbody>
+              <tr><td>화면에 늘 보이는 달력, 범위와 주말 막기</td><td><code>calendar_element</code></td><td><a class="xref" href="#build-calendar">인라인 달력</a></td></tr>
+              <tr><td>좁은 칸을 눌러 달력을 띄우기</td><td><code>date_field_element</code> + <code>make_date_picker_popup</code></td><td><a class="xref" href="#build-date-field">날짜 칸과 popup</a></td></tr>
+              <tr><td>터치 앱의 큰 칸, OS의 주 첫 요일</td><td><code>cell_size</code> · <code>user_first_weekday()</code></td><td><a class="xref" href="#build-date-touch">터치와 주 첫 요일</a></td></tr>
+              <tr><td>날짜를 저장하고 읽기, 한 달 뒤 계산</td><td><code>format_iso_date</code> · <code>parse_iso_date</code> · <code>add_months_clamped</code></td><td><a class="xref" href="#build-date-store">날짜 저장</a></td></tr>
+              <tr><td>시·분 (24시간제 / 12시간제)</td><td><code>time_picker_element</code></td><td><a class="xref" href="#build-time">시·분</a> · <a class="xref" href="#build-time-12h">12시간제</a></td></tr>
+              <tr><td>날짜와 시각을 한 줄에</td><td>날짜 칸 곁에 <code>time_picker_element</code></td><td><a class="xref" href="#build-date-time">날짜와 시각</a></td></tr>
+              <tr><td>화면에 놓는 색 고르기 (알파, 견본, 16진 칸)</td><td><code>color_picker_element</code></td><td><a class="xref" href="#build-color">인라인 색 고르기</a></td></tr>
+              <tr><td>칸을 눌러 색 popup</td><td><code>color_field_element</code> + <code>make_color_picker_popup</code></td><td><a class="xref" href="#build-color-field">색 칸과 popup</a></td></tr>
+              <tr><td>색을 설정 파일에 저장하기</td><td><code>check_hex_color</code> · <code>format_hex_color</code></td><td><a class="xref" href="#build-color-store">색 저장</a></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="sec" id="concepts">
+        <header class="sec-head">
+          <h2>개념: 고른 값도, 보는 자리도 앱이 든다</h2>
+          <p class="lede">고르기 요소는 아무것도 기억하지 않는다. 고른 값, 달력이 보이는 달, popup이 떠 있는지까지 앱이 frame마다 싣고, 요소는 절대 메시지로 "이것으로 하라"를 돌려준다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>값</th><th>임자</th><th>싣는 자리</th></tr></thead>
+            <tbody>
+              <tr><td>고른 날</td><td>앱. 범위 밖이어도 지우지 않고 그 칸을 고른 날로 그린다</td><td><code>calendar_config::value</code> · <code>date_field_config::value</code></td></tr>
+              <tr><td>커서 = 보이는 달</td><td>앱. 틀린 날(<code>ok()</code>가 아님)이면 요소가 시작 커서로, 범위 밖이면 범위로 접어 그린다</td><td><code>calendar_config::cursor</code></td></tr>
+              <tr><td>오늘</td><td>앱. 라이브러리는 시계를 읽지 않는다</td><td><code>calendar_config::today</code></td></tr>
+              <tr><td>주 첫 요일</td><td>앱. 기본은 일요일이고 OS를 읽지 않는다</td><td><code>first_day</code> (OS 값은 <code>user_first_weekday()</code>)</td></tr>
+              <tr><td>키보드 초점의 날</td><td>앱. <code>move_to</code>를 받아 초점 요청으로 옮긴다</td><td><code>ui_frame::focus</code></td></tr>
+              <tr><td>popup이 떠 있는가</td><td>앱. popup은 frame에 실린 동안만 있다</td><td><code>open</code> · <code>ui_frame::popups</code></td></tr>
+              <tr><td>시·분 칸의 글·caret·조합</td><td>앱의 편집 초안 둘</td><td><code>time_picker_config::hour</code> · <code>minute</code></td></tr>
+              <tr><td>오전·오후</td><td>앱</td><td><code>time_picker_config::pm</code></td></tr>
+              <tr><td>색</td><td>앱. 고르는 동안은 HSV 실수 넷으로 든다. 그리기는 범위로 자른 값을 쓴다</td><td><code>color_picker_config::value</code></td></tr>
+              <tr><td>16진 칸의 초안과 오류</td><td>앱 (<code>check_hex_color</code>로 판단)</td><td><code>color_picker_hex</code></td></tr>
+              <tr><td>끄는 동안의 상태</td><td>아무도 들지 않는다. 판·막대의 끌기는 지금 값을 읽지 않는다</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>날짜: 고른 날과 커서는 따로다</h3>
+        <div class="prose">
+          <ul>
+            <li><strong>보이는 달은 커서의 달이다.</strong> 이전·다음 단추도 커서를 옮긴다.</li>
+            <li><code>move_to(날)</code>은 커서 키와 "커서가 아닌 날의 클릭"이 낸다. 목표는 build 때의 커서에서 센 절대 값이고, 커서와 같으면 아무것도 내지 않는다.</li>
+            <li><code>select(날)</code>은 날 칸의 클릭·탭, 고를 수 있는 초점 날의 Enter·Space, 보조 기술의 Select가 낸다. 커서가 아닌 날의 클릭은 <code>move_to(날)</code> 다음 <code>select(날)</code>이다.</li>
+            <li><code>turn_month(날)</code>은 이전·다음 단추만 낸다. 비면 <code>move_to</code>를 쓴다. 앱이 초점 요청을 싣지 않아야 초점이 단추에 남는다.</li>
+            <li><code>available</code>이 거짓인 날에도 커서는 선다. 고르지만 못한다. 그 날의 이름에 ", 고를 수 없음"이 붙는다.</li>
+          </ul>
+        </div>
+
+        <h3>popup: 여는 것도, 자리도, 초점도 앱이 싣는다</h3>
+        <div class="loop" role="list">
+          <div role="listitem"><span class="who">사용자</span><span>날짜 칸을 누르거나 Alt+↓·F4·↓를 누른다.</span></div>
+          <div role="listitem"><span class="who">input thread</span><span>칸이 <code>set_open(true)</code>를 낸다. 클릭은 build 때 상태의 반대를 담는다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>앱이 <code>open</code>을 켜고, 커서를 <code>calendar_start_cursor</code>로 두고, popup 표면의 커서 날로 초점 요청을 싣는다.</span></div>
+          <div role="listitem"><span class="who">logic thread</span><span>frame을 지을 때 칸을 배치한 <strong>뒤에</strong> <code>make_date_picker_popup</code>을 popup 목록에 싣는다. 자리는 <code>place_field_popup</code>이 칸 아래로 정한다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>popup 표면을 띄우고, 초점 요청을 따라 날에 초점을 둔다. popup은 활성화를 받지 않는다.</span></div>
+          <div role="listitem"><span class="who">UI thread</span><span>바깥 누름·휠·Esc·창 이동 같은 계기를 감지하면 <code>dismiss(계기)</code> 메시지만 낸다. popup을 빼는 것은 앱이다.</span></div>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>popup의 크기는 본체의 <code>size_for</code>에 여백 8(논리 px)을 양쪽으로 더한 값이다. 바탕 판이 여백의 누름을 흡수한다.</li>
+            <li><code>place_field_popup</code>은 가로를 <code>alignment</code>(기본은 칸 왼쪽)에 맞춘 뒤 <code>limit</code> 안으로 민다. 세로는 칸 아래 + 간격(기본 2 논리 px × 배율)이다. 아래가 넘치고 위가 들어가면 위로 뒤집고, 둘 다 안 되면 아래에 둔다. 결과는 popup의 <code>x</code>·<code>y</code>에 그대로 넣는 논리 px다.</li>
+            <li><code>field</code>는 칸의 <code>bounds()</code>(물리 px), <code>limit</code>은 앵커 표면의 client 사각형(물리 px)이다. 그래서 popup은 칸 element를 배치한 뒤 같은 frame에서 짓는다.</li>
+            <li>열 때 옮길 초점은 날짜면 <code>calendar_element::day_id(owner, 커서)</code>, 색이면 <code>color_picker_element::plane_id(owner)</code>다. 다른 표면으로 옮긴 초점은 칸의 "떠남"이 아니어서 칸이 스스로 닫히지 않는다.</li>
+            <li>Esc로 닫을 때만 칸으로 돌아오는 초점 요청을 한 번 더 싣는다. 날짜는 날을 골라 닫을 때도 그렇다. popup이 사라지면 그 안의 초점은 지워질 뿐이다.</li>
+            <li>날짜 popup은 글 칸이 없어 모든 계기에 닫는다. 16진 칸을 실은 색 popup은 글을 치는 popup이라 창 이동·활성 전환(<code>surface_moved</code>·<code>activation_changed</code>)에 빈 액션을 줘 남긴다. 빈 액션은 "이 계기에는 닫지 않는다"는 뜻이다.</li>
+          </ul>
+        </div>
+
+        <h3>시각: 숫자 칸 둘</h3>
+        <div class="prose">
+          <ul>
+            <li>두 칸은 <code>text_input_element</code>다. kind는 라이브러리의 것(<code>time_picker_hour</code>·<code>time_picker_minute</code>)이고 owner는 <code>owner/hour</code>·<code>owner/minute</code>다.</li>
+            <li>범위는 시 0..23(12시간제는 1..12), 분 0..59, 걸음 1이다. 스핀 단추는 늘 켜지지만 <code>hour_to</code>·<code>minute_to</code>가 있어야 선다.</li>
+            <li>스핀·↑↓가 지은 다음 글은 읽히면 두 자리로 고쳐 낸다. 타자는 여느 칸처럼 편집 메시지다 (<a class="xref" href="values.html#build-number">숫자 칸</a>).</li>
+            <li>값은 앱이 <code>read_time_picker(시, 분, twelve_hour, pm)</code>로 읽는다. 12 AM은 0시, 12 PM은 12시다.</li>
+            <li>걸음은 범위로 접기만 한다. 23시 다음이 0시로 돌지 않고, 분이 시로 넘어가지 않는다.</li>
+          </ul>
+        </div>
+
+        <h3>색: HSV 하나, 절대 메시지 하나</h3>
+        <div class="prose">
+          <ul>
+            <li>고르는 동안의 색은 <code>hsv_color</code>(실수 넷)다. 8비트 색은 내보낼 때만 <code>color_from_hsv</code>로 짓는다. 왕복을 약속하는 것은 "8비트 → HSV → 8비트"뿐이다.</li>
+            <li>판·막대는 자기 채널만 바꾸고 나머지는 그 frame의 <code>value</code>에서 옮긴다. 모든 부분이 <code>change_to(hsv_color)</code> 하나를 탄다.</li>
+            <li>견본과 16진 확정은 <code>hsv_from_color(색, 지금 값)</code>이다. 회색이면 색상을, 검정이면 색상과 채도를 지금 값에서 지킨다.</li>
+            <li>16진 칸은 앱 kind의 <code>text_input_element</code>다. 정책의 <code>text_target_of</code>에 등록하고 <code>apply_text_edit</code>에 <code>hex_color_filter()</code>를 준다. 확정(<code>commit</code>)은 Enter, 같은 표면 안에서 칸을 떠날 때, 휴대폰 키보드의 확정 단추에 나간다.</li>
+            <li>앱은 <code>change_to</code>를 받으면 16진 초안을 <code>format_hex_color</code>로 다시 쓴다.</li>
+          </ul>
+        </div>
+        <div class="callout think"><i class="ci" aria-hidden="true">&#xEA61;</i><div><span class="ttl">보조 기술의 명령도 같은 메시지를 탄다</span>Windows UIA의 Select·Invoke·Toggle은 마우스 클릭과 같은 차례를 지키려고 input thread로 보내 정책의 <code>on_click</code> 훅 뒤에 낸다. 날의 Select는 날 칸의 클릭과 같다 — 커서가 아닌 날이면 <code>move_to</code> 다음 <code>select</code>다. 값 정하기·펼치기·접기(SetValue·Expand·Collapse)는 창 메시지로 미뤄 낸다.</div></div>
+      </section>
+
+      <section class="sec" id="build-calendar">
+        <header class="sec-head">
+          <h2>만들기: 인라인 달력</h2>
+          <p class="lede">오늘 앞 30일부터 뒤 60일까지만, 주말을 빼고 고르는 달력이다. 커서는 고른 날의 한 주 뒤에서 시작한다. 앱은 메시지 셋(<code>select</code>·<code>move_to</code>·<code>turn_month</code>)을 받는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.h:237-248" data-path="examples/demo/popups_page.h" data-start="237"><script type="text/plain">
+        // 날짜 칸과 인라인 달력이다. 오늘은 앱이 준다 (라이브러리는 시계를 읽지 않는다).
+        //  - 인라인 달력은 오늘 앞 30일부터 뒤 60일까지이고 주말을 고를 수 없다.
+        std::chrono::year_month_day today_ {};
+        std::optional<std::chrono::year_month_day> date_value_ {};
+        std::chrono::year_month_day date_cursor_ {};
+        std::optional<std::chrono::year_month_day> calendar_value_ {};
+        std::chrono::year_month_day calendar_cursor_ {};
+        luil::calendar_bounds calendar_bounds_ {};
+        const luil::ui_element* date_field_ { nullptr };
+        // 셸이 넣어 준 OS의 주 첫 요일과 그 값을 달력에 쓰는가다.
+        std::optional<std::chrono::weekday> os_first_day_ {};
+        bool use_os_first_day_ { false };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:117-127" data-path="examples/demo/popups_page.cpp" data-start="117"><script type="text/plain">
+    popups_page::popups_page(const std::chrono::year_month_day today) noexcept
+        : today_ { today.ok() ? today : fixed_today }
+    {
+        // 날짜 칸은 오늘을 고른 채로, 인라인 달력은 오늘을 고르고 커서를 한 주 뒤에 둔 채로 시작한다.
+        const std::chrono::sys_days now { today_ };
+        date_value_ = today_;
+        date_cursor_ = today_;
+        calendar_value_ = today_;
+        calendar_bounds_ = { std::chrono::year_month_day { now - std::chrono::days { 30 } }, std::chrono::year_month_day { now + std::chrono::days { 60 } } };
+        calendar_cursor_ = std::chrono::year_month_day { now + std::chrono::days { 7 } };
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:61-76" data-path="examples/demo/popups_page.cpp" data-start="61"><script type="text/plain">
+        [[nodiscard]] bool weekday_only(const std::chrono::year_month_day day)
+        {
+            const std::chrono::weekday weekday { std::chrono::sys_days { day } };
+            return weekday != std::chrono::Saturday && weekday != std::chrono::Sunday;
+        }
+
+        // 달력 하나의 커서·단추·고르기 메시지다. `owner`가 어느 달력인지 가른다.
+        [[nodiscard]] luil::calendar_config calendar_messages(const std::u8string_view owner)
+        {
+            luil::calendar_config calendar {};
+            calendar.owner = std::u8string { owner };
+            calendar.select = [owner](const std::chrono::year_month_day day) { return luil::make_app_action(date_select_intent { std::u8string { owner }, day }); };
+            calendar.move_to = [owner](const std::chrono::year_month_day day) { return luil::make_app_action(date_move_intent { std::u8string { owner }, day }); };
+            calendar.turn_month = [owner](const std::chrono::year_month_day day) { return luil::make_app_action(date_turn_intent { std::u8string { owner }, day }); };
+            return calendar;
+        }
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:617-631" data-path="examples/demo/popups_page.cpp" data-start="617"><script type="text/plain">
+        // 인라인 달력이다. 범위(오늘 앞 30일, 뒤 60일) 밖과 주말은 고를 수 없다. 커서와 고른 날은 label로도 그린다.
+        page.add(make_label({ kind_text, u8"calendar-title" }, u8"인라인 달력 (주말과 범위 밖은 고를 수 없음)", 15.0f, luil::label_color_role::primary), 28.0f);
+        luil::calendar_config calendar { calendar_messages(inline_calendar_owner) };
+        calendar.value = calendar_value_;
+        calendar.cursor = calendar_cursor_;
+        calendar.today = today_;
+        calendar.bounds = calendar_bounds_;
+        calendar.available = weekday_only;
+        calendar.first_day = first_day();
+        const luil::size_f calendar_size { luil::calendar_element::size_for(calendar) };
+        page.add(std::make_unique<luil::calendar_element>(std::move(calendar)), luil::stack_item { .length = calendar_size.height, .cross_length = calendar_size.width });
+        page.gap(8.0f);
+        const std::u8string chosen { calendar_value_.has_value() ? luil::format_iso_date(*calendar_value_) : std::u8string { u8"없음" } };
+        const std::u8string calendar_state { u8"고른 날: " + chosen + u8" · 커서: " + luil::format_iso_date(calendar_cursor_) };
+        page.add(make_label({ kind_text, u8"popups/calendar-state" }, calendar_state, 12.0f, luil::label_color_role::dim), 22.0f);
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="619" data-title="메시지 셋">앞 조각의 도우미가 owner와 메시지 셋을 채운다. owner가 어느 달력인지 가른다.</li>
+            <li data-lines="620-625" data-title="앱 상태 싣기">고른 날, 커서, 오늘, 범위, 고를 수 있는 날, 주 첫 요일. 모두 앱의 값이다.</li>
+            <li data-lines="626-627" data-title="크기">자리는 <code>size_for</code>로 잡는다. 기본 칸 32면 224 × 248(논리 px)이다.</li>
+            <li data-lines="629-631" data-title="상태 줄">고른 날과 커서를 ISO 글로 보인다. 화면 글로 쓴 것은 데모의 선택이다.</li>
+          </ol>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:359-403" data-path="examples/demo/popups_page.cpp" data-start="359"><script type="text/plain">
+        // 달력의 커서다. 커서를 옮기고 그 날로 초점 요청을 싣는다.
+        if (const auto* const move { message.get<date_move_intent>() }; move != nullptr)
+        {
+            if (move->owner == date_calendar_owner)
+            {
+                if (open_popup_ != date_owner)
+                    return true;
+                date_cursor_ = move->day;
+                request_focus(std::u8string { date_popup_id }, luil::calendar_element::day_id(date_calendar_owner, move->day));
+            }
+            else
+            {
+                calendar_cursor_ = move->day;
+                request_focus({}, luil::calendar_element::day_id(inline_calendar_owner, move->day));
+            }
+            return true;
+        }
+        // 단추의 달 넘기기는 커서만 옮긴다. 초점 요청이 없어 초점이 단추에 남는다 (날짜 고르기 결정 8).
+        if (const auto* const turn { message.get<date_turn_intent>() }; turn != nullptr)
+        {
+            if (turn->owner == date_calendar_owner)
+                date_cursor_ = turn->day;
+            else
+                calendar_cursor_ = turn->day;
+            return true;
+        }
+        // 날 고르기다. popup이면 값을 바꾸고 닫고 칸으로 초점을 돌린다. 인라인이면 값만 바꾼다 (커서는 클릭의 `move_to`가 옮겼다).
+        if (const auto* const select { message.get<date_select_intent>() }; select != nullptr)
+        {
+            if (select->owner == date_calendar_owner)
+            {
+                if (open_popup_ != date_owner)
+                    return true;
+                date_value_ = select->day;
+                date_cursor_ = select->day;
+                close_popup(date_owner);
+                request_focus({}, luil::ui_element_id { luil::ui_element_kind::date_field, std::u8string { date_field_owner } });
+            }
+            else
+            {
+                calendar_value_ = select->day;
+                calendar_cursor_ = select->day;
+            }
+            return true;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="359-375" data-title="커서">커서를 옮기고 그 날로 초점 요청을 싣는다. 인라인 달력은 주 창에 있어 표면 id가 빈 글이다.</li>
+            <li data-lines="376-384" data-title="단추">커서만 옮긴다. 초점 요청이 없어서 초점이 단추에 남고, 같은 단추를 거듭 누를 수 있다.</li>
+            <li data-lines="385-403" data-title="고르기">popup 안의 달력이면 값을 바꾸고 닫고 칸으로 초점을 돌린다. 인라인이면 값만 바꾼다. 커서는 클릭의 <code>move_to</code>가 이미 옮겼다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>데모는 오늘을 시작할 때 한 번 읽는다. 라이브러리는 시계를 읽지 않으므로, 자정을 넘겨도 앱이 <code>today</code>를 바꾸지 않으면 어제가 오늘로 남는다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-date-field">
+        <header class="sec-head">
+          <h2>만들기: 날짜 칸과 달력 popup</h2>
+          <p class="lede">칸은 <code>set_open</code>만 낸다. 앱이 popup을 열고, 칸 아래 자리를 계산해 싣고, 초점을 옮기고, 닫는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.h:108-138" data-path="examples/demo/popups_page.h" data-start="108"><script type="text/plain">
+    // 날짜 칸의 popup을 이 상태로 하라는 절대 메시지다 (`date_field_config::set_open`). 열면 커서를 시작 커서로 두고 초점을 옮긴다.
+    struct date_field_intent
+    {
+        bool open { false };
+    };
+
+    // 날짜 칸 popup의 닫힘 계기다. 글 칸이 없어 모든 계기에 닫고, Esc로 닫으면 초점을 칸으로 돌린다.
+    struct date_field_dismiss_intent
+    {
+        luil::popup_dismiss_reason reason { luil::popup_dismiss_reason::pointer_press_outside };
+    };
+
+    // 달력의 커서·단추·고르기다. `owner`는 어느 달력인가다 (popup 안의 것이 "popups/date", 인라인이 "popups/calendar").
+    //  - 커서(`move_to`)는 커서를 옮기고 그 날로 초점 요청을 싣는다. 단추(`turn_month`)는 커서만 옮겨 초점이 단추에 남는다.
+    struct date_move_intent
+    {
+        std::u8string owner {};
+        std::chrono::year_month_day day {};
+    };
+
+    struct date_turn_intent
+    {
+        std::u8string owner {};
+        std::chrono::year_month_day day {};
+    };
+
+    struct date_select_intent
+    {
+        std::u8string owner {};
+        std::chrono::year_month_day day {};
+    };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:584-603" data-path="examples/demo/popups_page.cpp" data-start="584"><script type="text/plain">
+        // 날짜 칸이다. 누르면(Alt+↓·F4·↓도) 칸 아래에 달력 popup이 뜨고 초점이 커서 날로 간다. Esc나 날 고르기로 닫으면 칸으로 돌아온다.
+        page.add(make_label({ kind_text, u8"date-field-title" }, u8"날짜 칸 (popup 달력에서 화살표·Page·Home·End로 고르기)", 15.0f, luil::label_color_role::primary), 28.0f);
+        luil::date_field_config date {};
+        date.owner = std::u8string { date_field_owner };
+        date.value = date_value_;
+        date.open = open_popup_ == date_owner;
+        date.set_open = [](const bool open) { return luil::make_app_action(date_field_intent { open }); };
+        date.name = u8"마감 날짜";
+        auto date_field { std::make_unique<luil::date_field_element>(std::move(date)) };
+        date_field_ = date_field.get();
+        page.add(std::move(date_field), luil::stack_item { .length = luil::dropdown_height, .cross_length = field_button_width });
+        page.gap(8.0f);
+        const std::u8string date_shown { date_value_.has_value() ? korean_date(*date_value_) : std::u8string { u8"없음" } };
+        const std::u8string date_state { std::u8string { u8"날짜 칸: " } + (open_popup_ == date_owner ? u8"열림" : u8"닫힘") + u8" · " + date_shown };
+        page.add(make_label({ kind_text, u8"popups/date-state" }, date_state, 12.0f, luil::label_color_role::dim), 22.0f);
+        page.gap(6.0f);
+        auto date_clear { std::make_unique<luil::text_button_element>(luil::ui_element_id { kind_layout, u8"popups/date-clear" }, luil::text_button_config { .text = u8"날짜 비우기" }) };
+        date_clear->set_action(luil::ui_trigger::left_click, luil::make_message_action(date_clear_intent {}));
+        page.add(std::move(date_clear), luil::stack_item { .length = luil::text_button_height, .cross_length = 104.0f });
+        page.gap(16.0f);
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="586-591" data-title="칸 설정">고른 날, 열림 상태(앱의 값), <code>set_open</code>, 접근 이름을 싣는다.</li>
+            <li data-lines="592-594" data-title="포인터를 남긴다">같은 frame의 popup 자리 계산에 쓰려고 칸의 포인터를 받아 둔다. 칸 높이는 <code>dropdown_height</code>(28)다.</li>
+            <li data-lines="596-602" data-title="앱의 것">상태 줄과 "날짜 비우기" 단추는 앱이 짓는다.</li>
+          </ol>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:759-775" data-path="examples/demo/popups_page.cpp" data-start="759"><script type="text/plain">
+        if (open_popup_ == date_owner && date_field_ != nullptr)
+        {
+            luil::calendar_config calendar { calendar_messages(date_calendar_owner) };
+            calendar.value = date_value_;
+            calendar.cursor = date_cursor_;
+            calendar.today = today_;
+            calendar.first_day = first_day();
+
+            luil::date_picker_popup_config popup {};
+            popup.id = std::u8string { date_popup_id };
+            popup.scale = scale;
+            popup.below = luil::field_popup_anchor { .field = date_field_->bounds(), .limit = surface };
+            // 글 칸이 없어 글을 치는 popup이 아니다. 창 이동·활성 전환을 포함한 모든 계기에 닫는다.
+            popup.dismiss = [](const luil::popup_dismiss_reason reason) { return luil::make_app_action(date_field_dismiss_intent { reason }); };
+            popup.corner = corner_;
+            popups.push_back(luil::make_date_picker_popup(std::move(calendar), std::move(popup)));
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="759-765" data-title="popup 안의 달력">열려 있고 칸을 배치했을 때만 짓는다. 같은 도우미로 메시지를 채우고 값·커서·오늘·주 첫 요일을 싣는다.</li>
+            <li data-lines="767-770" data-title="자리">popup id, 배율, 그리고 칸의 <code>bounds()</code>와 표면 사각형을 <code>below</code>에 준다.</li>
+            <li data-lines="771-772" data-title="닫힘 계기">글 칸이 없어 모든 계기에 닫는다.</li>
+            <li data-lines="773-774" data-title="싣기">모서리 스타일을 주고 frame의 popup 목록에 넣는다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:334-358" data-path="examples/demo/popups_page.cpp" data-start="334"><script type="text/plain">
+        if (const auto* const date { message.get<date_field_intent>() }; date != nullptr)
+        {
+            if (date->open)
+            {
+                if (open_popup_ != date_owner)
+                {
+                    show_popup(std::u8string { date_owner });
+                    date_cursor_ = luil::calendar_start_cursor(date_value_, today_, {});
+                    request_focus(std::u8string { date_popup_id }, luil::calendar_element::day_id(date_calendar_owner, date_cursor_));
+                }
+            }
+            else
+                close_popup(date_owner);
+            return true;
+        }
+        if (const auto* const dismiss { message.get<date_field_dismiss_intent>() }; dismiss != nullptr)
+        {
+            if (open_popup_ != date_owner)
+                return true;
+            close_popup(date_owner);
+            // Esc로 닫았을 때만 칸으로 돌린다. 다른 계기는 누른 자리가 초점을 가진다. 초안이 없어 값은 그대로다.
+            if (dismiss->reason == luil::popup_dismiss_reason::escape_key)
+                request_focus({}, luil::ui_element_id { luil::ui_element_kind::date_field, std::u8string { date_field_owner } });
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:205-218" data-path="examples/demo/popups_page.cpp" data-start="205"><script type="text/plain">
+    void popups_page::request_focus(std::u8string surface, luil::ui_element_id target)
+    {
+        ++focus_revision_;
+        focus_surface_ = std::move(surface);
+        focus_target_ = std::move(target);
+    }
+
+    std::optional<luil::focus_request> popups_page::make_focus_request() const
+    {
+        if (focus_revision_ == 0)
+            return std::nullopt;
+        // popup은 활성화를 받지 않는 표면이라 초점만 옮긴다. popup이 서는 frame을 기다린다 (timeout).
+        return luil::focus_request { .id = focus_revision_, .surface = focus_surface_, .target = focus_target_ };
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1016-1022,1031-1031" data-path="examples/demo_main.cpp" data-start="1016"><script type="text/plain">
+                if (const auto request { popups_.make_focus_request() }; request.has_value() && request->id != seen_popups_focus_)
+                {
+                    seen_popups_focus_ = request->id;
+                    focus_ = *request;
+                    focus_->id = ++focus_revision_;
+                    popups_focus_id_ = focus_->id;
+                }
+⋯@1031
+                frame->focus = focus_;
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>열 때 커서를 <code>calendar_start_cursor(값, 오늘, 범위)</code>로 둔다. 값 → 오늘 → 범위의 최소 순으로 처음 맞는 것을 범위로 접는다.</li>
+            <li>날을 고르면 값을 바꾸고 닫고 칸으로 초점을 돌린다 (<a class="xref" href="#build-calendar">앞 조각</a>의 고르기 갈래).</li>
+            <li>초점 요청은 번호(<code>id</code>)가 바뀔 때만 새 요청이다. popup 표면의 id를 <code>surface</code>로 준다. popup이 서는 frame을 기다렸다가 초점이 옮겨진다.</li>
+            <li>한 번에 popup 하나는 앱이 <code class="free">open_popup_</code> 하나로 지킨다. 닫기 메시지는 자기 popup이 떠 있을 때만 듣는다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-date-touch">
+        <header class="sec-head">
+          <h2>만들기: 터치 앱의 날짜 popup, OS의 주 첫 요일</h2>
+          <p class="lede">휴대폰 데모는 날 칸을 44로 키운다. 주 첫 요일은 셸이 시작할 때 OS에서 한 번 읽어 앱 메시지로 넣는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/popups_page.cpp:411-428" data-path="examples/mobile_demo/popups_page.cpp" data-start="411"><script type="text/plain">
+        if (open_popup_ == date_owner && date_field_ != nullptr)
+        {
+            luil::calendar_config calendar {};
+            calendar.owner = std::u8string { date_calendar_owner };
+            calendar.value = date_value_;
+            calendar.cursor = date_cursor_;
+            calendar.today = today_;
+            calendar.cell_size = date_cell_size;
+            calendar.select = [](const std::chrono::year_month_day day) { return luil::make_app_action(date_select_intent { day }); };
+            calendar.move_to = [](const std::chrono::year_month_day day) { return luil::make_app_action(date_move_intent { day }); };
+            calendar.turn_month = [](const std::chrono::year_month_day day) { return luil::make_app_action(date_turn_intent { day }); };
+
+            luil::date_picker_popup_config popup {};
+            popup.id = std::u8string { date_popup_id };
+            popup.scale = scale;
+            popup.below = luil::field_popup_anchor { .field = date_field_->bounds(), .limit = surface };
+            popup.dismiss = [](const luil::popup_dismiss_reason reason) { return luil::make_app_action(date_field_dismiss_intent { reason }); };
+            popups.push_back(luil::make_date_picker_popup(std::move(calendar), std::move(popup)));
+</script></div>
+        <div class="prose">
+          <p><code>cell_size</code>가 44면 달력 폭은 308이고 popup은 여백을 더해 324다. Android에서 popup은 주 표면 위의 overlay다. 화면 크기로 자르고, 넘치면 흘린다 (코드에서 확인한 동작).</p>
+        </div>
+        <h3>주 첫 요일을 OS에서</h3>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:1478-1487" data-path="examples/demo_main.cpp" data-start="1478"><script type="text/plain">
+            // 창과 host가 준비된 직후다 (메시지 루프 전).
+            // HTTP client의 배출구가 답을 넣을 곳이 이 host다.
+            void on_started(luil::win32::app_host& host) override
+            {
+                driver_.bind_host(host);
+                // 앱 식별은 창보다 먼저 섰다. 토스트 페이지의 상태 줄이 처음부터 이 값을 보인다.
+                host.post_app_message(luil::app_message { os_notification_status_intent { luil::notification_status() } });
+                // 지역 값은 시작할 때 한 번 읽는다. 데스크톱 데모에는 앞으로 올 때의 lifecycle 메시지가 없어 다시 읽지 않는다.
+                host.post_app_message(luil::app_message { os_locale_intent { luil::user_first_weekday(), luil::user_ui_languages() } });
+            }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo_main.cpp:739-745" data-path="examples/demo_main.cpp" data-start="739"><script type="text/plain">
+                // OS 값은 페이지가 직접 읽지 않는다. 페이지는 core test에 함께 컴파일되어 플랫폼 함수를 부르면 링크가 깨진다.
+                if (const auto* const locale { message.get<os_locale_intent>() }; locale != nullptr)
+                {
+                    system_languages_ = locale->languages;
+                    static_cast<void>(popups_.handle(luil::app_message { date_os_first_day_intent { locale->first_weekday } }));
+                    return;
+                }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:129-132" data-path="examples/demo/popups_page.cpp" data-start="129"><script type="text/plain">
+    std::chrono::weekday popups_page::first_day() const noexcept
+    {
+        return use_os_first_day_ ? os_first_day_.value_or(std::chrono::Sunday) : std::chrono::Sunday;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li><code>user_first_weekday()</code>는 부를 때마다 OS에 묻는다. frame마다 부르지 말고, 시작할 때와 앱이 앞으로 올 때 읽는다.</li>
+            <li>Windows는 <code>GetLocaleInfoEx</code>(<code>LOCALE_IFIRSTDAYOFWEEK</code>), Android는 <code>java.util.Calendar</code>의 <code>getFirstDayOfWeek()</code>, macOS·iOS는 <code>NSCalendar</code>의 <code>firstWeekday</code>를 읽는다.</li>
+            <li>페이지는 OS 함수를 직접 부르지 않는다. 셸이 읽어 넣은 값만 쓴다. 페이지가 플랫폼 없이 시험에 함께 컴파일되기 때문이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-date-store">
+        <header class="sec-head">
+          <h2>만들기: 날짜를 저장하고 다시 읽기</h2>
+          <p class="lede">저장용 글은 ISO(<code>YYYY-MM-DD</code>)다. 날짜 계산은 <code>calendar_date.h</code>의 순수 함수로 한다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-label="마감일 저장·읽기와 다음 청구일 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/ui/calendar_date.h"
+
+#include <chrono>
+#include <optional>
+#include <string>
+#include <string_view>
+
+namespace sample {
+    // 고른 날을 "2026-11-03"으로 저장하고 다시 읽는다. 화면 글이 아니라 저장용 글이다.
+    [[nodiscard]] std::u8string save_due(const std::optional<std::chrono::year_month_day> due)
+    {
+        return due.has_value() && due->ok() ? luil::format_iso_date(*due) : std::u8string {};
+    }
+
+    // 꼴이 틀리면(공백, 한 자리 달, 2월 30일) 값이 없다.
+    [[nodiscard]] std::optional<std::chrono::year_month_day> load_due(const std::u8string_view saved)
+    {
+        return luil::parse_iso_date(saved);
+    }
+
+    // 한 달 뒤의 같은 날이다. 1월 31일이면 2월 28일(윤년이면 29일)로 접고, 범위로 다시 접는다.
+    [[nodiscard]] std::chrono::year_month_day next_billing(const std::chrono::year_month_day day, const luil::calendar_bounds& bounds)
+    {
+        return luil::clamp_date(luil::add_months_clamped(day, 1), bounds);
+    }
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>저장소에 같은 예가 없어 직접 썼다. 공개 헤더에 대고 컴파일되는 것만 확인했다.</li>
+            <li><code>format_iso_date</code>는 날 칸의 owner, test, 저장에 쓰는 글이다. 화면에는 날짜 칸의 <code>format</code>이나 기본 문구를 쓴다.</li>
+            <li><code>parse_iso_date</code>는 정확히 <code>YYYY-MM-DD</code>만 읽는다. 공백, 한 자리 달, 2월 30일, 0년, 부호, <code>/</code>는 읽지 않는다.</li>
+            <li><code>add_months_clamped</code>는 날을 그 달의 말일로 접는다. 1월 31일에 한 달을 더하면 2월 28일(윤년이면 29일)이다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-time">
+        <header class="sec-head">
+          <h2>만들기: 시·분 (24시간제)</h2>
+          <p class="lede">선택 노드 예제다. 정책이 라이브러리 kind 둘을 편집 대상으로 옮기고, <code>handle</code>이 글을 적용하고, 값의 오류는 앱이 <code>read_time_picker</code>로 정한다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/selected_nodes/scene.h:6-8" data-path="examples/selected_nodes/scene.h" data-start="6"><script type="text/plain">
+    inline constexpr auto target_hour { static_cast<luil::text_input_target>(500) };
+    inline constexpr auto target_minute { static_cast<luil::text_input_target>(501) };
+    inline constexpr auto target_sample { static_cast<luil::text_input_target>(502) };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/selected_nodes/scene.h:22-30" data-path="examples/selected_nodes/scene.h" data-start="22"><script type="text/plain">
+    struct scene_state
+    {
+        luil::dock_layout dock { initial_layout() };
+        float page { 0.0f };
+        luil::text::text_edit_state hour { .text = u8"23" };
+        luil::text::text_edit_state minute { .text = u8"45" };
+        luil::text::text_edit_state sample { .text = u8"office affine ffi — caret" };
+        std::optional<luil::text_composition_event> composition {};
+    };
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/selected_nodes/scene.cpp:30-41" data-path="examples/selected_nodes/scene.cpp" data-start="30"><script type="text/plain">
+        luil::time_picker_config time {};
+        time.owner = u8"time";
+        time.hour = luil::make_text_input_view(state.hour, state.composition, target_hour);
+        time.minute = luil::make_text_input_view(state.minute, state.composition, target_minute);
+        time.invalid = luil::read_time_picker(state.hour.text, state.minute.text).has_value() == false;
+        const auto replace = [](const luil::text_input_target target, std::u8string text) {
+            const auto end { text.size() };
+            return luil::make_app_action(luil::text_edit_request { .target = target, .command = luil::text::text_edit_command::replace_all, .offset = end, .text = std::move(text) });
+        };
+        time.hour_to = [replace](std::u8string text) { return replace(target_hour, std::move(text)); };
+        time.minute_to = [replace](std::u8string text) { return replace(target_minute, std::move(text)); };
+        column->add(std::make_unique<luil::time_picker_element>(std::move(time)), { .length = 28.0f, .cross_length = 148.0f });
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="30-33" data-title="두 칸">owner와 두 칸의 view다. 칸마다 편집 대상이 다르다.</li>
+            <li data-lines="34" data-title="오류">두 칸이 함께 붉어진다. 판정은 앱이 같은 함수로 한다.</li>
+            <li data-lines="35-40" data-title="다음 글">스핀·↑↓가 지은 글로 초안 전체를 바꾸는 편집 메시지를 짓는다.</li>
+            <li data-lines="41" data-title="자리">24시간제는 148 × 28이다. 12시간제는 단추가 붙어 216 × 28이다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/selected_nodes/main.cpp:59-71" data-path="examples/selected_nodes/main.cpp" data-start="59"><script type="text/plain">
+        class policy final : public luil::interaction_policy
+        {
+        public:
+            std::optional<luil::text_input_target> text_target_of(const luil::ui_element_kind kind) const override
+            {
+                if (kind == luil::ui_element_kind::time_picker_hour) return target_hour;
+                if (kind == luil::ui_element_kind::time_picker_minute) return target_minute;
+                if (kind == kind_sample) return target_sample;
+                return std::nullopt;
+            }
+            luil::input_action make_text_edit_action(const luil::text_edit_request& request) const override { return luil::make_app_action(request); }
+            luil::input_action make_text_composition_action(const luil::text_composition_event& event) const override { return luil::make_app_action(event); }
+        };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/selected_nodes/main.cpp:24-35" data-path="examples/selected_nodes/main.cpp" data-start="24"><script type="text/plain">
+                if (const auto* composition { message.get<luil::text_composition_event>() }; composition != nullptr)
+                    state_.composition = *composition;
+                if (const auto* edit { message.get<luil::text_edit_request>() }; edit != nullptr)
+                {
+                    if (edit->target == target_sample)
+                        luil::apply_text_edit(state_.sample, *edit);
+                    else
+                    {
+                        const bool hour { edit->target == target_hour };
+                        luil::apply_text_edit(hour ? state_.hour : state_.minute, *edit, luil::number_input_filter({ .minimum = 0.0, .maximum = hour ? 23.0 : 59.0 }));
+                    }
+                }
+</script></div>
+        <div class="prose">
+          <p>타자는 <code>number_input_filter</code>로 거른다. 칸의 범위(시 0..23, 분 0..59)와 같은 범위를 준다. 이 예제의 진입점은 Windows 전용이고, scene은 플랫폼을 모른다.</p>
+        </div>
+        <div class="callout warn"><i class="ci" aria-hidden="true">&#xEA6C;</i><div><span class="ttl">한 화면의 시·분 고르기 둘은 같은 편집 대상을 받는다</span>정책의 <code>text_target_of</code>는 kind만 받는다. 두 고르기의 시 칸은 kind가 같아(<code>time_picker_hour</code>) 같은 대상을 답하게 되고, 편집 요청에는 어느 칸에서 왔는지가 실리지 않는다. 그래서 둘째 고르기에 친 글을 앱이 가를 길이 없다 (코드에서 확인한 동작). 스핀·↑↓는 앱이 준 <code>hour_to</code>가 대상을 정해 갈린다. 16진 색 칸은 앱 kind를 받아 이 문제가 없다.</div></div>
+      </section>
+
+      <section class="sec" id="build-time-12h">
+        <header class="sec-head">
+          <h2>만들기: 12시간제와 오전·오후</h2>
+          <p class="lede">시 칸이 1..12가 되고 오른쪽에 오전·오후 단추가 선다. 뒤집는 것은 앱이고, 저장은 <code>read_time_picker</code>가 돌려주는 24시간제 값이다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-label="알람 시각: 12시간제, 오전·오후 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/ui/app_message.h"
+#include "luil/ui/number_input.h"
+#include "luil/ui/time_picker_element.h"
+#include "luil/ui/ui_interaction.h"
+
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+
+namespace sample {
+    // 두 칸의 편집 대상이다. 앱 정책의 text_target_of가 time_picker_hour·time_picker_minute kind를 이 둘로 답한다.
+    constexpr luil::text_input_target target_alarm_hour { static_cast<luil::text_input_target>(60) };
+    constexpr luil::text_input_target target_alarm_minute { static_cast<luil::text_input_target>(61) };
+
+    struct alarm_period_intent
+    {
+    };
+
+    struct alarm_state
+    {
+        luil::text::text_edit_state hour { .text = u8"07" };
+        luil::text::text_edit_state minute { .text = u8"30" };
+        bool pm { false };
+        std::optional<luil::text_composition_event> composition {};
+    };
+
+    // 칸이 지은 글(스핀·↑↓)로 초안 전체를 바꾸는 메시지다 (selected_nodes 예제와 같은 꼴).
+    [[nodiscard]] luil::input_action replace_with(const luil::text_input_target target, std::u8string text)
+    {
+        const std::size_t end { text.size() };
+        return luil::make_app_action(luil::text_edit_request { .target = target, .command = luil::text::text_edit_command::replace_all, .offset = end, .text = std::move(text) });
+    }
+
+    [[nodiscard]] std::unique_ptr<luil::time_picker_element> build_alarm(const alarm_state& state)
+    {
+        luil::time_picker_config time {};
+        time.owner = u8"alarm";
+        time.hour = luil::make_text_input_view(state.hour, state.composition, target_alarm_hour);
+        time.minute = luil::make_text_input_view(state.minute, state.composition, target_alarm_minute);
+        time.twelve_hour = true;
+        time.pm = state.pm;
+        // 두 칸이 함께 붉어진다. 판단은 앱이 같은 함수로 한다.
+        time.invalid = luil::read_time_picker(state.hour.text, state.minute.text, true, state.pm).has_value() == false;
+        time.hour_to = [](std::u8string text) { return replace_with(target_alarm_hour, std::move(text)); };
+        time.minute_to = [](std::u8string text) { return replace_with(target_alarm_minute, std::move(text)); };
+        // 비워 두면 오전·오후 단추가 눌리지 않는다.
+        time.toggle_period = luil::make_message_action(alarm_period_intent {});
+        return std::make_unique<luil::time_picker_element>(std::move(time));
+    }
+
+    // logic thread의 handle 한 갈래다.
+    void handle(alarm_state& state, const luil::app_message& message)
+    {
+        if (const auto* const edit { message.get<luil::text_edit_request>() }; edit != nullptr)
+        {
+            if (edit->target == target_alarm_hour)
+                luil::apply_text_edit(state.hour, *edit, luil::number_input_filter({ .minimum = 1.0, .maximum = 12.0 }));
+            else if (edit->target == target_alarm_minute)
+                luil::apply_text_edit(state.minute, *edit, luil::number_input_filter({ .minimum = 0.0, .maximum = 59.0 }));
+        }
+        if (const auto* const composition { message.get<luil::text_composition_event>() }; composition != nullptr)
+        {
+            if (composition->composing)
+                state.composition = *composition;
+            else
+                state.composition.reset();
+        }
+        if (message.get<alarm_period_intent>() != nullptr)
+            state.pm = state.pm == false;
+    }
+
+    // 저장할 때 쓰는 24시간제 값이다. 읽히지 않으면 nullopt다.
+    [[nodiscard]] std::optional<luil::time_of_day> alarm_time(const alarm_state& state)
+    {
+        return luil::read_time_picker(state.hour.text, state.minute.text, true, state.pm);
+    }
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>저장소에 12시간제 예가 없어 직접 썼다. 공개 헤더에 대고 컴파일되는 것만 확인했다.</li>
+            <li>단추를 누르면 <code>toggle_period</code>가 나간다. 비워 두면 단추가 눌리지 않는다.</li>
+            <li><code>read_time_picker("12", "00", true, false)</code>는 0시, <code>("12", "00", true, true)</code>는 12시, <code>("1", "30", true, true)</code>는 13시 30분이다. 12시간제의 "0"은 틀린 값이다.</li>
+            <li>친 글은 두 자리로 고쳐지지 않는다. "7"은 "7"로 남고, ↑↓·스핀의 결과만 "08"처럼 두 자리다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-date-time">
+        <header class="sec-head">
+          <h2>만들기: 날짜와 시각을 한 줄에</h2>
+          <p class="lede">날짜 popup 안에는 시각 칸이 없다. 날짜 칸 곁에 <code>time_picker_element</code>를 따로 둔다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-label="회의 날짜와 시각 한 줄 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/ui/app_message.h"
+#include "luil/ui/calendar_element.h"
+#include "luil/ui/dropdown_element.h"
+#include "luil/ui/stack_element.h"
+#include "luil/ui/time_picker_element.h"
+#include "luil/ui/ui_interaction.h"
+
+#include <chrono>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
+
+namespace sample {
+    // 날짜 칸의 popup에는 시·분 칸이 없다. 시각은 칸 곁에 time_picker를 따로 둔다.
+    constexpr luil::text_input_target target_meeting_hour { static_cast<luil::text_input_target>(70) };
+    constexpr luil::text_input_target target_meeting_minute { static_cast<luil::text_input_target>(71) };
+
+    struct meeting_date_open_intent
+    {
+        bool open { false };
+    };
+
+    struct meeting_state
+    {
+        std::optional<std::chrono::year_month_day> day {};
+        bool date_open { false };
+        luil::text::text_edit_state hour { .text = u8"14" };
+        luil::text::text_edit_state minute { .text = u8"00" };
+        std::optional<luil::text_composition_event> composition {};
+    };
+
+    [[nodiscard]] std::unique_ptr<luil::stack_element> build_meeting_row(const meeting_state& state)
+    {
+        auto row { std::make_unique<luil::stack_element>(luil::ui_element_id {}, luil::stack_config { .direction = luil::stack_direction::row, .spacing = 8.0f }) };
+
+        luil::date_field_config date {};
+        date.owner = u8"meeting/date";
+        date.value = state.day;
+        date.open = state.date_open;
+        date.set_open = [](const bool open) { return luil::make_app_action(meeting_date_open_intent { open }); };
+        date.name = u8"회의 날짜";
+        row->add(std::make_unique<luil::date_field_element>(std::move(date)), luil::stack_item { .length = 160.0f, .cross_length = luil::dropdown_height });
+
+        luil::time_picker_config time {};
+        time.owner = u8"meeting/time";
+        time.hour = luil::make_text_input_view(state.hour, state.composition, target_meeting_hour);
+        time.minute = luil::make_text_input_view(state.minute, state.composition, target_meeting_minute);
+        time.invalid = luil::read_time_picker(state.hour.text, state.minute.text).has_value() == false;
+        time.hour_to = [](std::u8string text) {
+            const std::size_t end { text.size() };
+            return luil::make_app_action(luil::text_edit_request { .target = target_meeting_hour, .command = luil::text::text_edit_command::replace_all, .offset = end, .text = std::move(text) });
+        };
+        time.minute_to = [](std::u8string text) {
+            const std::size_t end { text.size() };
+            return luil::make_app_action(luil::text_edit_request { .target = target_meeting_minute, .command = luil::text::text_edit_command::replace_all, .offset = end, .text = std::move(text) });
+        };
+        row->add(std::make_unique<luil::time_picker_element>(std::move(time)), luil::stack_item { .length = 148.0f, .cross_length = 28.0f });
+        return row;
+    }
+}
+</script></div>
+        <div class="prose">
+          <p>직접 쓴 예다. 공개 헤더에 대고 컴파일되는 것만 확인했다. 날짜 칸의 popup·초점·<code>handle</code>은 <a class="xref" href="#build-date-field">날짜 칸과 popup</a>과 같다. 줄 방향의 <code>stack_item</code>은 <code>length</code>가 폭, <code>cross_length</code>가 높이다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-color">
+        <header class="sec-head">
+          <h2>만들기: 인라인 색 고르기</h2>
+          <p class="lede">판·막대·견본·16진 칸을 한 본체에 담는다. 값은 HSV로 들고, 8비트 색과 16진 글은 내보낼 때만 짓는다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.h:31-40" data-path="examples/demo/gallery_page.h" data-start="31"><script type="text/plain">
+    // 색 고르기의 값이다 (`color_picker_config::change_to`). 절대 값이라 몇 번 겹쳐 와도 마지막 값 그대로다.
+    struct gallery_color_intent
+    {
+        luil::hsv_color value {};
+    };
+
+    // 색 고르기의 16진 칸을 확정한다 (칸을 떠날 때와 Enter).
+    struct gallery_color_commit_intent
+    {
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.h:100-104" data-path="examples/demo/gallery_page.h" data-start="100"><script type="text/plain">
+        // 색 고르기의 값과 16진 칸의 초안이다. 값은 HSV로 들고 8비트 색은 내보낼 때만 짓는다 (color-space-design.md).
+        luil::hsv_color color_ { 225.0f, 0.8f, 1.0f, 0.5f };
+        luil::text::text_edit_state color_hex_ {};
+        std::optional<luil::text_composition_event> color_composition_ {};
+        bool color_hex_invalid_ { false };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:79-103" data-path="examples/demo/gallery_page.cpp" data-start="79"><script type="text/plain">
+        // 색 고르기의 처음 값이다. 8비트로 #3366FF80이다.
+        constexpr luil::hsv_color color_start { 225.0f, 0.8f, 1.0f, 0.5f };
+
+        [[nodiscard]] int percent_of(const float unit)
+        {
+            return static_cast<int>(std::lround(unit * 100.0f));
+        }
+
+        // "색: #3366FF80 · 색상 225° · 채도 80% · 명도 100% · 알파 50%"다. 16진 글은 `format_hex_color`라 대문자다.
+        [[nodiscard]] std::u8string color_text(const luil::hsv_color& color)
+        {
+            return u8"색: " + luil::format_hex_color(luil::color_from_hsv(color), true) + u8" · 색상 " + to_u8(static_cast<int>(std::lround(color.hue))) + u8"° · 채도 "
+                + to_u8(percent_of(color.saturation)) + u8"% · 명도 " + to_u8(percent_of(color.value)) + u8"% · 알파 " + to_u8(percent_of(color.alpha)) + u8"%";
+        }
+
+        // 초안 전체를 바꾼다. 색이 바뀌면 16진 칸이 그 색의 글로 돌아간다.
+        void replace_text(luil::text::text_edit_state& state, const std::u8string_view text, const luil::text_input_target target)
+        {
+            luil::text_edit_request request {};
+            request.target = target;
+            request.command = luil::text::text_edit_command::replace_all;
+            request.text = std::u8string { text };
+            request.offset = request.text.size();
+            luil::apply_text_edit(state, request);
+        }
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:161-205" data-path="examples/demo/gallery_page.cpp" data-start="161"><script type="text/plain">
+    gallery_page::gallery_page()
+    {
+        replace_text(color_hex_, luil::format_hex_color(luil::color_from_hsv(color_), true), target_gallery_color_hex);
+    }
+
+    bool gallery_page::handle(const luil::app_message& message)
+    {
+        if (const auto* const color { message.get<gallery_color_intent>() }; color != nullptr)
+        {
+            // 범위 다듬기는 값을 가진 앱의 몫이다. 16진 칸은 그 색의 글로 다시 쓴다.
+            color_ = luil::clamp_hsv(color->value);
+            replace_text(color_hex_, luil::format_hex_color(luil::color_from_hsv(color_), true), target_gallery_color_hex);
+            color_hex_invalid_ = false;
+            return true;
+        }
+        if (message.get<gallery_color_commit_intent>() != nullptr)
+        {
+            // 읽히면 지금 값을 keep으로 넘겨 회색·검정에서도 색상과 채도를 지킨다. 읽히지 않으면 칸을 붉게 둔다.
+            const luil::hex_color_check check { luil::check_hex_color(color_hex_.text, true) };
+            color_hex_invalid_ = check.valid() == false;
+            if (check.valid())
+            {
+                color_ = luil::hsv_from_color(*check.color, color_);
+                replace_text(color_hex_, luil::format_hex_color(luil::color_from_hsv(color_), true), target_gallery_color_hex);
+            }
+            return true;
+        }
+        if (const auto* const edit { message.get<edit_intent>() }; edit != nullptr)
+        {
+            // 남의 칸이면 다음 페이지가 받는다. 넣는 글은 16진 글자만 남긴다.
+            if (edit->request.target != target_gallery_color_hex)
+                return false;
+            luil::apply_text_edit(color_hex_, edit->request, luil::hex_color_filter());
+            return true;
+        }
+        if (const auto* const composition { message.get<composition_intent>() }; composition != nullptr)
+        {
+            if (composition->event.target != target_gallery_color_hex)
+                return false;
+            if (composition->event.composing)
+                color_composition_ = composition->event;
+            else
+                color_composition_.reset();
+            return true;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="161-164" data-title="처음 초안">처음 색의 16진 글로 초안을 채운다.</li>
+            <li data-lines="168-175" data-title="값">범위로 자르고(<code>clamp_hsv</code>), 16진 칸을 그 색의 글로 다시 쓴다.</li>
+            <li data-lines="176-187" data-title="확정">읽히면 지금 값을 keep으로 넘긴다. 읽히지 않으면 칸을 붉게 둔다.</li>
+            <li data-lines="188-195" data-title="타자">넣는 글은 <code>hex_color_filter()</code>로 16진 글자만 남긴다.</li>
+            <li data-lines="196-205" data-title="조합">IME 조합 상태를 view로 넘기려고 앱이 든다.</li>
+          </ol>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/gallery_page.cpp:480-502" data-path="examples/demo/gallery_page.cpp" data-start="480"><script type="text/plain">
+        // 색 고르기: 판·막대·견본·16진 칸을 한 본체에 담는다. 값은 label로도 그려 화면과 보조 기술이 같은 말을 한다.
+        page.begin_card(u8"색 고르기", u8"판을 누르거나 끌고 막대와 화살표 키로 고릅니다. 16진 칸은 Enter나 칸을 떠날 때 확정합니다.");
+        luil::color_picker_config picker {};
+        picker.owner = u8"gallery/color";
+        picker.value = color_;
+        picker.alpha = true;
+        picker.change_to = [](const luil::hsv_color value) { return luil::make_app_action(gallery_color_intent { value }); };
+        picker.hex = luil::color_picker_hex {
+            .id = { kind_gallery_color_hex_input, u8"gallery/color-hex" },
+            .value = luil::make_text_input_view(color_hex_, color_composition_, target_gallery_color_hex),
+            .invalid = color_hex_invalid_,
+            .commit = luil::make_message_action(gallery_color_commit_intent {}),
+        };
+        // 첫 견본은 처음 색이다. 원래 색 되돌리기를 앱이 이렇게 준다.
+        picker.presets = {
+            { luil::color_from_hsv(color_start), u8"처음 색" }, { luil::make_ui_color(0xE5, 0x39, 0x35), u8"빨강" },
+            { luil::make_ui_color(0x80, 0x80, 0x80), u8"회색" }, { luil::make_ui_color(0, 0, 0, 0), u8"투명" }
+        };
+        const luil::size_f picker_size { luil::color_picker_element::size_for(picker) };
+        page.add(std::make_unique<luil::color_picker_element>(std::move(picker)), luil::stack_item { .length = picker_size.height, .cross_length = picker_size.width });
+        page.gap(8.0f);
+        page.add(make_label({ kind_text, u8"gallery/color-value" }, color_text(color_), 13.0f, luil::label_color_role::primary), 24.0f);
+        page.end_card();
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="482-486" data-title="값과 메시지">알파를 켜고 <code>change_to</code> 하나를 단다.</li>
+            <li data-lines="487-492" data-title="16진 칸">앱 kind의 칸 id, 초안의 view, 오류, 확정 액션이다.</li>
+            <li data-lines="493-497" data-title="견본">첫 견본을 처음 색으로 주면 "원래 색으로 되돌리기"가 된다. 따로 있는 단추는 없다.</li>
+            <li data-lines="498-499" data-title="크기">자리는 <code>size_for</code>로 잡는다.</li>
+            <li data-lines="501" data-title="값 글">같은 값을 화면에도 적는다.</li>
+          </ol>
+        </div>
+        <div class="prose">
+          <p>처음 값 225°·80%·100%·50%는 8비트로 <code>#3366FF80</code>이다. 16진 칸의 앱 kind는 정책의 <code>text_target_of</code>가 편집 대상으로 옮긴다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-color-field">
+        <header class="sec-head">
+          <h2>만들기: 색 칸과 색 고르기 popup</h2>
+          <p class="lede">날짜 칸과 같은 꼴이다. 다른 점은 popup에 글 칸(16진)이 있다는 것이다. 닫는 모든 길에서 앱이 초안을 먼저 확정해야 한다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.h:85-106" data-path="examples/demo/popups_page.h" data-start="85"><script type="text/plain">
+    // 색 칸의 popup을 이 상태로 하라는 절대 메시지다 (`color_field_config::set_open`). 닫기는 16진 초안을 먼저 확정한다.
+    struct color_field_intent
+    {
+        bool open { false };
+    };
+
+    // 색 칸 popup의 닫힘 계기다. Esc로 닫으면 초점을 칸으로 돌린다 (color-picker-design.md 결정 3).
+    struct color_field_dismiss_intent
+    {
+        luil::popup_dismiss_reason reason { luil::popup_dismiss_reason::pointer_press_outside };
+    };
+
+    // popup 안 색 고르기의 값이다.
+    struct color_field_value_intent
+    {
+        luil::hsv_color value {};
+    };
+
+    // popup 안 16진 칸을 확정한다 (칸을 떠날 때와 Enter).
+    struct color_field_commit_intent
+    {
+    };
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:568-581" data-path="examples/demo/popups_page.cpp" data-start="568"><script type="text/plain">
+        // 색 칸이다. 누르면(Alt+↓·F4·↓도) 칸 아래에 색 고르기 popup이 뜨고 초점이 판으로 간다. Esc로 닫으면 칸으로 돌아온다.
+        page.add(make_label({ kind_text, u8"color-field-title" }, u8"색 칸 (popup에서 판·막대·16진 칸으로 고르기)", 15.0f, luil::label_color_role::primary), 28.0f);
+        luil::color_field_config color {};
+        color.owner = std::u8string { color_field_owner };
+        color.value = field_color_;
+        color.open = open_popup_ == color_owner;
+        color.set_open = [](const bool open) { return luil::make_app_action(color_field_intent { open }); };
+        color.name = u8"글자 색";
+        auto color_field { std::make_unique<luil::color_field_element>(std::move(color)) };
+        color_field_ = color_field.get();
+        page.add(std::move(color_field), luil::stack_item { .length = luil::dropdown_height, .cross_length = field_button_width });
+        page.gap(8.0f);
+        const std::u8string color_state { std::u8string { u8"색 칸: " } + (open_popup_ == color_owner ? u8"열림" : u8"닫힘") + u8" · " + luil::format_hex_color(luil::color_from_hsv(field_color_), false) };
+        page.add(make_label({ kind_text, u8"popups/color-state" }, color_state, 12.0f, luil::label_color_role::dim), 22.0f);
+</script></div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:731-757" data-path="examples/demo/popups_page.cpp" data-start="731"><script type="text/plain">
+        if (open_popup_ == color_owner && color_field_ != nullptr)
+        {
+            luil::color_picker_config picker {};
+            picker.owner = std::u8string { color_picker_owner };
+            picker.value = field_color_;
+            picker.change_to = [](const luil::hsv_color value) { return luil::make_app_action(color_field_value_intent { value }); };
+            picker.hex = luil::color_picker_hex {
+                .id = { kind_popups_color_hex_input, u8"popups/color-hex" },
+                .value = luil::make_text_input_view(field_hex_, field_composition_, target_popups_color_hex),
+                .invalid = field_hex_invalid_,
+                .commit = luil::make_message_action(color_field_commit_intent {}),
+            };
+            picker.presets = { { luil::make_ui_color(0x33, 0x66, 0xFF), u8"파랑" }, { luil::make_ui_color(0xE5, 0x39, 0x35), u8"빨강" }, { luil::make_ui_color(0x80, 0x80, 0x80), u8"회색" } };
+
+            luil::color_picker_popup_config popup {};
+            popup.id = std::u8string { color_popup_id };
+            popup.scale = scale;
+            popup.below = luil::field_popup_anchor { .field = color_field_->bounds(), .limit = surface };
+            // 16진 칸을 실은 popup은 글을 치는 popup이다. 창 이동·활성 전환에는 남는다 (검색 칸이 있는 드롭다운과 같다).
+            popup.dismiss = [](const luil::popup_dismiss_reason reason) {
+                if (search_popup_stays(reason))
+                    return luil::input_action {};
+                return luil::make_app_action(color_field_dismiss_intent { reason });
+            };
+            popup.corner = corner_;
+            popups.push_back(luil::make_color_picker_popup(std::move(picker), std::move(popup)));
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="733-743" data-title="본체">값, <code>change_to</code>, 16진 칸, 견본. 이 popup의 16진 칸은 알파 없이 읽고 쓴다.</li>
+            <li data-lines="745-748" data-title="자리">날짜 popup과 같다.</li>
+            <li data-lines="749-754" data-title="남는 계기">데모의 <code class="free">search_popup_stays</code>가 참인 계기(창 이동·활성 전환)에는 빈 액션을 줘 닫지 않는다.</li>
+            <li data-lines="755-756" data-title="싣기">모서리를 주고 popup 목록에 넣는다.</li>
+          </ol>
+        </div>
+        <div class="walk side">
+          <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:277-317" data-path="examples/demo/popups_page.cpp" data-start="277"><script type="text/plain">
+        // 색 칸이다. 열면 초안을 지금 색의 글로 다시 쓰고 판으로 초점을 옮긴다. 닫는 모든 길은 초안을 먼저 확정한다.
+        if (const auto* const field { message.get<color_field_intent>() }; field != nullptr)
+        {
+            if (field->open)
+            {
+                if (open_popup_ != color_owner)
+                {
+                    show_popup(std::u8string { color_owner });
+                    reset_color_hex();
+                    request_focus(std::u8string { color_popup_id }, luil::color_picker_element::plane_id(color_picker_owner));
+                }
+            }
+            else if (open_popup_ == color_owner)
+            {
+                commit_color_hex();
+                close_popup(color_owner);
+            }
+            return true;
+        }
+        if (const auto* const dismiss { message.get<color_field_dismiss_intent>() }; dismiss != nullptr)
+        {
+            if (open_popup_ != color_owner)
+                return true;
+            commit_color_hex();
+            close_popup(color_owner);
+            // popup이 사라지면 그 안의 초점은 지워질 뿐이다. Esc로 닫았을 때만 칸으로 돌린다. 다른 계기는 누른 자리가 초점을 가진다.
+            if (dismiss->reason == luil::popup_dismiss_reason::escape_key)
+                request_focus({}, luil::ui_element_id { luil::ui_element_kind::color_field, std::u8string { color_field_owner } });
+            return true;
+        }
+        if (const auto* const color { message.get<color_field_value_intent>() }; color != nullptr)
+        {
+            field_color_ = luil::clamp_hsv(color->value);
+            reset_color_hex();
+            return true;
+        }
+        if (message.get<color_field_commit_intent>() != nullptr)
+        {
+            commit_color_hex();
+            return true;
+        }
+</script></div>
+          <ol class="walk-steps-src">
+            <li data-lines="277-295" data-title="열기와 닫기">열면 초안을 지금 색의 글로 다시 쓰고 판으로 초점을 옮긴다. 닫을 때는 초안을 먼저 확정한다.</li>
+            <li data-lines="296-306" data-title="닫힘 계기">확정하고 닫는다. Esc일 때만 칸으로 초점을 돌린다.</li>
+            <li data-lines="307-317" data-title="값과 확정">인라인 색 고르기와 같다.</li>
+          </ol>
+        </div>
+        <div class="code" data-lang="cpp" data-src="examples/demo/popups_page.cpp:152-203" data-path="examples/demo/popups_page.cpp" data-start="152"><script type="text/plain">
+    void popups_page::show_popup(std::u8string owner)
+    {
+        if (open_popup_ != owner)
+        {
+            // 색 칸 popup이 열린 채 다른 임자로 바뀌면 바깥 누름 닫기가 이미 임자를 바꾼 뒤에 와 16진 초안을 확정할 길이
+            // 없다. 임자가 바뀌는 자리에서 초안을 확정해 닫는 길마다 같은 값이 남는다.
+            if (open_popup_ == color_owner)
+                commit_color_hex();
+            search_ = {};
+            composition_.reset();
+        }
+        open_popup_ = std::move(owner);
+    }
+
+    void popups_page::close_popup(const std::u8string_view owner)
+    {
+        if (open_popup_ == owner)
+            show_popup({});
+    }
+
+    void popups_page::close_popups()
+    {
+        if (open_popup_ == color_owner)
+            commit_color_hex();
+        open_popup_.clear();
+        search_ = {};
+        composition_.reset();
+    }
+
+    void popups_page::commit_color_hex()
+    {
+        // 읽히면 지금 값을 keep으로 넘겨 회색·검정에서도 색상과 채도를 지킨다.
+        const luil::hex_color_check check { luil::check_hex_color(field_hex_.text, false) };
+        field_hex_invalid_ = check.valid() == false;
+        if (check.valid())
+        {
+            field_color_ = luil::hsv_from_color(*check.color, field_color_);
+            reset_color_hex();
+        }
+    }
+
+    void popups_page::reset_color_hex()
+    {
+        luil::text_edit_request request {};
+        request.target = target_popups_color_hex;
+        request.command = luil::text::text_edit_command::replace_all;
+        request.text = luil::format_hex_color(luil::color_from_hsv(field_color_), false);
+        request.offset = request.text.size();
+        luil::apply_text_edit(field_hex_, request);
+        field_composition_.reset();
+        field_hex_invalid_ = false;
+    }
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>닫는 모든 길이 16진 초안을 먼저 확정한다. popup이 사라지면 그 tree가 없어 초점 떠남 훅이 서지 않기 때문이다.</li>
+            <li>다른 칸을 눌러 popup의 임자가 바뀌면, 열기 메시지가 바깥 누름 닫기보다 먼저 온다. 그래서 임자가 바뀌는 자리(<code class="free">show_popup</code>)에서도 확정한다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="build-color-touch">
+        <header class="sec-head">
+          <h2>만들기: 터치 앱의 색 고르기</h2>
+          <p class="lede">판을 페이지 폭에 맞추고(<code>plane_size</code>), 막대를 손가락에 맞게 높인다(<code>bar_height</code> 32).</p>
+        </header>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/basics_page.cpp:287-307" data-path="examples/mobile_demo/basics_page.cpp" data-start="287"><script type="text/plain">
+    luil::color_picker_config basics_page::make_color_config(const float width) const
+    {
+        luil::color_picker_config config {};
+        config.owner = u8"color";
+        config.value = color_;
+        config.alpha = true;
+        config.change_to = [](const luil::hsv_color value) { return luil::make_app_action(color_intent { value }); };
+        config.hex = luil::color_picker_hex {
+            .id = { kind_color_hex_input, u8"color-hex" },
+            .value = make_input_view(color_hex_, target_color_hex),
+            .invalid = color_hex_invalid_,
+            .commit = luil::make_message_action(color_commit_intent {}),
+        };
+        config.presets = {
+            { luil::make_ui_color(0x33, 0x66, 0xFF, 0x80), u8"처음 색" }, { luil::make_ui_color(0xE5, 0x39, 0x35), u8"빨강" }, { luil::make_ui_color(0x80, 0x80, 0x80), u8"회색" }
+        };
+        // 판은 페이지 폭에 맞추고 막대는 손가락에 맞게 높인다. 판이 화면을 덮어도 쓸기는 페이지를 흘리고, 잠깐 눌러 옮기면 끈다.
+        config.plane_size = std::max(1.0f, width - 2.0f * page_padding);
+        config.bar_height = 32.0f;
+        return config;
+    }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/basics_page.cpp:184-203" data-path="examples/mobile_demo/basics_page.cpp" data-start="184"><script type="text/plain">
+        if (const auto* const color { message.get<color_intent>() }; color != nullptr)
+        {
+            // 범위 다듬기는 값을 가진 앱의 몫이다. 16진 칸은 그 색의 글로 다시 쓴다.
+            color_ = luil::clamp_hsv(color->value);
+            reset_color_hex();
+            return true;
+        }
+        if (message.get<color_commit_intent>() != nullptr)
+        {
+            // 읽히면 지금 값을 keep으로 넘겨 회색·검정에서도 색상과 채도를 지킨다. 읽히지 않으면 칸을 붉게 둔다.
+            const luil::hex_color_check check { luil::check_hex_color(color_hex_.text, true) };
+            if (check.valid() == false)
+            {
+                color_hex_invalid_ = true;
+                return true;
+            }
+            color_ = luil::hsv_from_color(*check.color, color_);
+            reset_color_hex();
+            return true;
+        }
+</script></div>
+        <div class="code" data-lang="cpp" data-src="examples/mobile_demo/basics_page.cpp:276-285" data-path="examples/mobile_demo/basics_page.cpp" data-start="276"><script type="text/plain">
+    void basics_page::reset_color_hex()
+    {
+        luil::text_edit_request request {};
+        request.target = target_color_hex;
+        request.command = luil::text::text_edit_command::replace_all;
+        request.text = luil::format_hex_color(luil::color_from_hsv(color_), true);
+        request.offset = request.text.size();
+        luil::apply_text_edit(color_hex_, request);
+        color_hex_invalid_ = false;
+    }
+</script></div>
+        <div class="prose">
+          <p>판이 화면을 덮어도 빠른 쓸기는 페이지를 흘린다. 잠깐 눌러 스크롤이 될 수 없게 된 뒤 옮기면 판을 끈다. 판의 크기는 자리 폭보다 크면 그 폭으로 줄어든다.</p>
+        </div>
+      </section>
+
+      <section class="sec" id="build-color-store">
+        <header class="sec-head">
+          <h2>만들기: 색을 설정 파일에 저장하기</h2>
+          <p class="lede">고르는 동안의 HSV는 내보낼 때만 <code>#RRGGBBAA</code>로 쓴다. 읽을 때는 지금 값을 keep으로 넘긴다.</p>
+        </header>
+        <div class="code" data-lang="cpp" data-label="색 설정 읽기·쓰기와 16진 오류 글 (직접 작성)" data-compile="tu"><script type="text/plain">
+#include "luil/ui/color_space.h"
+
+#include <string>
+#include <string_view>
+
+namespace sample {
+    // 설정 파일에 "#RRGGBBAA"로 저장한 색을 읽는다. 읽히지 않으면 지금 값을 그대로 둔다.
+    //  - 지금 값을 keep으로 넘겨 회색·검정을 읽어도 색상(과 검정이면 채도)이 0으로 튀지 않는다.
+    [[nodiscard]] luil::hsv_color load_color(const std::u8string_view saved, const luil::hsv_color current)
+    {
+        const luil::hex_color_check check { luil::check_hex_color(saved, true) };
+        if (check.valid() == false)
+            return current;
+        return luil::hsv_from_color(*check.color, current);
+    }
+
+    // 고르는 동안의 값(HSV 실수 넷)을 내보낼 때만 8비트로 짓는다. 같은 색은 늘 같은 글이다.
+    [[nodiscard]] std::u8string save_color(const luil::hsv_color value)
+    {
+        return luil::format_hex_color(luil::color_from_hsv(value), true);
+    }
+
+    // 16진 칸의 오류 글이다. 문구는 앱의 말이다.
+    [[nodiscard]] std::u8string hex_error(const luil::hex_color_problem problem)
+    {
+        switch (problem)
+        {
+        case luil::hex_color_problem::none:
+        case luil::hex_color_problem::empty:
+            return {};
+        case luil::hex_color_problem::not_hex:
+            return u8"0-9와 A-F만 적어 주세요";
+        case luil::hex_color_problem::wrong_length:
+            return u8"#RGB·#RRGGBB·#RRGGBBAA 꼴로 적어 주세요";
+        }
+        return {};
+    }
+}
+</script></div>
+        <div class="prose">
+          <ul>
+            <li>저장소에 같은 예가 없어 직접 썼다. 공개 헤더에 대고 컴파일되는 것만 확인했다.</li>
+            <li>지금 값을 keep으로 넘기면 회색이나 검정을 읽어도 색상(검정이면 채도도)이 0으로 튀지 않는다.</li>
+            <li>16진 글은 CSS 순서(<code>#RRGGBBAA</code>)다. <code>ui_color</code> 리터럴의 <code>0xAARRGGBB</code>와 순서가 다르다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="config">
+        <header class="sec-head">
+          <h2>설정 레퍼런스</h2>
+          <p class="lede">선언 원문이다. 주석이 곧 설명서다 — 아래 표는 자주 묻는 필드만 추렸다. 모든 필드는 <a class="xref" href="api.html#calendar-config">API 찾아보기</a>에 있다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="calendar_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/calendar_element.h:15-71" data-path="include/luil/ui/calendar_element.h" data-start="15"><script type="text/plain">
+    // 달력의 치수다 (논리 픽셀). 그릴 때 배율을 곱한다.
+    // 날 칸과 머리 줄 단추의 한 변이다. 터치 앱은 `calendar_config::cell_size`로 올린다.
+    inline constexpr float calendar_cell_size { 32.0f };
+    // 요일 줄의 높이다.
+    inline constexpr float calendar_weekday_height { 24.0f };
+
+    // 달력이 스스로 놓는 글이다. 칸마다 비면 기본 문구다 (docs/calendar-date-design.md).
+    struct calendar_text
+    {
+        // root의 접근 이름이다 (달력).
+        std::u8string name {};
+        // 이전 달·다음 달 단추의 접근 이름이자 툴팁이다.
+        std::u8string previous_month {};
+        std::u8string next_month {};
+        // 날 이름 뒤 꼬리의 낱말이다 (", 오늘"·", 고를 수 없음"). 잇는 차례와 쉼표는 요소가 정한다.
+        std::u8string today {};
+        std::u8string unavailable {};
+        // 요일 줄의 이름이다. 일요일부터다 (`weekday::c_encoding` 순). 칸마다 비면 기본 문구(일·월·…·토)다.
+        std::array<std::u8string, 7> weekdays {};
+        // 머리 줄 제목이자 격자의 접근 이름이다 ("2026년 11월").
+        std::function<std::u8string(std::chrono::year_month)> month_title {};
+        // 날 칸의 접근 이름이다 ("2026년 11월 3일 화요일").
+        std::function<std::u8string(std::chrono::year_month_day)> day_name {};
+    };
+
+    struct calendar_config
+    {
+        // root와 격자의 owner다. 단추의 owner는 이 값, 단위 구분자(U+001F), `prev`·`next`이고 날 칸은 이 값, 단위 구분자,
+        // ISO 날짜(`2026-11-03`)다.
+        std::u8string owner {};
+        // 고른 날이다. 앱 상태다. 범위 밖이어도 그대로 두고 그 칸을 고른 날로 그린다.
+        std::optional<std::chrono::year_month_day> value {};
+        // 키보드 커서이자 보이는 달이다. 앱 상태다 (docs/date-picker-design.md 결정 2).
+        //  - 열 때 앱은 `calendar_start_cursor(value, today, bounds)`로 둔다. `ok()`가 아니면 요소가 그 함수로 바꿔 그리고,
+        //    범위 밖이면 범위로 접어 그린다. 키·단추가 내는 목표는 이 접은 커서에서 센다.
+        std::chrono::year_month_day cursor {};
+        // 오늘이다. 라이브러리는 시계를 읽지 않는다. 비면 오늘 표시가 없다. 자정이 지나면 앱이 다음 frame에 바꾼다.
+        std::optional<std::chrono::year_month_day> today {};
+        calendar_bounds bounds {};
+        // 고를 수 있는 날인가다. 비면 범위 안 모두다. 거짓인 날에도 커서는 서지만 고르지 않는다 (결정 6).
+        std::function<bool(std::chrono::year_month_day)> available {};
+        // 주의 첫 요일이다. 기본은 일요일이다. OS를 읽지 않는다. 앱은 `user_first_weekday`의 값을 넣는다.
+        std::chrono::weekday first_day { std::chrono::Sunday };
+        // 이 날을 고르라는 메시지다. 날 칸의 클릭·탭, 초점 날의 Enter·Space, 보조 기술의 Select가 낸다. 없으면 고를 수 없다.
+        std::function<input_action(std::chrono::year_month_day)> select {};
+        // 커서를 이 날로 하라는 절대 메시지다. 키와 커서가 아닌 날의 클릭이 낸다 (클릭은 이것 다음에 `select`).
+        //  - 앱은 커서를 옮기고 달력이 선 표면의 `day_id(owner, 새 커서)`로 초점 요청을 싣는다 (결정 2).
+        //  - 목표가 build 때의 커서와 같으면(범위 끝) 빈 목록으로 삼킨다. 한 frame 안에 키 둘이 오면 둘째가 같은 목표를 낸다.
+        //  - `move_to`와 `turn_month`가 모두 없으면 키 처리기와 이전·다음 단추가 없다.
+        std::function<input_action(std::chrono::year_month_day)> move_to {};
+        // 날 칸과 머리 줄 단추의 한 변이다 (논리 픽셀). 0이면 `calendar_cell_size`다. 터치 앱은 44 안팎으로 올린다.
+        float cell_size { 0.0f };
+        calendar_text text {};
+        // 이전·다음 단추가 내는 커서 메시지다 (결정 8). 비면 `move_to`다.
+        //  - 앱은 커서를 옮기되 초점 요청을 싣지 않는다. 그래야 누른 단추에 초점이 남아 같은 단추를 거듭 누를 수 있다.
+        std::function<input_action(std::chrono::year_month_day)> turn_month {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면, 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>root·격자의 owner다. 단추는 owner + U+001F + <code>prev</code>·<code>next</code>, 날 칸은 owner + U+001F + ISO 날짜다</td></tr>
+                  <tr><td><code>value</code></td><td>없음</td><td>고른 날이 없다. 범위 밖 값도 고른 날로 그린다 (고를 수는 없다)</td></tr>
+                  <tr><td><code>cursor</code></td><td><code>{}</code> (틀린 날)</td><td><code>calendar_start_cursor(value, today, bounds)</code>로 본다. 범위 밖이면 범위로 접는다</td></tr>
+                  <tr><td><code>today</code></td><td>없음</td><td>오늘 테와 ", 오늘" 꼬리가 없다</td></tr>
+                  <tr><td><code>bounds</code></td><td>0001-01-01 ~ 9999-12-31</td><td>양 끝을 포함한다. 최소가 최대보다 늦으면 최대를 최소로 본다 (하루짜리 범위)</td></tr>
+                  <tr><td><code>available</code></td><td>없음</td><td>범위 안의 모든 날을 고를 수 있다. 거짓인 날에도 커서는 선다</td></tr>
+                  <tr><td><code>first_day</code></td><td>일요일</td><td>OS를 읽지 않는다. 틀린 요일이면 일요일로 본다</td></tr>
+                  <tr><td><code>select</code></td><td>없음</td><td>날을 고를 수 없다</td></tr>
+                  <tr><td><code>move_to</code></td><td>없음</td><td>커서 키가 흐른다. 같은 목표면 빈 목록이다</td></tr>
+                  <tr><td><code>turn_month</code></td><td>없음</td><td>이전·다음 단추가 <code>move_to</code>를 쓴다. 앱은 여기에 초점 요청을 싣지 않는다</td></tr>
+                  <tr><td><code>cell_size</code></td><td>0 (= 32)</td><td>날 칸과 머리 단추의 한 변(논리 px). 0이거나 유한하지 않으면 32다. 터치 앱은 44 안팎</td></tr>
+                  <tr><td><code>text</code></td><td>모두 빈 글</td><td>칸마다 비면 기본 문구다. "달력", "이전 달"·"다음 달", "{year}년 {month}월", "{year}년 {month}월 {day}일 {weekday}", 요일 머리 "일"~"토"</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="callout"><i class="ci" aria-hidden="true">&#xEA74;</i><div><span class="ttl">키 처리기와 단추가 서는 조건</span>헤더 주석은 "<code>move_to</code>와 <code>turn_month</code>가 모두 없으면 키 처리기와 이전·다음 단추가 없다"고 적는다. 코드는 단추를 <code>turn_month</code>나 <code>move_to</code>가 있을 때, 키 처리기를 <code>select</code>나 <code>move_to</code>가 있을 때 세운다. 그래서 <code>select</code>만 준 달력은 처리기가 서서 Enter·Space를 삼키고(커서 키는 흐른다), <code>turn_month</code>만 준 달력은 단추는 서지만 키 처리기가 없다 (코드에서 확인한 동작).</div></div>
+          </section>
+          <section data-tab="날짜 칸·popup">
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/calendar_element.h:130-152" data-path="include/luil/ui/calendar_element.h" data-start="130"><script type="text/plain">
+    struct date_field_config
+    {
+        std::u8string owner {};
+        // 고른 날이다. 앱 상태다. 비었거나 `ok()`가 아니면 placeholder를 흐리게 그린다.
+        std::optional<std::chrono::year_month_day> value {};
+        // popup이 떠 있는지는 앱 상태다 (popup이 frame에 실려 있는지와 같이 간다).
+        bool open { false };
+        // popup을 **이 상태로** 하라는 절대 메시지다. 누름은 build 때의 `open` 반대를 담고, 보조 기술의 펼치기·접기는 목표를
+        // 담는다. 없으면 칸이 눌리지 않고 보조 기술이 열지 못한다.
+        std::function<input_action(bool open)> set_open {};
+        // 표시 글이자 접근 값이다. 비면 기본 문구("2026년 11월 3일")다.
+        std::function<std::u8string(std::chrono::year_month_day)> format {};
+        // 값이 없을 때의 글이다. 비면 기본 문구(날짜 선택)다.
+        std::u8string placeholder {};
+        // 접근 이름이다. 비면 기본 문구(날짜)다.
+        std::u8string name {};
+    };
+
+    // 달력을 popup으로 여는 닫힌 날짜 칸이다 (`ui_element_kind::date_field`). 높이는 `dropdown_height`(28)다.
+    // 표시 글과 달력 아이콘을 그린다. 닫힌 필드 popup 규약(field_popup.h)을 따르고 글을 받지 않는다.
+    //  - 클릭은 `set_open(!open)`, 키는 Alt+↓·F4·↓가 연다. 열린 동안 키보드 초점이 칸을 같은 표면 안에서 떠나면 닫는다.
+    //  - 열 때 앱은 커서를 시작 커서로 두고 popup 표면의 `calendar_element::day_id(owner, 커서)`로 초점 요청을 싣는다.
+    //    Esc나 날 고르기로 닫으면 칸으로 돌아오는 요청을 한 번 더 싣는다 (docs/date-picker-design.md).
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/app/date_picker_popup.h:12-38" data-path="include/luil/app/date_picker_popup.h" data-start="12"><script type="text/plain">
+    // popup 안에서 달력을 두르는 여백이다 (논리 픽셀).
+    inline constexpr float date_picker_popup_padding { 8.0f };
+
+    struct date_picker_popup_config
+    {
+        std::u8string id {};
+        // 앵커 표면이다. 비어 있으면 주 창이다.
+        std::u8string anchor {};
+        // 앵커 표면의 배율이다. tree를 이 배율로 배치하고 앵커의 물리 픽셀을 논리 좌표로 옮긴다.
+        // 0 이하거나 유한하지 않으면 1로 본다.
+        float scale { 1.0f };
+        // 닫힌 칸 아래의 자리다 (`place_field_popup`). 아래가 모자라면 위로 뒤집힌다.
+        field_popup_anchor below {};
+        // 닫힘 계기의 메시지다. 달력 popup에는 글 칸이 없어 분할 버튼 표의 모든 계기에 닫는다 (창 이동·활성 전환도).
+        //  - Esc(`escape_key`)로 닫을 때 앱은 칸으로 돌아오는 초점 요청을 싣는다. 다른 계기는 누른 자리가 초점을 가진다.
+        //  - 초안이 없다. 커서는 값이 아니어서 닫아도 값은 그대로다.
+        std::function<input_action(popup_dismiss_reason)> dismiss {};
+        // popup 창의 모서리다. 비어 있으면 내장 스타일의 값이다.
+        std::optional<popup_corner> corner {};
+    };
+
+    // 달력 popup을 조립한다 (`make_color_picker_popup`과 같은 꼴, docs/date-picker-design.md).
+    //  - 크기는 `calendar_element::size_for`에 여백을 더한 논리 상수의 합이다. 글 폭을 재지 않아 배율이 달라도 잘리지 않는다.
+    //  - tree를 `scale`로 배치하고 `place_field_popup`으로 자리를 놓는다. 바탕 판이 popup 전체를 칠하고 여백의 누름을 흡수한다.
+    //  - 열림 상태와 초점 요청은 앱의 몫이다. 열 때 popup 표면의 커서 날(`calendar_element::day_id`)로 초점을 옮긴다.
+    //    날을 고르면(`calendar_config::select`) 앱이 값을 바꾸고 닫고 칸으로 초점을 돌린다.
+    [[nodiscard]] ui_popup make_date_picker_popup(calendar_config calendar, date_picker_popup_config popup);
+</script></div>
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/field_popup.h:14-56" data-path="include/luil/ui/field_popup.h" data-start="14"><script type="text/plain">
+    // popup을 필드의 어느 가장자리에 맞추는가.
+    enum class field_popup_alignment
+    {
+        // popup의 왼쪽을 필드의 왼쪽에 맞춘다.
+        start,
+        // popup의 오른쪽을 필드의 오른쪽에 맞춘다.
+        end,
+    };
+
+    struct field_popup_anchor
+    {
+        // 필드의 자리다. `ui_element::bounds()`와 같은 좌표(물리 픽셀)다.
+        rect_f field {};
+        // popup이 들어갈 영역이다. 보통 앵커 표면의 client 사각형(물리 픽셀)이다.
+        //  - 작업 영역은 host만 안다. 그래서 이 영역 안에서만 놓고, 그 밖으로 걸치는 일은 없다.
+        rect_f limit {};
+        // 필드와 popup 사이의 간격이다 (논리 픽셀).
+        float gap { 2.0f };
+        field_popup_alignment alignment { field_popup_alignment::start };
+    };
+
+    struct field_popup_position
+    {
+        // `ui_popup::x`·`y`에 그대로 넣는 논리 픽셀이다.
+        float x { 0.0f };
+        float y { 0.0f };
+        // 아래가 모자라 필드 위에 놓았는가. 앱이 뒤집혔는지 알아야 하는 쪽(꼬리가 있는 popup)이 읽는다.
+        bool above { false };
+    };
+
+    // 필드 아래에 popup을 놓을 자리를 정한다. `size`는 popup의 논리 크기(`make_menu_popup`이 잰 폭·높이)다.
+    //  - 기본은 필드 아래다. 아래가 `limit`을 넘고 위가 들어가면 위로 뒤집는다. 둘 다 들어가지 않으면 아래에 두고
+    //    나머지는 host가 민다.
+    //  - 가로는 `alignment`로 맞춘 뒤 `limit` 안으로 민다. popup이 `limit`보다 넓으면 왼쪽 가장자리에 맞춘다.
+    //  - 배율이 유효하지 않으면(0 이하, 유한하지 않음) 1로 본다.
+    [[nodiscard]] field_popup_position place_field_popup(const field_popup_anchor& anchor, size_f size, float scale) noexcept;
+
+    // 필드를 여는 키 처리기다 (`ui_element::set_key_handler`). 필드의 처리기는 닫혀 있을 때만 일한다.
+    //  - Alt+↓는 Alt만 눌렸을 때, F4는 수식 키 없이 `set_open(true)`를 낸다. `down_opens`가 참이면 수식 키 없는 ↓도
+    //    연다. 화살표 단추처럼 ↓가 달리 쓰이지 않는 자리에 준다.
+    //  - 이미 열려 있으면 그 키들을 빈 목록으로 삼켜 앱 단축키로 새지 않게 한다. 그 밖의 키는 `std::nullopt`다.
+    //  - `set_open`이 비어 있으면 처리기도 비어 있다.
+    [[nodiscard]] key_handler field_popup_key_handler(bool open, std::function<input_action(bool open)> set_open, bool down_opens);
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면, 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>date_field_config::value</code></td><td>없음</td><td>placeholder를 흐리게 그린다</td></tr>
+                  <tr><td><code>open</code></td><td>거짓</td><td>앱 상태다. 열린 동안 테두리가 <code>accent</code>이고, 같은 표면 안에서 초점이 칸을 떠나면 <code>set_open(false)</code>를 낸다</td></tr>
+                  <tr><td><code>set_open</code></td><td>없음</td><td>칸이 눌리지 않고, 키 처리기가 없고, 보조 기술이 열지 못한다</td></tr>
+                  <tr><td><code>format</code></td><td>없음</td><td>표시 글이자 접근 값이다. 비면 "{year}년 {month}월 {day}일"</td></tr>
+                  <tr><td><code>placeholder</code> · <code>name</code></td><td>빈 글</td><td>비면 "날짜 선택" · "날짜". placeholder는 접근 값이 아니다</td></tr>
+                  <tr><td><code>date_picker_popup_config::id</code></td><td>빈 글</td><td>popup 표면의 id다. 초점 요청의 <code>surface</code>로 쓴다</td></tr>
+                  <tr><td><code>anchor</code> · <code>scale</code></td><td>주 창 · 1</td><td>앵커 표면과 그 배율. 배율이 0 이하거나 유한하지 않으면 1이다</td></tr>
+                  <tr><td><code>below</code></td><td><code>{}</code></td><td>칸의 <code>bounds()</code>·표면 사각형(<code>limit</code>)·간격 2·정렬 <code>start</code></td></tr>
+                  <tr><td><code>dismiss</code></td><td>없음</td><td>닫힘 계기를 감지해도 아무 메시지가 없다. 빈 액션을 돌려주면 그 계기에는 닫지 않는다</td></tr>
+                  <tr><td><code>corner</code></td><td>없음</td><td>기본 스타일의 모서리다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>popup의 크기는 달력의 <code>size_for</code>에 <code>date_picker_popup_padding</code>(8)을 양쪽으로 더한 값이다. <code>field_popup_key_handler</code>는 닫힌 칸들이 함께 쓰는 키 처리기다 (Alt+↓·F4, 그리고 <code>down_opens</code>면 ↓).</p></div>
+          </section>
+          <section data-tab="날짜 계산">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/calendar_date.h:10-62" data-path="include/luil/ui/calendar_date.h" data-start="10"><script type="text/plain">
+    // 달력이 쓰는 순수 날짜 계산이다 (docs/calendar-date-design.md). 값은 시간대가 없는 그레고리력 날짜이고, 표준
+    // `std::chrono::year_month_day`·`year_month`·`weekday`를 그대로 쓴다 (결정 1). 시계와 OS 지역은 읽지 않는다 (결정 2).
+    //  - 날짜는 1년부터 9999년까지다. 범위의 빈 끝은 그 끝이다.
+    //  - `ok()`가 아닌 값은 없는 것으로 본다. 표준 형만으로는 1월 31일에 한 달을 더하면 2월 31일(`ok()` 거짓)이 되어 앱마다
+    //    말일 접기를 짓게 되므로 접는 함수를 여기 둔다.
+
+    // 고를 수 있는 날의 최소·최대다. 둘 다 그 날을 포함한다.
+    //  - 비어 있거나 `ok()`가 아니면 그 끝(0001-01-01, 9999-12-31)이다. 끝 밖의 값은 끝으로 자른다.
+    //  - 최소가 최대보다 늦으면 최대를 최소로 본다 (범위가 그 날 하루다).
+    struct calendar_bounds
+    {
+        std::optional<std::chrono::year_month_day> minimum {};
+        std::optional<std::chrono::year_month_day> maximum {};
+    };
+
+    // 커서를 옮기는 한 걸음이다. 달력의 키 표가 이 열 가지를 쓴다 (docs/date-picker-design.md).
+    enum class calendar_move
+    {
+        previous_day,
+        next_day,
+        previous_week,
+        next_week,
+        previous_month,
+        next_month,
+        previous_year,
+        next_year,
+        // 그 달의 첫날·끝날이다 (Home·End, 날짜 고르기 결정 5).
+        month_start,
+        month_end,
+    };
+
+    // 한 달을 6주 x 7일로 편 격자다. 첫 칸은 그 달 1일과 같거나 그 앞의 가장 가까운 `first_day`다.
+    //  - 6주로 고정해 높이가 달마다 같다. 앞뒤 칸은 이웃 달의 날이고, 0001년 1월의 앞 칸과 9999년 12월의 뒤 칸은 범위 밖이다.
+    //  - `month`가 `ok()`가 아니면 1970년 1월로, `first_day`가 `ok()`가 아니면 일요일로 본다.
+    [[nodiscard]] std::array<std::chrono::year_month_day, 42> calendar_month_grid(std::chrono::year_month month, std::chrono::weekday first_day) noexcept;
+    // 달을 더하고 날을 그 달 말일로 접는다. 해는 12달이다 (1월 31일 + 1달은 2월 28·29일, 2월 29일 + 12달은 2월 28일).
+    //  - 1~9999년 밖으로 나가도 그대로 돌려준다. 범위로 접는 것은 `clamp_date`의 몫이다. `ok()`가 아닌 값은 그대로다.
+    [[nodiscard]] std::chrono::year_month_day add_months_clamped(std::chrono::year_month_day day, int months) noexcept;
+    // 범위 안으로 접는다. `ok()`가 아닌 날은 범위의 최소다.
+    [[nodiscard]] std::chrono::year_month_day clamp_date(std::chrono::year_month_day day, const calendar_bounds& bounds) noexcept;
+    // `ok()`이고 범위 안인가.
+    [[nodiscard]] bool calendar_contains(const calendar_bounds& bounds, std::chrono::year_month_day day) noexcept;
+    // 달력을 열 때 커서를 둘 날이다. 값, 없으면 오늘, 없으면 범위의 최소, 그것도 없으면 1970-01-01이고 범위로 접는다.
+    [[nodiscard]] std::chrono::year_month_day calendar_start_cursor(
+        std::optional<std::chrono::year_month_day> value, std::optional<std::chrono::year_month_day> today, const calendar_bounds& bounds) noexcept;
+    // 커서를 한 걸음 옮긴 날이다. 일·주는 `sys_days` 산술, 달·해는 `add_months_clamped`, 처음·끝은 그 달 1일과 말일이고 범위로
+    // 접는다. 범위 끝에서 더 갈 곳이 없으면 커서와 같은 날이 나온다. `ok()`가 아닌 커서는 범위의 최소에서 센다.
+    [[nodiscard]] std::chrono::year_month_day calendar_moved(std::chrono::year_month_day cursor, calendar_move move, const calendar_bounds& bounds) noexcept;
+    // "2026-11-03" 꼴의 ISO 글이다. 네 자리 해와 두 자리 달·날을 숫자 글자로 직접 지어 로케일에 달리지 않는다.
+    //  - 날 칸의 owner, test, 앱 저장에 쓰는 글이고 화면 글이 아니다 (화면 글은 기본 문구 "2026년 11월 3일").
+    [[nodiscard]] std::u8string format_iso_date(std::chrono::year_month_day day);
+    // 정확히 "YYYY-MM-DD" 꼴만 읽는다. 1~9999년이고 `ok()`인 날짜만이다. 공백·한 자리 달·2월 30일은 `std::nullopt`다.
+    [[nodiscard]] std::optional<std::chrono::year_month_day> parse_iso_date(std::u8string_view text) noexcept;
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>함수</th><th>규칙</th></tr></thead>
+                <tbody>
+                  <tr><td><code>calendar_month_grid(달, first_day)</code></td><td>첫 칸은 1일에서 ((1일의 요일 − first_day) mod 7)일 앞이다. 거기서 하루씩 42칸. 틀린 달은 1970년 1월, 틀린 요일은 일요일로 본다</td></tr>
+                  <tr><td><code>add_months_clamped(날, n)</code></td><td>해·달을 n달 옮기고 날을 그 달의 말일로 접는다. 틀린 날과 1~9999년 밖은 그대로다</td></tr>
+                  <tr><td><code>clamp_date(날, 범위)</code></td><td>범위로 접는다. 틀린 날은 범위의 최소다</td></tr>
+                  <tr><td><code>calendar_contains(범위, 날)</code></td><td>틀린 날이 아니고 범위 안인가</td></tr>
+                  <tr><td><code>calendar_start_cursor(값, 오늘, 범위)</code></td><td>값 → 오늘 → 범위의 최소 → 1970-01-01 가운데 처음 맞는 것을 범위로 접는다</td></tr>
+                  <tr><td><code>calendar_moved(커서, 걸음, 범위)</code></td><td>날·주는 ±1·7일, 달·해는 <code>add_months_clamped</code>로 ±1·12달, 처음·끝은 그 달의 1일·말일. 결과를 범위로 접는다. 틀린 커서는 범위의 최소에서 센다</td></tr>
+                  <tr><td><code>format_iso_date(날)</code></td><td>네 자리 해, 두 자리 달·날</td></tr>
+                  <tr><td><code>parse_iso_date(글)</code></td><td>길이 10, 다섯째와 여덟째 글자가 <code>-</code>, 나머지는 숫자, 1~9999년, 있는 날짜만 읽는다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>모두 순수 함수이고 그레고리력을 따른다. 2026년 11월은 일요일 시작이면 첫 칸이 11월 1일·끝 칸이 12월 12일, 월요일 시작이면 첫 칸이 10월 26일이다.</p></div>
+          </section>
+          <section data-tab="time_picker_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/time_picker_element.h:6-47" data-path="include/luil/ui/time_picker_element.h" data-start="6"><script type="text/plain">
+    struct time_of_day
+    {
+        int hour { 0 };
+        int minute { 0 };
+        [[nodiscard]] bool operator==(const time_of_day&) const = default;
+    };
+
+    // 24시간제 값이다. 빈 글·범위 밖·소수는 nullopt다. 12시간제의 12 AM은 0시, 12 PM은 12시다.
+    [[nodiscard]] std::optional<time_of_day> read_time_picker(std::u8string_view hour, std::u8string_view minute, bool twelve_hour = false, bool pm = false);
+    [[nodiscard]] std::u8string format_time_part(int value);
+
+    struct time_picker_config
+    {
+        std::u8string owner {};
+        text_input_view hour {};
+        text_input_view minute {};
+        bool twelve_hour { false };
+        bool pm { false };
+        bool invalid { false };
+        std::function<input_action(std::u8string)> hour_to {};
+        std::function<input_action(std::u8string)> minute_to {};
+        ui_action toggle_period {};
+        std::u8string hour_name {};
+        std::u8string minute_name {};
+        std::u8string am_label {};
+        std::u8string pm_label {};
+    };
+
+    // 두 숫자 칸은 time_picker_hour + `owner/hour`, time_picker_minute + `owner/minute`이다. 칸 안 스핀 단추의 id가
+    // 칸의 owner를 따르므로 두 칸의 owner를 가른다. 타자·IME는 일반 text_input과 같은 편집 경로로 보낸다.
+    class time_picker_element final : public ui_element
+    {
+    public:
+        explicit time_picker_element(time_picker_config config);
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] std::optional<size_f> preferred_size(const measure_context& context, float available_width) const override;
+
+    private:
+        ui_element* row_ { nullptr };
+        bool twelve_hour_ { false };
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면, 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>root와 칸 owner(<code>/hour</code>·<code>/minute</code>)의 뿌리다</td></tr>
+                  <tr><td><code>hour</code> · <code>minute</code></td><td>빈 view</td><td>두 칸의 view(<code>make_text_input_view</code>). 글은 앱의 초안이다</td></tr>
+                  <tr><td><code>twelve_hour</code> · <code>pm</code></td><td>거짓 · 거짓</td><td>12시간제면 시 칸이 1..12이고 오전·오후 단추가 선다. <code>pm</code>은 단추 글을 고른다</td></tr>
+                  <tr><td><code>invalid</code></td><td>거짓</td><td>두 칸을 함께 오류로 그린다. 판정은 앱이다</td></tr>
+                  <tr><td><code>hour_to</code> · <code>minute_to</code></td><td>없음</td><td>그 칸은 증감도 스핀 단추도 없다. 읽히는 글은 두 자리로 고쳐 넘긴다</td></tr>
+                  <tr><td><code>toggle_period</code></td><td>없음</td><td>오전·오후 단추가 눌리지 않는다</td></tr>
+                  <tr><td><code>hour_name</code> · <code>minute_name</code></td><td>빈 글</td><td>칸의 접근 이름. 비면 "시"·"분"</td></tr>
+                  <tr><td><code>am_label</code> · <code>pm_label</code></td><td>빈 글</td><td>단추 글. 비면 "오전"·"오후"</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>스핀 단추의 툴팁("시 늘리기"·"분 줄이기" 따위)은 바꾸는 설정이 없다. 크기는 24시간제 148 × 28, 12시간제 216 × 28이다.</p></div>
+          </section>
+          <section data-tab="color_picker_element">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/color_picker_element.h:14-83" data-path="include/luil/ui/color_picker_element.h" data-start="14"><script type="text/plain">
+    // 색 고르기의 치수다 (논리 픽셀). 그릴 때 배율을 곱한다.
+    // 채도·명도 판의 한 변이다.
+    inline constexpr float color_picker_plane_size { 200.0f };
+    // 색상 막대와 알파 막대의 높이다.
+    inline constexpr float color_picker_bar_height { 16.0f };
+    // 부분 사이의 간격이다. 견본 칸 사이도 같다.
+    inline constexpr float color_picker_gap { 8.0f };
+    // 지금 색을 보이는 견본의 한 변이다.
+    inline constexpr float color_picker_swatch_size { 32.0f };
+    // 미리 정한 견본 칸의 한 변이다.
+    inline constexpr float color_picker_preset_size { 24.0f };
+    // 16진 칸의 폭이다. 판이 좁으면 남는 자리까지 줄인다.
+    inline constexpr float color_picker_hex_width { 96.0f };
+    // 16진 칸의 높이다. 견본 줄의 세로 가운데에 선다.
+    inline constexpr float color_picker_hex_height { 28.0f };
+    // 누른 채 이 거리를 넘으면 끌기다 (물리 픽셀, `pointer_drag_target::start_distance`와 같은 단위, 별점과 같다).
+    //  - 판·색상 막대·알파 막대 셋 모두다 (docs/color-picker-design.md 결정 5). 터치는 이 픽셀 값 대신 터치 허용치를 쓴다.
+    inline constexpr float color_picker_drag_start_distance { 6.0f };
+
+    // 미리 정한 견본 칸 하나다. 색은 앱이 주는 내용의 색이다 (docs/concepts/theming.md의 예외).
+    struct color_picker_preset
+    {
+        ui_color color { 0 };
+        // 접근 이름과 툴팁이다. 비면 16진 글(`format_hex_color`)이다.
+        std::u8string name {};
+    };
+
+    // 16진 칸이다. 칸은 `text_input_element`이고 글 편집은 여느 텍스트 칸처럼 앱이 든다 (결정 2).
+    struct color_picker_hex
+    {
+        // 앱 kind다. 앱 정책의 `text_target_of`가 편집 대상으로 옮긴다. 앱은 `apply_text_edit`에 `hex_color_filter()`를 준다.
+        ui_element_id id {};
+        // 앱의 초안이다.
+        text_input_view value {};
+        // 초안이 색으로 서지 않는다. 앱이 `check_hex_color`로 정한다. 테두리를 오류색으로 그리고 보조 기술에 알린다.
+        bool invalid { false };
+        // 초안을 확정하라는 메시지다. 같은 표면 안에서 칸을 떠날 때, 칸에서 Enter를 칠 때(Android 키보드의 확정 단추도) 낸다.
+        //  - popup이 닫힐 때는 그 tree가 사라져 떠남 훅이 서지 않는다. 앱은 닫는 메시지를 처리할 때 초안을 확정한다.
+        //  - 앱은 받은 초안을 `check_hex_color`로 읽고 `hsv_from_color(색, 지금 값)`으로 바꿔 회색·검정에서도 색상을 지킨다.
+        ui_action commit {};
+        // 접근 이름이다. 비면 기본 문구(16진 색)다.
+        std::u8string name {};
+    };
+
+    struct color_picker_config
+    {
+        // root와 부분의 owner다. 부분의 owner는 이 값, 단위 구분자(U+001F), `plane`·`hue`·`alpha`·견본 번호(1부터) 순이다.
+        std::u8string owner {};
+        // 앱 상태다. 그리기는 `clamp_hsv`로 자른 값을 쓴다.
+        hsv_color value {};
+        // 알파 막대와 8자리 16진이다 (색 공간 결정 2). 끄면 막대도 체커도 없다.
+        bool alpha { false };
+        // 색을 **이것으로** 하라는 절대 메시지다. 판·막대·키·견본·보조 기술이 모두 이 하나를 탄다 (결정 1).
+        //  - 부분은 자기 채널만 바꾸고 나머지는 그 frame의 `value`에서 옮긴다. 판을 끄는 메시지는 build 때의 색상·알파를 담는다.
+        //  - 없으면 표시 전용이다. Tab 자리도 끌기도 커서도 없고 보조 기술은 읽기만 한다.
+        std::function<input_action(hsv_color value)> change_to {};
+        // 16진 칸이다. 없으면 견본 줄에 견본만 선다.
+        std::optional<color_picker_hex> hex {};
+        // 미리 정한 견본이다 (결정 6). 비면 견본 칸 줄이 없다. 원래 색 되돌리기는 앱이 첫 견본으로 준다.
+        std::vector<color_picker_preset> presets {};
+        // 판의 한 변이다 (논리 픽셀). 0이면 `color_picker_plane_size`다. 자리 폭보다 크면 그 폭으로 줄인다.
+        float plane_size { 0.0f };
+        // 막대의 높이다 (논리 픽셀). 0이면 `color_picker_bar_height`다. 터치 앱이 올린다.
+        float bar_height { 0.0f };
+        // 접근 이름이다. 비면 기본 문구(색·채도와 명도·색상·불투명도)다.
+        std::u8string name {};
+        std::u8string plane_name {};
+        std::u8string hue_name {};
+        std::u8string alpha_name {};
+    };
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>필드</th><th>기본값</th><th>없거나 비면, 주의</th></tr></thead>
+                <tbody>
+                  <tr><td><code>owner</code></td><td>빈 글</td><td>root와 부분 owner의 뿌리다 (+ U+001F + <code>plane</code>·<code>hue</code>·<code>alpha</code>·견본 번호). popup의 초점 대상은 <code>plane_id(owner)</code></td></tr>
+                  <tr><td><code>value</code></td><td><code>{0, 0, 0, 1}</code></td><td>앱 상태. 그리기·키·접근은 <code>clamp_hsv</code>한 값을 쓴다</td></tr>
+                  <tr><td><code>alpha</code></td><td>거짓</td><td>알파 막대, 8자리 16진, 체커가 없다. 견본 색도 불투명으로 읽는다</td></tr>
+                  <tr><td><code>change_to</code></td><td>없음</td><td>표시 전용이다. Tab 자리·끌기·커서 모양이 없고 보조 기술은 읽기만 한다</td></tr>
+                  <tr><td><code>hex</code></td><td>없음</td><td>16진 칸이 없다. 견본 줄에는 견본만 선다</td></tr>
+                  <tr><td><code>hex-&gt;commit</code></td><td>없음</td><td>초안을 확정할 길이 없다. popup이 닫힐 때는 서지 않으니 앱이 확정한다</td></tr>
+                  <tr><td><code>presets</code></td><td>비어 있음</td><td>견본이 없다. 이름이 빈 견본은 16진 글이 이름이자 툴팁이다</td></tr>
+                  <tr><td><code>plane_size</code></td><td>0 (= 200)</td><td>판의 한 변(논리 px). 자리 폭보다 크면 그 폭으로 줄인다</td></tr>
+                  <tr><td><code>bar_height</code></td><td>0 (= 16)</td><td>막대 높이(논리 px). 터치 앱이 키운다</td></tr>
+                  <tr><td><code>name</code> · <code>plane_name</code> · <code>hue_name</code> · <code>alpha_name</code></td><td>빈 글</td><td>접근 이름. 비면 "색"·"채도와 명도"·"색상"·"불투명도"</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="code" data-lang="cpp" data-src="include/luil/ui/color_picker_element.h:160-194" data-path="include/luil/ui/color_picker_element.h" data-start="160"><script type="text/plain">
+    struct color_field_config
+    {
+        std::u8string owner {};
+        // 앱 상태다. 견본과 16진 글로 그린다.
+        hsv_color value {};
+        // 8자리 16진 글과 견본의 체커다.
+        bool alpha { false };
+        // popup이 떠 있는지는 앱 상태다 (popup이 frame에 실려 있는지와 같이 간다).
+        bool open { false };
+        // popup을 **이 상태로** 하라는 절대 메시지다. 누름은 build 때의 `open` 반대를 담고, 보조 기술의 펼치기·접기는 목표를
+        // 담는다. 없으면 칸이 눌리지 않고 보조 기술이 열지 못한다.
+        std::function<input_action(bool open)> set_open {};
+        // 접근 이름이다. 비면 기본 문구(색)다.
+        std::u8string name {};
+    };
+
+    // 색 고르기를 popup으로 여는 닫힌 칸이다 (`ui_element_kind::color_field`). 높이는 `dropdown_height`(28)다.
+    // 견본 사각형, 16진 글, 펼침 화살표를 그린다. 닫힌 필드 popup 규약(field_popup.h)을 따른다.
+    //  - 클릭은 `set_open(!open)`, 키는 Alt+↓·F4·↓가 연다. 열린 동안 키보드 초점이 칸을 같은 표면 안에서 떠나면 닫는다.
+    //  - 열 때 앱은 popup 표면의 판으로 초점을 옮기는 요청을 싣는다 (`color_picker_element::plane_id`). Esc로 닫으면 칸으로
+    //    돌아오는 요청을 한 번 더 싣는다 (docs/color-picker-design.md 결정 3).
+    class color_field_element final : public ui_element
+    {
+    public:
+        explicit color_field_element(color_field_config config);
+
+        void arrange(const arrange_context& context) override;
+        void draw(draw_context& context, const interaction_snapshot& interaction) const override;
+        [[nodiscard]] access_info accessibility() const override;
+        // 펼치기·접기는 절대 메시지(`set_open`)로 답한다.
+        [[nodiscard]] std::optional<std::vector<input_action>> access_actions(const access_request& request) const override;
+
+    private:
+        color_field_config config_ {};
+    };
+</script></div>
+            <div class="code" data-lang="cpp" data-src="include/luil/app/color_picker_popup.h:12-36" data-path="include/luil/app/color_picker_popup.h" data-start="12"><script type="text/plain">
+    // popup 안에서 본체를 두르는 여백이다 (논리 픽셀).
+    inline constexpr float color_picker_popup_padding { 8.0f };
+
+    struct color_picker_popup_config
+    {
+        std::u8string id {};
+        // 앵커 표면이다. 비어 있으면 주 창이다.
+        std::u8string anchor {};
+        // 앵커 표면의 배율이다. tree를 이 배율로 배치하고 앵커의 물리 픽셀을 논리 좌표로 옮긴다.
+        // 0 이하거나 유한하지 않으면 1로 본다.
+        float scale { 1.0f };
+        // 닫힌 칸 아래의 자리다 (`place_field_popup`). 아래가 모자라면 위로 뒤집힌다.
+        field_popup_anchor below {};
+        // 닫힘 계기의 메시지다. 16진 칸을 실은 popup은 글을 치는 popup이라 앱이 `surface_moved`·`activation_changed`에
+        // 빈 액션을 줘 남긴다. 닫는 메시지를 처리할 때 앱은 읽히는 16진 초안을 확정한다 (popup이 사라지면 떠남 훅이 없다).
+        std::function<input_action(popup_dismiss_reason)> dismiss {};
+        // popup 창의 모서리다. 비어 있으면 내장 스타일의 값이다.
+        std::optional<popup_corner> corner {};
+    };
+
+    // 색 고르기 popup을 조립한다 (`make_menu_popup`과 같은 꼴, docs/color-picker-design.md).
+    //  - 크기는 `color_picker_element::size_for`에 여백을 더한 논리 상수의 합이다. 글 폭을 재지 않아 배율이 달라도 잘리지 않는다.
+    //  - tree를 `scale`로 배치하고 `place_field_popup`으로 자리를 놓는다. 바탕 판이 popup 전체를 칠하고 여백의 누름을 흡수한다.
+    //  - 열림 상태와 초점 요청은 앱의 몫이다. 열 때 popup 표면의 판(`color_picker_element::plane_id`)으로 초점을 옮긴다.
+    [[nodiscard]] ui_popup make_color_picker_popup(color_picker_config picker, color_picker_popup_config popup);
+</script></div>
+            <div class="prose small">
+              <ul>
+                <li>크기(<code>size_for</code>)는 폭이 판, 높이가 판 + 8 + 막대 (+ 8 + 알파 막대) + 8 + 견본 32 (+ 8 + 견본 줄들)이다. 견본 한 줄에는 (폭 + 8) / 32개가 선다.</li>
+                <li><code>color_field_config</code>는 <code>owner</code>, <code>value</code>, <code>alpha</code>, <code>open</code>, <code>set_open</code>, <code>name</code>(비면 "색")이다. 칸은 견본 18, 16진 글, 펼침 화살표를 그린다.</li>
+                <li>색 popup의 칸은 날짜 popup과 같다. 크기는 본체의 <code>size_for</code> + 16이다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="색 공간">
+            <div class="code tall" data-lang="cpp" data-src="include/luil/ui/color_space.h:18-32,34-80" data-path="include/luil/ui/color_space.h" data-start="18"><script type="text/plain">
+    // HSV 색이다. 범위 밖의 값은 `clamp_hsv`가 자른다.
+    struct hsv_color
+    {
+        // 색상이다 (도, [0, 360]). 360은 0과 같은 색이다.
+        float hue { 0.0f };
+        // 채도다 ([0, 1]).
+        float saturation { 0.0f };
+        // 명도다 ([0, 1]).
+        float value { 0.0f };
+        // 불투명도다 ([0, 1]).
+        float alpha { 1.0f };
+
+        [[nodiscard]] bool operator==(const hsv_color&) const = default;
+    };
+
+⋯@34
+    [[nodiscard]] hsv_color clamp_hsv(hsv_color color) noexcept;
+    // 8비트 sRGB 색을 짓는다. 먼저 `clamp_hsv`로 자르고 색상 360을 0으로 접은 뒤 채널마다 lround(x * 255)다. 알파도 같다.
+    [[nodiscard]] ui_color color_from_hsv(hsv_color color) noexcept;
+    // 8비트 색에서 HSV를 짓는다.
+    //  - 채도가 0(회색)이면 색상이 정해지지 않아 `keep.hue`를 쓴다. 명도가 0(검정)이면 색상과 채도가 정해지지 않아
+    //    `keep.hue`·`keep.saturation`을 쓴다. 앱은 지금 상태를 `keep`으로 넘겨 회색을 넣어도 색상 막대가 0으로 튀지 않게 한다.
+    //  - `keep`도 범위로 잘라 쓴다.
+    [[nodiscard]] hsv_color hsv_from_color(ui_color color, const hsv_color& keep = {}) noexcept;
+
+    // 16진 색 글이 색으로 서지 못하는 까닭이다. 오류 글의 문구는 앱의 말이다 (숫자 칸과 같다).
+    enum class hex_color_problem
+    {
+        none,
+        // 공백뿐이거나 비었다.
+        empty,
+        // 16진 밖의 글자가 있다 (가운데 공백, 둘째 `#` 포함).
+        not_hex,
+        // 자릿수가 3·6(알파면 4·8도)이 아니다.
+        wrong_length,
+    };
+
+    struct hex_color_check
+    {
+        hex_color_problem problem { hex_color_problem::empty };
+        // 읽은 색이다. 읽었으면 있다.
+        std::optional<ui_color> color {};
+
+        [[nodiscard]] bool valid() const noexcept
+        {
+            return problem == hex_color_problem::none;
+        }
+
+        [[nodiscard]] bool operator==(const hex_color_check&) const = default;
+    };
+
+    // 16진 색 글을 읽는다.
+    //  - 앞뒤 공백을 무시하고 앞의 `#`는 있어도 없어도 된다. 전각 숫자·전각 영문·전각 `#`는 ASCII로 읽는다 (IME 전각 확정).
+    //  - 자릿수는 3·6이고 `alpha`가 참이면 4·8도 받는다. 3·4자리는 자리마다 두 번 늘린다 (`#abc`는 `#AABBCC`).
+    //  - 알파 자리가 없으면 불투명(FF)이다. 순서는 `#RRGGBBAA`다 (CSS와 스타일 파일과 같다. `ui_color` 리터럴과는 다르다).
+    //  - 대소문자를 가리지 않는다.
+    [[nodiscard]] hex_color_check check_hex_color(std::u8string_view text, bool alpha);
+    // `#`와 대문자 여섯 자리다 (`#3366FF`). `alpha`가 참이면 알파를 뒤에 붙인 여덟 자리다 (`#3366FF80`).
+    // 같은 색은 늘 같은 글이라 test와 UIA 되읽기가 글로 비교할 수 있다.
+    [[nodiscard]] std::u8string format_hex_color(ui_color color, bool alpha);
+    // 넣는 글(타자·붙여넣기·IME 확정)에서 `0-9`·`a-f`·`A-F`·`#`만 남기는 거르기다 (`apply_text_edit`). 전각은 ASCII로 바꾼다.
+    //  - 조각만 보므로 이어 붙인 틀린 글("##12")은 막지 못한다. 그것은 `check_hex_color`가 잡는다.
+    [[nodiscard]] text_insert_filter hex_color_filter();
+</script></div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>이름</th><th>규칙</th></tr></thead>
+                <tbody>
+                  <tr><td><code>hsv_color</code></td><td>색상 [0, 360] (360은 0과 같은 색), 채도·명도·알파 [0, 1]. 기본은 <code>{0, 0, 0, 1}</code></td></tr>
+                  <tr><td><code>clamp_hsv</code></td><td>범위로 자른다. 숫자가 아닌 값은 0, 알파의 숫자가 아닌 값은 1이다 (보이지 않는 색이 조용히 생기지 않게)</td></tr>
+                  <tr><td><code>color_from_hsv</code></td><td>자른 뒤 360을 0으로 접고 double로 셈한다. 채널마다 x × 255를 반올림한다</td></tr>
+                  <tr><td><code>hsv_from_color(c, keep)</code></td><td><code>keep</code>도 자른다. 명도가 0이면 색상·채도를 <code>keep</code>에서, 채도가 0이면 색상을 <code>keep</code>에서 가져온다</td></tr>
+                  <tr><td><code>check_hex_color(글, alpha)</code></td><td>전각 숫자·영문·<code>#</code>·공백을 ASCII로 읽고 앞뒤 공백을 버린다. 앞의 <code>#</code> 하나를 뗀다. 16진 밖 글자(<code>not_hex</code>)를 자릿수(<code>wrong_length</code>)보다 먼저 본다. 3·6자리(알파면 4·8자리도), 짧은 꼴은 자리마다 두 번, 알파 자리가 없으면 FF</td></tr>
+                  <tr><td><code>format_hex_color(c, alpha)</code></td><td><code>#</code> + 대문자 RRGGBB(+AA)</td></tr>
+                  <tr><td><code>hex_color_filter()</code></td><td>넣는 조각에서 <code>0-9a-fA-F#</code>만 남긴다 (전각은 ASCII로)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>예: 220°·0.8·1·0.5는 <code>#3377FF80</code>, 225°면 <code>#3366FF80</code>이다. "#abc"는 <code>#AABBCC</code>, 알파를 켠 "#36f8"은 <code>#3366FF88</code>이다. "#"는 <code>wrong_length</code>, "##123"·"#12 34"·"#1G"는 <code>not_hex</code>다.</p></div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="messages">
+        <header class="sec-head">
+          <h2>사건과 메시지</h2>
+          <p class="lede">모든 메시지는 앱이 준 factory가 짓는 절대 메시지다. 포인터·키의 메시지는 input thread에서, popup 닫힘 계기와 보조 기술의 값 정하기·펼치기는 UI thread에서 지어진다. 받는 쪽은 언제나 logic thread의 <code>handle</code>이다.</p>
+        </header>
+        <h3>달력과 날짜 칸</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>낸 메시지</th><th>짓는 thread</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>커서 날 클릭·탭</td><td><code>select(날)</code></td><td>input</td><td>값을 바꾼다. popup이면 닫고 칸으로 초점을 돌린다</td></tr>
+              <tr><td>다른 날 클릭 (다른 달의 날 포함)</td><td><code>move_to(날)</code> 다음 <code>select(날)</code>. 누름의 초점은 커서 날에 선다</td><td>input</td><td>커서를 옮기고 그 날로 초점 요청, 값을 바꾼다</td></tr>
+              <tr><td>고를 수 없는 날·범위 밖 날 누름</td><td>없다. 누름은 받아서 초점이 커서 날에 남는다</td><td>input</td><td>—</td></tr>
+              <tr><td>이전·다음 단추</td><td><code>turn_month(커서 ± 한 달)</code> — 말일로 접고 범위로 접는다. 없으면 <code>move_to</code></td><td>input</td><td>커서만 옮긴다 (초점 요청 없음)</td></tr>
+              <tr><td>그 달 전체가 범위 밖인 쪽의 단추</td><td>비활성이다</td><td>—</td><td>—</td></tr>
+              <tr><td>커서 키</td><td><code>move_to(calendar_moved(커서, 걸음, 범위))</code>. 목표가 커서와 같으면 빈 목록</td><td>input</td><td>커서와 초점</td></tr>
+              <tr><td>Enter·Space (고를 수 있는 날)</td><td>실행 키가 클릭으로 바꿔 <code>select</code></td><td>input</td><td>값</td></tr>
+              <tr><td>Enter·Space (고를 수 없는 날)</td><td>빈 목록. 기본 단추로 가지 않는다</td><td>input</td><td>—</td></tr>
+              <tr><td>휠 · 터치의 가로 쓸기</td><td>없다. 달을 넘기는 것은 단추와 키뿐이다</td><td>—</td><td>—</td></tr>
+              <tr><td>날짜 칸 클릭</td><td><code>set_open(!open)</code> (build 때 상태의 반대)</td><td>input</td><td>popup을 열거나 닫는다</td></tr>
+              <tr><td>날짜 칸의 Alt+↓·F4·↓</td><td>닫혀 있으면 <code>set_open(true)</code>, 열려 있으면 빈 목록</td><td>input</td><td>연다</td></tr>
+              <tr><td>열린 칸에서 같은 표면 안의 다른 곳으로 초점</td><td><code>set_open(false)</code></td><td>input</td><td>닫는다</td></tr>
+              <tr><td>popup 닫힘 계기</td><td><code>dismiss(계기)</code></td><td>UI</td><td>닫는다. <code>escape_key</code>면 칸으로 초점을 돌린다</td></tr>
+              <tr><td>보조 기술의 Select (날)</td><td>이미 고른 날이면 빈 목록. 아니면 날 칸의 클릭과 같다. 고를 수 없는 날은 거절된다(<code>UIA_E_INVALIDOPERATION</code>)</td><td>input (UIA가 넘긴다)</td><td>클릭과 같다</td></tr>
+              <tr><td>보조 기술의 Expand·Collapse (칸)</td><td><code>set_open(true)</code> · <code>set_open(false)</code></td><td>UI</td><td>열거나 닫는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>시·분</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>낸 메시지</th><th>짓는 thread</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>글자·붙여넣기·IME</td><td>정책의 편집 메시지. 대상은 <code>text_target_of</code>가 <code>time_picker_hour</code>·<code>time_picker_minute</code>에 답한 값</td><td>input</td><td><code>apply_text_edit(초안, 요청, number_input_filter(범위))</code></td></tr>
+              <tr><td>↑ ↓ PageUp PageDown, 스핀 단추</td><td><code>hour_to</code>·<code>minute_to(다음 글)</code> — 두 자리</td><td>input</td><td>초안 전체를 그 글로 바꾼다</td></tr>
+              <tr><td>끝(23·59, 12시간제는 1·12)에서 더 가기</td><td>빈 목록(삼킴). 돌지 않는다</td><td>input</td><td>—</td></tr>
+              <tr><td>오전·오후 단추</td><td><code>toggle_period</code></td><td>input</td><td><code>pm</code>을 뒤집는다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <h3>색 고르기</h3>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>사건</th><th>낸 메시지</th><th>짓는 thread</th><th>앱이 할 일</th></tr></thead>
+            <tbody>
+              <tr><td>판 클릭·탭 (시작 거리 안에서 뗌)</td><td><code>change_to(그 자리의 채도·명도 + build 때의 색상·알파)</code></td><td>input</td><td><code>clamp_hsv</code>로 대입하고 16진 초안을 다시 쓴다</td></tr>
+              <tr><td>판 끌기 (6 물리 px를 넘김)</td><td>넘는 순간 누른 자리와 포인터 자리의 값, 이어서 값이 바뀔 때마다. 판 밖은 끝으로 자른다</td><td>input</td><td>같다</td></tr>
+              <tr><td>색상·알파 막대 클릭·끌기</td><td>그 채널만 바꾼 <code>change_to</code>. 끌기에서 세로로만 움직여 값이 같으면 없다</td><td>input</td><td>같다</td></tr>
+              <tr><td>견본 클릭·Enter·Space</td><td><code>change_to(hsv_from_color(견본, 지금 값))</code></td><td>input</td><td>같다</td></tr>
+              <tr><td>지금 값과 같은 자리의 클릭</td><td>그래도 <code>change_to</code>가 나간다 (코드에서 확인한 동작)</td><td>input</td><td>같은 값을 대입한다</td></tr>
+              <tr><td>키 (<a class="xref" href="#keyboard">키 표</a>)</td><td>한 걸음 옮긴 <code>change_to</code>. 끝이면 빈 목록</td><td>input</td><td>같다</td></tr>
+              <tr><td>16진 칸 타자</td><td>정책의 편집 메시지</td><td>input</td><td><code>apply_text_edit(초안, 요청, hex_color_filter())</code></td></tr>
+              <tr><td>16진 칸 Enter · 같은 표면 안에서 떠남 · 휴대폰 키보드의 확정</td><td><code>hex-&gt;commit</code></td><td>input</td><td><code>check_hex_color</code>로 읽어 <code>hsv_from_color(색, 지금 값)</code>, 아니면 <code>invalid</code></td></tr>
+              <tr><td>popup 닫힘 계기</td><td><code>dismiss(계기)</code></td><td>UI</td><td>초안을 확정하고 닫는다</td></tr>
+              <tr><td>색 칸 클릭·키</td><td><code>set_open</code> (날짜 칸과 같다)</td><td>input</td><td>—</td></tr>
+              <tr><td>보조 기술의 값 정하기 (막대)</td><td>그 채널만 바꾼 <code>change_to</code> (알파는 % 값을 받는다). 같으면 빈 목록, 숫자가 아니면 빈 목록, 표시 전용은 읽기 전용</td><td>UI</td><td>같다</td></tr>
+              <tr><td>휠</td><td>없다</td><td>—</td><td>—</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose small"><p>헤더 주석은 내보내는 함수(<code>emit</code>)가 "지금 값과 같으면 비어 있다"고 적는다. 코드는 같은 값을 거르지 않는다. 같은 값 거르기는 키, 막대의 값 정하기, 끌기 이동에만 있다. 같은 값의 메시지는 해가 없지만 앱이 "값이 바뀌었다"로 세면 틀린다.</p></div>
+      </section>
+
+      <section class="sec" id="keyboard">
+        <header class="sec-head">
+          <h2>키보드와 접근성</h2>
+          <p class="lede">달력은 격자의 키 처리기가, 색 고르기의 판과 막대는 값 걸음(<code>key_step_target</code>)이, 시·분은 숫자 칸의 키가 받는다. 닫힌 칸은 popup을 여는 키 셋을 공유한다.</p>
+        </header>
+        <div class="tabs">
+          <section data-tab="달력">
+            <div class="walk side">
+              <div class="code" data-lang="cpp" data-src="src/ui/calendar_element.cpp:382-416" data-path="src/ui/calendar_element.cpp" data-start="382"><script type="text/plain">
+    std::optional<std::vector<input_action>> calendar_element::handle_key(const key_pressed_event& event) const
+    {
+        // Ctrl·Alt·Meta를 든 키는 앱 단축키다. Shift는 PageUp·PageDown에서만 뜻이 있다 (한 해).
+        if (event.shortcut_modifier_down())
+            return std::nullopt;
+        const bool page { event.key == key_code::page_up || event.key == key_code::page_down };
+        if (event.shift && page == false)
+            return std::nullopt;
+        // 초점 날이 고를 수 있으면 Enter·Space는 실행 키(초점 날의 클릭)가 먼저 가져간다. 여기 온 것은 고를 수 없는 날이라
+        // 빈 목록으로 삼켜 기본 단추로 가지 않게 한다.
+        if (event.key == key_code::enter || event.key == key_code::space)
+            return config_.select != nullptr ? std::optional<std::vector<input_action>> { std::vector<input_action> {} } : std::nullopt;
+        if (config_.move_to == nullptr)
+            return std::nullopt;
+        std::optional<calendar_move> move {};
+        if (event.key == key_code::arrow_left)
+            move = calendar_move::previous_day;
+        else if (event.key == key_code::arrow_right)
+            move = calendar_move::next_day;
+        else if (event.key == key_code::arrow_up)
+            move = calendar_move::previous_week;
+        else if (event.key == key_code::arrow_down)
+            move = calendar_move::next_week;
+        else if (event.key == key_code::page_up)
+            move = event.shift ? calendar_move::previous_year : calendar_move::previous_month;
+        else if (event.key == key_code::page_down)
+            move = event.shift ? calendar_move::next_year : calendar_move::next_month;
+        else if (event.key == key_code::home)
+            move = calendar_move::month_start;
+        else if (event.key == key_code::end)
+            move = calendar_move::month_end;
+        if (move.has_value() == false)
+            return std::nullopt;
+        return emit_move(config_.move_to, calendar_moved(cursor_, *move, config_.bounds));
+    }
+</script></div>
+              <ol class="walk-steps-src">
+                <li data-lines="384-386" data-title="수식 키">Ctrl·Alt·Meta·주 단축키가 함께면 앱 단축키로 흐른다.</li>
+                <li data-lines="387-389" data-title="Shift">Shift는 PageUp·PageDown에서만 뜻이 있다(한 해). 다른 키와 함께면 흐른다.</li>
+                <li data-lines="390-393" data-title="Enter·Space">고를 수 있는 날이면 실행 키가 먼저 클릭으로 가져간다. 여기 온 것은 고를 수 없는 날이라 빈 목록으로 삼킨다.</li>
+                <li data-lines="394-395" data-title="move_to가 없으면">커서 키가 흐른다.</li>
+                <li data-lines="396-412" data-title="걸음">날·주·달·해, 그 달의 처음과 끝.</li>
+                <li data-lines="413-415" data-title="목표">범위로 접은 목표를 <code>move_to</code>로 낸다. 커서와 같으면 빈 목록이다.</li>
+              </ol>
+            </div>
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>커서</th></tr></thead>
+                <tbody>
+                  <tr><td>← · →</td><td>하루 앞 · 뒤</td></tr>
+                  <tr><td>↑ · ↓</td><td>한 주 앞 · 뒤</td></tr>
+                  <tr><td>PageUp · PageDown</td><td>한 달 앞 · 뒤 (말일로 접는다)</td></tr>
+                  <tr><td>Shift+PageUp · Shift+PageDown</td><td>한 해 앞 · 뒤 (2월 29일 → 2월 28일)</td></tr>
+                  <tr><td>Home · End</td><td>그 달의 1일 · 말일 (주의 처음·끝이 아니다)</td></tr>
+                  <tr><td>Enter · Space</td><td>고른다. 고를 수 없는 날이면 삼킨다</td></tr>
+                  <tr><td>Ctrl·Alt·Meta·Command와 함께</td><td>흐른다 (앱 단축키)</td></tr>
+                  <tr><td>Esc · Tab</td><td>흐른다. Esc는 popup 닫기로 간다</td></tr>
+                  <tr><td>범위 끝에서 더 갈 곳이 없음</td><td>빈 목록(삼킴)</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li>처리기는 격자(<code>calendar_grid</code>)의 키 처리기다. 날 칸은 처리기도 값 걸음도 묶음도 쓰지 않아, 조상으로 올라가는 첫 자리가 격자다.</li>
+                <li>Tab 자리는 이전 달, 다음 달, 커서 날 순이다. 날 가운데는 커서 날만 자리다 (고를 수 없는 날이어도).</li>
+                <li>2026년 11월 10일에서 ←는 9일, →는 11일, ↑는 3일, ↓는 17일, PageUp은 10월 10일, Shift+PageDown은 2027년 11월 10일, End는 30일이다. 범위가 11월 5일~20일이고 커서가 20일이면 →·↓·PageDown·End는 삼키고, Home·PageUp은 5일로 간다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="닫힌 칸">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>키</th><th>결과</th></tr></thead>
+                <tbody>
+                  <tr><td>Alt+↓ (Alt만)</td><td>연다</td></tr>
+                  <tr><td>F4 (수식 키 없이)</td><td>연다</td></tr>
+                  <tr><td>↓ (수식 키 없이)</td><td>연다. 날짜 칸과 색 칸은 <code>down_opens</code>를 켠다</td></tr>
+                  <tr><td>열린 동안 위의 키</td><td>빈 목록. 앱으로 새지 않는다</td></tr>
+                  <tr><td>↑</td><td>흐른다</td></tr>
+                  <tr><td>Space · Enter</td><td>실행 키 → 클릭 = <code>set_open(!open)</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small"><p>열 때 앱이 popup 표면으로 초점을 옮긴다. 그래야 다음 키가 달력이나 판에 닿는다.</p></div>
+          </section>
+          <section data-tab="시·분">
+            <div class="prose small">
+              <p>숫자 칸의 키 그대로다 (<a class="xref" href="values.html#keyboard">숫자 칸 키</a>). 세로 축이고 ↑가 늘린다.</p>
+              <ul>
+                <li>↑ · ↓ — 1 늘리고 줄인다. PageUp · PageDown — 10.</li>
+                <li>← · → · Home · End — caret.</li>
+                <li>끝에서 더 가지 않는다. 23시의 ↑, 59분의 ↑는 삼킨다.</li>
+                <li>Tab은 시 칸 → 분 칸 (→ 오전·오후 단추) 순이다. 스핀 단추는 자리가 아니다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="색 고르기">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>부분</th><th>키</th><th>결과</th></tr></thead>
+                <tbody>
+                  <tr><td>판</td><td>↑ · ↓</td><td>명도 +1% · −1%</td></tr>
+                  <tr><td>판</td><td>PageUp · PageDown</td><td>명도 +10% · −10%</td></tr>
+                  <tr><td>판</td><td>Home · End</td><td>명도 0% · 100%</td></tr>
+                  <tr><td>판</td><td>← · →</td><td>채도 −1% · +1% (판의 키 처리기다. Shift를 거르지 않는다)</td></tr>
+                  <tr><td>색상 막대</td><td>← · → / PageUp · PageDown / Home · End</td><td>−1° · +1° / −10° · +10° / 0° · 360°</td></tr>
+                  <tr><td>알파 막대</td><td>← · → / PageUp · PageDown / Home · End</td><td>−1% · +1% / −10% · +10% / 0% · 100%</td></tr>
+                  <tr><td>막대</td><td>↑ · ↓</td><td>흐른다 (가로 축)</td></tr>
+                  <tr><td>견본 줄</td><td>← · →</td><td>칸 사이 초점 이동 (가로 묶음)</td></tr>
+                  <tr><td>견본 칸</td><td>Enter · Space</td><td>그 견본의 색</td></tr>
+                  <tr><td>16진 칸</td><td>Enter (수식 키 없이)</td><td><code>commit</code>. 기본 단추로 가지 않는다</td></tr>
+                  <tr><td>모든 부분</td><td>Ctrl·Alt·Meta와 함께</td><td>흐른다</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li>걸음은 채도·명도·알파 1%, 색상 1°, Page는 10걸음이다. 지금 값이 격자 사이면 이웃 격자점으로 간다 (오차 0.001). 끝이면 빈 목록이다. 판이 (채도 0.4, 명도 0.5)일 때 ↑는 명도 0.51, PageUp은 0.6, →는 채도 0.41이다. 색상 100.4°에서 →는 101°, ←는 100°다.</li>
+                <li>판의 PageUp은 명도를 <strong>늘린다</strong> (<code>up_increases</code>). 막대의 PageUp은 줄인다.</li>
+                <li>Tab 자리는 판, 색상 막대, 알파 막대, 16진 칸, 견본 줄(첫 칸으로 들어간다) 순이다.</li>
+              </ul>
+            </div>
+          </section>
+          <section data-tab="보조 기술">
+            <div class="table-wrap">
+              <table class="t">
+                <thead><tr><th>요소</th><th>역할</th><th>이름</th><th>값·상태</th></tr></thead>
+                <tbody>
+                  <tr><td>달력 root</td><td><code>group</code></td><td><code>text.name</code>, 비면 "달력"</td><td>—</td></tr>
+                  <tr><td>이전·다음 단추</td><td><code>button</code></td><td>"이전 달"·"다음 달"</td><td>—</td></tr>
+                  <tr><td>격자</td><td><code>list</code> (선택 container)</td><td>달 제목</td><td>—</td></tr>
+                  <tr><td>날 칸</td><td><code>list_item</code></td><td>날 이름 + ", 오늘" + ", 고를 수 없음"</td><td><code>selected</code> = 고른 날인가</td></tr>
+                  <tr><td>날짜 칸</td><td><code>combo_box</code></td><td><code>name</code>, 비면 "날짜"</td><td>값 = 표시 글(없으면 빈 글), <code>expanded</code> = <code>open</code></td></tr>
+                  <tr><td>시·분 root</td><td>구조로 접힌다</td><td>—</td><td>—</td></tr>
+                  <tr><td>시·분 칸</td><td><code>edit</code></td><td>"시"·"분"</td><td>확정된 글, <code>invalid</code></td></tr>
+                  <tr><td>스핀 단추 · 오전·오후 단추</td><td><code>button</code></td><td>"시 늘리기" 따위 · 단추 글</td><td>—</td></tr>
+                  <tr><td>색 고르기 root</td><td><code>group</code></td><td><code>name</code>, 비면 "색"</td><td>값 = 16진 글 (읽기 전용)</td></tr>
+                  <tr><td>판</td><td><code>slider</code>, 범위 없음</td><td>"채도와 명도"</td><td>값 글 "채도 40%, 명도 80%"</td></tr>
+                  <tr><td>색상 막대 · 알파 막대</td><td><code>slider</code></td><td>"색상" · "불투명도"</td><td><code>access_range</code> { 0, 360, 색상, 1, 10 } · { 0, 100, 알파 × 100, 1, 10 }</td></tr>
+                  <tr><td>견본 칸</td><td><code>button</code></td><td><code>name</code>, 비면 16진 글</td><td>—</td></tr>
+                  <tr><td>16진 칸</td><td><code>edit</code></td><td><code>hex-&gt;name</code>, 비면 "16진 색"</td><td>초안 글, <code>invalid</code></td></tr>
+                  <tr><td>색 칸</td><td><code>combo_box</code></td><td><code>name</code>, 비면 "색"</td><td>16진 글, <code>expanded</code></td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="prose small">
+              <ul>
+                <li><strong>Windows UIA</strong>: 날 칸은 SelectionItem, 격자는 Selection, 칸은 ExpandCollapse, 막대는 RangeValue(SmallChange 1, LargeChange 10)다. 판은 범위가 없어 RangeValue가 서지 않는다. 보조 기술이 숫자로 판의 값을 정할 수 없고, 막대와 16진 칸이 그 길이다.</li>
+                <li><strong>macOS·iOS</strong>: 목록은 <code>AXTable</code>, 행은 <code>AXRow</code>, 글을 받지 않는 콤보는 <code>AXPopUpButton</code>, 막대는 <code>AXSlider</code>다. 막대의 올리기·내리기는 <code>step</code>(1)만큼이다. 설계 문서는 "접근성 규칙은 Win32 UIA 기준"이라고 적지만, 지금 macOS·iOS 다리도 이 역할·이름·범위를 읽는다 (코드에서 확인한 동작).</li>
+                <li>Android에는 접근성 다리가 없다 (<a class="xref" href="accessibility.html">접근성</a>).</li>
+              </ul>
+            </div>
+          </section>
+        </div>
+      </section>
+
+      <section class="sec" id="platforms">
+        <header class="sec-head">
+          <h2>플랫폼 차이</h2>
+          <p class="lede">키 표, 말일 접기, 색 변환은 공용 코어라 어디서나 같다. 차이는 popup 표면을 띄우는 방식, host가 키와 소프트 키보드를 옮기는 방식, 접근성 다리에서 난다.</p>
+        </header>
+        <div class="table-wrap">
+          <table class="t">
+            <thead><tr><th>주제</th><th>무엇이 다른가</th></tr></thead>
+            <tbody>
+              <tr><td>popup 표면</td><td><strong>Windows</strong>는 활성화를 받지 않는 별도 창이다. 키는 앵커 창에서 오고 논리 초점이 popup tree로 보낸다. <strong>Android</strong>는 주 표면 위의 overlay다. 화면 크기로 자르고 넘치면 흘린다 (코드에서 확인한 동작). macOS·iOS의 popup 표면은 이 문서에서 따라가지 않았다</td></tr>
+              <tr><td>Esc로 popup 닫기</td><td><strong>Windows</strong>는 <code>VK_ESCAPE</code>, <strong>macOS</strong>는 IME 조합 중이 아닐 때의 Esc, <strong>iOS</strong>는 하드웨어 키보드의 Esc다. <strong>Android</strong>는 뒤로 가기와 하드웨어 Esc가 모두 <code>escape_key</code>다</td></tr>
+              <tr><td>주 첫 요일</td><td><strong>Windows</strong> <code>GetLocaleInfoEx</code>, <strong>macOS·iOS</strong> <code>NSCalendar</code>(같은 소스를 iOS 빌드도 짓는다), <strong>Android</strong> <code>java.util.Calendar</code>. 앱이 <code>user_first_weekday()</code>로 읽어 넣을 때만 쓰인다</td></tr>
+              <tr><td>달력의 터치</td><td>공용 controller라 모두 같다. 탭은 클릭이고, 달을 넘기는 쓸기는 없다. 칸은 44 안팎을 권한다</td></tr>
+              <tr><td>판·막대의 터치</td><td>시작 거리 6 대신 터치 규칙을 따른다. 축에 맞는 빠른 쓸기는 감싼 창의 스크롤이고, 잠깐 눌러 옮기면 끌기다. <strong>Android</strong>는 허용치를 시스템 값으로 덮는다</td></tr>
+              <tr><td>16진 칸의 확정</td><td><strong>Windows·macOS</strong>는 Enter. <strong>iOS·Android</strong>는 키보드의 확정 단추도 확정이다</td></tr>
+              <tr><td>소프트 키보드</td><td>16진 칸은 <strong>iOS</strong> <code>UIKeyboardTypeDefault</code>, <strong>Android</strong> 일반 키보드다. 시·분 칸은 칸이 <code>number</code>로 올려 <strong>iOS</strong> <code>UIKeyboardTypeNumberPad</code>, <strong>Android</strong> <code>TYPE_CLASS_NUMBER</code>다. Windows·macOS host는 키보드 종류를 읽지 않는다</td></tr>
+              <tr><td>Command+←/→</td><td><strong>macOS</strong>(그리고 iOS의 하드웨어 키보드)는 Home/End로 바꾼다. 달력은 그 달의 1일·말일, 막대는 0·끝이 된다</td></tr>
+              <tr><td>Command+↑/↓</td><td>Home/End로 바뀌지만 주 단축키로 남는다. 달력의 처리기와 막대의 값 걸음이 받지 않고 흐른다 (코드에서 확인한 동작)</td></tr>
+              <tr><td>보조 기술</td><td><strong>Windows</strong> UIA, <strong>macOS</strong> NSAccessibility, <strong>iOS</strong> UIAccessibility. <strong>Android</strong>는 없다</td></tr>
+              <tr><td>판·막대의 그라디언트</td><td>Skia 선형 그라디언트다. Vulkan·CPU 그리기에서 같은 색이 나는지는 설계 문서가 실기기 확인 대상으로 남겨 두었다</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="prose">
+          <ul>
+            <li>시·분 고르기를 쓰는 휴대폰 예제는 없다. <code>examples/selected_nodes</code>의 진입점은 Windows다.</li>
+            <li>위 표는 모두 코드를 읽어 정리한 것이다. 실기기에서 재어 본 결과가 아니다.</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="sec" id="pitfalls">
+        <header class="sec-head">
+          <h2>함정</h2>
+          <p class="lede">오류 없이 조용히 틀리는 자리들이다.</p>
+        </header>
+        <ol class="recap">
+          <li><strong>라이브러리는 시계를 읽지 않는다.</strong> <code>today</code>를 주지 않으면 오늘 표시가 없다. 자정을 넘겨도 앱이 바꾸지 않으면 어제가 오늘이다.</li>
+          <li><strong>커서는 앱 상태다.</strong> <code>move_to</code>·<code>turn_month</code>를 받아 커서를 바꾸지 않으면 키와 단추가 먹지 않는 것처럼 보인다.</li>
+          <li><strong><code>move_to</code>에는 초점 요청을 싣고, <code>turn_month</code>에는 싣지 않는다.</strong> 반대로 하면 화살표 뒤에 초점이 날을 따르지 않거나, 단추를 누를 때마다 초점이 날로 가서 같은 단추를 거듭 누를 수 없다.</li>
+          <li><strong>말일 접기는 이어진다.</strong> 1월 31일의 PageDown은 2월 28일이고, 커서가 2월 28일이 된 뒤의 PageDown은 3월 28일이다. 처음의 31일을 기억하지 않는다 (코드에서 확인한 동작 — test는 한 걸음만 본다). 2월 29일의 Shift+PageDown도 이듬해 2월 28일이고, 돌아와도 28일이다.</li>
+          <li><strong>한 frame 안의 키 둘은 한 걸음이다.</strong> 목표를 build 때의 커서에서 세므로 둘째 키가 같은 목표를 낸다.</li>
+          <li><strong>범위 밖 값은 지워지지 않는다.</strong> <code>value</code>가 범위 밖이어도 고른 날로 그린다. 저장하기 전에 <code>calendar_contains</code>로 검사한다.</li>
+          <li><strong>범위가 뒤집히면 하루다.</strong> 최소가 최대보다 늦으면 최대를 최소로 본다.</li>
+          <li><strong>고를 수 없는 날에도 커서가 선다.</strong> Enter가 빈 목록이라 아무 일도 없는 것처럼 보인다. 날 이름의 ", 고를 수 없음"이 까닭을 알린다.</li>
+          <li><strong>달력의 메시지를 일부만 주면 키가 어긋난다.</strong> <code>select</code>만 준 달력은 키 처리기가 서서 Enter·Space를 삼키고 커서 키는 흐른다. <code>turn_month</code>만 준 달력은 단추만 서고 키 처리기가 없다 (코드에서 확인한 동작 — 헤더 주석과 다르다).</li>
+          <li><strong><code>format_iso_date</code>는 화면 글이 아니고, <code>parse_iso_date</code>는 엄격하다.</strong> 화면에는 날짜 칸의 <code>format</code>이나 기본 문구를 쓴다. 사용자가 친 글이나 다른 꼴로 저장한 값은 읽지 않는다.</li>
+          <li><strong>주 첫 요일의 기본은 일요일이다.</strong> OS를 따르려면 앱이 <code>user_first_weekday()</code>로 읽어 넣는다. 그 함수는 부를 때마다 OS에 묻는다.</li>
+          <li><strong>popup은 칸을 배치한 뒤에 짓는다.</strong> <code>below.field</code>는 그 frame에서 배치된 칸의 <code>bounds()</code>(물리 px)다. 이전 frame의 포인터를 쓰면 자리가 틀린다.</li>
+          <li><strong>popup을 여닫는 것은 앱이다.</strong> 칸은 메시지만 낸다. 닫힘 계기 메시지(<code>dismiss</code>)도 popup을 빼지 않는다.</li>
+          <li><strong>열 때 초점을 옮기지 않으면 키보드가 popup에 닿지 않는다.</strong> popup은 활성화를 받지 않는 표면이다.</li>
+          <li><strong>16진 초안은 popup이 닫혀도 저절로 확정되지 않는다.</strong> 떠남 훅은 같은 표면 안의 이동에만 선다. <code>dismiss</code>와 임자가 바뀌는 자리에서 앱이 확정한다.</li>
+          <li><strong>색을 <code>ui_color</code>로 들지 않는다.</strong> HSV → 8비트 → HSV 왕복은 양자화로 어긋나 끄는 동안 손잡이가 흔들린다.</li>
+          <li><strong>회색을 넣으면 색상이 0으로 튄다</strong> — <code>hsv_from_color</code>에 지금 값을 keep으로 넘기지 않으면 그렇다.</li>
+          <li><strong>16진 글의 꼴.</strong> 순서는 CSS의 <code>#RRGGBBAA</code>이고 <code>ui_color</code> 리터럴은 <code>0xAARRGGBB</code>다. 알파를 끈 칸에 친 8자리는 <code>wrong_length</code>다. "#" 하나만 친 글은 <code>empty</code>가 아니라 <code>wrong_length</code>다. 거르기는 넣는 조각만 보므로 "##12" 같은 글은 검사가 잡는다.</li>
+          <li><strong>판의 메시지는 build 때의 색상·알파를 싣는다.</strong> 같은 frame 안에 두 부분을 함께 조작하면 앞의 것이 덮인다.</li>
+          <li><strong>같은 자리를 눌러도 메시지가 나간다.</strong> 판·막대의 클릭과 견본은 지금 값과 같은지 보지 않는다 (코드에서 확인한 동작 — 헤더 주석은 거른다고 적는다).</li>
+          <li><strong>16진 칸에 초점이 있으면 Enter가 기본 단추로 가지 않는다.</strong> 칸의 처리기가 <code>commit</code>으로 삼킨다.</li>
+          <li><strong>시·분은 돌지 않는다.</strong> 23시의 ↑, 59분의 ↑는 아무 일도 없고 분이 시로 넘어가지 않는다.</li>
+          <li><strong>시·분 칸의 kind는 라이브러리 것이다.</strong> 정책의 <code>text_target_of</code>에 <code>time_picker_hour</code>·<code>time_picker_minute</code>를 등록해야 글이 들어간다. kind만으로 대상을 정하므로, 한 화면의 시·분 고르기 둘은 같은 편집 대상을 받는다 (코드에서 확인한 동작).</li>
+          <li><strong>친 시각 글은 그대로 남는다.</strong> "7"은 두 자리로 고쳐지지 않는다. <code>read_time_picker</code>는 숫자 칸 규칙으로 읽어 " 7 "·"+7"·전각 "７"도 7시로 읽는다 (코드에서 확인한 동작). 12시간제의 "0"은 틀린 값이다.</li>
+          <li><strong><code>toggle_period</code>를 비우면 오전·오후 단추가 눌리지 않는다.</strong></li>
+        </ol>
+      </section>
+
+      <section class="sec" id="faq" data-toc="자주 묻는 질문">
+        <header class="sec-head">
+          <h2>자주 묻는 질문</h2>
+        </header>
+        <div class="faq-list">
+          <details class="faq"><summary>고른 날짜는 누가 들고 있나?</summary><div class="faq-a"><p class="faq-short">앱이다. <code>calendar_config::value</code>·<code>date_field_config::value</code>로 싣고 <code>select</code>로 받는다.</p><p>요소는 날을 기억하지 않는다. 다음 frame에 앱이 새 값을 실어야 고른 날이 바뀌어 그려진다.</p></div></details>
+          <details class="faq"><summary>보이는 달은 어떻게 바꾸나?</summary><div class="faq-a"><p class="faq-short">커서(<code>cursor</code>)를 바꾼다. 보이는 달은 커서의 달이다.</p><p>이전·다음 단추도 <code>turn_month</code>(없으면 <code>move_to</code>)로 커서를 옮기라고 할 뿐이다. 받은 앱이 커서를 바꾼다.</p></div></details>
+          <details class="faq"><summary>날짜 칸을 누르면 달력이 저절로 뜨나?</summary><div class="faq-a"><p class="faq-short">아니다. 칸은 <code>set_open(true)</code>를 내고, 앱이 <code>open</code>을 켜고 <code>make_date_picker_popup</code>을 frame에 싣는다.</p><p>닫는 것도 앱이다 (<a class="xref" href="#build-date-field">날짜 칸과 popup</a>).</p></div></details>
+          <details class="faq"><summary>달력 popup을 칸 바로 아래에 붙이려면?</summary><div class="faq-a"><p class="faq-short"><code>below</code>에 칸의 <code>bounds()</code>와 표면 사각형을 준다.</p><p>아래 자리가 모자라고 위가 들어가면 위로 뒤집힌다. 가로는 칸 왼쪽에 맞춘 뒤 표면 안으로 민다.</p></div></details>
+          <details class="faq"><summary>popup을 열었는데 화살표가 먹지 않는다.</summary><div class="faq-a"><p class="faq-short">열 때 popup 표면의 커서 날로 초점 요청을 싣는다.</p><p><code>focus_request</code>의 <code>surface</code>에 popup id, 대상에 <code>calendar_element::day_id(owner, 커서)</code>를 준다. 번호(<code>id</code>)를 올려야 새 요청이다.</p></div></details>
+          <details class="faq"><summary>월요일부터 시작하려면?</summary><div class="faq-a"><p class="faq-short"><code>first_day = std::chrono::Monday</code>를 준다.</p><p>OS 설정을 따르려면 <code>user_first_weekday()</code>로 읽어 넣는다. 시작할 때와 앞으로 올 때만 읽는다.</p></div></details>
+          <details class="faq"><summary>주말이나 휴일을 고르지 못하게 하려면?</summary><div class="faq-a"><p class="faq-short"><code>available</code>을 준다. 그 날에도 커서는 서지만 고르지 못한다.</p><p>고를 수 있는 기간은 <code>bounds</code>다. 그 달 전체가 범위 밖이면 그쪽 단추가 비활성이 된다.</p></div></details>
+          <details class="faq"><summary>1월 31일에서 다음 달로 가면?</summary><div class="faq-a"><p class="faq-short">2월 28일(윤년이면 29일)이다. 거기서 다시 다음 달로 가면 3월 28일이다.</p><p>말일로 접은 날을 커서로 들기 때문에 처음의 31일을 기억하지 않는다 (코드에서 확인한 동작). 원래 날을 지켜야 하면 앱이 따로 들고 <code>add_months_clamped</code>를 처음 날에서 센다.</p></div></details>
+          <details class="faq"><summary>Home·End는 주의 처음과 끝인가?</summary><div class="faq-a"><p class="faq-short">아니다. 그 달의 1일과 말일이다.</p><p>한 해를 넘기려면 Shift+PageUp·PageDown이다. 월이나 연을 고르는 보기는 없다.</p></div></details>
+          <details class="faq"><summary>날짜를 글로 쳐서 넣을 수 있나?</summary><div class="faq-a"><p class="faq-short">날짜 칸은 글을 받지 않는다.</p><p>필요하면 앱이 텍스트 칸을 따로 두고 <code>parse_iso_date</code> 같은 함수로 읽는다. <code>parse_iso_date</code>는 <code>YYYY-MM-DD</code>만 읽는다.</p></div></details>
+          <details class="faq"><summary>날짜와 시각을 함께 고르려면?</summary><div class="faq-a"><p class="faq-short">날짜 칸 곁에 <code>time_picker_element</code>를 둔다.</p><p>날짜 popup 안에는 시각 칸이 없다 (<a class="xref" href="#build-date-time">날짜와 시각</a>).</p></div></details>
+          <details class="faq"><summary>23시에서 ↑를 누르면 0시가 되나?</summary><div class="faq-a"><p class="faq-short">안 된다. 범위로 접기만 하고 키를 삼킨다.</p><p>59분의 ↑도 시를 올리지 않는다. 돌거나 넘기는 동작이 필요하면 앱이 단추를 따로 둔다.</p></div></details>
+          <details class="faq"><summary>12시간제로 보이고 24시간제로 저장하려면?</summary><div class="faq-a"><p class="faq-short"><code>twelve_hour = true</code>, <code>pm</code>, <code>toggle_period</code>를 준다. 저장은 <code>read_time_picker(시, 분, true, pm)</code>의 값이다.</p><p>12 AM은 0시, 12 PM은 12시다 (<a class="xref" href="#build-time-12h">12시간제</a>).</p></div></details>
+          <details class="faq"><summary>색은 어떤 형으로 저장하나?</summary><div class="faq-a"><p class="faq-short">고르는 동안은 <code>hsv_color</code>, 저장은 <code>format_hex_color(color_from_hsv(값), alpha)</code>의 글이다.</p><p>읽을 때는 <code>check_hex_color</code>로 읽고 <code>hsv_from_color(색, 지금 값)</code>으로 바꾼다 (<a class="xref" href="#build-color-store">색 저장</a>).</p></div></details>
+          <details class="faq"><summary>16진 칸에 친 값은 언제 반영되나?</summary><div class="faq-a"><p class="faq-short">확정(<code>commit</code>) 때다. Enter, 같은 표면 안에서 칸을 떠날 때, 휴대폰 키보드의 확정 단추.</p><p>popup이 닫힐 때는 확정이 저절로 서지 않는다. 닫는 길마다 앱이 확정한다.</p></div></details>
+          <details class="faq"><summary>회색 견본을 눌렀더니 색상 막대가 그대로다. 정상인가?</summary><div class="faq-a"><p class="faq-short">정상이다. 회색에는 색상이 없어 지금 색상을 지킨다.</p><p>견본은 <code>hsv_from_color(견본, 지금 값)</code>으로 들어온다. 검정이면 채도도 지킨다.</p></div></details>
+          <details class="faq"><summary>스크린 리더로 판의 값을 정할 수 있나?</summary><div class="faq-a"><p class="faq-short">판에는 범위가 없어 정할 수 없다. 막대와 16진 칸으로 정한다.</p><p>판은 값 글("채도 40%, 명도 80%")을 읽힐 뿐이다. 키보드로는 ↑↓·←→로 움직일 수 있다.</p></div></details>
+          <details class="faq"><summary>색 고르기 popup은 창을 옮기면 닫히나?</summary><div class="faq-a"><p class="faq-short">앱이 정한다. 16진 칸이 있으면 창 이동·활성 전환에 빈 액션을 줘 남기는 것이 권고다.</p><p>빈 액션은 "이 계기에는 닫지 않는다"는 뜻이다. 날짜 popup은 글 칸이 없어 모든 계기에 닫는다.</p></div></details>
+        </div>
+      </section>
+
+
+      <!-- auto:headers — tools/gen_pages.py가 manifest.json에서 채운다. 손으로 고치지 않는다. -->
+      <section class="sec" id="headers" data-toc="관련 헤더">
+        <header class="sec-head">
+          <h2>이 문서가 다루는 헤더</h2>
+          <p class="lede">이 문서의 내용이 기대는 공개 헤더다. 기호를 누르면 API 찾아보기에서 주석과 선언 원문을 본다.</p>
+        </header>
+        <div class="hdr-list">
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/color_picker_popup.h" target="_blank" rel="noopener">include/luil/app/color_picker_popup.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#color-picker-popup-padding" title="상수"><span class="kb ">k</span>color_picker_popup_padding</a><a href="api.html#color-picker-popup-config" title="구조체"><span class="kb t">S</span>color_picker_popup_config</a><a href="api.html#make-color-picker-popup" title="함수"><span class="kb f">f</span>make_color_picker_popup</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/app/date_picker_popup.h" target="_blank" rel="noopener">include/luil/app/date_picker_popup.h</a><span class="n">최상위 기호 3</span></div>
+            <div class="hdr-syms"><a href="api.html#date-picker-popup-padding" title="상수"><span class="kb ">k</span>date_picker_popup_padding</a><a href="api.html#date-picker-popup-config" title="구조체"><span class="kb t">S</span>date_picker_popup_config</a><a href="api.html#make-date-picker-popup" title="함수"><span class="kb f">f</span>make_date_picker_popup</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/calendar_date.h" target="_blank" rel="noopener">include/luil/ui/calendar_date.h</a><span class="n">최상위 기호 10</span></div>
+            <div class="hdr-syms"><a href="api.html#calendar-bounds" title="구조체"><span class="kb t">S</span>calendar_bounds</a><a href="api.html#calendar-move" title="열거형"><span class="kb e">E</span>calendar_move</a><a href="api.html#calendar-month-grid" title="함수"><span class="kb f">f</span>calendar_month_grid</a><a href="api.html#add-months-clamped" title="함수"><span class="kb f">f</span>add_months_clamped</a><a href="api.html#clamp-date" title="함수"><span class="kb f">f</span>clamp_date</a><a href="api.html#calendar-contains" title="함수"><span class="kb f">f</span>calendar_contains</a><a href="api.html#calendar-start-cursor" title="함수"><span class="kb f">f</span>calendar_start_cursor</a><a href="api.html#calendar-moved" title="함수"><span class="kb f">f</span>calendar_moved</a><a href="api.html#format-iso-date" title="함수"><span class="kb f">f</span>format_iso_date</a><a href="api.html#parse-iso-date" title="함수"><span class="kb f">f</span>parse_iso_date</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/calendar_element.h" target="_blank" rel="noopener">include/luil/ui/calendar_element.h</a><span class="n">최상위 기호 7</span></div>
+            <div class="hdr-syms"><a href="api.html#calendar-cell-size" title="상수"><span class="kb ">k</span>calendar_cell_size</a><a href="api.html#calendar-weekday-height" title="상수"><span class="kb ">k</span>calendar_weekday_height</a><a href="api.html#calendar-text" title="구조체"><span class="kb t">S</span>calendar_text</a><a href="api.html#calendar-config" title="구조체"><span class="kb t">S</span>calendar_config</a><a href="api.html#calendar-element" title="클래스"><span class="kb t">C</span>calendar_element</a><a href="api.html#date-field-config" title="구조체"><span class="kb t">S</span>date_field_config</a><a href="api.html#date-field-element" title="클래스"><span class="kb t">C</span>date_field_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/color_picker_element.h" target="_blank" rel="noopener">include/luil/ui/color_picker_element.h</a><span class="n">최상위 기호 14</span></div>
+            <div class="hdr-syms"><a href="api.html#color-picker-plane-size" title="상수"><span class="kb ">k</span>color_picker_plane_size</a><a href="api.html#color-picker-bar-height" title="상수"><span class="kb ">k</span>color_picker_bar_height</a><a href="api.html#color-picker-gap" title="상수"><span class="kb ">k</span>color_picker_gap</a><a href="api.html#color-picker-swatch-size" title="상수"><span class="kb ">k</span>color_picker_swatch_size</a><a href="api.html#color-picker-preset-size" title="상수"><span class="kb ">k</span>color_picker_preset_size</a><a href="api.html#color-picker-hex-width" title="상수"><span class="kb ">k</span>color_picker_hex_width</a><a href="api.html#color-picker-hex-height" title="상수"><span class="kb ">k</span>color_picker_hex_height</a><a href="api.html#color-picker-drag-start-distance" title="상수"><span class="kb ">k</span>color_picker_drag_start_distance</a><a href="api.html#color-picker-preset" title="구조체"><span class="kb t">S</span>color_picker_preset</a><a href="api.html#color-picker-hex" title="구조체"><span class="kb t">S</span>color_picker_hex</a><a href="api.html#color-picker-config" title="구조체"><span class="kb t">S</span>color_picker_config</a><a href="api.html#color-picker-element" title="클래스"><span class="kb t">C</span>color_picker_element</a><a href="api.html#color-field-config" title="구조체"><span class="kb t">S</span>color_field_config</a><a href="api.html#color-field-element" title="클래스"><span class="kb t">C</span>color_field_element</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/color_space.h" target="_blank" rel="noopener">include/luil/ui/color_space.h</a><span class="n">최상위 기호 9</span></div>
+            <div class="hdr-syms"><a href="api.html#hsv-color" title="구조체"><span class="kb t">S</span>hsv_color</a><a href="api.html#clamp-hsv" title="함수"><span class="kb f">f</span>clamp_hsv</a><a href="api.html#color-from-hsv" title="함수"><span class="kb f">f</span>color_from_hsv</a><a href="api.html#hsv-from-color" title="함수"><span class="kb f">f</span>hsv_from_color</a><a href="api.html#hex-color-problem" title="열거형"><span class="kb e">E</span>hex_color_problem</a><a href="api.html#hex-color-check" title="구조체"><span class="kb t">S</span>hex_color_check</a><a href="api.html#check-hex-color" title="함수"><span class="kb f">f</span>check_hex_color</a><a href="api.html#format-hex-color" title="함수"><span class="kb f">f</span>format_hex_color</a><a href="api.html#hex-color-filter" title="함수"><span class="kb f">f</span>hex_color_filter</a></div>
+          </div>
+          <div class="hdr">
+            <div class="hdr-head"><a class="path" href="https://github.com/yuldK/luil/blob/563a8552f11b4b9f3067f01ce2855bd107590ba5/include/luil/ui/time_picker_element.h" target="_blank" rel="noopener">include/luil/ui/time_picker_element.h</a><span class="n">최상위 기호 5</span></div>
+            <div class="hdr-syms"><a href="api.html#time-of-day" title="구조체"><span class="kb t">S</span>time_of_day</a><a href="api.html#read-time-picker" title="함수"><span class="kb f">f</span>read_time_picker</a><a href="api.html#format-time-part" title="함수"><span class="kb f">f</span>format_time_part</a><a href="api.html#time-picker-config" title="구조체"><span class="kb t">S</span>time_picker_config</a><a href="api.html#time-picker-element" title="클래스"><span class="kb t">C</span>time_picker_element</a></div>
+          </div>
+        </div>
+      </section>
+      <!-- /auto:headers -->
+    </div>
+    <nav class="pager" data-auto aria-label="앞뒤 문서"></nav>
+  </main>
+</div>
+<footer class="site-foot"></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+<script src="assets/manual.js"></script>
+<!--LABSCRIPTS-->
+</body>
+</html>

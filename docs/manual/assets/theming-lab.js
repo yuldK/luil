@@ -216,7 +216,9 @@
 
       // 역할 표
       const count = GROUPS.reduce((n, g) => n + g.rows.length, 0);
-      tableHead.textContent = "팔레트의 모든 칸 — 색 " + count + "개 (" + (hc ? "high_contrast_palette_for(high_contrast_colors {})" : "compose_palette") + ")";
+      tableHead.textContent = "";
+      tableHead.append("팔레트의 모든 칸 — 색 " + count + "개 · ",
+        breakable("code", hc ? "high_contrast_palette_for(high_contrast_colors {})" : "compose_palette(style.neutral_for(theme), accent.for_theme(theme), style.tones)"));
       table.textContent = "";
       table.append(el("thead", null, el("tr", null, el("th", { text: hc ? "역할 · 고대비 식" : "역할 · 합성 식" }), el("th", { text: "색" }), el("th", { text: "값" }))));
       const tb = el("tbody");

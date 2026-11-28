@@ -13,6 +13,7 @@
 <script>try{var t=localStorage.getItem("luil-manual:theme");if(t==="light"||t==="dark")document.documentElement.setAttribute("data-theme",t)}catch(e){}</script>
 <style>
   .doc-head .meta dd code { white-space: nowrap; }
+  .doc-head .meta dd .hc { white-space: nowrap; }
   .choose { display: grid; gap: 10px; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); }
   .choose .panel h4 { display: flex; gap: 8px; align-items: center; }
   .choose .panel h4 code { font-size: 13px; }
@@ -77,7 +78,7 @@
       <p class="summary">배치 요소는 자식에게 자리를 나눠 주는 그릇이다. 측정 단계가 없어 길이는 담는 쪽이 정하고, 접힘·폭·흘린 양·도킹 배치·페이지 위치는 모두 앱 상태다. 요소는 그 값을 받아 그리고, 바꾸자는 메시지만 낸다.</p>
       <div class="head-cols">
         <dl class="meta">
-          <div><dt>관련 소스</dt><dd><code>stack_element.h</code>·<code>wrap_element.h</code>·<code>grid_element.h</code>·<code>layer_element.h</code>·<code>strip_element.h</code>·<code>panel_element.h</code>·<code>group_element.h</code>·<code>root_element.h</code>·<code>sidebar_element.h</code>·<code>split_handle_element.h</code>·<code>dock_element.h</code>·<code>pager_element.h</code>·<code>layout_metrics.h</code></dd></div>
+          <div><dt>관련 소스</dt><dd><span class="hc"><code>stack_element.h</code>·</span><span class="hc"><code>wrap_element.h</code>·</span><span class="hc"><code>grid_element.h</code>·</span><span class="hc"><code>layer_element.h</code>·</span><span class="hc"><code>strip_element.h</code>·</span><span class="hc"><code>panel_element.h</code>·</span><span class="hc"><code>group_element.h</code>·</span><span class="hc"><code>root_element.h</code>·</span><span class="hc"><code>sidebar_element.h</code>·</span><span class="hc"><code>split_handle_element.h</code>·</span><span class="hc"><code>dock_element.h</code>·</span><span class="hc"><code>pager_element.h</code>·</span><code>layout_metrics.h</code></dd></div>
           <div><dt>실습</dt><dd>격자 열 계산기, 줄바꿈 칸 수, 창 폭 등급</dd></div>
           <div><dt>먼저 읽기</dt><dd><a class="xref" href="layout.html">배치</a> · <a class="xref" href="ui-tree.html">불변 UI tree</a> · <a class="xref" href="threads.html">스레드 모델</a></dd></div>
         </dl>
