@@ -25,6 +25,7 @@ namespace luil {
         toast_severity severity { toast_severity::info };
         // 라벨과 액션이 모두 있어야 버튼을 만든다.
         //  - 하나만 있으면 "버튼은 있는데 아무 일도 하지 않는" 조합이라 만들지 않는다.
+        //  - duration이 있으면 그 시각이 지난 뒤의 누름은 액션을 부르지 않는다. 다 흐려져 보이지 않는 단추가 눌리지 않게 한다.
         std::u8string action_label {};
         ui_action action {};
         // 표시를 시작한 시각과 보여 줄 시간이다.

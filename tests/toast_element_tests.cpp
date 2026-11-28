@@ -130,6 +130,31 @@ TEST_CASE("A toast makes its action button only when both label and action are g
     REQUIRE(silent.children().empty());
 }
 
+TEST_CASE("A faded out toast's action button no longer acts", "[ui][toast]")
+{
+    // 다 흐려진 토스트는 앱이 지울 때까지 tree에 남는다. 보이지 않는 단추의 누름은 액션을 부르지 않는다.
+    //  - 누름에는 시각이 없어 처리하는 순간의 시계로 견준다. 그래서 만료는 지금보다 한참 앞뒤로 둔다.
+    const auto make = [](const char8_t* id, const std::chrono::steady_clock::time_point shown, const std::chrono::milliseconds duration) {
+        luil::toast_config config { make_toast(id) };
+        config.action_label = u8"실행 취소";
+        config.action = [](const luil::ui_action_context&) -> std::vector<luil::input_action> { return std::vector<luil::input_action>(1); };
+        config.shown_at = shown;
+        config.duration = duration;
+        return luil::toast_element { std::move(config) };
+    };
+    const auto press = [](const luil::toast_element& toast) {
+        REQUIRE(toast.children().size() == 1);
+        const luil::ui_action* const action { toast.children()[0]->action(luil::ui_trigger::left_click) };
+        REQUIRE(action != nullptr);
+        return (*action)(luil::ui_action_context {}).size();
+    };
+    const auto now { std::chrono::steady_clock::now() };
+    REQUIRE(press(make(u8"expired", now - 60s, 1000ms)) == 0u);
+    REQUIRE(press(make(u8"showing", now, 600s)) == 1u);
+    // duration이 없는 토스트는 늘 누를 수 있다.
+    REQUIRE(press(make(u8"sticky", now - 999h, 0ms)) == 1u);
+}
+
 TEST_CASE("A toast fades only near the end of its duration", "[ui][toast]")
 {
     const std::chrono::steady_clock::time_point shown {};

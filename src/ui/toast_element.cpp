@@ -12,6 +12,7 @@
 #include "include/core/SkRect.h"
 #include "include/core/SkTypeface.h"
 
+#include <chrono>
 #include <memory>
 #include <utility>
 
@@ -31,7 +32,18 @@ namespace luil {
         // Tab이 여기 서면 다음 Tab이 갈 곳을 잃는다.
         action->set_tab_stop(false);
         action->set_cursor(ui_cursor::hand);
-        action->set_action(ui_trigger::left_click, config_.action);
+        // 다 흐려진 토스트는 앱이 목록에서 지울 때까지 tree에 남는다. 그동안 보이지 않는 단추가 눌려 동작을 내면 유령이므로,
+        // 만료 시각이 지난 누름은 아무것도 내지 않는다.
+        //  - 누름에는 시각이 실리지 않아(`ui_action_context`) 누름을 처리하는 순간의 시계로 견준다.
+        //  - 몸통은 그 자리의 누름을 여전히 흡수한다 (`hit_opaque`). 그 틈은 앱이 만료 시각에 지우는 것으로 닫힌다.
+        ui_action pressed { config_.action };
+        if (config_.duration.count() > 0)
+            pressed = [action = std::move(pressed), expires = config_.shown_at + config_.duration](const ui_action_context& context) -> std::vector<input_action> {
+                if (std::chrono::steady_clock::now() >= expires)
+                    return {};
+                return action(context);
+            };
+        action->set_action(ui_trigger::left_click, std::move(pressed));
         action_ = action.get();
         add_child(std::move(action));
     }
