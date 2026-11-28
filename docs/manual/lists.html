@@ -1955,7 +1955,7 @@ struct pick_file_intent
                   <tr><td>↑ · ↓</td><td>활성 항목 한 칸. 비활성은 건너뛰고 칸으로 세지 않는다. <strong>끝에서 멈춘다</strong> (삼키고 메시지 없음)</td></tr>
                   <tr><td>PageUp · PageDown</td><td>커서부터 <strong>실제 행 높이</strong>를 더해 창 높이를 넘기 전까지. 칸 수는 활성 행만 센다</td></tr>
                   <tr><td>Home · End</td><td>모델의 처음·끝 <strong>활성</strong> 항목</td></tr>
-                  <tr><td>커서가 빌 때</td><td><code>cursor</code>가 비면 <code>selected</code>가 커서다. 그 키도 비었거나 모델에 없으면 첫 활성 항목이 커서다. 그래서 커서를 주지 않은 목록의 첫 ↓는 둘째 활성 항목으로 간다</td></tr>
+                  <tr><td>커서가 빌 때</td><td><code>cursor</code>가 비면 <code>selected</code>가 커서다. 그 키도 비었거나 모델에 없으면 첫 활성 항목이 커서다. 그래서 <code>cursor</code>·<code>selected</code>를 둘 다 비운 목록의 첫 ↓는 둘째 활성 항목으로 간다</td></tr>
                   <tr><td>← · → (계층)</td><td><a class="xref" href="#build-lazy">←/→ 표</a>대로. Ctrl·Shift와 함께면 계층 키가 아니다</td></tr>
                   <tr><td>Shift + 단계 키</td><td><code>move_with</code>면 <code>extend</code>. <code>move</code>만 든 목록에서는 Shift가 보이지 않아 그냥 이동이다</td></tr>
                   <tr><td>Ctrl + 단계 키</td><td><code>move_with</code>면 <code>keep_selection</code>(커서만). <code>move</code>만이면 앱 단축키다</td></tr>
